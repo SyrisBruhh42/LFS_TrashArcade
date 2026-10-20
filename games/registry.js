@@ -596,5 +596,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-20",
     "accentColor": "#58fd7c",
     "path": "./games/046-neon-core-drill/index.html"
+  },
+  {
+    "id": "047",
+    "slug": "047-echo-cog",
+    "title": "Echo Cog",
+    "genre": "Wave-Defense Tower Micro-Strategy",
+    "coreMechanic": "Polarity/Magnetism Switching",
+    "setting": "Clockwork Steampunk Foundry",
+    "description": "Defend the core of the clockwork foundry against waves of rogue automatons by building towers and switching polarities to attract or repel.",
+    "controls": "Mouse to build and select towers. Spacebar or touch to switch polarity.",
+    "createdAt": "2023-11-01",
+    "accentColor": "#aae7db",
+    "path": "./games/047-echo-cog/index.html"
   }
 ];
