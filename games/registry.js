@@ -440,5 +440,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-18",
     "accentColor": "#bad97b",
     "path": "./games/034-jungle-recoil-heist/index.html"
+  },
+  {
+    "id": "035",
+    "slug": "035-orbital-dilation-blitz",
+    "title": "Orbital Dilation Blitz",
+    "genre": "Tactical Grid/Turn-Based Blitz",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Orbital Space Station",
+    "description": "Navigate the orbital space station grid. Enemies move when you move, but standing still dilates time, giving you tactical advantages to blitz your foes.",
+    "controls": "WASD/Arrows to move, Space to attack. On mobile, swipe to move and tap to attack.",
+    "createdAt": "2026-10-20",
+    "accentColor": "#ac6a66",
+    "path": "./games/035-orbital-dilation-blitz/index.html"
   }
 ];
