@@ -388,5 +388,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-24",
     "accentColor": "#c8f6d6",
     "path": "./games/030-abyssal-alchemy/index.html"
+  },
+  {
+    "id": "031",
+    "slug": "031-scrap-retrieval",
+    "title": "Scrap Retrieval",
+    "genre": "Gravity/Orbital Physics Action",
+    "coreMechanic": "Limited Ammo Must Be Physically Retrieved",
+    "setting": "Junkyard Robot Scrapheap",
+    "description": "Navigate a junkyard robot scrapheap using gravity mechanics. Fire limited grapple hooks to pull scrap and traverse the environment, but you must physically retrieve your fired hooks to reuse them.",
+    "controls": "WASD / Arrows to move. Mouse / Touch to aim and fire grapple hook.",
+    "createdAt": "2024-10-25",
+    "accentColor": "#c0699a",
+    "path": "./games/031-scrap-retrieval/index.html"
   }
 ];
