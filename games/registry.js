@@ -675,5 +675,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#59c297",
     "phase": "4",
     "path": "./games/052-sky-shifting-arena/index.html"
+  },
+  {
+    "id": "053",
+    "slug": "053-sandstorm-echo-coop",
+    "title": "Sandstorm Echo Coop",
+    "genre": "Rhythm/Beat-Synced Reflex",
+    "coreMechanic": "Echo/Ghost Self-Cooperation",
+    "setting": "Desert Sandstorm Bazaar",
+    "description": "Navigate a treacherous sandstorm bazaar. Cooperate with your past self to overcome rhythm-based obstacles.",
+    "controls": "WASD/Arrows to move. Touch: Virtual joystick.",
+    "createdAt": "2024-10-25",
+    "accentColor": "#c6f8c8",
+    "phase": "1",
+    "path": "./games/053-sandstorm-echo-coop/index.html"
   }
 ];
