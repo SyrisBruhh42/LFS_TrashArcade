@@ -193,5 +193,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-25",
     "accentColor": "#f8cac2",
     "path": "./games/015-sweet-echo-assault/index.html"
+  },
+  {
+    "id": "016",
+    "slug": "016-alchemy-foundry-overdrive",
+    "title": "Alchemy Foundry Overdrive",
+    "genre": "Alchemy/Chain-Reaction Puzzle Action",
+    "coreMechanic": "Sacrifice Health for Overdrive Power",
+    "setting": "Clockwork Steampunk Foundry",
+    "description": "Chain element reactions in a clockwork foundry, sacrificing health to overclock production.",
+    "controls": "Arrow keys / WASD to move. Space to sacrifice health for overdrive. Touch to move, tap HUD to overdrive.",
+    "createdAt": "2024-10-20",
+    "accentColor": "#dbd5e3",
+    "path": "./games/016-alchemy-foundry-overdrive/index.html"
   }
 ];
