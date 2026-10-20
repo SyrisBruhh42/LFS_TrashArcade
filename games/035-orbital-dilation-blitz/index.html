@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Orbital Dilation Blitz</title>
+<style>
+    :root {
+        --accent: #ac6a66;
+        --bg: #0a0c10;
+        --fg: #e0e0e0;
+        --grid: rgba(172, 106, 102, 0.2);
+    }
+    html, body {
+        margin: 0; padding: 0; width: 100%; height: 100%;
+        background-color: var(--bg);
+        color: var(--fg);
+        font-family: monospace;
+        overflow: hidden;
+        touch-action: none;
+        user-select: none;
+    }
+    #game-container {
+        position: relative;
+        width: 100%; height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    canvas {
+        background-color: var(--bg);
+        box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        image-rendering: pixelated;
+    }
+
+    .screen {
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: rgba(10, 12, 16, 0.85);
+        z-index: 10;
+    }
+    .screen.active {
+        display: flex;
+    }
+
+    h1 {
+        font-size: 3rem;
+        color: var(--accent);
+        text-shadow: 0 0 10px var(--accent);
+        margin-bottom: 0.5em;
+        text-align: center;
+    }
+    h2 { font-size: 2rem; margin-bottom: 1em; }
+
+    button {
+        background: transparent;
+        border: 2px solid var(--accent);
+        color: var(--accent);
+        padding: 15px 30px;
+        margin: 10px;
+        font-size: 1.2rem;
+        font-family: monospace;
+        cursor: pointer;
+        text-transform: uppercase;
+        transition: all 0.2s;
+    }
+    button:hover, button:active {
+        background: var(--accent);
+        color: var(--bg);
+    }
+
+    .hud {
+        position: absolute;
+        top: 0; left: 0; width: 100%;
+        padding: 20px;
+        box-sizing: border-box;
+        display: flex;
+        justify-content: space-between;
+        pointer-events: none;
+        z-index: 5;
+        font-size: 1.5rem;
+    }
+    .hud span {
+        text-shadow: 1px 1px 2px black;
+    }
+
+    #pause-btn-hud {
+        pointer-events: auto;
+        padding: 5px 15px;
+        margin: 0;
+    }
+
+    .modal {
+        background: #111;
+        border: 2px solid var(--accent);
+        padding: 30px;
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        z-index: 20;
+        max-width: 90%;
+        max-height: 90%;
+        overflow-y: auto;
+    }
+    .modal.active { display: flex; }
+
+    .back-link {
+        position: absolute;
+        bottom: 20px;
+        color: var(--fg);
+        text-decoration: none;
+        font-size: 1rem;
+        opacity: 0.7;
+    }
+    .back-link:hover { opacity: 1; text-decoration: underline; }
+
+    .stats {
+        margin-bottom: 20px;
+        text-align: center;
+        opacity: 0.8;
+    }
+
+    .options-row {
+        margin: 10px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        min-width: 300px;
+    }
+
+    .controls-overlay {
+        position: absolute;
+        bottom: 10px;
+        left: 0;
+        width: 100%;
+        display: none;
+        justify-content: space-between;
+        padding: 20px;
+        box-sizing: border-box;
+        pointer-events: none;
+        z-index: 5;
+    }
+    .controls-overlay.active { display: flex; }
+
+    .dpad, .action-btns {
+        display: grid;
+        gap: 10px;
+        pointer-events: auto;
+    }
+    .dpad {
+        grid-template-columns: 50px 50px 50px;
+        grid-template-rows: 50px 50px 50px;
+    }
+    .dpad button {
+        margin: 0;
+        padding: 0;
+        width: 50px;
+        height: 50px;
+        background: rgba(172, 106, 102, 0.2);
+        border: 1px solid var(--accent);
+    }
+    .dpad-up { grid-column: 2; grid-row: 1; }
+    .dpad-left { grid-column: 1; grid-row: 2; }
+    .dpad-right { grid-column: 3; grid-row: 2; }
+    .dpad-down { grid-column: 2; grid-row: 3; }
+
+    .action-btns button {
+        width: 60px; height: 60px;
+        border-radius: 50%;
+        margin: 0 10px;
+        background: rgba(172, 106, 102, 0.2);
+    }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud" class="hud" style="display:none;">
+        <span id="scoreDisplay">Score: 0</span>
+        <button id="pause-btn-hud">II</button>
+        <span id="waveDisplay">Wave: 1</span>
+    </div>
+
+    <!-- UI Screens -->
+    <div id="screen-title" class="screen active">
+        <h1>Orbital Dilation Blitz</h1>
+        <div class="stats" id="title-stats">
+            High Score: 0<br>
+            Games Played: 0
+        </div>
+        <button id="btn-play">Play</button>
+        <button id="btn-howto">How to Play</button>
+        <button id="btn-options-title">Options</button>
+        <a href="../../index.html" class="back-link">Back to Arcade</a>
+    </div>
+
+    <div id="screen-playing" class="screen">
+        <!-- Kept empty, just for state tracking, HUD overlays it -->
+    </div>
+
+    <div id="screen-paused" class="screen">
+        <h2>PAUSED</h2>
+        <button id="btn-resume">Resume</button>
+        <button id="btn-restart-paused">Restart</button>
+        <button id="btn-options-paused">Options</button>
+        <button id="btn-quit">Quit to Title</button>
+    </div>
+
+    <div id="screen-gameover" class="screen">
+        <h2>GAME OVER</h2>
+        <div class="stats" id="gameover-stats">
+            Score: 0<br>
+            Wave: 0
+        </div>
+        <h3 id="new-highscore-msg" style="color:var(--accent); display:none;">NEW HIGH SCORE!</h3>
+        <button id="btn-play-again">Play Again</button>
+        <button id="btn-title-go">Title Screen</button>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-howto" class="modal">
+        <h2>How to Play</h2>
+        <p>You are on an orbital grid.</p>
+        <p><b>Movement:</b> WASD / Arrows / D-pad</p>
+        <p><b>Attack:</b> Space / Action Button (Attack in direction of movement to Blitz)</p>
+        <p><b>Time Dilation:</b> When you stand still, time dilates.<br>Enemies move only when you move or attack.<br>Plan your route carefully!</p>
+        <button id="btn-close-howto">Close</button>
+    </div>
+
+    <div id="modal-options" class="modal">
+        <h2>Options</h2>
+        <div class="options-row">
+            <span>Master Mute</span>
+            <input type="checkbox" id="opt-mute">
+        </div>
+        <div class="options-row">
+            <span>SFX Vol</span>
+            <input type="range" id="opt-sfx" min="0" max="100" value="100">
+        </div>
+        <div class="options-row">
+            <span>Music Vol</span>
+            <input type="range" id="opt-music" min="0" max="100" value="100">
+        </div>
+        <div class="options-row">
+            <span>Screen Shake</span>
+            <select id="opt-shake">
+                <option value="1">100%</option>
+                <option value="0.5">50%</option>
+                <option value="0">Off</option>
+            </select>
+        </div>
+        <div class="options-row">
+            <span>Touch Controls</span>
+            <select id="opt-touch">
+                <option value="auto">Auto</option>
+                <option value="always">Always</option>
+                <option value="off">Off</option>
+            </select>
+        </div>
+        <div class="options-row">
+            <button id="btn-export">Export Save</button>
+            <button id="btn-import">Import Save</button>
+        </div>
+        <div class="options-row">
+            <button id="btn-reset" style="color:red; border-color:red;">Reset Save</button>
+        </div>
+        <button id="btn-close-options">Close</button>
+    </div>
+
+    <div class="controls-overlay" id="touch-controls">
+        <div class="dpad">
+            <button class="dpad-up" id="btn-up">^</button>
+            <button class="dpad-left" id="btn-left">&lt;</button>
+            <button class="dpad-right" id="btn-right">&gt;</button>
+            <button class="dpad-down" id="btn-down">v</button>
+        </div>
+        <div class="action-btns">
+            <button id="btn-action">ATK</button>
+        </div>
+    </div>
+</div>
+
+<script>
+
+const SAVE_KEY = 'arcade_game_035_035-orbital-dilation-blitz_v1';
+
+class SaveManager {
+    constructor() {
+        this.data = {
+            highScore: 0,
+            gamesPlayed: 0,
+            options: {
+                mute: false,
+                sfx: 100,
+                music: 100,
+                shake: 1,
+                touch: 'auto'
+            }
+        };
+        this.load();
+    }
+    load() {
+        try {
+            const raw = localStorage.getItem(SAVE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                this.data = { ...this.data, ...parsed };
+                if(parsed.options) this.data.options = { ...this.data.options, ...parsed.options };
+            }
+        } catch (e) { console.warn('Save load failed', e); }
+    }
+    save() {
+        try {
+            localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+        } catch (e) { console.warn('Save failed', e); }
+    }
+    reset() {
+        this.data.highScore = 0;
+        this.data.gamesPlayed = 0;
+        this.save();
+    }
+    exportData() { return btoa(JSON.stringify(this.data)); }
+    importData(str) {
+        try {
+            const parsed = JSON.parse(atob(str));
+            if(parsed && typeof parsed === 'object') {
+                this.data = { ...this.data, ...parsed };
+                this.save();
+                return true;
+            }
+        } catch(e) {}
+        return false;
+    }
+}
+
+class SoundEngine {
+    constructor(saveManager) {
+        this.ctx = null;
+        this.save = saveManager;
+        this.masterGain = null;
+        this.sfxGain = null;
+        this.musicGain = null;
+        this.initialized = false;
+
+        // Synths
+        this.musicOsc = null;
+        this.musicInterval = null;
+        this.notes = [220, 261.63, 329.63, 392, 440, 523.25];
+        this.noteIndex = 0;
+    }
+
+    init() {
+        if(this.initialized) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if(!AudioContext) return;
+        this.ctx = new AudioContext();
+
+        this.masterGain = this.ctx.createGain();
+        this.sfxGain = this.ctx.createGain();
+        this.musicGain = this.ctx.createGain();
+
+        this.sfxGain.connect(this.masterGain);
+        this.musicGain.connect(this.masterGain);
+        this.masterGain.connect(this.ctx.destination);
+
+        this.updateVolumes();
+        this.initialized = true;
+    }
+
+    updateVolumes() {
+        if(!this.initialized) return;
+        const opts = this.save.data.options;
+        this.masterGain.gain.value = opts.mute ? 0 : 1;
+        this.sfxGain.gain.value = opts.sfx / 100;
+        this.musicGain.gain.value = opts.music / 100;
+    }
+
+    resume() {
+        if(this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    }
+
+    playTone(freq, type, duration, vol=1) {
+        if(!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    playNoise(duration, vol=1) {
+        if(!this.initialized) return;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for(let i=0; i<bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1000;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.sfxGain);
+        noise.start();
+    }
+
+    playMove() { this.playTone(400, 'sine', 0.1, 0.3); }
+    playAttack() { this.playTone(150, 'square', 0.2, 0.5); this.playNoise(0.1, 0.5); }
+    playHit() { this.playNoise(0.2, 0.8); this.playTone(100, 'sawtooth', 0.3, 0.5); }
+    playSpawn() { this.playTone(600, 'sine', 0.1, 0.2); setTimeout(()=>this.playTone(800, 'sine', 0.2, 0.2), 100); }
+    playGameOver() { this.playTone(150, 'sawtooth', 1.0, 0.8); }
+
+    startMusic() {
+        if(!this.initialized || this.musicInterval) return;
+        this.musicInterval = setInterval(() => {
+            if(this.ctx.state !== 'running') return;
+            const freq = this.notes[this.noteIndex % this.notes.length];
+            this.noteIndex++;
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.value = freq;
+
+            // Subtle arp
+            gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+
+            osc.connect(gain);
+            gain.connect(this.musicGain);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.2);
+        }, 250);
+    }
+    stopMusic() {
+        if(this.musicInterval) {
+            clearInterval(this.musicInterval);
+            this.musicInterval = null;
+        }
+    }
+}
+
+class InputManager {
+    constructor() {
+        this.keys = {};
+        this.taps = { up:false, down:false, left:false, right:false, action:false };
+        this.pointer = { x: 0, y: 0, isDown: false };
+        this.hasTouch = false;
+
+        window.addEventListener('keydown', e => { this.keys[e.code] = true; });
+        window.addEventListener('keyup', e => { this.keys[e.code] = false; });
+
+        const c = document.getElementById('gameCanvas');
+        c.addEventListener('pointerdown', e => {
+            this.pointer.isDown = true;
+            this.updatePointer(e);
+        });
+        c.addEventListener('pointermove', e => {
+            if(this.pointer.isDown) this.updatePointer(e);
+        });
+        c.addEventListener('pointerup', e => { this.pointer.isDown = false; });
+
+        window.addEventListener('touchstart', () => { this.hasTouch = true; }, {once:true});
+
+        // Touch UI buttons
+        const bindBtn = (id, key) => {
+            const btn = document.getElementById(id);
+            if(!btn) return;
+            const down = (e) => { e.preventDefault(); this.taps[key] = true; };
+            const up = (e) => { e.preventDefault(); this.taps[key] = false; };
+            btn.addEventListener('pointerdown', down);
+            btn.addEventListener('pointerup', up);
+            btn.addEventListener('pointerleave', up);
+            btn.addEventListener('touchstart', down, {passive:false});
+            btn.addEventListener('touchend', up, {passive:false});
+        };
+        bindBtn('btn-up', 'up');
+        bindBtn('btn-down', 'down');
+        bindBtn('btn-left', 'left');
+        bindBtn('btn-right', 'right');
+        bindBtn('btn-action', 'action');
+    }
+
+    updatePointer(e) {
+        const c = document.getElementById('gameCanvas');
+        const rect = c.getBoundingClientRect();
+        // Assuming logical size 1280x720 scaled via CSS
+        const scaleX = 1280 / rect.width;
+        const scaleY = 720 / rect.height;
+        this.pointer.x = (e.clientX - rect.left) * scaleX;
+        this.pointer.y = (e.clientY - rect.top) * scaleY;
+    }
+
+    isPressed(action) {
+        if(action === 'up') return this.keys['ArrowUp'] || this.keys['KeyW'] || this.taps.up;
+        if(action === 'down') return this.keys['ArrowDown'] || this.keys['KeyS'] || this.taps.down;
+        if(action === 'left') return this.keys['ArrowLeft'] || this.keys['KeyA'] || this.taps.left;
+        if(action === 'right') return this.keys['ArrowRight'] || this.keys['KeyD'] || this.taps.right;
+        if(action === 'action') return this.keys['Space'] || this.keys['Enter'] || this.taps.action;
+        return false;
+    }
+
+    // One-shot check helper (requires manual clearing if used in loop, or state tracking)
+    // For turn-based, we'll track previous state in the game logic
+}
+
+
+class GameEngine {
+    constructor() {
+        this.save = new SaveManager();
+        this.sound = new SoundEngine(this.save);
+        this.input = new InputManager();
+
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d', { alpha: false });
+        this.logicalWidth = 1280;
+        this.logicalHeight = 720;
+        this.canvas.width = this.logicalWidth;
+        this.canvas.height = this.logicalHeight;
+
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+        this.lastTime = performance.now();
+        this.shakeTimer = 0;
+
+        this.score = 0;
+        this.wave = 1;
+
+        this.setupUI();
+
+        // ResizeObserver for canvas scaling
+        const ro = new ResizeObserver(() => this.resize());
+        ro.observe(document.getElementById('game-container'));
+        this.resize();
+
+        // Visibility and blur
+        document.addEventListener('visibilitychange', () => {
+            if(document.hidden && this.state === 'PLAYING') this.changeState('PAUSED');
+        });
+        window.addEventListener('blur', () => {
+            if(this.state === 'PLAYING') this.changeState('PAUSED');
+        });
+    }
+
+    resize() {
+        const container = document.getElementById('game-container');
+        const aspect = this.logicalWidth / this.logicalHeight;
+        let w = container.clientWidth;
+        let h = container.clientHeight;
+        if (w / h > aspect) {
+            w = h * aspect;
+        } else {
+            h = w / aspect;
+        }
+        this.canvas.style.width = w + 'px';
+        this.canvas.style.height = h + 'px';
+
+        // Auto touch UI logic
+        const touchOpt = this.save.data.options.touch;
+        const showTouch = touchOpt === 'always' || (touchOpt === 'auto' && (this.input.hasTouch || w < 800));
+        const overlay = document.getElementById('touch-controls');
+        if(this.state === 'PLAYING' && showTouch) {
+            overlay.classList.add('active');
+        } else {
+            overlay.classList.remove('active');
+        }
+    }
+
+    setupUI() {
+        const get = id => document.getElementById(id);
+
+        // Title
+        get('btn-play').addEventListener('click', () => { this.sound.init(); this.sound.resume(); this.startGame(); });
+        get('btn-howto').addEventListener('click', () => { this.sound.init(); this.sound.resume(); get('modal-howto').classList.add('active'); });
+        get('btn-options-title').addEventListener('click', () => { this.sound.init(); this.sound.resume(); this.openOptions(); });
+
+        // Modals close
+        get('btn-close-howto').addEventListener('click', () => get('modal-howto').classList.remove('active'));
+        get('btn-close-options').addEventListener('click', () => {
+            get('modal-options').classList.remove('active');
+            this.save.save();
+            this.sound.updateVolumes();
+            this.resize(); // update touch UI
+        });
+
+        // HUD Pause
+        get('pause-btn-hud').addEventListener('click', () => this.changeState('PAUSED'));
+
+        // Paused
+        get('btn-resume').addEventListener('click', () => this.changeState('PLAYING'));
+        get('btn-restart-paused').addEventListener('click', () => this.startGame());
+        get('btn-options-paused').addEventListener('click', () => this.openOptions());
+        get('btn-quit').addEventListener('click', () => this.changeState('TITLE'));
+
+        // Game Over
+        get('btn-play-again').addEventListener('click', () => this.startGame());
+        get('btn-title-go').addEventListener('click', () => this.changeState('TITLE'));
+
+        // Options Sync
+        const opts = this.save.data.options;
+        get('opt-mute').checked = opts.mute;
+        get('opt-sfx').value = opts.sfx;
+        get('opt-music').value = opts.music;
+        get('opt-shake').value = opts.shake;
+        get('opt-touch').value = opts.touch;
+
+        const bindOpt = (id, key, isNum, isCheckbox) => {
+            get(id).addEventListener('change', (e) => {
+                let val = e.target.value;
+                if(isCheckbox) val = e.target.checked;
+                else if(isNum) val = parseFloat(val);
+                this.save.data.options[key] = val;
+                this.sound.updateVolumes();
+                this.resize();
+            });
+        };
+        bindOpt('opt-mute', 'mute', false, true);
+        bindOpt('opt-sfx', 'sfx', true, false);
+        bindOpt('opt-music', 'music', true, false);
+        bindOpt('opt-shake', 'shake', true, false);
+        bindOpt('opt-touch', 'touch', false, false);
+
+        // Persistence buttons
+        get('btn-export').addEventListener('click', () => {
+            prompt('Copy your save data:', this.save.exportData());
+        });
+        get('btn-import').addEventListener('click', () => {
+            const str = prompt('Paste your save data:');
+            if(str) {
+                if(this.save.importData(str)) alert('Save loaded!');
+                else alert('Invalid save data.');
+                this.updateTitleStats();
+            }
+        });
+        let resetClicks = 0;
+        get('btn-reset').addEventListener('click', (e) => {
+            resetClicks++;
+            if(resetClicks === 1) {
+                e.target.textContent = "Click again to confirm reset";
+                setTimeout(() => { resetClicks = 0; e.target.textContent = "Reset Save"; }, 3000);
+            } else if(resetClicks === 2) {
+                this.save.reset();
+                this.updateTitleStats();
+                e.target.textContent = "Save Reset!";
+                resetClicks = 0;
+                setTimeout(() => { e.target.textContent = "Reset Save"; }, 2000);
+            }
+        });
+
+        this.updateTitleStats();
+    }
+
+    updateTitleStats() {
+        document.getElementById('title-stats').innerHTML =
+            `High Score: ${this.save.data.highScore}<br>Games Played: ${this.save.data.gamesPlayed}`;
+    }
+
+    changeState(newState) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        const hud = document.getElementById('hud');
+
+        if (newState === 'TITLE') {
+            document.getElementById('screen-title').classList.add('active');
+            hud.style.display = 'none';
+            this.sound.stopMusic();
+            this.updateTitleStats();
+        } else if (newState === 'PLAYING') {
+            document.getElementById('screen-playing').classList.add('active');
+            hud.style.display = 'flex';
+            this.sound.resume();
+            this.sound.startMusic();
+        } else if (newState === 'PAUSED') {
+            document.getElementById('screen-paused').classList.add('active');
+            hud.style.display = 'flex';
+            this.sound.stopMusic();
+        } else if (newState === 'GAME_OVER') {
+            document.getElementById('screen-gameover').classList.add('active');
+            hud.style.display = 'none';
+            this.sound.stopMusic();
+            this.sound.playGameOver();
+
+            this.save.data.gamesPlayed++;
+            let isHigh = false;
+            if (this.score > this.save.data.highScore) {
+                this.save.data.highScore = this.score;
+                isHigh = true;
+            }
+            this.save.save();
+
+            document.getElementById('gameover-stats').innerHTML = `Score: ${this.score}<br>Wave: ${this.wave}`;
+            document.getElementById('new-highscore-msg').style.display = isHigh ? 'block' : 'none';
+        }
+
+        this.state = newState;
+        this.resize(); // Trigger touch UI update
+    }
+
+    startGame() {
+        this.score = 0;
+        this.wave = 1;
+        this.updateHUD();
+        // Trigger game reset here (will implement later)
+        if(this.initGameLogic) this.initGameLogic();
+        this.changeState('PLAYING');
+    }
+
+    updateHUD() {
+        document.getElementById('scoreDisplay').innerText = `Score: ${this.score}`;
+        document.getElementById('waveDisplay').innerText = `Wave: ${this.wave}`;
+    }
+
+    addScreenShake(amt) {
+        this.shakeTimer = amt;
+    }
+
+    loop(time) {
+        requestAnimationFrame((t) => this.loop(t));
+        const dt = Math.min((time - this.lastTime) / 1000, 0.1);
+        this.lastTime = time;
+
+        this.ctx.save();
+
+        // Clear
+        this.ctx.fillStyle = '#0a0c10';
+        this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
+
+        // Screen shake
+        if (this.shakeTimer > 0) {
+            const shakeLevel = this.save.data.options.shake;
+            if(shakeLevel > 0) {
+                const mag = this.shakeTimer * 10 * shakeLevel;
+                const dx = (Math.random() - 0.5) * mag;
+                const dy = (Math.random() - 0.5) * mag;
+                this.ctx.translate(dx, dy);
+            }
+            this.shakeTimer -= dt * 10;
+        }
+
+        if (this.state === 'PLAYING') {
+            if(this.updateGame) this.updateGame(dt);
+        } else if (this.state === 'TITLE') {
+            this.drawTitleBackground(time, dt);
+        }
+
+        if(this.drawGame) this.drawGame(dt);
+
+        this.ctx.restore();
+    }
+
+    drawTitleBackground(time, dt) {
+        this.ctx.fillStyle = 'rgba(172, 106, 102, 0.1)';
+        const offset = (time / 50) % 40;
+        for(let i = 0; i < this.logicalWidth; i += 40) {
+            this.ctx.fillRect(i, 0, 1, this.logicalHeight);
+        }
+        for(let i = 0; i < this.logicalHeight; i += 40) {
+            this.ctx.fillRect(0, i + offset, this.logicalWidth, 1);
+        }
+    }
+
+    start() {
+        this.lastTime = performance.now();
+        requestAnimationFrame((t) => this.loop(t));
+    }
+}
+
+
+// Extensions to GameEngine for logic
+GameEngine.prototype.initGameLogic = function() {
+    this.gridSize = 40;
+    this.cols = Math.floor(this.logicalWidth / this.gridSize);
+    this.rows = Math.floor(this.logicalHeight / this.gridSize);
+
+    this.player = {
+        x: Math.floor(this.cols / 2),
+        y: Math.floor(this.rows / 2),
+        hp: 3,
+        dirX: 0,
+        dirY: -1,
+        cooldown: 0
+    };
+
+    this.enemies = [];
+    this.particles = [];
+    this.texts = [];
+
+    this.turnTimer = 0;
+    this.turnDelay = 0.15; // Fast pacing
+
+    this.inputState = { up: false, down: false, left: false, right: false, action: false };
+
+    this.spawnWave();
+};
+
+GameEngine.prototype.spawnWave = function() {
+    this.enemies = [];
+    let count = 2 + this.wave * 2;
+    for(let i=0; i<count; i++) {
+        let ex, ey;
+        do {
+            ex = Math.floor(Math.random() * this.cols);
+            ey = Math.floor(Math.random() * this.rows);
+        } while(Math.abs(ex - this.player.x) < 5 && Math.abs(ey - this.player.y) < 5);
+
+        this.enemies.push({ x: ex, y: ey, hp: 1, type: Math.random() > 0.7 ? 'shooter' : 'chaser' });
+    }
+    this.sound.playSpawn();
+    this.addText("WAVE " + this.wave, this.logicalWidth/2, this.logicalHeight/2, '#ac6a66');
+};
+
+GameEngine.prototype.addParticle = function(x, y, color, speed) {
+    this.particles.push({
+        x: x, y: y,
+        vx: (Math.random() - 0.5) * speed,
+        vy: (Math.random() - 0.5) * speed,
+        life: 1.0, color: color
+    });
+};
+
+GameEngine.prototype.addText = function(text, x, y, color) {
+    this.texts.push({ text, x, y, life: 1.0, color });
+};
+
+GameEngine.prototype.updateGame = function(dt) {
+    if(this.player.hp <= 0) {
+        this.changeState('GAME_OVER');
+        return;
+    }
+
+    if(this.player.cooldown > 0) this.player.cooldown -= dt;
+    this.turnTimer -= dt;
+
+    // Process input
+    let moved = false;
+    let attacked = false;
+
+    // Edge trigger inputs
+    let currentInput = {
+        up: this.input.isPressed('up'),
+        down: this.input.isPressed('down'),
+        left: this.input.isPressed('left'),
+        right: this.input.isPressed('right'),
+        action: this.input.isPressed('action')
+    };
+
+    if(this.turnTimer <= 0) {
+        let dx = 0, dy = 0;
+        if(currentInput.up && !this.inputState.up) { dy = -1; this.player.dirX=0; this.player.dirY=-1; }
+        else if(currentInput.down && !this.inputState.down) { dy = 1; this.player.dirX=0; this.player.dirY=1; }
+        else if(currentInput.left && !this.inputState.left) { dx = -1; this.player.dirX=-1; this.player.dirY=0; }
+        else if(currentInput.right && !this.inputState.right) { dx = 1; this.player.dirX=1; this.player.dirY=0; }
+
+        if(dx !== 0 || dy !== 0) {
+            let nx = this.player.x + dx;
+            let ny = this.player.y + dy;
+            if(nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows) {
+                this.player.x = nx;
+                this.player.y = ny;
+                moved = true;
+                this.sound.playMove();
+            }
+        } else if (currentInput.action && !this.inputState.action && this.player.cooldown <= 0) {
+            // Attack in facing direction (Blitz)
+            attacked = true;
+            this.sound.playAttack();
+            this.player.cooldown = 0.5; // Attack cooldown
+
+            // Blitz logic - dash attack
+            for(let step=1; step<=3; step++) {
+                let tx = this.player.x + this.player.dirX * step;
+                let ty = this.player.y + this.player.dirY * step;
+                this.addParticle(tx * this.gridSize + this.gridSize/2, ty * this.gridSize + this.gridSize/2, '#ffffff', 200);
+
+                // Hit enemy
+                for(let i = this.enemies.length - 1; i >= 0; i--) {
+                    let e = this.enemies[i];
+                    if(e.x === tx && e.y === ty) {
+                        e.hp--;
+                        this.sound.playHit();
+                        this.addScreenShake(0.5);
+                        for(let p=0; p<10; p++) this.addParticle(tx*this.gridSize + 20, ty*this.gridSize + 20, '#ac6a66', 300);
+                        if(e.hp <= 0) {
+                            this.enemies.splice(i, 1);
+                            this.score += 100 * this.wave;
+                            this.updateHUD();
+                            this.addText("+100", tx*this.gridSize, ty*this.gridSize, '#ffffff');
+                        }
+                    }
+                }
+            }
+        }
+
+        if(moved || attacked) {
+            this.turnTimer = this.turnDelay;
+            // TRIGGER ENEMY TURN (Time-Dilation mechanic)
+            this.updateEnemies();
+        }
+    }
+
+    this.inputState = currentInput;
+
+    // Update effects
+    for(let i=this.particles.length-1; i>=0; i--) {
+        let p = this.particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt * 2;
+        if(p.life <= 0) this.particles.splice(i, 1);
+    }
+    for(let i=this.texts.length-1; i>=0; i--) {
+        let t = this.texts[i];
+        t.y -= 50 * dt;
+        t.life -= dt;
+        if(t.life <= 0) this.texts.splice(i, 1);
+    }
+};
+
+GameEngine.prototype.drawGame = function(dt) {
+    if(this.state === 'TITLE') return;
+
+    // Draw Grid
+    this.ctx.strokeStyle = 'rgba(172, 106, 102, 0.1)';
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    for(let i=0; i<=this.cols; i++) {
+        this.ctx.moveTo(i * this.gridSize, 0);
+        this.ctx.lineTo(i * this.gridSize, this.logicalHeight);
+    }
+    for(let i=0; i<=this.rows; i++) {
+        this.ctx.moveTo(0, i * this.gridSize);
+        this.ctx.lineTo(this.logicalWidth, i * this.gridSize);
+    }
+    this.ctx.stroke();
+
+    if(this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+        if(!this.player) return; // Not init yet
+
+        // Draw Player
+        let px = this.player.x * this.gridSize;
+        let py = this.player.y * this.gridSize;
+
+        this.ctx.fillStyle = '#ac6a66'; // Accent color
+        this.ctx.fillRect(px + 5, py + 5, this.gridSize - 10, this.gridSize - 10);
+
+        // Draw Direction indicator
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.beginPath();
+        if(this.player.dirY === -1) { // Up
+            this.ctx.moveTo(px + 20, py + 5); this.ctx.lineTo(px + 10, py + 15); this.ctx.lineTo(px + 30, py + 15);
+        } else if(this.player.dirY === 1) { // Down
+            this.ctx.moveTo(px + 20, py + 35); this.ctx.lineTo(px + 10, py + 25); this.ctx.lineTo(px + 30, py + 25);
+        } else if(this.player.dirX === -1) { // Left
+            this.ctx.moveTo(px + 5, py + 20); this.ctx.lineTo(px + 15, py + 10); this.ctx.lineTo(px + 15, py + 30);
+        } else if(this.player.dirX === 1) { // Right
+            this.ctx.moveTo(px + 35, py + 20); this.ctx.lineTo(px + 25, py + 10); this.ctx.lineTo(px + 25, py + 30);
+        }
+        this.ctx.fill();
+
+        // Draw Health
+        for(let i=0; i<this.player.hp; i++) {
+            this.ctx.fillStyle = '#ff4444';
+            this.ctx.fillRect(px + 5 + i*10, py - 5, 8, 4);
+        }
+
+        // Draw Enemies (Placeholder before full implementation)
+        for(let e of this.enemies) {
+            this.ctx.fillStyle = e.type === 'chaser' ? '#e0e0e0' : '#8888ff';
+            this.ctx.beginPath();
+            this.ctx.arc(e.x * this.gridSize + 20, e.y * this.gridSize + 20, 15, 0, Math.PI*2);
+            this.ctx.fill();
+        }
+
+        // Draw particles
+        for(let p of this.particles) {
+            this.ctx.fillStyle = p.color;
+            this.ctx.globalAlpha = p.life;
+            this.ctx.fillRect(p.x, p.y, 4, 4);
+        }
+        this.ctx.globalAlpha = 1.0;
+
+        // Draw text
+        this.ctx.font = '20px monospace';
+        this.ctx.textAlign = 'center';
+        for(let t of this.texts) {
+            this.ctx.fillStyle = t.color;
+            this.ctx.globalAlpha = t.life;
+            this.ctx.fillText(t.text, t.x, t.y);
+        }
+        this.ctx.globalAlpha = 1.0;
+    }
+};
+
+
+// Implement updateEnemies which gets called ONLY when player moves/attacks
+GameEngine.prototype.updateEnemies = function() {
+    if(this.enemies.length === 0) {
+        this.wave++;
+        this.score += 500;
+        this.updateHUD();
+        this.spawnWave();
+        return;
+    }
+
+    for(let e of this.enemies) {
+        // Move towards player
+        let dx = this.player.x - e.x;
+        let dy = this.player.y - e.y;
+
+        let moveX = 0, moveY = 0;
+
+        if (e.type === 'chaser') {
+            if(Math.abs(dx) > Math.abs(dy)) {
+                moveX = dx > 0 ? 1 : -1;
+            } else {
+                moveY = dy > 0 ? 1 : -1;
+            }
+        } else { // 'shooter' moves randomly if too close, or aligns
+            if(Math.abs(dx) < 3 && Math.abs(dy) < 3) {
+                moveX = Math.random() > 0.5 ? (dx > 0 ? -1 : 1) : 0;
+                moveY = moveX === 0 ? (dy > 0 ? -1 : 1) : 0;
+            } else if (Math.abs(dx) > Math.abs(dy)) {
+                moveX = dx > 0 ? 1 : -1;
+            } else {
+                moveY = dy > 0 ? 1 : -1;
+            }
+        }
+
+        // Check collision with other enemies
+        let canMove = true;
+        let nx = e.x + moveX;
+        let ny = e.y + moveY;
+
+        for(let other of this.enemies) {
+            if(other !== e && other.x === nx && other.y === ny) {
+                canMove = false; break;
+            }
+        }
+
+        if(canMove && nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows) {
+            e.x = nx;
+            e.y = ny;
+        }
+
+        // Attack Player
+        if(e.x === this.player.x && e.y === this.player.y) {
+            this.player.hp--;
+            this.sound.playHit();
+            this.addScreenShake(1.0);
+            for(let p=0; p<15; p++) this.addParticle(e.x*this.gridSize + 20, e.y*this.gridSize + 20, '#ff0000', 400);
+            // Bounce enemy back
+            e.x -= moveX;
+            e.y -= moveY;
+            if (this.player.hp <= 0) {
+                this.addText("DESTROYED!", this.player.x * this.gridSize, this.player.y * this.gridSize, '#ff0000');
+            }
+        }
+    }
+};
+
+// Initialize the engine and start
+window.addEventListener('DOMContentLoaded', () => {
+    const engine = new GameEngine();
+    engine.start();
+});
+
+</script>
+</body>
+</html>
