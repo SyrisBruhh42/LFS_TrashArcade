@@ -531,5 +531,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-18",
     "accentColor": "#505963",
     "path": "./games/041-sandstorm-bazaar-overdrive/index.html"
+  },
+  {
+    "id": "042",
+    "slug": "042-vector-stealth-retrieve",
+    "title": "Vector Stealth Retrieve",
+    "genre": "Stealth/Line-of-Sight Heist",
+    "coreMechanic": "Limited Ammo Must Be Physically Retrieved",
+    "setting": "Retro CRT Vector Grid",
+    "description": "Infiltrate the vector grid. You have one projectile to disable guards, but you must physically retrieve it to fire again.",
+    "controls": "WASD/Arrows to move, Mouse/Touch to aim and shoot. Retrieve ammo by walking over it.",
+    "createdAt": "2024-05-18",
+    "accentColor": "#56b587",
+    "path": "./games/042-vector-stealth-retrieve/index.html"
   }
 ];
