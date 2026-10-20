@@ -648,5 +648,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-19",
     "accentColor": "#c29d7e",
     "path": "./games/050-neon-synthwave-slash/index.html"
+  },
+  {
+    "id": "051",
+    "slug": "051-orbital-overdrive",
+    "title": "Orbital Overdrive",
+    "genre": "Tactical Grid/Turn-Based Blitz",
+    "coreMechanic": "Sacrifice Health for Overdrive Power",
+    "setting": "Orbital Space Station",
+    "description": "Tactical blitz in a space station. Move quickly on the grid to destroy rogue bots. Sacrifice health to gain an overdrive action.",
+    "controls": "WASD/Arrows to move/attack. Space or tap Overdrive button to sacrifice health for extra actions. Touch: Swipe to move/attack.",
+    "createdAt": "2024-10-21",
+    "accentColor": "#5074de",
+    "path": "./games/051-orbital-overdrive/index.html"
   }
 ];
