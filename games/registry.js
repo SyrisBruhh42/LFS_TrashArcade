@@ -284,5 +284,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-31",
     "accentColor": "#42997b",
     "path": "./games/023-cyber-drill-dojo/index.html"
+  },
+  {
+    "id": "024",
+    "slug": "024-orbital-rhythm-collapse",
+    "title": "Orbital Rhythm Collapse",
+    "genre": "Rhythm/Beat-Synced Reflex",
+    "coreMechanic": "Shrinking Arena / Shifting Geometry",
+    "setting": "Orbital Space Station",
+    "description": "Defend the orbital space station from collapse! Sync your reflexes to the rhythm to hit incoming energy nodes and maintain the structural integrity of your shrinking geometry arena.",
+    "controls": "Click or Tap in sync with the beat. Hit space or enter to start/pause. Missing beats causes the arena to shrink faster.",
+    "createdAt": "2024-11-06",
+    "accentColor": "#b5954c",
+    "path": "./games/024-orbital-rhythm-collapse/index.html"
   }
 ];
