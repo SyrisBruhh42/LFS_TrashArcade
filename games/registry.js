@@ -635,5 +635,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-18",
     "accentColor": "#7f5598",
     "path": "./games/049-volcanic-time-forge/index.html"
+  },
+  {
+    "id": "050",
+    "slug": "050-neon-synthwave-slash",
+    "title": "Neon Synthwave Slash",
+    "genre": "Directional Parry/Slash Arcade",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Neon Synthwave City",
+    "description": "Slice through enemies in a neon-drenched synthwave city. Time slows when you stay still, allowing you to plan your strikes and parry incoming threats.",
+    "controls": "WASD/Arrows to move, Mouse Click/Drag or Arrow Keys to parry/slash in a direction. Touch: Drag to parry/slash.",
+    "createdAt": "2024-05-19",
+    "accentColor": "#c29d7e",
+    "path": "./games/050-neon-synthwave-slash/index.html"
   }
 ];
