@@ -336,5 +336,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-21",
     "accentColor": "#9fdd81",
     "path": "./games/026-manor-overdrive-rush/index.html"
+  },
+  {
+    "id": "027",
+    "slug": "027-frozen-tail-rhythm",
+    "title": "Frozen Tail Rhythm",
+    "genre": "Rhythm/Beat-Synced Reflex",
+    "coreMechanic": "Risk/Reward Tether or Tail Growth",
+    "setting": "Frozen Arctic Research Base",
+    "description": "Navigate a frozen arctic research base to the rhythm. Gather research data to grow your tail, but be careful - a longer tail means a higher combo, but makes you more vulnerable to the freezing hazards.",
+    "controls": "WASD/Arrows/Virtual D-Pad to move. Space/Tap to lock in your rhythm sync for a points boost.",
+    "createdAt": "2024-11-20",
+    "accentColor": "#71c55f",
+    "path": "./games/027-frozen-tail-rhythm/index.html"
   }
 ];
