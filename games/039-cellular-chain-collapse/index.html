@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Cellular Chain Collapse</title>
+<style>
+  :root {
+    --accent: #d9a481;
+    --bg: #111;
+    --text: #eee;
+    --hud: rgba(0, 0, 0, 0.5);
+  }
+  * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: monospace; overflow: hidden; touch-action: none;
+    display: flex; justify-content: center; align-items: center;
+    width: 100vw; height: 100vh;
+  }
+  #game-container {
+    position: relative;
+    width: 100%; height: 100%;
+    max-width: 1280px; max-height: 720px;
+    background: #050510;
+    overflow: hidden;
+  }
+  canvas {
+    display: block; width: 100%; height: 100%;
+    image-rendering: pixelated;
+  }
+  .ui-layer {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; display: flex; flex-direction: column;
+  }
+  .screen {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: none; flex-direction: column; justify-content: center; align-items: center;
+    background: rgba(0,0,0,0.8); pointer-events: auto;
+  }
+  .screen.active { display: flex; }
+  h1 { color: var(--accent); font-size: 3rem; margin-bottom: 1rem; text-align: center; text-shadow: 0 0 10px var(--accent); }
+  h2 { color: var(--text); font-size: 2rem; margin-bottom: 1rem; }
+  p { font-size: 1.2rem; text-align: center; max-width: 80%; line-height: 1.5; margin-bottom: 1rem; }
+  button {
+    background: transparent; color: var(--accent);
+    border: 2px solid var(--accent); padding: 10px 20px;
+    font-size: 1.5rem; font-family: monospace; cursor: pointer;
+    margin: 5px; border-radius: 5px; transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  button:hover { background: var(--accent); color: var(--bg); box-shadow: 0 0 15px var(--accent); }
+  #hud {
+    position: absolute; top: 0; left: 0; width: 100%; padding: 10px 20px;
+    display: flex; justify-content: space-between; pointer-events: none;
+    font-size: 1.5rem; color: var(--accent); text-shadow: 1px 1px 0 #000;
+  }
+  .hud-btn { pointer-events: auto; }
+  .controls-guide { font-size: 0.9rem; color: #888; margin-top: 2rem; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px dashed var(--accent); }
+  a:hover { color: #fff; border-color: #fff; }
+
+  /* Options Modal */
+  .modal {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: #222; border: 2px solid var(--accent); padding: 20px;
+    display: none; flex-direction: column; align-items: center; z-index: 100;
+    min-width: 300px;
+  }
+  .modal.active { display: flex; }
+  .option-row { display: flex; justify-content: space-between; width: 100%; margin: 10px 0; align-items: center;}
+  input[type=range] { accent-color: var(--accent); }
+
+  /* Touch controls */
+  #touch-controls {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 40%;
+    pointer-events: none; display: none;
+  }
+  #touch-controls.active { display: block; }
+  .joystick-zone { position: absolute; bottom: 10%; left: 10%; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3); pointer-events: auto; }
+  .joystick-knob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.5); pointer-events: none; }
+  .action-btn { position: absolute; bottom: 10%; right: 10%; width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3); display: flex; justify-content: center; align-items: center; font-size: 1.5rem; pointer-events: auto; color: rgba(255,255,255,0.5); }
+
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="game-canvas" width="1280" height="720"></canvas>
+
+  <div id="hud" style="display: none;">
+    <div>Score: <span id="score-val">0</span></div>
+    <div>Lives: <span id="lives-val">3</span></div>
+    <button class="hud-btn" id="btn-pause">II</button>
+  </div>
+
+  <div id="touch-controls">
+    <div class="joystick-zone" id="joystick"><div class="joystick-knob" id="joystick-knob"></div></div>
+    <div class="action-btn" id="btn-action">PULSE</div>
+  </div>
+
+  <div class="ui-layer">
+    <div id="screen-title" class="screen active">
+      <h1>Cellular Chain Collapse</h1>
+      <p>High Score: <span id="high-score-val">0</span></p>
+      <button id="btn-play">Play</button>
+      <button id="btn-howto">How to Play</button>
+      <button id="btn-options-title">Options</button>
+      <div style="margin-top:20px;"><a href="../../index.html">Back to Arcade</a></div>
+    </div>
+
+    <div id="screen-howto" class="screen">
+      <h2>How to Play</h2>
+      <p>Navigate the shifting microscopic cell. The arena shrinks over time!</p>
+      <p>Use WASD/Arrows to move.</p>
+      <p>Press SPACE or Tap to trigger a Catalyst Pulse.</p>
+      <p>Explode spores in chain reactions to expand the arena and score big.</p>
+      <p>Don't touch the edges or spores!</p>
+      <button id="btn-howto-back">Back</button>
+    </div>
+
+    <div id="screen-paused" class="screen">
+      <h2>PAUSED</h2>
+      <button id="btn-resume">Resume</button>
+      <button id="btn-restart">Restart</button>
+      <button id="btn-options-pause">Options</button>
+      <div style="margin-top:20px;"><a href="../../index.html">Quit to Title</a></div>
+    </div>
+
+    <div id="screen-gameover" class="screen">
+      <h2>GAME OVER</h2>
+      <p>Final Score: <span id="final-score">0</span></p>
+      <p id="new-high-score-msg" style="color:var(--accent); display:none; font-weight:bold;">NEW HIGH SCORE!</p>
+      <button id="btn-play-again">Play Again</button>
+      <button id="btn-to-title">Title Screen</button>
+    </div>
+  </div>
+
+  <div id="modal-options" class="modal">
+    <h2>Options</h2>
+    <div class="option-row">
+      <label>Master Volume</label>
+      <input type="range" id="opt-vol-master" min="0" max="100" value="100">
+    </div>
+    <div class="option-row">
+      <label>Music Volume</label>
+      <input type="range" id="opt-vol-music" min="0" max="100" value="80">
+    </div>
+    <div class="option-row">
+      <label>SFX Volume</label>
+      <input type="range" id="opt-vol-sfx" min="0" max="100" value="100">
+    </div>
+    <div class="option-row">
+      <label>Touch Controls</label>
+      <select id="opt-touch">
+        <option value="auto">Auto</option>
+        <option value="always">Always</option>
+        <option value="off">Off</option>
+      </select>
+    </div>
+    <div style="margin-top:20px; display:flex; flex-direction:column; gap:10px;">
+        <button id="btn-save-export" style="font-size:1rem;">Export Save</button>
+        <button id="btn-save-import" style="font-size:1rem;">Import Save</button>
+        <button id="btn-save-reset" style="font-size:1rem; color:#f55; border-color:#f55;">Reset Save</button>
+    </div>
+    <button id="btn-options-close" style="margin-top:20px;">Close</button>
+  </div>
+</div>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+
+// --- SAVE MANAGER ---
+const SAVE_KEY = 'arcade_game_039_039-cellular-chain-collapse_v1';
+class SaveManager {
+  constructor() {
+    this.data = {
+      highScore: 0,
+      totalGamesPlayed: 0,
+      totalScoreAccumulated: 0,
+      unlockedMilestones: [],
+      options: {
+        masterVol: 100,
+        musicVol: 80,
+        sfxVol: 100,
+        touchMode: 'auto'
+      }
+    };
+    this.load();
+  }
+  load() {
+    try {
+      const stored = localStorage.getItem(SAVE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        this.data = { ...this.data, ...parsed };
+        // Merge options safely
+        if (parsed.options) {
+            this.data.options = { ...this.data.options, ...parsed.options };
+        }
+      }
+    } catch(e) { console.warn('Save load failed', e); }
+  }
+  save() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+    } catch(e) { console.warn('Save failed', e); }
+  }
+  reset() {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch(e) { console.warn('Reset failed', e); }
+    this.data.highScore = 0;
+    this.data.totalGamesPlayed = 0;
+    this.save();
+  }
+}
+const saveMgr = new SaveManager();
+
+// --- AUDIO ENGINE ---
+class SoundEngine {
+  constructor() {
+    this.ctx = null;
+    this.masterGain = null;
+    this.musicGain = null;
+    this.sfxGain = null;
+    this.initialized = false;
+    this.synths = [];
+  }
+  init() {
+    if (this.initialized) return;
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AudioContext();
+      this.masterGain = this.ctx.createGain();
+      this.musicGain = this.ctx.createGain();
+      this.sfxGain = this.ctx.createGain();
+
+      this.musicGain.connect(this.masterGain);
+      this.sfxGain.connect(this.masterGain);
+      this.masterGain.connect(this.ctx.destination);
+
+      this.updateVolumes();
+      this.initialized = true;
+      this.ctx.resume();
+    } catch (e) { console.warn("AudioContext init failed", e); }
+  }
+  updateVolumes() {
+    if (!this.initialized) return;
+    this.masterGain.gain.value = saveMgr.data.options.masterVol / 100;
+    this.musicGain.gain.value = saveMgr.data.options.musicVol / 100;
+    this.sfxGain.gain.value = saveMgr.data.options.sfxVol / 100;
+  }
+  playTone(freq, type, duration, vol=1) {
+    if (!this.initialized || this.ctx.state !== 'running') return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + duration);
+  }
+  playNoise(duration, vol=1) {
+    if (!this.initialized || this.ctx.state !== 'running') return;
+    const bufferSize = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 1000;
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+
+    noise.start();
+  }
+  playPulse() { this.playTone(800, 'sine', 0.2, 0.5); this.playTone(1200, 'triangle', 0.1, 0.3); }
+  playExplosion() { this.playNoise(0.5, 0.8); this.playTone(100, 'square', 0.3, 0.5); }
+  playHit() { this.playNoise(0.2, 0.5); this.playTone(50, 'sawtooth', 0.2, 0.5); }
+  playUI() { this.playTone(600, 'sine', 0.1, 0.3); }
+}
+const audio = new SoundEngine();
+
+// --- INPUT MANAGER ---
+class InputManager {
+  constructor() {
+    this.keys = {};
+    this.mouse = { x: 0, y: 0, down: false };
+    this.joystick = { dx: 0, dy: 0, active: false };
+    this.actionPressed = false;
+    this.hasTouch = false;
+    this.scaleX = 1;
+    this.scaleY = 1;
+    this.offsetX = 0;
+    this.offsetY = 0;
+
+    window.addEventListener('keydown', (e) => { this.keys[e.code] = true; if(e.code==='Space') this.actionPressed = true; });
+    window.addEventListener('keyup', (e) => { this.keys[e.code] = false; if(e.code==='Space') this.actionPressed = false; });
+
+    const canvas = document.getElementById('game-canvas');
+    const updateMouse = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        this.mouse.x = (e.clientX - rect.left) * (1280 / rect.width);
+        this.mouse.y = (e.clientY - rect.top) * (720 / rect.height);
+    };
+
+    canvas.addEventListener('pointerdown', (e) => {
+        audio.init();
+        if(e.pointerType === 'touch') this.hasTouch = true;
+        this.mouse.down = true;
+        updateMouse(e);
+        // Only trigger action on canvas click if touch controls aren't intercepting
+        if (!this.hasTouch || saveMgr.data.options.touchMode === 'off') {
+            this.actionPressed = true;
+        }
+    });
+    window.addEventListener('pointerup', (e) => {
+        this.mouse.down = false;
+        if (!this.hasTouch || saveMgr.data.options.touchMode === 'off') {
+            this.actionPressed = false;
+        }
+    });
+    canvas.addEventListener('pointermove', updateMouse);
+
+    // Virtual Joystick
+    const joyZone = document.getElementById('joystick');
+    const joyKnob = document.getElementById('joystick-knob');
+    let joyTouchId = null;
+    let joyCenter = {x:0, y:0};
+
+    const handleJoyStart = (e) => {
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        joyTouchId = touch.identifier;
+        this.joystick.active = true;
+        const rect = joyZone.getBoundingClientRect();
+        joyCenter = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+        updateJoy(touch);
+    };
+    const handleJoyMove = (e) => {
+        e.preventDefault();
+        for(let i=0; i<e.changedTouches.length; i++) {
+            if(e.changedTouches[i].identifier === joyTouchId) {
+                updateJoy(e.changedTouches[i]);
+            }
+        }
+    };
+    const handleJoyEnd = (e) => {
+        for(let i=0; i<e.changedTouches.length; i++) {
+            if(e.changedTouches[i].identifier === joyTouchId) {
+                joyTouchId = null;
+                this.joystick.active = false;
+                this.joystick.dx = 0;
+                this.joystick.dy = 0;
+                joyKnob.style.transform = `translate(-50%, -50%)`;
+            }
+        }
+    };
+    const updateJoy = (touch) => {
+        let dx = touch.clientX - joyCenter.x;
+        let dy = touch.clientY - joyCenter.y;
+        const dist = Math.hypot(dx, dy);
+        const maxDist = 40;
+        if(dist > maxDist) {
+            dx = (dx/dist)*maxDist;
+            dy = (dy/dist)*maxDist;
+        }
+        joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        this.joystick.dx = dx / maxDist;
+        this.joystick.dy = dy / maxDist;
+    };
+
+    joyZone.addEventListener('touchstart', handleJoyStart, {passive: false});
+    joyZone.addEventListener('touchmove', handleJoyMove, {passive: false});
+    joyZone.addEventListener('touchend', handleJoyEnd);
+    joyZone.addEventListener('touchcancel', handleJoyEnd);
+
+    const actionBtn = document.getElementById('btn-action');
+    actionBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); this.actionPressed = true; });
+    actionBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); this.actionPressed = false; });
+  }
+
+  getMovement() {
+    let dx = 0; let dy = 0;
+    if (this.keys['ArrowLeft'] || this.keys['KeyA']) dx -= 1;
+    if (this.keys['ArrowRight'] || this.keys['KeyD']) dx += 1;
+    if (this.keys['ArrowUp'] || this.keys['KeyW']) dy -= 1;
+    if (this.keys['ArrowDown'] || this.keys['KeyS']) dy += 1;
+
+    if (this.joystick.active) {
+        dx = this.joystick.dx;
+        dy = this.joystick.dy;
+    }
+
+    const len = Math.hypot(dx, dy);
+    if (len > 0) {
+        // Normalize if length > 1
+        if (len > 1) { dx /= len; dy /= len; }
+    }
+    return {dx, dy};
+  }
+}
+const input = new InputManager();
+
+// --- RESIZE OBSERVER ---
+const container = document.getElementById('game-container');
+const touchControls = document.getElementById('touch-controls');
+const ro = new ResizeObserver(entries => {
+    for (let entry of entries) {
+        const w = entry.contentRect.width;
+        const h = entry.contentRect.height;
+        // Show touch controls if small screen or touch forced
+        if (saveMgr.data.options.touchMode === 'always' ||
+            (saveMgr.data.options.touchMode === 'auto' && (w < 800 || 'ontouchstart' in window))) {
+            touchControls.classList.add('active');
+        } else {
+            touchControls.classList.remove('active');
+        }
+    }
+});
+ro.observe(container);
+
+// --- MAIN STUBS ---
+
+// --- GAME LOGIC ---
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+const LOGICAL_WIDTH = 1280;
+const LOGICAL_HEIGHT = 720;
+
+class GameEngine {
+    constructor() {
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+        this.lastTime = 0;
+        this.particles = [];
+        this.spores = [];
+        this.pulses = [];
+
+        this.player = {
+            x: LOGICAL_WIDTH / 2,
+            y: LOGICAL_HEIGHT / 2,
+            radius: 15,
+            vx: 0, vy: 0,
+            speed: 400,
+            lives: 3,
+            pulseCooldown: 0,
+            invuln: 0
+        };
+
+        // Arena: Shrinking wobbly circle
+        this.arena = {
+            x: LOGICAL_WIDTH / 2,
+            y: LOGICAL_HEIGHT / 2,
+            radius: 350,
+            baseRadius: 350,
+            minRadius: 80,
+            shrinkRate: 5, // pixels per second
+            wobblePhase: 0
+        };
+
+        this.score = 0;
+        this.combo = 0;
+        this.comboTimer = 0;
+        this.spawnerTimer = 0;
+        this.wave = 1;
+
+        // Setup UI listeners
+        this.setupUI();
+    }
+
+    setupUI() {
+        const getEl = id => document.getElementById(id);
+        const hideAllScreens = () => document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+
+        // Title Screen
+        getEl('high-score-val').innerText = saveMgr.data.highScore;
+        getEl('btn-play').addEventListener('click', () => { audio.playUI(); this.startGame(); });
+        getEl('btn-howto').addEventListener('click', () => { audio.playUI(); hideAllScreens(); getEl('screen-howto').classList.add('active'); });
+        getEl('btn-options-title').addEventListener('click', () => { audio.playUI(); getEl('modal-options').classList.add('active'); });
+
+        // How To
+        getEl('btn-howto-back').addEventListener('click', () => { audio.playUI(); hideAllScreens(); getEl('screen-title').classList.add('active'); });
+
+        // HUD
+        getEl('btn-pause').addEventListener('click', () => { audio.playUI(); this.togglePause(); });
+
+        // Pause Screen
+        getEl('btn-resume').addEventListener('click', () => { audio.playUI(); this.togglePause(); });
+        getEl('btn-restart').addEventListener('click', () => { audio.playUI(); this.startGame(); });
+        getEl('btn-options-pause').addEventListener('click', () => { audio.playUI(); getEl('modal-options').classList.add('active'); });
+
+        // Game Over
+        getEl('btn-play-again').addEventListener('click', () => { audio.playUI(); this.startGame(); });
+        getEl('btn-to-title').addEventListener('click', () => { audio.playUI(); hideAllScreens(); getEl('screen-title').classList.add('active'); });
+
+        // Options Modal
+        getEl('opt-vol-master').value = saveMgr.data.options.masterVol;
+        getEl('opt-vol-music').value = saveMgr.data.options.musicVol;
+        getEl('opt-vol-sfx').value = saveMgr.data.options.sfxVol;
+        getEl('opt-touch').value = saveMgr.data.options.touchMode;
+
+        const updateOpt = () => {
+            saveMgr.data.options.masterVol = getEl('opt-vol-master').value;
+            saveMgr.data.options.musicVol = getEl('opt-vol-music').value;
+            saveMgr.data.options.sfxVol = getEl('opt-vol-sfx').value;
+            saveMgr.data.options.touchMode = getEl('opt-touch').value;
+            audio.updateVolumes();
+            saveMgr.save();
+            // Trigger resize to apply touch mode
+            window.dispatchEvent(new Event('resize'));
+        };
+
+        getEl('opt-vol-master').addEventListener('input', updateOpt);
+        getEl('opt-vol-music').addEventListener('input', updateOpt);
+        getEl('opt-vol-sfx').addEventListener('input', updateOpt);
+        getEl('opt-touch').addEventListener('change', updateOpt);
+        getEl('btn-options-close').addEventListener('click', () => { audio.playUI(); getEl('modal-options').classList.remove('active'); });
+
+        getEl('btn-save-export').addEventListener('click', () => {
+            const data = btoa(JSON.stringify(saveMgr.data));
+            prompt("Copy your save data:", data);
+        });
+        getEl('btn-save-import').addEventListener('click', () => {
+            const data = prompt("Paste your save data:");
+            if(data) {
+                try {
+                    const parsed = JSON.parse(atob(data));
+                    saveMgr.data = parsed;
+                    saveMgr.save();
+                    alert("Import successful! Reloading...");
+                    location.reload();
+                } catch(e) { alert("Invalid save data."); }
+            }
+        });
+        let resetClicks = 0;
+        getEl('btn-save-reset').addEventListener('click', (e) => {
+            resetClicks++;
+            if(resetClicks === 1) {
+                e.target.innerText = "Click again to confirm reset";
+                setTimeout(()=> { resetClicks=0; e.target.innerText="Reset Save"; }, 3000);
+            } else {
+                saveMgr.reset();
+                location.reload();
+            }
+        });
+
+        // Visibility API for auto-pause
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && this.state === 'PLAYING') {
+                this.togglePause();
+            }
+        });
+        window.addEventListener('blur', () => {
+            if (this.state === 'PLAYING') {
+                this.togglePause();
+            }
+        });
+    }
+
+    togglePause() {
+        if (this.state === 'PLAYING') {
+            this.state = 'PAUSED';
+            document.getElementById('screen-paused').classList.add('active');
+            document.getElementById('hud').style.display = 'none';
+        } else if (this.state === 'PAUSED') {
+            this.state = 'PLAYING';
+            document.getElementById('screen-paused').classList.remove('active');
+            document.getElementById('hud').style.display = 'flex';
+            this.lastTime = performance.now();
+        }
+    }
+
+    startGame() {
+        this.state = 'PLAYING';
+        this.score = 0;
+        this.combo = 0;
+        this.wave = 1;
+        this.player.lives = 3;
+        this.player.x = LOGICAL_WIDTH / 2;
+        this.player.y = LOGICAL_HEIGHT / 2;
+        this.player.invuln = 2; // 2 seconds invulnerability at start
+        this.arena.radius = this.arena.baseRadius;
+        this.spores = [];
+        this.pulses = [];
+        this.particles = [];
+
+        document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+        document.getElementById('hud').style.display = 'flex';
+        this.updateHUD();
+
+        this.lastTime = performance.now();
+        audio.init();
+    }
+
+    updateHUD() {
+        document.getElementById('score-val').innerText = this.score + (this.combo > 1 ? ` (x${this.combo})` : '');
+        document.getElementById('lives-val').innerText = this.player.lives;
+    }
+
+    spawnSpore() {
+        // Spawn spore inside arena but away from player
+        let valid = false;
+        let sx, sy;
+        while(!valid) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * (this.arena.radius - 30);
+            sx = this.arena.x + Math.cos(angle) * dist;
+            sy = this.arena.y + Math.sin(angle) * dist;
+            if (Math.hypot(sx - this.player.x, sy - this.player.y) > 100) {
+                valid = true;
+            }
+        }
+        this.spores.push({
+            x: sx, y: sy,
+            radius: 12 + Math.random() * 8,
+            vx: (Math.random() - 0.5) * 50,
+            vy: (Math.random() - 0.5) * 50,
+            wobble: Math.random() * Math.PI * 2,
+            color: `hsl(${Math.random() * 60 + 100}, 80%, 60%)` // Greenish
+        });
+    }
+
+    triggerPulse(x, y, isPlayer) {
+        this.pulses.push({
+            x: x, y: y,
+            radius: 10,
+            maxRadius: isPlayer ? 80 : 60,
+            life: 0,
+            maxLife: 0.5,
+            isPlayer: isPlayer
+        });
+        if (isPlayer) {
+            audio.playPulse();
+            this.player.pulseCooldown = 0.8;
+
+            // Generate visual spark
+            for(let i=0; i<5; i++){
+                 this.particles.push({
+                    x: x, y: y,
+                    vx: (Math.random()-0.5)*200, vy: (Math.random()-0.5)*200,
+                    life: 0.3, maxLife: 0.3, color: '#fff', size: 2
+                });
+            }
+        }
+    }
+
+    spawnExplosion(x, y, color) {
+        audio.playExplosion();
+        for(let i=0; i<15; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 300 + 100;
+            this.particles.push({
+                x: x, y: y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 0.5, maxLife: 0.5 + Math.random()*0.2,
+                color: color,
+                size: Math.random() * 4 + 2
+            });
+        }
+    }
+
+    takeDamage() {
+        if (this.player.invuln > 0) return;
+        audio.playHit();
+        this.player.lives--;
+        this.combo = 0;
+        this.updateHUD();
+        this.player.invuln = 1.5;
+
+        // Push back towards center
+        const angle = Math.atan2(this.arena.y - this.player.y, this.arena.x - this.player.x);
+        this.player.x += Math.cos(angle) * 30;
+        this.player.y += Math.sin(angle) * 30;
+
+        // Shake screen (handled in rendering)
+        this.screenShake = 0.3;
+
+        if (this.player.lives <= 0) {
+            this.gameOver();
+        }
+    }
+
+    gameOver() {
+        this.state = 'GAME_OVER';
+        document.getElementById('hud').style.display = 'none';
+        const goScreen = document.getElementById('screen-gameover');
+        goScreen.classList.add('active');
+        document.getElementById('final-score').innerText = this.score;
+
+        saveMgr.data.totalGamesPlayed++;
+        saveMgr.data.totalScoreAccumulated += this.score;
+
+        const newHsMsg = document.getElementById('new-high-score-msg');
+        if (this.score > saveMgr.data.highScore) {
+            saveMgr.data.highScore = this.score;
+            newHsMsg.style.display = 'block';
+        } else {
+            newHsMsg.style.display = 'none';
+        }
+        saveMgr.save();
+    }
+
+    update(dt) {
+        if (this.state !== 'PLAYING') return;
+
+        // --- Player Update ---
+        const move = input.getMovement();
+        this.player.vx = move.dx * this.player.speed;
+        this.player.vy = move.dy * this.player.speed;
+
+        this.player.x += this.player.vx * dt;
+        this.player.y += this.player.vy * dt;
+
+        if (this.player.pulseCooldown > 0) this.player.pulseCooldown -= dt;
+        if (this.player.invuln > 0) this.player.invuln -= dt;
+
+        // Trigger pulse
+        if (input.actionPressed && this.player.pulseCooldown <= 0) {
+            this.triggerPulse(this.player.x, this.player.y, true);
+        }
+
+        // --- Arena Update ---
+        this.arena.wobblePhase += dt * 2;
+        this.arena.radius -= this.arena.shrinkRate * dt;
+        if (this.arena.radius < this.arena.minRadius) {
+            // Squished!
+            this.takeDamage();
+            this.arena.radius = this.arena.minRadius + 50; // Give some breathing room
+        }
+
+        // Constrain player to arena
+        const distToCenter = Math.hypot(this.player.x - this.arena.x, this.player.y - this.arena.y);
+        if (distToCenter > this.arena.radius - this.player.radius) {
+            // Hit membrane
+            this.takeDamage();
+            const angle = Math.atan2(this.player.y - this.arena.y, this.player.x - this.arena.x);
+            this.player.x = this.arena.x + Math.cos(angle) * (this.arena.radius - this.player.radius - 5);
+            this.player.y = this.arena.y + Math.sin(angle) * (this.arena.radius - this.player.radius - 5);
+        }
+
+        // --- Spore Update ---
+        this.spawnerTimer -= dt;
+        if (this.spawnerTimer <= 0) {
+            this.spawnSpore();
+            this.spawnerTimer = 2.0 - Math.min(1.5, this.score / 5000); // gets faster
+        }
+
+        for (let i = this.spores.length - 1; i >= 0; i--) {
+            let s = this.spores[i];
+            s.x += s.vx * dt;
+            s.y += s.vy * dt;
+            s.wobble += dt * 5;
+
+            // Constrain spore to arena (bounce)
+            const sDist = Math.hypot(s.x - this.arena.x, s.y - this.arena.y);
+            if (sDist > this.arena.radius - s.radius) {
+                const angle = Math.atan2(s.y - this.arena.y, s.x - this.arena.x);
+                // Reflect velocity
+                const nx = Math.cos(angle);
+                const ny = Math.sin(angle);
+                const dot = s.vx * nx + s.vy * ny;
+                s.vx = s.vx - 2 * dot * nx;
+                s.vy = s.vy - 2 * dot * ny;
+                // Clamp position
+                s.x = this.arena.x + nx * (this.arena.radius - s.radius - 1);
+                s.y = this.arena.y + ny * (this.arena.radius - s.radius - 1);
+            }
+
+            // Check collision with player
+            if (this.player.invuln <= 0) {
+                if (Math.hypot(this.player.x - s.x, this.player.y - s.y) < this.player.radius + s.radius) {
+                    this.takeDamage();
+                    this.spawnExplosion(s.x, s.y, s.color);
+                    this.spores.splice(i, 1);
+                    continue;
+                }
+            }
+        }
+
+        // --- Pulses Update & Chain Reactions ---
+        for (let i = this.pulses.length - 1; i >= 0; i--) {
+            let p = this.pulses[i];
+            p.life += dt;
+            p.radius = (p.life / p.maxLife) * p.maxRadius;
+
+            // Check collisions with spores
+            for (let j = this.spores.length - 1; j >= 0; j--) {
+                let s = this.spores[j];
+                if (Math.hypot(p.x - s.x, p.y - s.y) < p.radius + s.radius) {
+                    // Explode spore!
+                    this.spawnExplosion(s.x, s.y, s.color);
+                    // Chain reaction: spawn new pulse at spore location
+                    this.triggerPulse(s.x, s.y, false);
+
+                    // Score logic
+                    this.combo++;
+                    this.comboTimer = 2.0;
+                    this.score += 10 * this.combo;
+
+                    // Expand arena
+                    this.arena.radius = Math.min(this.arena.baseRadius, this.arena.radius + 10);
+
+                    this.updateHUD();
+                    this.spores.splice(j, 1);
+                }
+            }
+
+            if (p.life >= p.maxLife) {
+                this.pulses.splice(i, 1);
+            }
+        }
+
+        if (this.comboTimer > 0) {
+            this.comboTimer -= dt;
+            if (this.comboTimer <= 0) {
+                this.combo = 0;
+                this.updateHUD();
+            }
+        }
+
+        // --- Particles Update ---
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let pt = this.particles[i];
+            pt.x += pt.vx * dt;
+            pt.y += pt.vy * dt;
+            pt.life -= dt;
+            if (pt.life <= 0) {
+                this.particles.splice(i, 1);
+            }
+        }
+
+        if (this.screenShake > 0) this.screenShake -= dt;
+    }
+
+    drawMembrane(ctx, cx, cy, radius, phase, color, lineWidth) {
+        ctx.beginPath();
+        const segments = 30;
+        for (let i = 0; i <= segments; i++) {
+            const angle = (i / segments) * Math.PI * 2;
+            // Add wobbly noise
+            const offset = Math.sin(angle * 5 + phase) * 10 + Math.cos(angle * 3 - phase * 1.5) * 5;
+            const r = radius + offset;
+            const x = cx + Math.cos(angle) * r;
+            const y = cy + Math.sin(angle) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.stroke();
+    }
+
+    draw() {
+        ctx.fillStyle = '#050510';
+        ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+
+        if (this.state === 'TITLE') {
+            // Draw aesthetic background
+            ctx.globalAlpha = 0.3;
+            this.drawMembrane(ctx, LOGICAL_WIDTH/2, LOGICAL_HEIGHT/2, 200, performance.now()/1000, '#d9a481', 4);
+            ctx.globalAlpha = 1.0;
+            return;
+        }
+
+        ctx.save();
+        if (this.screenShake > 0 && saveMgr.data.options.sfxVol > 0) {
+            const shakeAmt = this.screenShake * 10;
+            ctx.translate((Math.random()-0.5)*shakeAmt, (Math.random()-0.5)*shakeAmt);
+        }
+
+        // Draw Arena Membrane
+        // Glow effect
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#d9a481';
+        this.drawMembrane(ctx, this.arena.x, this.arena.y, this.arena.radius, this.arena.wobblePhase, '#d9a481', 6);
+        ctx.shadowBlur = 0;
+
+        // Draw inner background
+        ctx.save();
+        ctx.beginPath();
+        const segments = 30;
+        for (let i = 0; i <= segments; i++) {
+            const angle = (i / segments) * Math.PI * 2;
+            const offset = Math.sin(angle * 5 + this.arena.wobblePhase) * 10 + Math.cos(angle * 3 - this.arena.wobblePhase * 1.5) * 5;
+            const r = this.arena.radius + offset;
+            const x = this.arena.x + Math.cos(angle) * r;
+            const y = this.arena.y + Math.sin(angle) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.clip();
+        // Inner grid pattern
+        ctx.strokeStyle = 'rgba(217, 164, 129, 0.1)';
+        ctx.lineWidth = 1;
+        for(let i=0; i<LOGICAL_WIDTH; i+=40) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, LOGICAL_HEIGHT); ctx.stroke();
+        }
+        for(let i=0; i<LOGICAL_HEIGHT; i+=40) {
+            ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(LOGICAL_WIDTH, i); ctx.stroke();
+        }
+        ctx.restore();
+
+        // Draw Pulses
+        for (let p of this.pulses) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = p.isPlayer ? '#fff' : '#d9a481';
+            ctx.lineWidth = 4 * (1 - p.life/p.maxLife);
+            ctx.stroke();
+
+            // Fill
+            ctx.fillStyle = p.isPlayer ? `rgba(255,255,255,${0.3 * (1 - p.life/p.maxLife)})` : `rgba(217,164,129,${0.3 * (1 - p.life/p.maxLife)})`;
+            ctx.fill();
+        }
+
+        // Draw Spores
+        for (let s of this.spores) {
+            this.drawMembrane(ctx, s.x, s.y, s.radius, s.wobble, s.color, 3);
+            // Core
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.radius * 0.4, 0, Math.PI*2);
+            ctx.fillStyle = s.color;
+            ctx.fill();
+        }
+
+        // Draw Player
+        if (this.state === 'PLAYING' || this.state === 'GAME_OVER') {
+            if (this.player.invuln <= 0 || Math.floor(performance.now() / 100) % 2 === 0) {
+                ctx.beginPath();
+                ctx.arc(this.player.x, this.player.y, this.player.radius, 0, Math.PI*2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                ctx.strokeStyle = '#d9a481';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Nucleus
+                ctx.beginPath();
+                ctx.arc(this.player.x, this.player.y, this.player.radius * 0.5, 0, Math.PI*2);
+                ctx.fillStyle = '#d9a481';
+                ctx.fill();
+            }
+        }
+
+        // Draw Particles
+        for (let pt of this.particles) {
+            ctx.globalAlpha = pt.life / pt.maxLife;
+            ctx.fillStyle = pt.color;
+            ctx.fillRect(pt.x - pt.size/2, pt.y - pt.size/2, pt.size, pt.size);
+        }
+        ctx.globalAlpha = 1.0;
+
+        ctx.restore();
+    }
+
+    loop(now) {
+        let dt = Math.min((now - this.lastTime) / 1000, 0.1);
+        this.lastTime = now;
+
+        this.update(dt);
+        this.draw();
+
+        requestAnimationFrame((n) => this.loop(n));
+    }
+
+    start() {
+        this.lastTime = performance.now();
+        requestAnimationFrame((n) => this.loop(n));
+    }
+}
+
+const engine = new GameEngine();
+engine.start();
+
+
+
+});
+</script>
+</body>
+</html>
