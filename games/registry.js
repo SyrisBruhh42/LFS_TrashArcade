@@ -453,5 +453,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2026-10-20",
     "accentColor": "#ac6a66",
     "path": "./games/035-orbital-dilation-blitz/index.html"
+  },
+  {
+    "id": "036",
+    "slug": "036-gothic-drill-sacrifice",
+    "title": "Gothic Drill Sacrifice",
+    "genre": "Subterranean Drilling/Mining Roguelite",
+    "coreMechanic": "Sacrifice Health for Overdrive Power",
+    "setting": "Haunted Victorian Manor",
+    "description": "Descend through the subterranean depths beneath a haunted Victorian manor. Sacrifice your life force to power an arcane drill to destroy spirits and carve your path to the abyss.",
+    "controls": "WASD/Arrows to move and drill. Space/Tap to sacrifice health for Overdrive. Mouse/Touch to navigate.",
+    "createdAt": "2024-04-20",
+    "accentColor": "#5be29e",
+    "path": "./games/036-gothic-drill-sacrifice/index.html"
   }
 ];
