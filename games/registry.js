@@ -297,5 +297,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-11-06",
     "accentColor": "#b5954c",
     "path": "./games/024-orbital-rhythm-collapse/index.html"
+  },
+  {
+    "id": "025",
+    "slug": "025-echo-forge-parry",
+    "title": "Echo Forge Parry",
+    "genre": "Directional Parry/Slash Arcade",
+    "coreMechanic": "Echo/Ghost Self-Cooperation",
+    "setting": "Volcanic Forge World",
+    "description": "Master the forge! Cooperate with your past echoes to parry attacks and slash enemies in this fiery volcanic world.",
+    "controls": "WASD/Arrows to move, Mouse to slash/parry. Touch and drag to slash/parry.",
+    "createdAt": "2024-05-15",
+    "accentColor": "#a6a5bf",
+    "path": "./games/025-echo-forge-parry/index.html"
   }
 ];
