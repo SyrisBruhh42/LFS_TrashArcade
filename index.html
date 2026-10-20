@@ -1,1535 +1,742 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Jules' GBA: A Traveler's Chronicle</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LFS_TrashArcade Cabinet — Offline Game Hub</title>
   <style>
     :root {
-      --bg-color: #121820;
-      --panel-bg: rgba(22, 30, 42, 0.95);
-      --panel-border: #4a688a;
-      --panel-header: #283a52;
-      --text-main: #e2f0fd;
-      --text-muted: #8ba2bd;
-      --accent-gold: #f5ca53;
-      --accent-blue: #3a9bdc;
-      --accent-green: #48c774;
-      --accent-red: #f14668;
-      --accent-purple: #9b51e0;
-      --slot-bg: #1a2332;
-      --slot-hover: #2d3d54;
-      --font-family: 'Courier New', Courier, monospace, monospace;
+      --bg-deep: #090c14;
+      --bg-panel: #111726;
+      --bg-card: #161f33;
+      --bg-card-hover: #1d2942;
+      --border-subtle: #283655;
+      --text-primary: #eef4ff;
+      --text-secondary: #98abc9;
+      --accent-cyan: #00e5ff;
+      --accent-gold: #ffd166;
+      --accent-magenta: #ff4d8d;
+      --accent-green: #06d6a0;
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+      --font-mono: 'Courier New', Courier, monospace;
     }
 
     * {
       box-sizing: border-box;
-      user-select: none;
-      -webkit-user-select: none;
       margin: 0;
       padding: 0;
     }
 
-    body, html {
-      width: 100%;
-      height: 100%;
-      background-color: var(--bg-color);
-      color: var(--text-main);
-      font-family: var(--font-family);
-      overflow: hidden;
+    body {
+      min-height: 100vh;
+      background: radial-gradient(circle at 50% 0%, #17223b 0%, var(--bg-deep) 70%);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
     }
 
-    #game-container {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      max-width: 1280px;
-      max-height: 800px;
-      background-color: #000;
-      display: flex;
-      flex-direction: column;
-      border: 4px solid var(--panel-border);
-      box-shadow: 0 0 20px rgba(0,0,0,0.8);
-      overflow: hidden;
-    }
-
-    /* Top Navigation / Status Header */
-    #top-bar {
-      height: 40px;
-      background: var(--panel-header);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 12px;
-      border-bottom: 2px solid var(--panel-border);
-      z-index: 10;
-      font-size: 13px;
-    }
-
-    .nav-tabs {
-      display: flex;
-      gap: 6px;
-    }
-
-    .tab-btn {
-      background: #1a2636;
-      border: 1px solid var(--panel-border);
-      color: var(--text-main);
-      padding: 4px 10px;
-      font-family: var(--font-family);
-      font-size: 12px;
-      cursor: pointer;
-      border-radius: 3px;
-      transition: background 0.15s;
-    }
-
-    .tab-btn:hover, .tab-btn.active {
-      background: var(--accent-blue);
-      color: #fff;
-    }
-
-    /* Main Viewport Area */
-    #viewport-container {
-      position: relative;
-      flex: 1;
-      width: 100%;
-      height: calc(100% - 100px);
-      overflow: hidden;
-      background: #05080c;
-    }
-
-    canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      image-rendering: pixelated;
-    }
-
-    /* Floating Overlay Panels */
-    .overlay-panel {
-      position: absolute;
-      top: 10px;
-      bottom: 10px;
-      left: 10px;
-      right: 10px;
-      background: var(--panel-bg);
-      border: 2px solid var(--panel-border);
-      border-radius: 6px;
-      display: none;
-      flex-direction: column;
+    header {
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(17, 23, 38, 0.9);
+      padding: 20px 24px;
+      position: sticky;
+      top: 0;
       z-index: 20;
-      padding: 16px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.7);
-      backdrop-filter: blur(4px);
+      backdrop-filter: blur(10px);
     }
 
-    .overlay-panel.active {
+    .header-inner {
+      max-width: 1280px;
+      margin: 0 auto;
       display: flex;
-    }
-
-    .panel-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 2px solid var(--panel-border);
-      padding-bottom: 8px;
-      margin-bottom: 12px;
-    }
-
-    .panel-title {
-      font-size: 18px;
-      font-weight: bold;
-      color: var(--accent-gold);
-    }
-
-    .close-btn {
-      background: var(--accent-red);
-      color: #fff;
-      border: none;
-      padding: 4px 10px;
-      cursor: pointer;
-      border-radius: 3px;
-      font-weight: bold;
-    }
-
-    /* Bottom HUD / Hotbar */
-    #bottom-hud {
-      height: 60px;
-      background: var(--panel-header);
-      border-top: 2px solid var(--panel-border);
-      display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      padding: 0 12px;
-      z-index: 10;
+      gap: 16px;
     }
 
-    .hotbar {
+    .brand {
       display: flex;
-      gap: 6px;
+      align-items: center;
+      gap: 14px;
     }
 
-    .hotbar-slot {
+    .brand-logo {
       width: 44px;
       height: 44px;
-      background: var(--slot-bg);
-      border: 2px solid var(--panel-border);
-      border-radius: 4px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      cursor: pointer;
-    }
-
-    .hotbar-slot.active {
-      border-color: var(--accent-gold);
-      box-shadow: 0 0 8px var(--accent-gold);
-    }
-
-    .hotbar-key {
-      position: absolute;
-      top: 2px;
-      left: 3px;
-      font-size: 9px;
-      color: var(--text-muted);
-    }
-
-    .slot-icon {
-      font-size: 18px;
-    }
-
-    .slot-count {
-      position: absolute;
-      bottom: 2px;
-      right: 4px;
-      font-size: 10px;
-      color: var(--accent-gold);
-      font-weight: bold;
-    }
-
-    /* Controls Overlay for Touch / Mobile */
-    #mobile-controls {
-      position: absolute;
-      bottom: 70px;
-      left: 10px;
-      right: 10px;
-      display: none;
-      justify-content: space-between;
-      pointer-events: none;
-      z-index: 15;
-    }
-
-    .dpad, .action-buttons {
-      pointer-events: auto;
-      display: grid;
-      gap: 4px;
-    }
-
-    .dpad {
-      grid-template-columns: repeat(3, 40px);
-      grid-template-rows: repeat(3, 40px);
-    }
-
-    .dpad-btn, .action-btn {
-      background: rgba(40, 58, 82, 0.85);
-      border: 1px solid var(--panel-border);
-      color: white;
-      border-radius: 6px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: bold;
-      font-size: 14px;
-      user-select: none;
+      box-shadow: 0 0 18px rgba(0, 229, 255, 0.35);
     }
 
-    .action-buttons {
+    .brand-title h1 {
+      font-size: 1.45rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    .brand-title p {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    .header-actions {
       display: flex;
+      flex-wrap: wrap;
+      align-items: center;
       gap: 10px;
-      align-items: flex-end;
-    }
-
-    .action-btn {
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      background: rgba(58, 155, 220, 0.85);
-    }
-
-    /* Tooltip */
-    #tooltip {
-      position: absolute;
-      background: rgba(10, 15, 22, 0.95);
-      border: 1px solid var(--accent-gold);
-      padding: 8px 12px;
-      border-radius: 4px;
-      font-size: 12px;
-      pointer-events: none;
-      z-index: 100;
-      display: none;
-      max-width: 250px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    }
-
-    /* Flex Grid layouts for panels */
-    .grid-2col {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    .grid-3col {
-      display: grid;
-      grid-template-columns: 1fr 2fr 1fr;
-      gap: 12px;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    .panel-scroll {
-      overflow-y: auto;
-      padding-right: 6px;
-    }
-
-    .panel-scroll::-webkit-scrollbar {
-      width: 6px;
-    }
-    .panel-scroll::-webkit-scrollbar-thumb {
-      background: var(--panel-border);
-      border-radius: 3px;
-    }
-
-    .card {
-      background: var(--slot-bg);
-      border: 1px solid var(--panel-border);
-      border-radius: 4px;
-      padding: 10px;
-      margin-bottom: 8px;
-    }
-
-    .card.interactive {
-      cursor: pointer;
-    }
-    .card.interactive:hover {
-      border-color: var(--accent-blue);
-      background: var(--slot-hover);
     }
 
     .btn {
-      background: var(--accent-blue);
-      color: #fff;
-      border: none;
-      padding: 6px 14px;
-      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.9rem;
       cursor: pointer;
-      font-family: var(--font-family);
-      font-size: 13px;
-      font-weight: bold;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      text-decoration: none;
+      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
     }
+
     .btn:hover {
-      filter: brightness(1.1);
+      transform: translateY(-1px);
+      border-color: var(--accent-cyan);
+      background: var(--bg-card-hover);
     }
-    .btn-success { background: var(--accent-green); }
-    .btn-danger { background: var(--accent-red); }
-    .btn-gold { background: var(--accent-gold); color: #000; }
 
-    input, select, textarea {
-      background: #121820;
-      border: 1px solid var(--panel-border);
-      color: var(--text-main);
-      padding: 6px 10px;
-      border-radius: 4px;
-      font-family: var(--font-family);
-      font-size: 13px;
+    .btn-primary {
+      background: linear-gradient(135deg, #00b4d8, #0077b6);
+      border-color: var(--accent-cyan);
+      color: #fff;
+    }
+
+    .btn-gold {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      border-color: var(--accent-gold);
+      color: #fff;
+    }
+
+    main {
+      max-width: 1280px;
       width: 100%;
+      margin: 0 auto;
+      padding: 24px;
+      flex: 1;
     }
 
-    /* Turn-based combat overlay styling */
-    #combat-overlay {
-      position: absolute;
-      inset: 0;
-      background: rgba(5, 8, 12, 0.95);
-      z-index: 30;
-      display: none;
-      flex-direction: column;
-    }
-    #combat-overlay.active {
+    .controls-bar {
       display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      background: var(--bg-panel);
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .search-box {
+      flex: 1;
+      min-width: 240px;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 11px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      font-size: 0.95rem;
+      outline: none;
+    }
+
+    .search-box input:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.2);
+    }
+
+    .genre-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .genre-tag {
+      padding: 6px 13px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-panel);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .genre-tag.active,
+    .genre-tag:hover {
+      background: rgba(0, 229, 255, 0.14);
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+    }
+
+    .stats-strip {
+      display: flex;
+      gap: 18px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+      gap: 20px;
+    }
+
+    .game-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .game-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--card-accent, var(--accent-cyan));
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    }
+
+    .card-thumb {
+      position: relative;
+      height: 150px;
+      background: #0b101d;
+      border-bottom: 1px solid var(--border-subtle);
+      overflow: hidden;
+    }
+
+    .card-thumb canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .card-id-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 4px 9px;
+      border-radius: 6px;
+      background: rgba(9, 12, 20, 0.85);
+      border: 1px solid var(--card-accent, var(--accent-cyan));
+      color: var(--card-accent, var(--accent-cyan));
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .card-score-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(9, 12, 20, 0.88);
+      border: 1px solid var(--accent-gold);
+      color: var(--accent-gold);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .card-body {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .card-axes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .axis-pill {
+      font-size: 0.74rem;
+      padding: 3px 8px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-secondary);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .card-desc {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.45;
+      flex: 1;
+    }
+
+    .card-controls {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      background: rgba(9, 12, 20, 0.55);
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+    }
+
+    .card-footer {
+      padding: 12px 16px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card-date {
+      font-size: 0.76rem;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 8, 15, 0.82);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      max-width: 560px;
+      width: 100%;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .modal textarea {
+      width: 100%;
+      min-height: 130px;
+      background: var(--bg-deep);
+      color: var(--accent-cyan);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 10px;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      resize: vertical;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--text-secondary);
+      background: var(--bg-panel);
+      border-radius: 12px;
+      border: 1px dashed var(--border-subtle);
+    }
+
+    footer {
+      text-align: center;
+      padding: 18px;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border-subtle);
     }
   </style>
 </head>
 <body>
-
-<div id="game-container">
-  <!-- Top Bar -->
-  <div id="top-bar">
-    <div style="font-weight: bold; color: var(--accent-gold);">🎮 JULES' GBA</div>
-    <div class="nav-tabs">
-      <button class="tab-btn active" onclick="Game.setTab('map')">🗺️ World Map</button>
-      <button class="tab-btn" onclick="Game.setTab('party')">⚔️ Party & Jobs</button>
-      <button class="tab-btn" onclick="Game.setTab('jei')">📖 JEI Index</button>
-      <button class="tab-btn" onclick="Game.setTab('automation')">⚙️ Automation</button>
-      <button class="tab-btn" onclick="Game.setTab('system')">💾 Save/Mods</button>
-    </div>
-    <div id="time-display" style="color: var(--text-muted); font-size: 12px;">Day 1 - 08:00 AM</div>
-  </div>
-
-  <!-- Main Viewport -->
-  <div id="viewport-container">
-    <canvas id="gameCanvas"></canvas>
-
-    <!-- Combat Overlay -->
-    <div id="combat-overlay">
-      <canvas id="combatCanvas"></canvas>
-      <div id="combat-menu-bar" style="position: absolute; bottom: 20px; left: 20px; right: 20px; display: flex; gap: 10px; justify-content: center; z-index: 35;">
-        <button class="btn btn-gold" onclick="Game.executeCombatAction('attack')">⚔️ Attack</button>
-        <button class="btn" onclick="Game.executeCombatAction('skill')">✨ Psynergy Skill</button>
-        <button class="btn btn-success" onclick="Game.executeCombatAction('item')">🧪 Item</button>
-        <button class="btn btn-danger" onclick="Game.executeCombatAction('flee')">🏃 Run</button>
-      </div>
-    </div>
-
-    <!-- Party & Jobs Overlay -->
-    <div id="panel-party" class="overlay-panel">
-      <div class="panel-header">
-        <div class="panel-title">⚔️ Roster Management (FFTA System)</div>
-        <button class="close-btn" onclick="Game.setTab('map')">✕</button>
-      </div>
-      <div class="grid-3col">
-        <!-- Hero List -->
-        <div class="panel-scroll" id="party-roster-list"></div>
-        <!-- Hero Stats & Gear -->
-        <div class="panel-scroll" id="party-hero-details"></div>
-        <!-- Job & Skill Tree -->
-        <div class="panel-scroll" id="party-job-tree"></div>
-      </div>
-    </div>
-
-    <!-- JEI Crafting Overlay -->
-    <div id="panel-jei" class="overlay-panel">
-      <div class="panel-header">
-        <div class="panel-title">📖 JEI - Just Enough Items (ATM10 Crafting)</div>
-        <button class="close-btn" onclick="Game.setTab('map')">✕</button>
-      </div>
-      <div style="margin-bottom: 10px; display: flex; gap: 10px;">
-        <input type="text" id="jei-search" placeholder="Search items, recipes, materials..." oninput="Game.filterJEI()">
-        <button class="btn btn-gold" onclick="Game.quickCraftAll()">Auto-Craft All</button>
-      </div>
-      <div class="grid-2col">
-        <div class="panel-scroll" id="jei-item-list"></div>
-        <div class="panel-scroll" id="jei-recipe-details"></div>
-      </div>
-    </div>
-
-    <!-- Automation Network Overlay -->
-    <div id="panel-automation" class="overlay-panel">
-      <div class="panel-header">
-        <div class="panel-title">⚙️ Factorio Automation Grid</div>
-        <button class="close-btn" onclick="Game.setTab('map')">✕</button>
-      </div>
-      <div class="grid-2col">
-        <div class="panel-scroll" id="automation-summary"></div>
-        <div class="panel-scroll" id="automation-machines"></div>
-      </div>
-    </div>
-
-    <!-- Save / System / Mod Loader Overlay -->
-    <div id="panel-system" class="overlay-panel">
-      <div class="panel-header">
-        <div class="panel-title">💾 Save Management & Custom Content Loader</div>
-        <button class="close-btn" onclick="Game.setTab('map')">✕</button>
-      </div>
-      <div class="grid-2col">
-        <div class="card">
-          <h3>Local Storage Saves</h3>
-          <p style="font-size:12px; color: var(--text-muted); margin: 8px 0;">Auto-saves every 60 seconds.</p>
-          <div style="display:flex; gap:10px;">
-            <button class="btn btn-success" onclick="Game.saveGame()">Manual Save</button>
-            <button class="btn" onclick="Game.loadGame()">Load Save</button>
-            <button class="btn btn-danger" onclick="Game.resetGame()">Reset World</button>
-          </div>
-          <hr style="margin: 15px 0; border-color: var(--panel-border);">
-          <h3>Export / Import Save</h3>
-          <div style="display:flex; gap:10px; margin-top: 8px;">
-            <button class="btn" onclick="Game.exportSaveJSON()">Export JSON File</button>
-            <input type="file" id="import-save-file" style="display:none" onchange="Game.importSaveJSON(event)">
-            <button class="btn" onclick="document.getElementById('import-save-file').click()">Import JSON File</button>
-          </div>
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#090c14" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="6" width="20" height="12" rx="3"></rect>
+            <path d="M6 12h4m-2-2v4"></path>
+            <circle cx="15" cy="11" r="1"></circle>
+            <circle cx="18" cy="13" r="1"></circle>
+          </svg>
         </div>
-        <div class="card">
-          <h3>Infinite Mod / Content Loader</h3>
-          <p style="font-size:12px; color: var(--text-muted); margin: 8px 0;">Paste JSON to dynamically add custom Items, Jobs, Recipes, or Monsters!</p>
-          <textarea id="mod-json-input" rows="6" placeholder='{\n  "items": [{"id": "quantum_sword", "name": "Quantum Blade", "type": "weapon", "atk": 120}],\n  "recipes": []\n}'></textarea>
-          <button class="btn btn-gold" style="margin-top:8px;" onclick="Game.loadCustomModJSON()">Load Mod JSON</button>
+        <div class="brand-title">
+          <h1>LFS_TrashArcade Cabinet</h1>
+          <p>100% Offline Procedural HTML5 Game Factory</p>
         </div>
       </div>
+      <div class="header-actions">
+        <button class="btn btn-gold" id="random-game-btn" type="button">Random Game</button>
+        <button class="btn" id="backup-modal-btn" type="button">Global Save Backup</button>
+      </div>
     </div>
-  </div>
+  </header>
 
-  <!-- Mobile Controls Overlay -->
-  <div id="mobile-controls">
-    <div class="dpad">
-      <div></div><div class="dpad-btn" id="btn-up">▲</div><div></div>
-      <div class="dpad-btn" id="btn-left">◀</div><div></div><div class="dpad-btn" id="btn-right">▶</div>
-      <div></div><div class="dpad-btn" id="btn-down">▼</div><div></div>
-    </div>
-    <div class="action-buttons">
-      <div class="action-btn" id="btn-a">A</div>
-      <div class="action-btn" id="btn-b" style="background: rgba(241, 70, 104, 0.85);">B</div>
-    </div>
-  </div>
-
-  <!-- Bottom HUD / Hotbar -->
-  <div id="bottom-hud">
-    <div style="display:flex; align-items:center; gap: 10px;">
-      <div id="hero-mini-status" style="font-size: 12px; line-height: 1.4;">
-        <span style="color:var(--accent-gold); font-weight:bold;" id="field-hero-name">Hero</span><br>
-        <span style="color:var(--accent-green);" id="field-hero-hp">HP: 100/100</span> |
-        <span style="color:var(--accent-blue);" id="field-hero-mp">MP: 50/50</span>
+  <main>
+    <div class="controls-bar">
+      <div class="search-box">
+        <input type="search" id="search-input" placeholder="Search games by title, genre, or mechanic..." aria-label="Search games" />
+      </div>
+      <div class="stats-strip" id="arcade-stats">
+        <span id="stat-total-games">0 Games</span>
+        <span id="stat-total-plays">0 Plays</span>
       </div>
     </div>
 
-    <!-- 10 Hotbar Slots -->
-    <div class="hotbar" id="hotbar-slots"></div>
+    <div class="genre-tags" id="genre-tags"></div>
+    <div class="games-grid" id="games-grid"></div>
+  </main>
 
-    <div style="display:flex; gap: 6px;">
-      <button class="btn" onclick="Game.quickSortInventory()">Sort</button>
-      <button class="btn btn-gold" onclick="Game.quickStackChests()">Quick-Stack</button>
+  <div class="modal-backdrop" id="backup-modal" role="dialog" aria-modal="true" aria-labelledby="backup-modal-title">
+    <div class="modal">
+      <h2 id="backup-modal-title">Global Arcade Save Backup</h2>
+      <p style="font-size:0.88rem;color:var(--text-secondary);">
+        Export or import all <code>arcade_game_*</code> save keys across the entire Arcade Cabinet in a single Base64 bundle.
+      </p>
+      <textarea id="backup-textarea" placeholder="Base64 save bundle appears here..."></textarea>
+      <div id="backup-status" style="font-size:0.82rem;color:var(--accent-green);min-height:1.2em;"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;">
+        <button class="btn" id="export-bundle-btn" type="button">Generate &amp; Copy Export</button>
+        <button class="btn btn-primary" id="import-bundle-btn" type="button">Import Bundle</button>
+        <button class="btn" id="close-modal-btn" type="button">Close</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- Tooltip -->
-<div id="tooltip"></div>
+  <footer>
+    LFS_TrashArcade Offline Arcade Monorepo &bull; Zero External Dependencies &bull; Runs via <code>file://</code> or Static Host
+  </footer>
 
-<script>
-/* ==========================================================================
-   JULES' GBA - ENGINE ARCHITECTURE & REGISTRIES
-   ========================================================================== */
+  <script src="./games/registry.js"></script>
+  <script>
+    (function () {
+      'use strict';
 
-// --- 1. WEB AUDIO SYNTHESIZER ENGINE ---
-const AudioEngine = {
-  ctx: null,
-  init() {
-    if (!this.ctx) {
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-  },
-  play(type) {
-    if (!this.ctx) return;
-    try {
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
+      const registry = Array.isArray(window.ARCADE_REGISTRY) ? window.ARCADE_REGISTRY : [];
+      let selectedGenre = 'ALL';
+      let searchQuery = '';
 
-      if (type === 'step') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(120, now);
-        gain.gain.setValueAtTime(0.05, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-        osc.start(now);
-        osc.stop(now + 0.08);
-      } else if (type === 'hit') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(180, now);
-        osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-        osc.start(now);
-        osc.stop(now + 0.15);
-      } else if (type === 'magic') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(400, now);
-        osc.frequency.exponentialRampToValueAtTime(800, now + 0.25);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
-        osc.start(now);
-        osc.stop(now + 0.25);
-      } else if (type === 'craft') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.setValueAtTime(500, now + 0.08);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-        osc.start(now);
-        osc.stop(now + 0.2);
-      } else if (type === 'select') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, now);
-        gain.gain.setValueAtTime(0.08, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-        osc.start(now);
-        osc.stop(now + 0.05);
+      function getGameSave(game) {
+        const key = 'arcade_game_' + game.id + '_' + game.slug + '_v1';
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) return JSON.parse(raw);
+        } catch (e) {}
+        return null;
       }
-    } catch(e){}
-  }
-};
 
-// --- 2. EXTENSIBLE REGISTRIES ---
-const Registry = {
-  Items: {
-    // Basic Materials
-    wood: { id: 'wood', name: 'Wood', icon: '🪵', category: 'material', desc: 'Harvested from trees. Essential crafting fuel.' },
-    stone: { id: 'stone', name: 'Stone', icon: '🪨', category: 'material', desc: 'Sturdy stone dug from the earth.' },
-    iron_ore: { id: 'iron_ore', name: 'Iron Ore', icon: '⛰️', category: 'material', desc: 'Raw iron deposit mined from deep veins.' },
-    iron_ingot: { id: 'iron_ingot', name: 'Iron Ingot', icon: '🧱', category: 'material', desc: 'Smelted iron used for machinery and arms.' },
-    mana_crystal: { id: 'mana_crystal', name: 'Mana Crystal', icon: '🔮', category: 'material', desc: 'Glowing crystal infused with Psynergy energy.' },
-    gold_ore: { id: 'gold_ore', name: 'Gold Ore', icon: '✨', category: 'material', desc: 'Rare precious ore.' },
-    cosmic_dust: { id: 'cosmic_dust', name: 'Cosmic Dust', icon: '🌌', category: 'material', desc: 'Ultra-rare material dropped by cosmic monoliths.' },
+      function drawProceduralThumbnail(canvas, game) {
+        const ctx = canvas.getContext('2d');
+        const w = (canvas.width = 360);
+        const h = (canvas.height = 150);
+        const accent = game.accentColor || '#00e5ff';
 
-    // Weapons & Gear
-    bronze_sword: { id: 'bronze_sword', name: 'Bronze Sword', icon: '🗡️', category: 'weapon', atk: 12, desc: 'Reliable starter blade.' },
-    iron_blade: { id: 'iron_blade', name: 'Iron Blade', icon: '⚔️', category: 'weapon', atk: 28, desc: 'Forged iron sword crafted for warriors.' },
-    arcane_staff: { id: 'arcane_staff', name: 'Arcane Staff', icon: '🪄', category: 'weapon', matk: 35, desc: 'Amplifies elemental Psynergy abilities.' },
-    tactical_shield: { id: 'tactical_shield', name: 'Tactical Shield', icon: '🛡️', category: 'armor', def: 18, desc: 'Heavy shield favoured by Paladins.' },
+        const grad = ctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, '#090d1a');
+        grad.addColorStop(1, '#16223d');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
 
-    // Consumables & Field Tools
-    potion: { id: 'potion', name: 'Health Potion', icon: '🧪', category: 'consumable', heal: 50, desc: 'Restores 50 HP.' },
-    ether: { id: 'ether', name: 'Mana Ether', icon: '💧', category: 'consumable', mana: 30, desc: 'Restores 30 MP.' },
-    psy_glove: { id: 'psy_glove', name: 'Psynergy Glove', icon: '🧤', category: 'tool', ability: 'Lift', desc: 'Field tool allowing player to lift heavy boulders.' },
-
-    // Automation Machine Items
-    auto_miner: { id: 'auto_miner', name: 'Auto-Miner', icon: '⛏️', category: 'automation', desc: 'Automatically extracts resources from adjacent nodes.' },
-    conveyor: { id: 'conveyor', name: 'Conveyor Belt', icon: '➡️', category: 'automation', desc: 'Transports items across the map grid.' },
-    assembler: { id: 'assembler', name: 'Auto-Assembler', icon: '🏭', category: 'automation', desc: 'Automates crafting recipes continually.' },
-    chest: { id: 'chest', name: 'Storage Chest', icon: '📦', category: 'automation', desc: 'Holds up to 20 stacks of items.' }
-  },
-
-  Recipes: [
-    { id: 'iron_ingot', name: 'Iron Ingot', inputs: { iron_ore: 2, wood: 1 }, output: { iron_ingot: 1 } },
-    { id: 'bronze_sword', name: 'Bronze Sword', inputs: { wood: 3, stone: 5 }, output: { bronze_sword: 1 } },
-    { id: 'iron_blade', name: 'Iron Blade', inputs: { iron_ingot: 4, wood: 2 }, output: { iron_blade: 1 } },
-    { id: 'arcane_staff', name: 'Arcane Staff', inputs: { wood: 5, mana_crystal: 2 }, output: { arcane_staff: 1 } },
-    { id: 'potion', name: 'Health Potion', inputs: { wood: 1, mana_crystal: 1 }, output: { potion: 2 } },
-    { id: 'auto_miner', name: 'Auto-Miner', inputs: { iron_ingot: 5, stone: 10 }, output: { auto_miner: 1 } },
-    { id: 'conveyor', name: 'Conveyor Belt', inputs: { iron_ingot: 1 }, output: { conveyor: 4 } },
-    { id: 'assembler', name: 'Auto-Assembler', inputs: { iron_ingot: 10, mana_crystal: 3 }, output: { assembler: 1 } },
-    { id: 'chest', name: 'Storage Chest', inputs: { wood: 8 }, output: { chest: 1 } }
-  ],
-
-  Jobs: {
-    Squire: { name: 'Squire', statGrowth: { hp: 12, mp: 4, str: 5, agi: 4, int: 2 }, skills: ['slash', 'focus'] },
-    Knight: { name: 'Knight', statGrowth: { hp: 18, mp: 5, str: 7, agi: 3, int: 3 }, skills: ['slash', 'shield_bash', 'taunt'] },
-    Elementalist: { name: 'Elementalist', statGrowth: { hp: 8, mp: 12, str: 2, agi: 4, int: 8 }, skills: ['fireball', 'frost_nova', 'growth_heal'] },
-    Mechanist: { name: 'Mechanist', statGrowth: { hp: 10, mp: 8, str: 4, agi: 6, int: 6 }, skills: ['overclock', 'turret_drop'] },
-    Tactician: { name: 'Tactician', statGrowth: { hp: 11, mp: 9, str: 4, agi: 7, int: 6 }, skills: ['rally', 'hasten'] }
-  },
-
-  Skills: {
-    slash: { name: 'Slash', mp: 0, power: 1.2, type: 'physical', desc: 'Basic melee attack.' },
-    focus: { name: 'Focus', mp: 5, power: 0, type: 'buff', desc: 'Raises Attack Power for 2 turns.' },
-    shield_bash: { name: 'Shield Bash', mp: 8, power: 1.4, type: 'physical', desc: 'Stuns target.' },
-    fireball: { name: 'Fireball', mp: 10, power: 2.0, type: 'psynergy', element: 'fire', desc: 'Golden Sun style Pyrokinesis.' },
-    frost_nova: { name: 'Frost Nova', mp: 12, power: 1.8, type: 'psynergy', element: 'water', desc: 'Chills all foes.' },
-    growth_heal: { name: 'Growth Heal', mp: 8, power: 1.5, type: 'heal', fieldAbility: 'Growth', desc: 'Golden Sun Psynergy that heals or blooms overworld vines.' }
-  },
-
-  Biomes: {
-    emerald_plains: { name: 'Emerald Plains', bg: '#2d5a27', tileIcon: '🌱', encounters: ['slime', 'goblin'] },
-    cosmic_cavern: { name: 'Cosmic Cavern', bg: '#1c1b29', tileIcon: '🪨', encounters: ['rock_golem', 'mana_ghost'] },
-    magma_forge: { name: 'Magma Forge', bg: '#4d1e18', tileIcon: '🔥', encounters: ['fire_elemental', 'drake'] }
-  },
-
-  Monsters: {
-    slime: { name: 'Forest Slime', hp: 35, atk: 8, def: 2, agi: 3, exp: 15, loot: { wood: 2, potion: 0.3 } },
-    goblin: { name: 'Scout Goblin', hp: 55, atk: 14, def: 4, agi: 6, exp: 30, loot: { stone: 3, iron_ore: 0.5 } },
-    rock_golem: { name: 'Ancient Golem', hp: 120, atk: 22, def: 12, agi: 2, exp: 75, loot: { iron_ore: 4, mana_crystal: 0.5 } },
-    mana_ghost: { name: 'Mana Spectre', hp: 80, atk: 18, def: 5, agi: 8, exp: 60, loot: { mana_crystal: 2 } },
-    drake: { name: 'Magma Drake', hp: 250, atk: 35, def: 15, agi: 7, exp: 200, loot: { cosmic_dust: 1, gold_ore: 3 } }
-  }
-};
-
-/* ==========================================================================
-   ENGINE STATE & CORE LOGIC
-   ========================================================================== */
-
-const Game = {
-  activeTab: 'map',
-  activeHotbarIndex: 0,
-
-  // World Grid Data
-  mapSize: 64,
-  tileSize: 32,
-  map: [], // 2D grid
-  automationGrid: [], // Machines on tiles
-  fogOfWar: [], // Fog of war grid
-
-  // World Environment State
-  gameTime: 480, // Minutes in day (0-1440). Starts at 8:00 AM (480 mins)
-  dayCount: 1,
-
-  // Player & Party
-  player: {
-    x: 32,
-    y: 32,
-    facing: 'down'
-  },
-
-  inventory: [
-    { id: 'wood', count: 20 },
-    { id: 'stone', count: 15 },
-    { id: 'iron_ore', count: 8 },
-    { id: 'potion', count: 5 },
-    { id: 'auto_miner', count: 2 },
-    { id: 'conveyor', count: 10 }
-  ],
-
-  hotbar: ['auto_miner', 'conveyor', 'assembler', 'chest', 'potion', null, null, null, null, null],
-
-  party: [
-    {
-      id: 'hero_1',
-      name: 'Jules',
-      job: 'Squire',
-      level: 1,
-      exp: 0,
-      stats: { hp: 100, maxHp: 100, mp: 40, maxMp: 40, str: 14, agi: 10, int: 8, def: 6 },
-      skills: ['slash', 'focus'],
-      equipped: { weapon: 'bronze_sword', armor: null }
-    },
-    {
-      id: 'hero_2',
-      name: 'Isaac',
-      job: 'Elementalist',
-      level: 1,
-      exp: 0,
-      stats: { hp: 70, maxHp: 70, mp: 80, maxMp: 80, str: 6, agi: 12, int: 16, def: 4 },
-      skills: ['fireball', 'growth_heal'],
-      equipped: { weapon: 'arcane_staff', armor: null }
-    }
-  ],
-
-  // Combat State
-  inCombat: false,
-  combatState: null,
-
-  // Initialization
-  init() {
-    this.initCanvas();
-    this.generateMap();
-    this.setupControls();
-    this.renderHotbar();
-    this.startMainLoop();
-    console.log("Jules' GBA Engine Initialized successfully.");
-  },
-
-  initCanvas() {
-    this.canvas = document.getElementById('gameCanvas');
-    this.ctx = this.canvas.getContext('2d');
-    this.combatCanvas = document.getElementById('combatCanvas');
-    this.combatCtx = this.combatCanvas.getContext('2d');
-    this.resizeCanvas();
-    window.addEventListener('resize', () => this.resizeCanvas());
-  },
-
-  resizeCanvas() {
-    const container = document.getElementById('viewport-container');
-    this.canvas.width = container.clientWidth;
-    this.canvas.height = container.clientHeight;
-    this.combatCanvas.width = container.clientWidth;
-    this.combatCanvas.height = container.clientHeight;
-  },
-
-  generateMap() {
-    this.map = [];
-    this.automationGrid = [];
-    this.fogOfWar = [];
-
-    for (let y = 0; y < this.mapSize; y++) {
-      const row = [];
-      const autoRow = [];
-      const fogRow = [];
-
-      for (let x = 0; x < this.mapSize; x++) {
-        let tileType = 'emerald_plains';
-        let resource = null;
-        let obstacle = null;
-
-        // Simple procedural biome layout based on coordinates
-        const distFromCenter = Math.hypot(x - 32, y - 32);
-        if (distFromCenter > 22) {
-          tileType = 'cosmic_cavern';
-        } else if (x > 42) {
-          tileType = 'magma_forge';
+        // Deterministic seed from slug
+        let seed = 0;
+        const slugStr = String(game.slug || game.id || '001');
+        for (let i = 0; i < slugStr.length; i++) {
+          seed = (seed * 31 + slugStr.charCodeAt(i)) >>> 0;
         }
 
-        // Overworld Field Obstacles for Psynergy Puzzles
-        const obstacleRand = Math.random();
-        if (obstacleRand < 0.03) obstacle = 'boulder'; // Can be moved with Lift
-        else if (obstacleRand < 0.05) obstacle = 'sprout'; // Can grow with Growth
-        else if (obstacleRand < 0.07) obstacle = 'puddle'; // Can freeze with Frost
-
-        // Random resource nodes
-        const rand = Math.random();
-        if (!obstacle) {
-          if (rand < 0.06) resource = 'wood';
-          else if (rand < 0.10) resource = 'stone';
-          else if (rand < 0.13) resource = 'iron_ore';
-          else if (rand < 0.15) resource = 'mana_crystal';
+        // Perspective grid lines
+        ctx.strokeStyle = accent;
+        ctx.globalAlpha = 0.18;
+        ctx.lineWidth = 1;
+        for (let x = 0; x < w; x += 28) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+          ctx.stroke();
+        }
+        for (let y = 0; y < h; y += 28) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
         }
 
-        row.push({ tileType, resource, obstacle });
-        autoRow.push(null);
-        fogRow.push(true); // Unexplored fog
-      }
-      this.map.push(row);
-      this.automationGrid.push(autoRow);
-      this.fogOfWar.push(fogRow);
-    }
-
-    this.updateFogOfWar();
-  },
-
-  updateFogOfWar() {
-    const px = this.player.x;
-    const py = this.player.y;
-    const radius = 6;
-
-    for (let y = Math.max(0, py - radius); y <= Math.min(this.mapSize - 1, py + radius); y++) {
-      for (let x = Math.max(0, px - radius); x <= Math.min(this.mapSize - 1, px + radius); x++) {
-        if (Math.hypot(x - px, y - py) <= radius) {
-          this.fogOfWar[y][x] = false; // Reveal
+        // Procedural geometric emblem
+        ctx.globalAlpha = 0.85;
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 2.5;
+        const cx = w / 2;
+        const cy = h / 2;
+        const sides = 3 + (seed % 5);
+        const radius = 38;
+        ctx.beginPath();
+        for (let i = 0; i <= sides; i++) {
+          const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
+          const px = cx + Math.cos(angle) * radius;
+          const py = cy + Math.sin(angle) * radius;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
         }
-      }
-    }
-  },
+        ctx.stroke();
 
-  // Interface Navigation
-  setTab(tab) {
-    this.activeTab = tab;
-    AudioEngine.init();
-    AudioEngine.play('select');
-
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.overlay-panel').forEach(p => p.classList.remove('active'));
-
-    if (tab !== 'map') {
-      const panel = document.getElementById(`panel-${tab}`);
-      if (panel) panel.classList.add('active');
-    }
-
-    if (tab === 'party') this.renderPartyPanel();
-    if (tab === 'jei') this.renderJEIPanel();
-    if (tab === 'automation') this.renderAutomationPanel();
-  },
-
-  // Hotbar UI
-  renderHotbar() {
-    const container = document.getElementById('hotbar-slots');
-    container.innerHTML = '';
-    this.hotbar.forEach((itemId, idx) => {
-      const slot = document.createElement('div');
-      slot.className = `hotbar-slot ${this.activeHotbarIndex === idx ? 'active' : ''}`;
-      slot.onclick = () => {
-        this.activeHotbarIndex = idx;
-        this.renderHotbar();
-      };
-
-      const keyLabel = document.createElement('span');
-      keyLabel.className = 'hotbar-key';
-      keyLabel.innerText = idx === 9 ? '0' : (idx + 1).toString();
-      slot.appendChild(keyLabel);
-
-      if (itemId) {
-        const item = Registry.Items[itemId];
-        const invItem = this.inventory.find(i => i.id === itemId);
-        const count = invItem ? invItem.count : 0;
-
-        const icon = document.createElement('span');
-        icon.className = 'slot-icon';
-        icon.innerText = item ? item.icon : '❓';
-        slot.appendChild(icon);
-
-        if (count > 0) {
-          const countSpan = document.createElement('span');
-          countSpan.className = 'slot-count';
-          countSpan.innerText = count;
-          slot.appendChild(countSpan);
-        }
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 0.45, 0, Math.PI * 2);
+        ctx.fillStyle = accent;
+        ctx.globalAlpha = 0.35;
+        ctx.fill();
+        ctx.globalAlpha = 1;
       }
 
-      container.appendChild(slot);
-    });
-
-    // Update mini status
-    if (this.party.length > 0) {
-      const h = this.party[0];
-      document.getElementById('field-hero-name').innerText = `${h.name} (Lvl ${h.level} ${h.job})`;
-      document.getElementById('field-hero-hp').innerText = `HP: ${h.stats.hp}/${h.stats.maxHp}`;
-      document.getElementById('field-hero-mp').innerText = `MP: ${h.stats.mp}/${h.stats.maxMp}`;
-    }
-  },
-
-  // Setup Key and Mobile Touch Controls
-  setupControls() {
-    window.addEventListener('keydown', (e) => {
-      if (this.inCombat) return;
-
-      let dx = 0, dy = 0;
-      if (e.key === 'ArrowUp' || e.key === 'w') dy = -1;
-      if (e.key === 'ArrowDown' || e.key === 's') dy = 1;
-      if (e.key === 'ArrowLeft' || e.key === 'a') dx = -1;
-      if (e.key === 'ArrowRight' || e.key === 'd') dx = 1;
-
-      if (dx !== 0 || dy !== 0) {
-        this.movePlayer(dx, dy);
-      }
-
-      // Hotkey slot selection
-      if (e.key >= '1' && e.key <= '9') {
-        this.activeHotbarIndex = parseInt(e.key) - 1;
-        this.renderHotbar();
-      } else if (e.key === '0') {
-        this.activeHotbarIndex = 9;
-        this.renderHotbar();
-      }
-
-      // Action Key (Space / E)
-      if (e.key === ' ' || e.key === 'e') {
-        this.interactCurrentTile();
-      }
-    });
-
-    // Check Mobile Touch
-    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-      document.getElementById('mobile-controls').style.display = 'flex';
-
-      document.getElementById('btn-up').onclick = () => this.movePlayer(0, -1);
-      document.getElementById('btn-down').onclick = () => this.movePlayer(0, 1);
-      document.getElementById('btn-left').onclick = () => this.movePlayer(-1, 0);
-      document.getElementById('btn-right').onclick = () => this.movePlayer(1, 0);
-      document.getElementById('btn-a').onclick = () => this.interactCurrentTile();
-    }
-  },
-
-  movePlayer(dx, dy) {
-    const newX = Math.max(0, Math.min(this.mapSize - 1, this.player.x + dx));
-    const newY = Math.max(0, Math.min(this.mapSize - 1, this.player.y + dy));
-
-    // Check obstacle collision
-    const targetTile = this.map[newY][newX];
-    if (targetTile && targetTile.obstacle === 'boulder') {
-      // Boulder blocks movement unless moved or lifted
-      return;
-    }
-
-    if (newX !== this.player.x || newY !== this.player.y) {
-      this.player.x = newX;
-      this.player.y = newY;
-      AudioEngine.play('step');
-
-      this.updateFogOfWar();
-
-      // Random Wild Encounter Check
-      if (Math.random() < 0.04) {
-        this.triggerWildEncounter();
-      }
-    }
-  },
-
-  interactCurrentTile() {
-    const x = this.player.x;
-    const y = this.player.y;
-    const tile = this.map[y][x];
-    const machine = this.automationGrid[y][x];
-
-    // Check adjacent tiles for Field Obstacles (Psynergy puzzles like Lift / Growth)
-    const dirs = [{x:0, y:-1}, {x:0, y:1}, {x:-1, y:0}, {x:1, y:0}];
-    for (let d of dirs) {
-      const nx = x + d.x;
-      const ny = y + d.y;
-      if (nx >= 0 && nx < this.mapSize && ny >= 0 && ny < this.mapSize) {
-        const adjTile = this.map[ny][nx];
-        if (adjTile.obstacle === 'sprout') {
-          adjTile.obstacle = null;
-          adjTile.resource = 'wood'; // Grows vine/wood
-          AudioEngine.play('magic');
-          return;
-        } else if (adjTile.obstacle === 'puddle') {
-          adjTile.obstacle = null;
-          adjTile.resource = 'mana_crystal'; // Freezes into crystal
-          AudioEngine.play('magic');
-          return;
-        }
-      }
-    }
-
-    // 1. If machine exists on tile, harvest stored production
-    if (machine) {
-      if (machine.storedCount >= 1) {
-        const countToHarvest = Math.floor(machine.storedCount);
-        this.addItemToInventory(machine.outputItem, countToHarvest);
-        machine.storedCount -= countToHarvest;
-        AudioEngine.play('craft');
-      }
-      return;
-    }
-
-    // 2. If resource on tile, mine it
-    if (tile.resource) {
-      const resId = tile.resource;
-      this.addItemToInventory(resId, 1);
-      AudioEngine.play('hit');
-      if (Math.random() < 0.3) {
-        tile.resource = null;
-      }
-      this.renderHotbar();
-      return;
-    }
-
-    // 3. Otherwise place item currently selected in hotbar (if automation machine)
-    const selectedItemId = this.hotbar[this.activeHotbarIndex];
-    if (selectedItemId && ['auto_miner', 'conveyor', 'assembler', 'chest'].includes(selectedItemId)) {
-      if (this.removeItemFromInventory(selectedItemId, 1)) {
-        this.automationGrid[y][x] = {
-          type: selectedItemId,
-          storedCount: 0,
-          outputItem: selectedItemId === 'auto_miner' ? (tile.resource || 'stone') : 'iron_ingot'
-        };
-        AudioEngine.play('craft');
-        this.renderHotbar();
-      }
-    }
-  },
-
-  addItemToInventory(id, count) {
-    if (!id || count <= 0) return;
-    let item = this.inventory.find(i => i.id === id);
-    if (item) {
-      item.count += count;
-    } else {
-      this.inventory.push({ id, count });
-    }
-  },
-
-  removeItemFromInventory(id, count) {
-    let item = this.inventory.find(i => i.id === id);
-    if (item && item.count >= count) {
-      item.count -= count;
-      return true;
-    }
-    return false;
-  },
-
-  // Turn-Based Combat System (Golden Sun / FFTA Inspired)
-  triggerWildEncounter() {
-    if (this.inCombat) return;
-    const tile = this.map[this.player.y][this.player.x];
-    const biome = Registry.Biomes[tile.tileType] || Registry.Biomes.emerald_plains;
-    const monsterKey = biome.encounters[Math.floor(Math.random() * biome.encounters.length)];
-    const monsterData = Registry.Monsters[monsterKey];
-
-    this.inCombat = true;
-    this.combatState = {
-      enemy: {
-        ...monsterData,
-        maxHp: monsterData.hp,
-        currentHp: monsterData.hp
-      },
-      turnQueue: [...this.party],
-      activeTurnIndex: 0,
-      log: [`A wild ${monsterData.name} appeared!`]
-    };
-
-    document.getElementById('combat-overlay').classList.add('active');
-    AudioEngine.play('magic');
-    this.renderCombatUI();
-  },
-
-  executeCombatAction(action) {
-    if (!this.inCombat) return;
-    const state = this.combatState;
-    const hero = state.turnQueue[state.activeTurnIndex];
-
-    if (action === 'flee') {
-      AudioEngine.play('select');
-      this.endCombat("Fled from battle!");
-      return;
-    }
-
-    if (action === 'attack') {
-      const dmg = Math.max(5, Math.floor(hero.stats.str * 1.5 - state.enemy.def * 0.5));
-      state.enemy.currentHp -= dmg;
-      AudioEngine.play('hit');
-      state.log.push(`${hero.name} attacked ${state.enemy.name} for ${dmg} damage!`);
-    } else if (action === 'skill') {
-      if (hero.stats.mp >= 10) {
-        hero.stats.mp -= 10;
-        const dmg = Math.max(10, Math.floor(hero.stats.int * 2.2));
-        state.enemy.currentHp -= dmg;
-        AudioEngine.play('magic');
-        state.log.push(`${hero.name} cast Psynergy for ${dmg} damage!`);
-      } else {
-        alert("Not enough MP!");
-        return;
-      }
-    } else if (action === 'item') {
-      if (this.removeItemFromInventory('potion', 1)) {
-        hero.stats.hp = Math.min(hero.stats.maxHp, hero.stats.hp + 50);
-        AudioEngine.play('magic');
-        state.log.push(`${hero.name} used a Potion (+50 HP)!`);
-      } else {
-        alert("No potions in inventory!");
-        return;
-      }
-    }
-
-    // Check Enemy Defeat
-    if (state.enemy.currentHp <= 0) {
-      AudioEngine.play('craft');
-      // Give rewards
-      hero.exp += state.enemy.exp;
-      if (hero.exp >= hero.level * 50) {
-        hero.level++;
-        hero.stats.maxHp += 15;
-        hero.stats.hp = hero.stats.maxHp;
-        hero.stats.str += 3;
-        hero.stats.int += 2;
-      }
-      this.endCombat(`Victory! Gained ${state.enemy.exp} EXP!`);
-      return;
-    }
-
-    // Enemy Turn Counter-Attack
-    const enemyDmg = Math.max(3, Math.floor(state.enemy.atk - hero.stats.def * 0.5));
-    hero.stats.hp = Math.max(0, hero.stats.hp - enemyDmg);
-    AudioEngine.play('hit');
-    state.log.push(`${state.enemy.name} hit ${hero.name} for ${enemyDmg} damage!`);
-
-    // Check Hero Defeat
-    if (hero.stats.hp <= 0) {
-      hero.stats.hp = Math.floor(hero.stats.maxHp * 0.5); // Revive half HP
-      this.endCombat(`${hero.name} was defeated! Retreating...`);
-      return;
-    }
-
-    this.renderCombatUI();
-  },
-
-  endCombat(msg) {
-    alert(msg);
-    this.inCombat = false;
-    this.combatState = null;
-    document.getElementById('combat-overlay').classList.remove('active');
-    this.renderHotbar();
-  },
-
-  renderCombatUI() {
-    if (!this.inCombat) return;
-    const ctx = this.combatCtx;
-    const w = this.combatCanvas.width;
-    const h = this.combatCanvas.height;
-
-    // Background
-    ctx.fillStyle = '#111823';
-    ctx.fillRect(0, 0, w, h);
-
-    // Render Enemy
-    ctx.fillStyle = '#f14668';
-    ctx.beginPath();
-    ctx.arc(w / 2, h / 3, 50, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 18px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText(this.combatState.enemy.name, w / 2, h / 3 - 60);
-
-    // Enemy Health Bar
-    const enemyHpPct = Math.max(0, this.combatState.enemy.currentHp / this.combatState.enemy.maxHp);
-    ctx.fillStyle = '#333';
-    ctx.fillRect(w / 2 - 80, h / 3 + 60, 160, 14);
-    ctx.fillStyle = '#f14668';
-    ctx.fillRect(w / 2 - 80, h / 3 + 60, 160 * enemyHpPct, 14);
-
-    // Battle Log
-    ctx.font = '12px Courier New';
-    ctx.fillStyle = '#f5ca53';
-    const recentLogs = this.combatState.log.slice(-3);
-    recentLogs.forEach((logText, i) => {
-      ctx.fillText(logText, w / 2, h / 3 + 100 + (i * 18));
-    });
-
-    // Render Party Members
-    const activeHero = this.combatState.turnQueue[this.combatState.activeTurnIndex];
-    ctx.font = '14px Courier New';
-    ctx.textAlign = 'left';
-    this.party.forEach((hero, idx) => {
-      const x = 40 + idx * 220;
-      const y = h - 200;
-      ctx.fillStyle = (hero === activeHero) ? '#f5ca53' : '#283a52';
-      ctx.fillRect(x, y, 200, 110);
-      ctx.strokeStyle = '#4a688a';
-      ctx.strokeRect(x, y, 200, 110);
-
-      ctx.fillStyle = '#fff';
-      ctx.fillText(`${hero.name} (Lvl ${hero.level})`, x + 10, y + 25);
-      ctx.fillText(`HP: ${hero.stats.hp}/${hero.stats.maxHp}`, x + 10, y + 50);
-      ctx.fillText(`MP: ${hero.stats.mp}/${hero.stats.maxMp}`, x + 10, y + 75);
-    });
-  },
-
-  // Main Game Loop (Automation & Render)
-  startMainLoop() {
-    let lastTime = performance.now();
-    const tick = (now) => {
-      const dt = (now - lastTime) / 1000;
-      lastTime = now;
-
-      this.updateAutomation(dt);
-      this.renderMap();
-
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  },
-
-  updateAutomation(dt) {
-    // Every tick, process machines (miners extract resources)
-    for (let y = 0; y < this.mapSize; y++) {
-      for (let x = 0; x < this.mapSize; x++) {
-        const machine = this.automationGrid[y][x];
-        if (machine && machine.type === 'auto_miner') {
-          machine.storedCount = (machine.storedCount || 0) + dt * 0.2; // 1 item every 5s
-        }
-      }
-    }
-  },
-
-  renderMap() {
-    if (this.inCombat) return;
-    const ctx = this.ctx;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
-
-    ctx.fillStyle = '#05080c';
-    ctx.fillRect(0, 0, w, h);
-
-    const cameraX = this.player.x * this.tileSize - w / 2;
-    const cameraY = this.player.y * this.tileSize - h / 2;
-
-    const startX = Math.max(0, Math.floor(cameraX / this.tileSize));
-    const endX = Math.min(this.mapSize, Math.ceil((cameraX + w) / this.tileSize));
-    const startY = Math.max(0, Math.floor(cameraY / this.tileSize));
-    const endY = Math.min(this.mapSize, Math.ceil((cameraY + h) / this.tileSize));
-
-    // Draw Grid Tiles
-    for (let y = startY; y < endY; y++) {
-      for (let x = startX; x < endX; x++) {
-        const tile = this.map[y][x];
-        const screenX = Math.floor(x * this.tileSize - cameraX);
-        const screenY = Math.floor(y * this.tileSize - cameraY);
-
-        // Check Fog of War
-        if (this.fogOfWar[y][x]) {
-          ctx.fillStyle = '#05080c';
-          ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
-          continue;
-        }
-
-        const biome = Registry.Biomes[tile.tileType] || Registry.Biomes.emerald_plains;
-        ctx.fillStyle = biome.bg;
-        ctx.fillRect(screenX, screenY, this.tileSize - 1, this.tileSize - 1);
-
-        // Draw Field Obstacles
-        if (tile.obstacle === 'boulder') {
-          ctx.font = '16px serif';
-          ctx.fillText('🪨', screenX + 6, screenY + 22);
-        } else if (tile.obstacle === 'sprout') {
-          ctx.font = '16px serif';
-          ctx.fillText('🌱', screenX + 6, screenY + 22);
-        } else if (tile.obstacle === 'puddle') {
-          ctx.font = '16px serif';
-          ctx.fillText('💧', screenX + 6, screenY + 22);
-        }
-
-        // Draw Resource Icon
-        if (tile.resource && !tile.obstacle) {
-          const item = Registry.Items[tile.resource];
-          if (item) {
-            ctx.font = '16px serif';
-            ctx.fillText(item.icon, screenX + 6, screenY + 22);
+      function renderGenreTags() {
+        const container = document.getElementById('genre-tags');
+        const genres = ['ALL'];
+        registry.forEach(function (g) {
+          if (g.genre && genres.indexOf(g.genre) === -1) {
+            genres.push(g.genre);
           }
-        }
-
-        // Draw Automation Machine
-        const machine = this.automationGrid[y][x];
-        if (machine) {
-          const item = Registry.Items[machine.type];
-          if (item) {
-            ctx.font = '16px serif';
-            ctx.fillText(item.icon, screenX + 6, screenY + 22);
-          }
-        }
-      }
-    }
-
-    // Draw Player
-    const playerScreenX = Math.floor(this.player.x * this.tileSize - cameraX);
-    const playerScreenY = Math.floor(this.player.y * this.tileSize - cameraY);
-    ctx.fillStyle = '#f5ca53';
-    ctx.beginPath();
-    ctx.arc(playerScreenX + this.tileSize / 2, playerScreenY + this.tileSize / 2, 12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  },
-
-  // Overlays Renderers
-  renderPartyPanel() {
-    const rosterList = document.getElementById('party-roster-list');
-    rosterList.innerHTML = '<h3>Roster Members</h3>';
-    this.party.forEach(hero => {
-      const card = document.createElement('div');
-      card.className = 'card interactive';
-      card.innerHTML = `<strong>${hero.name}</strong> - Lvl ${hero.level} ${hero.job}<br>HP: ${hero.stats.hp}/${hero.stats.maxHp} | MP: ${hero.stats.mp}/${hero.stats.maxMp}`;
-      rosterList.appendChild(card);
-    });
-
-    const details = document.getElementById('party-hero-details');
-    if (this.party.length > 0) {
-      const h = this.party[0];
-      details.innerHTML = `
-        <h3>${h.name}'s Stats & Gear</h3>
-        <p><strong>Job:</strong> ${h.job}</p>
-        <p><strong>STR:</strong> ${h.stats.str} | <strong>AGI:</strong> ${h.stats.agi} | <strong>INT:</strong> ${h.stats.int}</p>
-        <hr style="margin: 10px 0; border-color: var(--panel-border);">
-        <p><strong>Equipped Weapon:</strong> ${h.equipped.weapon ? Registry.Items[h.equipped.weapon].name : 'None'}</p>
-        <p><strong>Equipped Armor:</strong> ${h.equipped.armor ? Registry.Items[h.equipped.armor].name : 'None'}</p>
-      `;
-    }
-
-    const jobTree = document.getElementById('party-job-tree');
-    jobTree.innerHTML = '<h3>Available Job Classes</h3>';
-    Object.keys(Registry.Jobs).forEach(jobKey => {
-      const job = Registry.Jobs[jobKey];
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `<strong>${job.name}</strong><br><span style="font-size:11px; color:var(--text-muted)">Skills: ${job.skills.join(', ')}</span>`;
-      jobTree.appendChild(card);
-    });
-  },
-
-  renderJEIPanel() {
-    this.filterJEI();
-  },
-
-  filterJEI() {
-    const search = (document.getElementById('jei-search').value || '').toLowerCase();
-    const itemList = document.getElementById('jei-item-list');
-    itemList.innerHTML = '<h3>Items & Materials</h3>';
-
-    Object.keys(Registry.Items).forEach(key => {
-      const item = Registry.Items[key];
-      if (item.name.toLowerCase().includes(search) || item.desc.toLowerCase().includes(search)) {
-        const card = document.createElement('div');
-        card.className = 'card interactive';
-        card.onclick = () => this.showRecipeDetails(key);
-        card.innerHTML = `<span>${item.icon} <strong>${item.name}</strong></span><br><span style="font-size:11px; color:var(--text-muted);">${item.desc}</span>`;
-        itemList.appendChild(card);
-      }
-    });
-  },
-
-  showRecipeDetails(itemId) {
-    const details = document.getElementById('jei-recipe-details');
-    const item = Registry.Items[itemId];
-    const recipes = Registry.Recipes.filter(r => r.id === itemId);
-
-    let html = `<h3>${item.icon} ${item.name}</h3><p style="margin-bottom:10px;">${item.desc}</p>`;
-
-    if (recipes.length > 0) {
-      recipes.forEach(r => {
-        html += `<div class="card"><strong>Recipe:</strong><br>`;
-        Object.keys(r.inputs).forEach(inId => {
-          const inItem = Registry.Items[inId];
-          html += `- ${inItem ? inItem.name : inId}: ${r.inputs[inId]}<br>`;
         });
-        html += `<button class="btn btn-gold" style="margin-top:8px;" onclick="Game.craftRecipe('${r.id}')">Craft 1x</button></div>`;
-      });
-    } else {
-      html += `<p style="color:var(--text-muted);">No crafting recipe found (Harvested directly from world).</p>`;
-    }
 
-    details.innerHTML = html;
-  },
+        container.innerHTML = '';
+        genres.forEach(function (genre) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'genre-tag' + (selectedGenre === genre ? ' active' : '');
+          btn.textContent = genre === 'ALL' ? 'All Genres (' + registry.length + ')' : genre;
+          btn.addEventListener('click', function () {
+            selectedGenre = genre;
+            renderGenreTags();
+            renderGames();
+          });
+          container.appendChild(btn);
+        });
+      }
 
-  craftRecipe(recipeId) {
-    const recipe = Registry.Recipes.find(r => r.id === recipeId);
-    if (!recipe) return;
+      function renderGames() {
+        const grid = document.getElementById('games-grid');
+        grid.innerHTML = '';
 
-    // Check if player has inputs
-    let canCraft = true;
-    Object.keys(recipe.inputs).forEach(inId => {
-      const required = recipe.inputs[inId];
-      const inv = this.inventory.find(i => i.id === inId);
-      if (!inv || inv.count < required) canCraft = false;
-    });
+        let totalPlays = 0;
+        registry.forEach(function (g) {
+          const save = getGameSave(g);
+          if (save && typeof save.totalGamesPlayed === 'number') {
+            totalPlays += save.totalGamesPlayed;
+          }
+        });
 
-    if (canCraft) {
-      Object.keys(recipe.inputs).forEach(inId => {
-        this.removeItemFromInventory(inId, recipe.inputs[inId]);
-      });
-      Object.keys(recipe.output).forEach(outId => {
-        this.addItemToInventory(outId, recipe.output[outId]);
-      });
-      AudioEngine.play('craft');
-      this.renderHotbar();
-      this.showRecipeDetails(recipeId);
-    } else {
-      alert("Missing required crafting ingredients!");
-    }
-  },
+        document.getElementById('stat-total-games').textContent = registry.length + (registry.length === 1 ? ' Game' : ' Games');
+        document.getElementById('stat-total-plays').textContent = totalPlays + ' Total Plays';
 
-  quickCraftAll() {
-    Registry.Recipes.forEach(r => {
-      this.craftRecipe(r.id);
-    });
-  },
+        const q = searchQuery.trim().toLowerCase();
+        const filtered = registry.filter(function (g) {
+          const matchesGenre = selectedGenre === 'ALL' || g.genre === selectedGenre;
+          const matchesSearch =
+            !q ||
+            (g.title && g.title.toLowerCase().indexOf(q) !== -1) ||
+            (g.genre && g.genre.toLowerCase().indexOf(q) !== -1) ||
+            (g.coreMechanic && g.coreMechanic.toLowerCase().indexOf(q) !== -1) ||
+            (g.description && g.description.toLowerCase().indexOf(q) !== -1) ||
+            (g.id && g.id.toLowerCase().indexOf(q) !== -1);
+          return matchesGenre && matchesSearch;
+        });
 
-  renderAutomationPanel() {
-    const summary = document.getElementById('automation-summary');
-    const machines = document.getElementById('automation-machines');
-
-    let totalMachines = 0;
-    let machineListHtml = '';
-
-    for (let y = 0; y < this.mapSize; y++) {
-      for (let x = 0; x < this.mapSize; x++) {
-        const m = this.automationGrid[y][x];
-        if (m) {
-          totalMachines++;
-          const item = Registry.Items[m.type];
-          machineListHtml += `<div class="card">${item.icon} <strong>${item.name}</strong> at (${x}, ${y}) - Output: ${Math.floor(m.storedCount || 0)} items</div>`;
+        if (filtered.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'empty-state';
+          empty.textContent = 'No arcade modules match your current filter.';
+          grid.appendChild(empty);
+          return;
         }
+
+        filtered.forEach(function (game) {
+          const save = getGameSave(game);
+          const highScore = save && typeof save.highScore === 'number' ? save.highScore : 0;
+          const card = document.createElement('article');
+          card.className = 'game-card';
+          card.style.setProperty('--card-accent', game.accentColor || '#00e5ff');
+
+          const thumb = document.createElement('div');
+          thumb.className = 'card-thumb';
+          const canvas = document.createElement('canvas');
+          thumb.appendChild(canvas);
+
+          const idBadge = document.createElement('span');
+          idBadge.className = 'card-id-badge';
+          idBadge.textContent = '#' + game.id;
+          thumb.appendChild(idBadge);
+
+          const scoreBadge = document.createElement('span');
+          scoreBadge.className = 'card-score-badge';
+          scoreBadge.textContent = 'HI: ' + highScore.toLocaleString();
+          thumb.appendChild(scoreBadge);
+
+          const body = document.createElement('div');
+          body.className = 'card-body';
+
+          const titleEl = document.createElement('h2');
+          titleEl.className = 'card-title';
+          titleEl.textContent = game.title;
+          body.appendChild(titleEl);
+
+          const axesEl = document.createElement('div');
+          axesEl.className = 'card-axes';
+          if (game.genre) {
+            const p1 = document.createElement('span');
+            p1.className = 'axis-pill';
+            p1.textContent = game.genre;
+            axesEl.appendChild(p1);
+          }
+          if (game.coreMechanic) {
+            const p2 = document.createElement('span');
+            p2.className = 'axis-pill';
+            p2.textContent = game.coreMechanic;
+            axesEl.appendChild(p2);
+          }
+          body.appendChild(axesEl);
+
+          const descEl = document.createElement('p');
+          descEl.className = 'card-desc';
+          descEl.textContent = game.description || '';
+          body.appendChild(descEl);
+
+          if (game.controls) {
+            const ctrlEl = document.createElement('div');
+            ctrlEl.className = 'card-controls';
+            ctrlEl.textContent = 'Controls: ' + game.controls;
+            body.appendChild(ctrlEl);
+          }
+
+          const footer = document.createElement('div');
+          footer.className = 'card-footer';
+
+          const dateEl = document.createElement('span');
+          dateEl.className = 'card-date';
+          dateEl.textContent = game.createdAt || '';
+          footer.appendChild(dateEl);
+
+          const playBtn = document.createElement('a');
+          playBtn.className = 'btn btn-primary';
+          playBtn.href = game.path || ('./games/' + game.slug + '/index.html');
+          playBtn.textContent = 'Play Now';
+          footer.appendChild(playBtn);
+
+          card.appendChild(thumb);
+          card.appendChild(body);
+          card.appendChild(footer);
+          grid.appendChild(card);
+
+          drawProceduralThumbnail(canvas, game);
+        });
       }
-    }
 
-    summary.innerHTML = `<h3>Automation Grid Overview</h3><p>Total Active Machines: <strong>${totalMachines}</strong></p>`;
-    machines.innerHTML = `<h3>Placed Machines</h3>${machineListHtml || '<p style="color:var(--text-muted);">No machines placed yet. Place Auto-Miners or Conveyors from your hotbar!</p>'}`;
-  },
+      document.getElementById('search-input').addEventListener('input', function (e) {
+        searchQuery = e.target.value || '';
+        renderGames();
+      });
 
-  quickSortInventory() {
-    this.inventory.sort((a, b) => a.id.localeCompare(b.id));
-    AudioEngine.play('select');
-    this.renderHotbar();
-  },
+      document.getElementById('random-game-btn').addEventListener('click', function () {
+        if (registry.length === 0) return;
+        const pick = registry[Math.floor(Math.random() * registry.length)];
+        window.location.href = pick.path || ('./games/' + pick.slug + '/index.html');
+      });
 
-  quickStackChests() {
-    AudioEngine.play('select');
-    alert("Quick-stacked items to nearby chests!");
-  },
+      // Global Save Backup Modal
+      const modal = document.getElementById('backup-modal');
+      const textarea = document.getElementById('backup-textarea');
+      const statusEl = document.getElementById('backup-status');
 
-  // Save / Load System
-  saveGame() {
-    const saveData = {
-      player: this.player,
-      inventory: this.inventory,
-      party: this.party,
-      automationGrid: this.automationGrid
-    };
-    localStorage.setItem('JULES_GBA_SAVE', JSON.stringify(saveData));
-    AudioEngine.play('craft');
-    alert("Game saved successfully!");
-  },
-
-  loadGame() {
-    const raw = localStorage.getItem('JULES_GBA_SAVE');
-    if (raw) {
-      const saveData = JSON.parse(raw);
-      this.player = saveData.player;
-      this.inventory = saveData.inventory;
-      this.party = saveData.party;
-      this.automationGrid = saveData.automationGrid;
-      this.renderHotbar();
-      alert("Game loaded!");
-    } else {
-      alert("No local save found.");
-    }
-  },
-
-  resetGame() {
-    if (confirm("Reset world and inventory?")) {
-      localStorage.removeItem('JULES_GBA_SAVE');
-      location.reload();
-    }
-  },
-
-  exportSaveJSON() {
-    const saveData = {
-      player: this.player,
-      inventory: this.inventory,
-      party: this.party,
-      automationGrid: this.automationGrid
-    };
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveData, null, 2));
-    const dlAnchor = document.createElement('a');
-    dlAnchor.setAttribute("href", dataStr);
-    dlAnchor.setAttribute("download", "jules_gba_save.json");
-    document.body.appendChild(dlAnchor);
-    dlAnchor.click();
-    dlAnchor.remove();
-  },
-
-  importSaveJSON(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const saveData = JSON.parse(e.target.result);
-        if (saveData.player && saveData.inventory) {
-          this.player = saveData.player;
-          this.inventory = saveData.inventory;
-          this.party = saveData.party || this.party;
-          this.automationGrid = saveData.automationGrid || this.automationGrid;
-          this.renderHotbar();
-          alert("JSON Save imported successfully!");
+      function exportGlobalBundle() {
+        const bundle = {};
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.indexOf('arcade_game_') === 0) {
+              bundle[k] = localStorage.getItem(k);
+            }
+          }
+        } catch (e) {}
+        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(bundle))));
+        textarea.value = encoded;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(encoded).catch(function () {});
         }
-      } catch (err) {
-        alert("Invalid save file format!");
+        statusEl.textContent = 'Exported ' + Object.keys(bundle).length + ' game save(s) to Base64.';
       }
-    };
-    reader.readAsText(file);
-  },
 
-  loadCustomModJSON() {
-    const text = document.getElementById('mod-json-input').value;
-    try {
-      const mod = JSON.parse(text);
-      if (mod.items) {
-        mod.items.forEach(i => Registry.Items[i.id] = i);
-      }
-      if (mod.recipes) {
-        mod.recipes.forEach(r => Registry.Recipes.push(r));
-      }
-      if (mod.monsters) {
-        mod.monsters.forEach(m => Registry.Monsters[m.id] = m);
-      }
-      alert("Custom Mod JSON loaded dynamically into registries!");
-      this.renderHotbar();
-      if (this.activeTab === 'jei') this.renderJEIPanel();
-    } catch (e) {
-      alert("Invalid JSON format in Mod loader!");
-    }
-  }
-};
+      document.getElementById('backup-modal-btn').addEventListener('click', function () {
+        statusEl.textContent = '';
+        exportGlobalBundle();
+        modal.classList.add('open');
+      });
 
-// Initialize Game Engine on Page Load
-window.addEventListener('load', () => {
-  Game.init();
-});
-</script>
+      document.getElementById('close-modal-btn').addEventListener('click', function () {
+        modal.classList.remove('open');
+      });
+
+      document.getElementById('export-bundle-btn').addEventListener('click', exportGlobalBundle);
+
+      document.getElementById('import-bundle-btn').addEventListener('click', function () {
+        const raw = textarea.value.trim();
+        if (!raw) {
+          statusEl.textContent = 'Paste a Base64 save bundle first.';
+          return;
+        }
+        try {
+          const jsonStr = decodeURIComponent(escape(atob(raw)));
+          const parsed = JSON.parse(jsonStr);
+          let count = 0;
+          Object.keys(parsed).forEach(function (k) {
+            if (k.indexOf('arcade_game_') === 0 && typeof parsed[k] === 'string') {
+              try {
+                localStorage.setItem(k, parsed[k]);
+                count++;
+              } catch (e) {}
+            }
+          });
+          statusEl.textContent = 'Successfully restored ' + count + ' game save(s)!';
+          renderGames();
+        } catch (err) {
+          statusEl.textContent = 'Invalid Base64 save bundle.';
+        }
+      });
+
+      renderGenreTags();
+      renderGames();
+    })();
+  </script>
 </body>
 </html>

@@ -1,0 +1,40 @@
+name: Crucible Verify & Auto-Merge Jules PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: lfs-trasharcade-automerge
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  verify-and-automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify PR Branch Syntax & Markers
+        run: |
+          node ./scripts/verify.js
+
+      - name: Reconcile Registry & Auto-Merge Passing PR into Main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+        run: |
+          node ./scripts/auto_merge_arcade.js

@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Jules' GBA: A Traveler's Chronicle</title>
+  <style>
+    :root {
+      --bg-color: #121820;
+      --panel-bg: rgba(22, 30, 42, 0.95);
+      --panel-border: #4a688a;
+      --panel-header: #283a52;
+      --text-main: #e2f0fd;
+      --text-muted: #8ba2bd;
+      --accent-gold: #f5ca53;
+      --accent-blue: #3a9bdc;
+      --accent-green: #48c774;
+      --accent-red: #f14668;
+      --accent-purple: #9b51e0;
+      --slot-bg: #1a2332;
+      --slot-hover: #2d3d54;
+      --font-family: 'Courier New', Courier, monospace, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      max-width: 1280px;
+      max-height: 800px;
+      background-color: #000;
+      display: flex;
+      flex-direction: column;
+      border: 4px solid var(--panel-border);
+      box-shadow: 0 0 20px rgba(0,0,0,0.8);
+      overflow: hidden;
+    }
+
+    /* Top Navigation / Status Header */
+    #top-bar {
+      height: 40px;
+      background: var(--panel-header);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      border-bottom: 2px solid var(--panel-border);
+      z-index: 10;
+      font-size: 13px;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 6px;
+    }
+
+    .tab-btn {
+      background: #1a2636;
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      padding: 4px 10px;
+      font-family: var(--font-family);
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: background 0.15s;
+    }
+
+    .tab-btn:hover, .tab-btn.active {
+      background: var(--accent-blue);
+      color: #fff;
+    }
+
+    /* Main Viewport Area */
+    #viewport-container {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: calc(100% - 100px);
+      overflow: hidden;
+      background: #05080c;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+    }
+
+    /* Floating Overlay Panels */
+    .overlay-panel {
+      position: absolute;
+      top: 10px;
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      background: var(--panel-bg);
+      border: 2px solid var(--panel-border);
+      border-radius: 6px;
+      display: none;
+      flex-direction: column;
+      z-index: 20;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+    }
+
+    .overlay-panel.active {
+      display: flex;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid var(--panel-border);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: var(--accent-gold);
+    }
+
+    .close-btn {
+      background: var(--accent-red);
+      color: #fff;
+      border: none;
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 3px;
+      font-weight: bold;
+    }
+
+    /* Bottom HUD / Hotbar */
+    #bottom-hud {
+      height: 60px;
+      background: var(--panel-header);
+      border-top: 2px solid var(--panel-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      z-index: 10;
+    }
+
+    .hotbar {
+      display: flex;
+      gap: 6px;
+    }
+
+    .hotbar-slot {
+      width: 44px;
+      height: 44px;
+      background: var(--slot-bg);
+      border: 2px solid var(--panel-border);
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .hotbar-slot.active {
+      border-color: var(--accent-gold);
+      box-shadow: 0 0 8px var(--accent-gold);
+    }
+
+    .hotbar-key {
+      position: absolute;
+      top: 2px;
+      left: 3px;
+      font-size: 9px;
+      color: var(--text-muted);
+    }
+
+    .slot-icon {
+      font-size: 18px;
+    }
+
+    .slot-count {
+      position: absolute;
+      bottom: 2px;
+      right: 4px;
+      font-size: 10px;
+      color: var(--accent-gold);
+      font-weight: bold;
+    }
+
+    /* Controls Overlay for Touch / Mobile */
+    #mobile-controls {
+      position: absolute;
+      bottom: 70px;
+      left: 10px;
+      right: 10px;
+      display: none;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 15;
+    }
+
+    .dpad, .action-buttons {
+      pointer-events: auto;
+      display: grid;
+      gap: 4px;
+    }
+
+    .dpad {
+      grid-template-columns: repeat(3, 40px);
+      grid-template-rows: repeat(3, 40px);
+    }
+
+    .dpad-btn, .action-btn {
+      background: rgba(40, 58, 82, 0.85);
+      border: 1px solid var(--panel-border);
+      color: white;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      user-select: none;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .action-btn {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: rgba(58, 155, 220, 0.85);
+    }
+
+    /* Tooltip */
+    #tooltip {
+      position: absolute;
+      background: rgba(10, 15, 22, 0.95);
+      border: 1px solid var(--accent-gold);
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 100;
+      display: none;
+      max-width: 250px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+
+    /* Flex Grid layouts for panels */
+    .grid-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .grid-3col {
+      display: grid;
+      grid-template-columns: 1fr 2fr 1fr;
+      gap: 12px;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .panel-scroll {
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+
+    .panel-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .panel-scroll::-webkit-scrollbar-thumb {
+      background: var(--panel-border);
+      border-radius: 3px;
+    }
+
+    .card {
+      background: var(--slot-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+
+    .card.interactive {
+      cursor: pointer;
+    }
+    .card.interactive:hover {
+      border-color: var(--accent-blue);
+      background: var(--slot-hover);
+    }
+
+    .btn {
+      background: var(--accent-blue);
+      color: #fff;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: var(--font-family);
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .btn:hover {
+      filter: brightness(1.1);
+    }
+    .btn-success { background: var(--accent-green); }
+    .btn-danger { background: var(--accent-red); }
+    .btn-gold { background: var(--accent-gold); color: #000; }
+
+    input, select, textarea {
+      background: #121820;
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: var(--font-family);
+      font-size: 13px;
+      width: 100%;
+    }
+
+    /* Turn-based combat overlay styling */
+    #combat-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 8, 12, 0.95);
+      z-index: 30;
+      display: none;
+      flex-direction: column;
+    }
+    #combat-overlay.active {
+      display: flex;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <!-- Top Bar -->
+  <div id="top-bar">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <a href="../../index.html" class="tab-btn" style="text-decoration:none;color:var(--accent-gold);padding:4px 8px;border-radius:4px;font-weight:bold;">&#8592; Arcade</a>
+      <button class="tab-btn" id="pause-toggle-btn" onclick="window.ArcadeHarness && window.ArcadeHarness.togglePause()" style="padding:4px 8px;border-radius:4px;color:var(--text-main);cursor:pointer;">II PAUSE</button>
+    </div>
+
+    <div style="font-weight: bold; color: var(--accent-gold);">🎮 JULES' GBA</div>
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="Game.setTab('map')">🗺️ World Map</button>
+      <button class="tab-btn" onclick="Game.setTab('party')">⚔️ Party & Jobs</button>
+      <button class="tab-btn" onclick="Game.setTab('jei')">📖 JEI Index</button>
+      <button class="tab-btn" onclick="Game.setTab('automation')">⚙️ Automation</button>
+      <button class="tab-btn" onclick="Game.setTab('system')">💾 Save/Mods</button>
+    </div>
+    <div id="time-display" style="color: var(--text-muted); font-size: 12px;">Day 1 - 08:00 AM</div>
+  </div>
+
+  <!-- Main Viewport -->
+  <div id="viewport-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Combat Overlay -->
+    <div id="combat-overlay">
+      <canvas id="combatCanvas"></canvas>
+      <div id="combat-menu-bar" style="position: absolute; bottom: 20px; left: 20px; right: 20px; display: flex; gap: 10px; justify-content: center; z-index: 35;">
+        <button class="btn btn-gold" onclick="Game.executeCombatAction('attack')">⚔️ Attack</button>
+        <button class="btn" onclick="Game.executeCombatAction('skill')">✨ Psynergy Skill</button>
+        <button class="btn btn-success" onclick="Game.executeCombatAction('item')">🧪 Item</button>
+        <button class="btn btn-danger" onclick="Game.executeCombatAction('flee')">🏃 Run</button>
+      </div>
+    </div>
+
+    <!-- Party & Jobs Overlay -->
+    <div id="panel-party" class="overlay-panel">
+      <div class="panel-header">
+        <div class="panel-title">⚔️ Roster Management (FFTA System)</div>
+        <button class="close-btn" onclick="Game.setTab('map')">✕</button>
+      </div>
+      <div class="grid-3col">
+        <!-- Hero List -->
+        <div class="panel-scroll" id="party-roster-list"></div>
+        <!-- Hero Stats & Gear -->
+        <div class="panel-scroll" id="party-hero-details"></div>
+        <!-- Job & Skill Tree -->
+        <div class="panel-scroll" id="party-job-tree"></div>
+      </div>
+    </div>
+
+    <!-- JEI Crafting Overlay -->
+    <div id="panel-jei" class="overlay-panel">
+      <div class="panel-header">
+        <div class="panel-title">📖 JEI - Just Enough Items (ATM10 Crafting)</div>
+        <button class="close-btn" onclick="Game.setTab('map')">✕</button>
+      </div>
+      <div style="margin-bottom: 10px; display: flex; gap: 10px;">
+        <input type="text" id="jei-search" placeholder="Search items, recipes, materials..." oninput="Game.filterJEI()">
+        <button class="btn btn-gold" onclick="Game.quickCraftAll()">Auto-Craft All</button>
+      </div>
+      <div class="grid-2col">
+        <div class="panel-scroll" id="jei-item-list"></div>
+        <div class="panel-scroll" id="jei-recipe-details"></div>
+      </div>
+    </div>
+
+    <!-- Automation Network Overlay -->
+    <div id="panel-automation" class="overlay-panel">
+      <div class="panel-header">
+        <div class="panel-title">⚙️ Factorio Automation Grid</div>
+        <button class="close-btn" onclick="Game.setTab('map')">✕</button>
+      </div>
+      <div class="grid-2col">
+        <div class="panel-scroll" id="automation-summary"></div>
+        <div class="panel-scroll" id="automation-machines"></div>
+      </div>
+    </div>
+
+    <!-- Save / System / Mod Loader Overlay -->
+    <div id="panel-system" class="overlay-panel">
+      <div class="panel-header">
+        <div class="panel-title">💾 Save Management & Custom Content Loader</div>
+        <button class="close-btn" onclick="Game.setTab('map')">✕</button>
+      </div>
+      <div class="grid-2col">
+        <div class="card">
+          <h3>Local Storage Saves</h3>
+          <p style="font-size:12px; color: var(--text-muted); margin: 8px 0;">Auto-saves every 60 seconds.</p>
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-success" onclick="Game.saveGame()">Manual Save</button>
+            <button class="btn" onclick="Game.loadGame()">Load Save</button>
+            <button class="btn btn-danger" onclick="Game.resetGame()">Reset World</button>
+          </div>
+          <hr style="margin: 15px 0; border-color: var(--panel-border);">
+          <h3>Export / Import Save</h3>
+          <div style="display:flex; gap:10px; margin-top: 8px;">
+            <button class="btn" onclick="Game.exportSaveJSON()">Export JSON File</button>
+            <input type="file" id="import-save-file" style="display:none" onchange="Game.importSaveJSON(event)">
+            <button class="btn" onclick="document.getElementById('import-save-file').click()">Import JSON File</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Infinite Mod / Content Loader</h3>
+          <p style="font-size:12px; color: var(--text-muted); margin: 8px 0;">Paste JSON to dynamically add custom Items, Jobs, Recipes, or Monsters!</p>
+          <textarea id="mod-json-input" rows="6" placeholder='{\n  "items": [{"id": "quantum_sword", "name": "Quantum Blade", "type": "weapon", "atk": 120}],\n  "recipes": []\n}'></textarea>
+          <button class="btn btn-gold" style="margin-top:8px;" onclick="Game.loadCustomModJSON()">Load Mod JSON</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Controls Overlay -->
+  <div id="mobile-controls">
+    <div class="dpad">
+      <div></div><div class="dpad-btn" id="btn-up">▲</div><div></div>
+      <div class="dpad-btn" id="btn-left">◀</div><div></div><div class="dpad-btn" id="btn-right">▶</div>
+      <div></div><div class="dpad-btn" id="btn-down">▼</div><div></div>
+    </div>
+    <div class="action-buttons">
+      <div class="action-btn" id="btn-a">A</div>
+      <div class="action-btn" id="btn-b" style="background: rgba(241, 70, 104, 0.85);">B</div>
+    </div>
+  </div>
+
+  <!-- Bottom HUD / Hotbar -->
+  <div id="bottom-hud">
+    <div style="display:flex; align-items:center; gap: 10px;">
+      <div id="hero-mini-status" style="font-size: 12px; line-height: 1.4;">
+        <span style="color:var(--accent-gold); font-weight:bold;" id="field-hero-name">Hero</span><br>
+        <span style="color:var(--accent-green);" id="field-hero-hp">HP: 100/100</span> |
+        <span style="color:var(--accent-blue);" id="field-hero-mp">MP: 50/50</span>
+      </div>
+    </div>
+
+    <!-- 10 Hotbar Slots -->
+    <div class="hotbar" id="hotbar-slots"></div>
+
+    <div style="display:flex; gap: 6px;">
+      <button class="btn" onclick="Game.quickSortInventory()">Sort</button>
+      <button class="btn btn-gold" onclick="Game.quickStackChests()">Quick-Stack</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div id="tooltip"></div>
+
+<script>
+/* ==========================================================================
+   JULES' GBA - ENGINE ARCHITECTURE & REGISTRIES
+   ========================================================================== */
+
+// --- 1. WEB AUDIO SYNTHESIZER ENGINE ---
+const AudioEngine = {
+  ctx: null,
+  init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+  },
+  play(type) {
+    if (!this.ctx) return;
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      if (type === 'step') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(120, now);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      } else if (type === 'hit') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      } else if (type === 'magic') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(800, now + 0.25);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      } else if (type === 'craft') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.setValueAtTime(500, now + 0.08);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      } else if (type === 'select') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, now);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      }
+    } catch(e){}
+  }
+};
+
+// --- 2. EXTENSIBLE REGISTRIES ---
+const Registry = {
+  Items: {
+    // Basic Materials
+    wood: { id: 'wood', name: 'Wood', icon: '🪵', category: 'material', desc: 'Harvested from trees. Essential crafting fuel.' },
+    stone: { id: 'stone', name: 'Stone', icon: '🪨', category: 'material', desc: 'Sturdy stone dug from the earth.' },
+    iron_ore: { id: 'iron_ore', name: 'Iron Ore', icon: '⛰️', category: 'material', desc: 'Raw iron deposit mined from deep veins.' },
+    iron_ingot: { id: 'iron_ingot', name: 'Iron Ingot', icon: '🧱', category: 'material', desc: 'Smelted iron used for machinery and arms.' },
+    mana_crystal: { id: 'mana_crystal', name: 'Mana Crystal', icon: '🔮', category: 'material', desc: 'Glowing crystal infused with Psynergy energy.' },
+    gold_ore: { id: 'gold_ore', name: 'Gold Ore', icon: '✨', category: 'material', desc: 'Rare precious ore.' },
+    cosmic_dust: { id: 'cosmic_dust', name: 'Cosmic Dust', icon: '🌌', category: 'material', desc: 'Ultra-rare material dropped by cosmic monoliths.' },
+
+    // Weapons & Gear
+    bronze_sword: { id: 'bronze_sword', name: 'Bronze Sword', icon: '🗡️', category: 'weapon', atk: 12, desc: 'Reliable starter blade.' },
+    iron_blade: { id: 'iron_blade', name: 'Iron Blade', icon: '⚔️', category: 'weapon', atk: 28, desc: 'Forged iron sword crafted for warriors.' },
+    arcane_staff: { id: 'arcane_staff', name: 'Arcane Staff', icon: '🪄', category: 'weapon', matk: 35, desc: 'Amplifies elemental Psynergy abilities.' },
+    tactical_shield: { id: 'tactical_shield', name: 'Tactical Shield', icon: '🛡️', category: 'armor', def: 18, desc: 'Heavy shield favoured by Paladins.' },
+
+    // Consumables & Field Tools
+    potion: { id: 'potion', name: 'Health Potion', icon: '🧪', category: 'consumable', heal: 50, desc: 'Restores 50 HP.' },
+    ether: { id: 'ether', name: 'Mana Ether', icon: '💧', category: 'consumable', mana: 30, desc: 'Restores 30 MP.' },
+    psy_glove: { id: 'psy_glove', name: 'Psynergy Glove', icon: '🧤', category: 'tool', ability: 'Lift', desc: 'Field tool allowing player to lift heavy boulders.' },
+
+    // Automation Machine Items
+    auto_miner: { id: 'auto_miner', name: 'Auto-Miner', icon: '⛏️', category: 'automation', desc: 'Automatically extracts resources from adjacent nodes.' },
+    conveyor: { id: 'conveyor', name: 'Conveyor Belt', icon: '➡️', category: 'automation', desc: 'Transports items across the map grid.' },
+    assembler: { id: 'assembler', name: 'Auto-Assembler', icon: '🏭', category: 'automation', desc: 'Automates crafting recipes continually.' },
+    chest: { id: 'chest', name: 'Storage Chest', icon: '📦', category: 'automation', desc: 'Holds up to 20 stacks of items.' }
+  },
+
+  Recipes: [
+    { id: 'iron_ingot', name: 'Iron Ingot', inputs: { iron_ore: 2, wood: 1 }, output: { iron_ingot: 1 } },
+    { id: 'bronze_sword', name: 'Bronze Sword', inputs: { wood: 3, stone: 5 }, output: { bronze_sword: 1 } },
+    { id: 'iron_blade', name: 'Iron Blade', inputs: { iron_ingot: 4, wood: 2 }, output: { iron_blade: 1 } },
+    { id: 'arcane_staff', name: 'Arcane Staff', inputs: { wood: 5, mana_crystal: 2 }, output: { arcane_staff: 1 } },
+    { id: 'potion', name: 'Health Potion', inputs: { wood: 1, mana_crystal: 1 }, output: { potion: 2 } },
+    { id: 'auto_miner', name: 'Auto-Miner', inputs: { iron_ingot: 5, stone: 10 }, output: { auto_miner: 1 } },
+    { id: 'conveyor', name: 'Conveyor Belt', inputs: { iron_ingot: 1 }, output: { conveyor: 4 } },
+    { id: 'assembler', name: 'Auto-Assembler', inputs: { iron_ingot: 10, mana_crystal: 3 }, output: { assembler: 1 } },
+    { id: 'chest', name: 'Storage Chest', inputs: { wood: 8 }, output: { chest: 1 } }
+  ],
+
+  Jobs: {
+    Squire: { name: 'Squire', statGrowth: { hp: 12, mp: 4, str: 5, agi: 4, int: 2 }, skills: ['slash', 'focus'] },
+    Knight: { name: 'Knight', statGrowth: { hp: 18, mp: 5, str: 7, agi: 3, int: 3 }, skills: ['slash', 'shield_bash', 'taunt'] },
+    Elementalist: { name: 'Elementalist', statGrowth: { hp: 8, mp: 12, str: 2, agi: 4, int: 8 }, skills: ['fireball', 'frost_nova', 'growth_heal'] },
+    Mechanist: { name: 'Mechanist', statGrowth: { hp: 10, mp: 8, str: 4, agi: 6, int: 6 }, skills: ['overclock', 'turret_drop'] },
+    Tactician: { name: 'Tactician', statGrowth: { hp: 11, mp: 9, str: 4, agi: 7, int: 6 }, skills: ['rally', 'hasten'] }
+  },
+
+  Skills: {
+    slash: { name: 'Slash', mp: 0, power: 1.2, type: 'physical', desc: 'Basic melee attack.' },
+    focus: { name: 'Focus', mp: 5, power: 0, type: 'buff', desc: 'Raises Attack Power for 2 turns.' },
+    shield_bash: { name: 'Shield Bash', mp: 8, power: 1.4, type: 'physical', desc: 'Stuns target.' },
+    fireball: { name: 'Fireball', mp: 10, power: 2.0, type: 'psynergy', element: 'fire', desc: 'Golden Sun style Pyrokinesis.' },
+    frost_nova: { name: 'Frost Nova', mp: 12, power: 1.8, type: 'psynergy', element: 'water', desc: 'Chills all foes.' },
+    growth_heal: { name: 'Growth Heal', mp: 8, power: 1.5, type: 'heal', fieldAbility: 'Growth', desc: 'Golden Sun Psynergy that heals or blooms overworld vines.' }
+  },
+
+  Biomes: {
+    emerald_plains: { name: 'Emerald Plains', bg: '#2d5a27', tileIcon: '🌱', encounters: ['slime', 'goblin'] },
+    cosmic_cavern: { name: 'Cosmic Cavern', bg: '#1c1b29', tileIcon: '🪨', encounters: ['rock_golem', 'mana_ghost'] },
+    magma_forge: { name: 'Magma Forge', bg: '#4d1e18', tileIcon: '🔥', encounters: ['fire_elemental', 'drake'] }
+  },
+
+  Monsters: {
+    slime: { name: 'Forest Slime', hp: 35, atk: 8, def: 2, agi: 3, exp: 15, loot: { wood: 2, potion: 0.3 } },
+    goblin: { name: 'Scout Goblin', hp: 55, atk: 14, def: 4, agi: 6, exp: 30, loot: { stone: 3, iron_ore: 0.5 } },
+    rock_golem: { name: 'Ancient Golem', hp: 120, atk: 22, def: 12, agi: 2, exp: 75, loot: { iron_ore: 4, mana_crystal: 0.5 } },
+    mana_ghost: { name: 'Mana Spectre', hp: 80, atk: 18, def: 5, agi: 8, exp: 60, loot: { mana_crystal: 2 } },
+    drake: { name: 'Magma Drake', hp: 250, atk: 35, def: 15, agi: 7, exp: 200, loot: { cosmic_dust: 1, gold_ore: 3 } }
+  }
+};
+
+/* ==========================================================================
+   ENGINE STATE & CORE LOGIC
+   ========================================================================== */
+
+const Game = {
+  activeTab: 'map',
+  activeHotbarIndex: 0,
+
+  // World Grid Data
+  mapSize: 64,
+  tileSize: 32,
+  map: [], // 2D grid
+  automationGrid: [], // Machines on tiles
+  fogOfWar: [], // Fog of war grid
+
+  // World Environment State
+  gameTime: 480, // Minutes in day (0-1440). Starts at 8:00 AM (480 mins)
+  dayCount: 1,
+
+  // Player & Party
+  player: {
+    x: 32,
+    y: 32,
+    facing: 'down'
+  },
+
+  inventory: [
+    { id: 'wood', count: 20 },
+    { id: 'stone', count: 15 },
+    { id: 'iron_ore', count: 8 },
+    { id: 'potion', count: 5 },
+    { id: 'auto_miner', count: 2 },
+    { id: 'conveyor', count: 10 }
+  ],
+
+  hotbar: ['auto_miner', 'conveyor', 'assembler', 'chest', 'potion', null, null, null, null, null],
+
+  party: [
+    {
+      id: 'hero_1',
+      name: 'Jules',
+      job: 'Squire',
+      level: 1,
+      exp: 0,
+      stats: { hp: 100, maxHp: 100, mp: 40, maxMp: 40, str: 14, agi: 10, int: 8, def: 6 },
+      skills: ['slash', 'focus'],
+      equipped: { weapon: 'bronze_sword', armor: null }
+    },
+    {
+      id: 'hero_2',
+      name: 'Isaac',
+      job: 'Elementalist',
+      level: 1,
+      exp: 0,
+      stats: { hp: 70, maxHp: 70, mp: 80, maxMp: 80, str: 6, agi: 12, int: 16, def: 4 },
+      skills: ['fireball', 'growth_heal'],
+      equipped: { weapon: 'arcane_staff', armor: null }
+    }
+  ],
+
+  // Combat State
+  inCombat: false,
+  combatState: null,
+
+  // Initialization
+  init() {
+    this.initCanvas();
+    this.generateMap();
+    this.setupControls();
+    this.renderHotbar();
+    this.startMainLoop();
+    console.log("Jules' GBA Engine Initialized successfully.");
+  },
+
+  initCanvas() {
+    this.canvas = document.getElementById('gameCanvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.combatCanvas = document.getElementById('combatCanvas');
+    this.combatCtx = this.combatCanvas.getContext('2d');
+    this.resizeCanvas();
+    window.addEventListener('resize', () => this.resizeCanvas());
+  },
+
+  resizeCanvas() {
+    const container = document.getElementById('viewport-container');
+    this.canvas.width = container.clientWidth;
+    this.canvas.height = container.clientHeight;
+    this.combatCanvas.width = container.clientWidth;
+    this.combatCanvas.height = container.clientHeight;
+  },
+
+  generateMap() {
+    this.map = [];
+    this.automationGrid = [];
+    this.fogOfWar = [];
+
+    for (let y = 0; y < this.mapSize; y++) {
+      const row = [];
+      const autoRow = [];
+      const fogRow = [];
+
+      for (let x = 0; x < this.mapSize; x++) {
+        let tileType = 'emerald_plains';
+        let resource = null;
+        let obstacle = null;
+
+        // Simple procedural biome layout based on coordinates
+        const distFromCenter = Math.hypot(x - 32, y - 32);
+        if (distFromCenter > 22) {
+          tileType = 'cosmic_cavern';
+        } else if (x > 42) {
+          tileType = 'magma_forge';
+        }
+
+        // Overworld Field Obstacles for Psynergy Puzzles
+        const obstacleRand = Math.random();
+        if (obstacleRand < 0.03) obstacle = 'boulder'; // Can be moved with Lift
+        else if (obstacleRand < 0.05) obstacle = 'sprout'; // Can grow with Growth
+        else if (obstacleRand < 0.07) obstacle = 'puddle'; // Can freeze with Frost
+
+        // Random resource nodes
+        const rand = Math.random();
+        if (!obstacle) {
+          if (rand < 0.06) resource = 'wood';
+          else if (rand < 0.10) resource = 'stone';
+          else if (rand < 0.13) resource = 'iron_ore';
+          else if (rand < 0.15) resource = 'mana_crystal';
+        }
+
+        row.push({ tileType, resource, obstacle });
+        autoRow.push(null);
+        fogRow.push(true); // Unexplored fog
+      }
+      this.map.push(row);
+      this.automationGrid.push(autoRow);
+      this.fogOfWar.push(fogRow);
+    }
+
+    this.updateFogOfWar();
+  },
+
+  updateFogOfWar() {
+    const px = this.player.x;
+    const py = this.player.y;
+    const radius = 6;
+
+    for (let y = Math.max(0, py - radius); y <= Math.min(this.mapSize - 1, py + radius); y++) {
+      for (let x = Math.max(0, px - radius); x <= Math.min(this.mapSize - 1, px + radius); x++) {
+        if (Math.hypot(x - px, y - py) <= radius) {
+          this.fogOfWar[y][x] = false; // Reveal
+        }
+      }
+    }
+  },
+
+  // Interface Navigation
+  setTab(tab) {
+    this.activeTab = tab;
+    AudioEngine.init();
+    AudioEngine.play('select');
+
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.overlay-panel').forEach(p => p.classList.remove('active'));
+
+    if (tab !== 'map') {
+      const panel = document.getElementById(`panel-${tab}`);
+      if (panel) panel.classList.add('active');
+    }
+
+    if (tab === 'party') this.renderPartyPanel();
+    if (tab === 'jei') this.renderJEIPanel();
+    if (tab === 'automation') this.renderAutomationPanel();
+  },
+
+  // Hotbar UI
+  renderHotbar() {
+    const container = document.getElementById('hotbar-slots');
+    container.innerHTML = '';
+    this.hotbar.forEach((itemId, idx) => {
+      const slot = document.createElement('div');
+      slot.className = `hotbar-slot ${this.activeHotbarIndex === idx ? 'active' : ''}`;
+      slot.onclick = () => {
+        this.activeHotbarIndex = idx;
+        this.renderHotbar();
+      };
+
+      const keyLabel = document.createElement('span');
+      keyLabel.className = 'hotbar-key';
+      keyLabel.innerText = idx === 9 ? '0' : (idx + 1).toString();
+      slot.appendChild(keyLabel);
+
+      if (itemId) {
+        const item = Registry.Items[itemId];
+        const invItem = this.inventory.find(i => i.id === itemId);
+        const count = invItem ? invItem.count : 0;
+
+        const icon = document.createElement('span');
+        icon.className = 'slot-icon';
+        icon.innerText = item ? item.icon : '❓';
+        slot.appendChild(icon);
+
+        if (count > 0) {
+          const countSpan = document.createElement('span');
+          countSpan.className = 'slot-count';
+          countSpan.innerText = count;
+          slot.appendChild(countSpan);
+        }
+      }
+
+      container.appendChild(slot);
+    });
+
+    // Update mini status
+    if (this.party.length > 0) {
+      const h = this.party[0];
+      document.getElementById('field-hero-name').innerText = `${h.name} (Lvl ${h.level} ${h.job})`;
+      document.getElementById('field-hero-hp').innerText = `HP: ${h.stats.hp}/${h.stats.maxHp}`;
+      document.getElementById('field-hero-mp').innerText = `MP: ${h.stats.mp}/${h.stats.maxMp}`;
+    }
+  },
+
+  // Setup Key and Mobile Touch Controls
+  setupControls() {
+    window.addEventListener('keydown', (e) => {
+      if (this.inCombat) return;
+
+      let dx = 0, dy = 0;
+      if (e.key === 'ArrowUp' || e.key === 'w') dy = -1;
+      if (e.key === 'ArrowDown' || e.key === 's') dy = 1;
+      if (e.key === 'ArrowLeft' || e.key === 'a') dx = -1;
+      if (e.key === 'ArrowRight' || e.key === 'd') dx = 1;
+
+      if (dx !== 0 || dy !== 0) {
+        this.movePlayer(dx, dy);
+      }
+
+      // Hotkey slot selection
+      if (e.key >= '1' && e.key <= '9') {
+        this.activeHotbarIndex = parseInt(e.key) - 1;
+        this.renderHotbar();
+      } else if (e.key === '0') {
+        this.activeHotbarIndex = 9;
+        this.renderHotbar();
+      }
+
+      // Action Key (Space / E)
+      if (e.key === ' ' || e.key === 'e') {
+        this.interactCurrentTile();
+      }
+    });
+
+    // Check Mobile Touch
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+      document.getElementById('mobile-controls').style.display = 'flex';
+
+      document.getElementById('btn-up').onclick = () => this.movePlayer(0, -1);
+      document.getElementById('btn-down').onclick = () => this.movePlayer(0, 1);
+      document.getElementById('btn-left').onclick = () => this.movePlayer(-1, 0);
+      document.getElementById('btn-right').onclick = () => this.movePlayer(1, 0);
+      document.getElementById('btn-a').onclick = () => this.interactCurrentTile();
+    }
+  },
+
+  movePlayer(dx, dy) {
+    const newX = Math.max(0, Math.min(this.mapSize - 1, this.player.x + dx));
+    const newY = Math.max(0, Math.min(this.mapSize - 1, this.player.y + dy));
+
+    // Check obstacle collision
+    const targetTile = this.map[newY][newX];
+    if (targetTile && targetTile.obstacle === 'boulder') {
+      // Boulder blocks movement unless moved or lifted
+      return;
+    }
+
+    if (newX !== this.player.x || newY !== this.player.y) {
+      this.player.x = newX;
+      this.player.y = newY;
+      AudioEngine.play('step');
+
+      this.updateFogOfWar();
+
+      // Random Wild Encounter Check
+      if (Math.random() < 0.04) {
+        this.triggerWildEncounter();
+      }
+    }
+  },
+
+  interactCurrentTile() {
+    const x = this.player.x;
+    const y = this.player.y;
+    const tile = this.map[y][x];
+    const machine = this.automationGrid[y][x];
+
+    // Check adjacent tiles for Field Obstacles (Psynergy puzzles like Lift / Growth)
+    const dirs = [{x:0, y:-1}, {x:0, y:1}, {x:-1, y:0}, {x:1, y:0}];
+    for (let d of dirs) {
+      const nx = x + d.x;
+      const ny = y + d.y;
+      if (nx >= 0 && nx < this.mapSize && ny >= 0 && ny < this.mapSize) {
+        const adjTile = this.map[ny][nx];
+        if (adjTile.obstacle === 'sprout') {
+          adjTile.obstacle = null;
+          adjTile.resource = 'wood'; // Grows vine/wood
+          AudioEngine.play('magic');
+          return;
+        } else if (adjTile.obstacle === 'puddle') {
+          adjTile.obstacle = null;
+          adjTile.resource = 'mana_crystal'; // Freezes into crystal
+          AudioEngine.play('magic');
+          return;
+        }
+      }
+    }
+
+    // 1. If machine exists on tile, harvest stored production
+    if (machine) {
+      if (machine.storedCount >= 1) {
+        const countToHarvest = Math.floor(machine.storedCount);
+        this.addItemToInventory(machine.outputItem, countToHarvest);
+        machine.storedCount -= countToHarvest;
+        AudioEngine.play('craft');
+      }
+      return;
+    }
+
+    // 2. If resource on tile, mine it
+    if (tile.resource) {
+      const resId = tile.resource;
+      this.addItemToInventory(resId, 1);
+      AudioEngine.play('hit');
+      if (Math.random() < 0.3) {
+        tile.resource = null;
+      }
+      this.renderHotbar();
+      return;
+    }
+
+    // 3. Otherwise place item currently selected in hotbar (if automation machine)
+    const selectedItemId = this.hotbar[this.activeHotbarIndex];
+    if (selectedItemId && ['auto_miner', 'conveyor', 'assembler', 'chest'].includes(selectedItemId)) {
+      if (this.removeItemFromInventory(selectedItemId, 1)) {
+        this.automationGrid[y][x] = {
+          type: selectedItemId,
+          storedCount: 0,
+          outputItem: selectedItemId === 'auto_miner' ? (tile.resource || 'stone') : 'iron_ingot'
+        };
+        AudioEngine.play('craft');
+        this.renderHotbar();
+      }
+    }
+  },
+
+  addItemToInventory(id, count) {
+    if (!id || count <= 0) return;
+    let item = this.inventory.find(i => i.id === id);
+    if (item) {
+      item.count += count;
+    } else {
+      this.inventory.push({ id, count });
+    }
+  },
+
+  removeItemFromInventory(id, count) {
+    let item = this.inventory.find(i => i.id === id);
+    if (item && item.count >= count) {
+      item.count -= count;
+      return true;
+    }
+    return false;
+  },
+
+  // Turn-Based Combat System (Golden Sun / FFTA Inspired)
+  triggerWildEncounter() {
+    if (this.inCombat) return;
+    const tile = this.map[this.player.y][this.player.x];
+    const biome = Registry.Biomes[tile.tileType] || Registry.Biomes.emerald_plains;
+    const monsterKey = biome.encounters[Math.floor(Math.random() * biome.encounters.length)];
+    const monsterData = Registry.Monsters[monsterKey];
+
+    this.inCombat = true;
+    this.combatState = {
+      enemy: {
+        ...monsterData,
+        maxHp: monsterData.hp,
+        currentHp: monsterData.hp
+      },
+      turnQueue: [...this.party],
+      activeTurnIndex: 0,
+      log: [`A wild ${monsterData.name} appeared!`]
+    };
+
+    document.getElementById('combat-overlay').classList.add('active');
+    AudioEngine.play('magic');
+    this.renderCombatUI();
+  },
+
+  executeCombatAction(action) {
+    if (!this.inCombat) return;
+    const state = this.combatState;
+    const hero = state.turnQueue[state.activeTurnIndex];
+
+    if (action === 'flee') {
+      AudioEngine.play('select');
+      this.endCombat("Fled from battle!");
+      return;
+    }
+
+    if (action === 'attack') {
+      const dmg = Math.max(5, Math.floor(hero.stats.str * 1.5 - state.enemy.def * 0.5));
+      state.enemy.currentHp -= dmg;
+      AudioEngine.play('hit');
+      state.log.push(`${hero.name} attacked ${state.enemy.name} for ${dmg} damage!`);
+    } else if (action === 'skill') {
+      if (hero.stats.mp >= 10) {
+        hero.stats.mp -= 10;
+        const dmg = Math.max(10, Math.floor(hero.stats.int * 2.2));
+        state.enemy.currentHp -= dmg;
+        AudioEngine.play('magic');
+        state.log.push(`${hero.name} cast Psynergy for ${dmg} damage!`);
+      } else {
+        alert("Not enough MP!");
+        return;
+      }
+    } else if (action === 'item') {
+      if (this.removeItemFromInventory('potion', 1)) {
+        hero.stats.hp = Math.min(hero.stats.maxHp, hero.stats.hp + 50);
+        AudioEngine.play('magic');
+        state.log.push(`${hero.name} used a Potion (+50 HP)!`);
+      } else {
+        alert("No potions in inventory!");
+        return;
+      }
+    }
+
+    // Check Enemy Defeat
+    if (state.enemy.currentHp <= 0) {
+      AudioEngine.play('craft');
+      // Give rewards
+      hero.exp += state.enemy.exp;
+      if (hero.exp >= hero.level * 50) {
+        hero.level++;
+        hero.stats.maxHp += 15;
+        hero.stats.hp = hero.stats.maxHp;
+        hero.stats.str += 3;
+        hero.stats.int += 2;
+      }
+      this.endCombat(`Victory! Gained ${state.enemy.exp} EXP!`);
+      return;
+    }
+
+    // Enemy Turn Counter-Attack
+    const enemyDmg = Math.max(3, Math.floor(state.enemy.atk - hero.stats.def * 0.5));
+    hero.stats.hp = Math.max(0, hero.stats.hp - enemyDmg);
+    AudioEngine.play('hit');
+    state.log.push(`${state.enemy.name} hit ${hero.name} for ${enemyDmg} damage!`);
+
+    // Check Hero Defeat
+    if (hero.stats.hp <= 0) {
+      hero.stats.hp = Math.floor(hero.stats.maxHp * 0.5); // Revive half HP
+      this.endCombat(`${hero.name} was defeated! Retreating...`);
+      return;
+    }
+
+    this.renderCombatUI();
+  },
+
+  endCombat(msg) {
+    alert(msg);
+    this.inCombat = false;
+    this.combatState = null;
+    document.getElementById('combat-overlay').classList.remove('active');
+    this.renderHotbar();
+  },
+
+  renderCombatUI() {
+    if (!this.inCombat) return;
+    const ctx = this.combatCtx;
+    const w = this.combatCanvas.width;
+    const h = this.combatCanvas.height;
+
+    // Background
+    ctx.fillStyle = '#111823';
+    ctx.fillRect(0, 0, w, h);
+
+    // Render Enemy
+    ctx.fillStyle = '#f14668';
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 3, 50, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(this.combatState.enemy.name, w / 2, h / 3 - 60);
+
+    // Enemy Health Bar
+    const enemyHpPct = Math.max(0, this.combatState.enemy.currentHp / this.combatState.enemy.maxHp);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(w / 2 - 80, h / 3 + 60, 160, 14);
+    ctx.fillStyle = '#f14668';
+    ctx.fillRect(w / 2 - 80, h / 3 + 60, 160 * enemyHpPct, 14);
+
+    // Battle Log
+    ctx.font = '12px Courier New';
+    ctx.fillStyle = '#f5ca53';
+    const recentLogs = this.combatState.log.slice(-3);
+    recentLogs.forEach((logText, i) => {
+      ctx.fillText(logText, w / 2, h / 3 + 100 + (i * 18));
+    });
+
+    // Render Party Members
+    const activeHero = this.combatState.turnQueue[this.combatState.activeTurnIndex];
+    ctx.font = '14px Courier New';
+    ctx.textAlign = 'left';
+    this.party.forEach((hero, idx) => {
+      const x = 40 + idx * 220;
+      const y = h - 200;
+      ctx.fillStyle = (hero === activeHero) ? '#f5ca53' : '#283a52';
+      ctx.fillRect(x, y, 200, 110);
+      ctx.strokeStyle = '#4a688a';
+      ctx.strokeRect(x, y, 200, 110);
+
+      ctx.fillStyle = '#fff';
+      ctx.fillText(`${hero.name} (Lvl ${hero.level})`, x + 10, y + 25);
+      ctx.fillText(`HP: ${hero.stats.hp}/${hero.stats.maxHp}`, x + 10, y + 50);
+      ctx.fillText(`MP: ${hero.stats.mp}/${hero.stats.maxMp}`, x + 10, y + 75);
+    });
+  },
+
+  // Main Game Loop (Automation & Render)
+  startMainLoop() {
+    let lastTime = performance.now();
+    const tick = (now) => {
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      this.updateAutomation(dt);
+      this.renderMap();
+
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  },
+
+  updateAutomation(dt) {
+    // Every tick, process machines (miners extract resources)
+    for (let y = 0; y < this.mapSize; y++) {
+      for (let x = 0; x < this.mapSize; x++) {
+        const machine = this.automationGrid[y][x];
+        if (machine && machine.type === 'auto_miner') {
+          machine.storedCount = (machine.storedCount || 0) + dt * 0.2; // 1 item every 5s
+        }
+      }
+    }
+  },
+
+  renderMap() {
+    if (this.inCombat) return;
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+
+    ctx.fillStyle = '#05080c';
+    ctx.fillRect(0, 0, w, h);
+
+    const cameraX = this.player.x * this.tileSize - w / 2;
+    const cameraY = this.player.y * this.tileSize - h / 2;
+
+    const startX = Math.max(0, Math.floor(cameraX / this.tileSize));
+    const endX = Math.min(this.mapSize, Math.ceil((cameraX + w) / this.tileSize));
+    const startY = Math.max(0, Math.floor(cameraY / this.tileSize));
+    const endY = Math.min(this.mapSize, Math.ceil((cameraY + h) / this.tileSize));
+
+    // Draw Grid Tiles
+    for (let y = startY; y < endY; y++) {
+      for (let x = startX; x < endX; x++) {
+        const tile = this.map[y][x];
+        const screenX = Math.floor(x * this.tileSize - cameraX);
+        const screenY = Math.floor(y * this.tileSize - cameraY);
+
+        // Check Fog of War
+        if (this.fogOfWar[y][x]) {
+          ctx.fillStyle = '#05080c';
+          ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
+          continue;
+        }
+
+        const biome = Registry.Biomes[tile.tileType] || Registry.Biomes.emerald_plains;
+        ctx.fillStyle = biome.bg;
+        ctx.fillRect(screenX, screenY, this.tileSize - 1, this.tileSize - 1);
+
+        // Draw Field Obstacles
+        if (tile.obstacle === 'boulder') {
+          ctx.font = '16px serif';
+          ctx.fillText('🪨', screenX + 6, screenY + 22);
+        } else if (tile.obstacle === 'sprout') {
+          ctx.font = '16px serif';
+          ctx.fillText('🌱', screenX + 6, screenY + 22);
+        } else if (tile.obstacle === 'puddle') {
+          ctx.font = '16px serif';
+          ctx.fillText('💧', screenX + 6, screenY + 22);
+        }
+
+        // Draw Resource Icon
+        if (tile.resource && !tile.obstacle) {
+          const item = Registry.Items[tile.resource];
+          if (item) {
+            ctx.font = '16px serif';
+            ctx.fillText(item.icon, screenX + 6, screenY + 22);
+          }
+        }
+
+        // Draw Automation Machine
+        const machine = this.automationGrid[y][x];
+        if (machine) {
+          const item = Registry.Items[machine.type];
+          if (item) {
+            ctx.font = '16px serif';
+            ctx.fillText(item.icon, screenX + 6, screenY + 22);
+          }
+        }
+      }
+    }
+
+    // Draw Player
+    const playerScreenX = Math.floor(this.player.x * this.tileSize - cameraX);
+    const playerScreenY = Math.floor(this.player.y * this.tileSize - cameraY);
+    ctx.fillStyle = '#f5ca53';
+    ctx.beginPath();
+    ctx.arc(playerScreenX + this.tileSize / 2, playerScreenY + this.tileSize / 2, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  },
+
+  // Overlays Renderers
+  renderPartyPanel() {
+    const rosterList = document.getElementById('party-roster-list');
+    rosterList.innerHTML = '<h3>Roster Members</h3>';
+    this.party.forEach(hero => {
+      const card = document.createElement('div');
+      card.className = 'card interactive';
+      card.innerHTML = `<strong>${hero.name}</strong> - Lvl ${hero.level} ${hero.job}<br>HP: ${hero.stats.hp}/${hero.stats.maxHp} | MP: ${hero.stats.mp}/${hero.stats.maxMp}`;
+      rosterList.appendChild(card);
+    });
+
+    const details = document.getElementById('party-hero-details');
+    if (this.party.length > 0) {
+      const h = this.party[0];
+      details.innerHTML = `
+        <h3>${h.name}'s Stats & Gear</h3>
+        <p><strong>Job:</strong> ${h.job}</p>
+        <p><strong>STR:</strong> ${h.stats.str} | <strong>AGI:</strong> ${h.stats.agi} | <strong>INT:</strong> ${h.stats.int}</p>
+        <hr style="margin: 10px 0; border-color: var(--panel-border);">
+        <p><strong>Equipped Weapon:</strong> ${h.equipped.weapon ? Registry.Items[h.equipped.weapon].name : 'None'}</p>
+        <p><strong>Equipped Armor:</strong> ${h.equipped.armor ? Registry.Items[h.equipped.armor].name : 'None'}</p>
+      `;
+    }
+
+    const jobTree = document.getElementById('party-job-tree');
+    jobTree.innerHTML = '<h3>Available Job Classes</h3>';
+    Object.keys(Registry.Jobs).forEach(jobKey => {
+      const job = Registry.Jobs[jobKey];
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `<strong>${job.name}</strong><br><span style="font-size:11px; color:var(--text-muted)">Skills: ${job.skills.join(', ')}</span>`;
+      jobTree.appendChild(card);
+    });
+  },
+
+  renderJEIPanel() {
+    this.filterJEI();
+  },
+
+  filterJEI() {
+    const search = (document.getElementById('jei-search').value || '').toLowerCase();
+    const itemList = document.getElementById('jei-item-list');
+    itemList.innerHTML = '<h3>Items & Materials</h3>';
+
+    Object.keys(Registry.Items).forEach(key => {
+      const item = Registry.Items[key];
+      if (item.name.toLowerCase().includes(search) || item.desc.toLowerCase().includes(search)) {
+        const card = document.createElement('div');
+        card.className = 'card interactive';
+        card.onclick = () => this.showRecipeDetails(key);
+        card.innerHTML = `<span>${item.icon} <strong>${item.name}</strong></span><br><span style="font-size:11px; color:var(--text-muted);">${item.desc}</span>`;
+        itemList.appendChild(card);
+      }
+    });
+  },
+
+  showRecipeDetails(itemId) {
+    const details = document.getElementById('jei-recipe-details');
+    const item = Registry.Items[itemId];
+    const recipes = Registry.Recipes.filter(r => r.id === itemId);
+
+    let html = `<h3>${item.icon} ${item.name}</h3><p style="margin-bottom:10px;">${item.desc}</p>`;
+
+    if (recipes.length > 0) {
+      recipes.forEach(r => {
+        html += `<div class="card"><strong>Recipe:</strong><br>`;
+        Object.keys(r.inputs).forEach(inId => {
+          const inItem = Registry.Items[inId];
+          html += `- ${inItem ? inItem.name : inId}: ${r.inputs[inId]}<br>`;
+        });
+        html += `<button class="btn btn-gold" style="margin-top:8px;" onclick="Game.craftRecipe('${r.id}')">Craft 1x</button></div>`;
+      });
+    } else {
+      html += `<p style="color:var(--text-muted);">No crafting recipe found (Harvested directly from world).</p>`;
+    }
+
+    details.innerHTML = html;
+  },
+
+  craftRecipe(recipeId) {
+    const recipe = Registry.Recipes.find(r => r.id === recipeId);
+    if (!recipe) return;
+
+    // Check if player has inputs
+    let canCraft = true;
+    Object.keys(recipe.inputs).forEach(inId => {
+      const required = recipe.inputs[inId];
+      const inv = this.inventory.find(i => i.id === inId);
+      if (!inv || inv.count < required) canCraft = false;
+    });
+
+    if (canCraft) {
+      Object.keys(recipe.inputs).forEach(inId => {
+        this.removeItemFromInventory(inId, recipe.inputs[inId]);
+      });
+      Object.keys(recipe.output).forEach(outId => {
+        this.addItemToInventory(outId, recipe.output[outId]);
+      });
+      AudioEngine.play('craft');
+      this.renderHotbar();
+      this.showRecipeDetails(recipeId);
+    } else {
+      alert("Missing required crafting ingredients!");
+    }
+  },
+
+  quickCraftAll() {
+    Registry.Recipes.forEach(r => {
+      this.craftRecipe(r.id);
+    });
+  },
+
+  renderAutomationPanel() {
+    const summary = document.getElementById('automation-summary');
+    const machines = document.getElementById('automation-machines');
+
+    let totalMachines = 0;
+    let machineListHtml = '';
+
+    for (let y = 0; y < this.mapSize; y++) {
+      for (let x = 0; x < this.mapSize; x++) {
+        const m = this.automationGrid[y][x];
+        if (m) {
+          totalMachines++;
+          const item = Registry.Items[m.type];
+          machineListHtml += `<div class="card">${item.icon} <strong>${item.name}</strong> at (${x}, ${y}) - Output: ${Math.floor(m.storedCount || 0)} items</div>`;
+        }
+      }
+    }
+
+    summary.innerHTML = `<h3>Automation Grid Overview</h3><p>Total Active Machines: <strong>${totalMachines}</strong></p>`;
+    machines.innerHTML = `<h3>Placed Machines</h3>${machineListHtml || '<p style="color:var(--text-muted);">No machines placed yet. Place Auto-Miners or Conveyors from your hotbar!</p>'}`;
+  },
+
+  quickSortInventory() {
+    this.inventory.sort((a, b) => a.id.localeCompare(b.id));
+    AudioEngine.play('select');
+    this.renderHotbar();
+  },
+
+  quickStackChests() {
+    AudioEngine.play('select');
+    alert("Quick-stacked items to nearby chests!");
+  },
+
+  // Save / Load System
+  saveGame() {
+    const saveData = {
+      player: this.player,
+      inventory: this.inventory,
+      party: this.party,
+      automationGrid: this.automationGrid
+    };
+    localStorage.setItem('JULES_GBA_SAVE', JSON.stringify(saveData));
+    AudioEngine.play('craft');
+    alert("Game saved successfully!");
+  },
+
+  loadGame() {
+    const raw = localStorage.getItem('JULES_GBA_SAVE');
+    if (raw) {
+      const saveData = JSON.parse(raw);
+      this.player = saveData.player;
+      this.inventory = saveData.inventory;
+      this.party = saveData.party;
+      this.automationGrid = saveData.automationGrid;
+      this.renderHotbar();
+      alert("Game loaded!");
+    } else {
+      alert("No local save found.");
+    }
+  },
+
+  resetGame() {
+    if (confirm("Reset world and inventory?")) {
+      localStorage.removeItem('JULES_GBA_SAVE');
+      location.reload();
+    }
+  },
+
+  exportSaveJSON() {
+    const saveData = {
+      player: this.player,
+      inventory: this.inventory,
+      party: this.party,
+      automationGrid: this.automationGrid
+    };
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveData, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", "jules_gba_save.json");
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+  },
+
+  importSaveJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const saveData = JSON.parse(e.target.result);
+        if (saveData.player && saveData.inventory) {
+          this.player = saveData.player;
+          this.inventory = saveData.inventory;
+          this.party = saveData.party || this.party;
+          this.automationGrid = saveData.automationGrid || this.automationGrid;
+          this.renderHotbar();
+          alert("JSON Save imported successfully!");
+        }
+      } catch (err) {
+        alert("Invalid save file format!");
+      }
+    };
+    reader.readAsText(file);
+  },
+
+  loadCustomModJSON() {
+    const text = document.getElementById('mod-json-input').value;
+    try {
+      const mod = JSON.parse(text);
+      if (mod.items) {
+        mod.items.forEach(i => Registry.Items[i.id] = i);
+      }
+      if (mod.recipes) {
+        mod.recipes.forEach(r => Registry.Recipes.push(r));
+      }
+      if (mod.monsters) {
+        mod.monsters.forEach(m => Registry.Monsters[m.id] = m);
+      }
+      alert("Custom Mod JSON loaded dynamically into registries!");
+      this.renderHotbar();
+      if (this.activeTab === 'jei') this.renderJEIPanel();
+    } catch (e) {
+      alert("Invalid JSON format in Mod loader!");
+    }
+  }
+};
+
+// Initialize Game Engine on Page Load
+window.addEventListener('load', () => {
+  Game.init();
+});
+
+// --- Arcade Cabinet Integration Harness (ResizeObserver, PAUSED State, Namespaced SaveManager) ---
+window.ArcadeHarness = {
+  SAVE_KEY: 'arcade_game_001_001-jules-gba-travelers-chronicle_v1',
+  state: 'PLAYING',
+  memorySave: {
+    highScore: 100,
+    bestWaveOrCombo: 1,
+    totalGamesPlayed: 0,
+    totalScoreAccumulated: 0,
+    unlockedMilestones: ['Traveler Initiate'],
+    options: { muted: false, sfxVolume: 0.8, musicVolume: 0.6, screenShake: '100%', particles: 'High' }
+  },
+  loadSave() {
+    try {
+      const raw = localStorage.getItem(this.SAVE_KEY);
+      if (raw) {
+        return Object.assign({}, this.memorySave, JSON.parse(raw));
+      }
+    } catch (e) {}
+    return this.memorySave;
+  },
+  writeSave(patch) {
+    const next = Object.assign(this.loadSave(), patch || {});
+    this.memorySave = next;
+    try {
+      localStorage.setItem(this.SAVE_KEY, JSON.stringify(next));
+    } catch (e) {}
+    return next;
+  },
+  setPaused(paused) {
+    this.state = paused ? 'PAUSED' : 'PLAYING';
+    const modal = document.getElementById('arcade-paused-modal');
+    if (modal) modal.style.display = paused ? 'flex' : 'none';
+  },
+  togglePause() {
+    this.setPaused(this.state !== 'PAUSED');
+  },
+  init() {
+    const saved = this.loadSave();
+    this.writeSave({
+      totalGamesPlayed: (saved.totalGamesPlayed || 0) + 1,
+      highScore: Math.max(saved.highScore || 0, (window.Game && window.Game.player && window.Game.player.gold) ? window.Game.player.gold : 100)
+    });
+
+    const modal = document.createElement('div');
+    modal.id = 'arcade-paused-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(10,14,22,0.85);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#e2f0fd;font-family:monospace;';
+    modal.innerHTML = '<div style="background:#161e2a;border:2px solid #f5ca53;border-radius:10px;padding:24px 32px;text-align:center;max-width:360px;width:90%;"><h2 style="color:#f5ca53;margin-bottom:12px;">GAME PAUSED</h2><p style="color:#8ba2bd;font-size:13px;margin-bottom:18px;">Jules\x27 GBA: A Traveler\x27s Chronicle</p><div style="display:flex;flex-direction:column;gap:10px;"><button onclick="window.ArcadeHarness.setPaused(false)" style="padding:10px;background:#3a9bdc;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Resume (Esc)</button><a href="../../index.html" style="padding:10px;background:#283a52;color:#f5ca53;text-decoration:none;border:1px solid #4a688a;border-radius:6px;font-weight:bold;">Back to Arcade Hub</a></div></div>';
+    document.body.appendChild(modal);
+
+    const container = document.getElementById('game-container') || document.body;
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => {
+        if (window.Game && typeof window.Game.resizeCanvas === 'function') {
+          window.Game.resizeCanvas();
+        }
+      });
+      ro.observe(container);
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.state === 'PLAYING') {
+        this.setPaused(true);
+      }
+    });
+    window.addEventListener('blur', () => {
+      if (this.state === 'PLAYING') {
+        this.setPaused(true);
+      }
+    });
+    window.addEventListener('pointerdown', () => {
+      if (window.Sound && window.Sound.ctx && window.Sound.ctx.state === 'suspended') {
+        window.Sound.ctx.resume().catch(() => {});
+      }
+    }, { passive: true });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        this.togglePause();
+      }
+    });
+  }
+};
+window.addEventListener('load', () => {
+  window.ArcadeHarness.init();
+});
+
+</script>
+</body>
+</html>
