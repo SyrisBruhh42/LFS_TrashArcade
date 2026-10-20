@@ -375,5 +375,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-24",
     "accentColor": "#ad5fbb",
     "path": "./games/029-origami-recoil-siege/index.html"
+  },
+  {
+    "id": "030",
+    "slug": "030-abyssal-alchemy",
+    "title": "Abyssal Alchemy",
+    "genre": "Alchemy/Chain-Reaction Puzzle Action",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Deep Ocean Trench",
+    "description": "Trigger explosive chain reactions in the deep ocean trench. Stop moving to slow down time and plan your next alchemical reaction.",
+    "controls": "WASD / Arrows to move. Space / Click / Tap to place an alchemical seed. Stop moving to dilate time.",
+    "createdAt": "2024-10-24",
+    "accentColor": "#c8f6d6",
+    "path": "./games/030-abyssal-alchemy/index.html"
   }
 ];
