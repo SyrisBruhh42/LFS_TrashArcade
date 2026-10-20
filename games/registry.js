@@ -492,5 +492,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2026-10-19",
     "accentColor": "#e8dc6d",
     "path": "./games/038-paper-polarity-beats/index.html"
+  },
+  {
+    "id": "039",
+    "slug": "039-cellular-chain-collapse",
+    "title": "Cellular Chain Collapse",
+    "genre": "Alchemy/Chain-Reaction Puzzle Action",
+    "coreMechanic": "Shrinking Arena / Shifting Geometry",
+    "setting": "Microscopic Cell Interior",
+    "description": "Trigger catalyst pulses within a shrinking wobbly cell membrane. Create chain reactions by exploding enemy spores to expand the arena and survive.",
+    "controls": "WASD/Arrows to move, Space/Click/Tap to trigger a catalyst pulse.",
+    "createdAt": "2024-11-20",
+    "accentColor": "#d9a481",
+    "path": "./games/039-cellular-chain-collapse/index.html"
   }
 ];
