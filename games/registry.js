@@ -271,5 +271,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-31",
     "accentColor": "#589b70",
     "path": "./games/021-neon-grid-switch/index.html"
+  },
+  {
+    "id": "023",
+    "slug": "023-cyber-drill-dojo",
+    "title": "Cyber Drill Dojo",
+    "genre": "Subterranean Drilling/Mining Roguelite",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Cyber Samurai Dojo",
+    "description": "Descend through the subterranean levels of the Cyber Samurai Dojo. Drill to mine cyber-minerals while time dilates when you are still, allowing you to gracefully dodge obstacles and security routines.",
+    "controls": "WASD/Arrows to move and drill. Release all controls to slow down time.",
+    "createdAt": "2024-10-31",
+    "accentColor": "#42997b",
+    "path": "./games/023-cyber-drill-dojo/index.html"
   }
 ];
