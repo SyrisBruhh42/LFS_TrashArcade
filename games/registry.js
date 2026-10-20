@@ -1,14 +1,26 @@
 window.ARCADE_REGISTRY = [
   {
-    id: "001",
-    slug: "001-jules-gba-travelers-chronicle",
-    title: "Jules' GBA: A Traveler's Chronicle",
-    genre: "Tactical Grid/Turn-Based Blitz",
-    coreMechanic: "Automation Grid & Party Tactics RPG",
-    description: "Explore a procedural overworld, build Factorio-style automation belts, craft via JEI recipes, and battle monsters in turn-based tactical party combat.",
-    controls: "WASD / Arrow Keys to move, Click / Touch D-Pad & Action Buttons to interact",
-    createdAt: "2026-10-19",
-    path: "./games/001-jules-gba-travelers-chronicle/index.html",
-    accentColor: "#f5ca53"
+    "id": "001",
+    "slug": "001-jules-gba-travelers-chronicle",
+    "title": "Jules' GBA: A Traveler's Chronicle",
+    "genre": "Tactical Grid/Turn-Based Blitz",
+    "coreMechanic": "Automation Grid & Party Tactics RPG",
+    "description": "Explore a procedural overworld, build Factorio-style automation belts, craft via JEI recipes, and battle monsters in turn-based tactical party combat.",
+    "controls": "WASD / Arrow Keys to move, Click / Touch D-Pad & Action Buttons to interact",
+    "createdAt": "2026-10-19",
+    "path": "./games/001-jules-gba-travelers-chronicle/index.html",
+    "accentColor": "#f5ca53"
+  },
+  {
+    "id": "002",
+    "slug": "002-neon-grapple-dilation",
+    "title": "Neon Grapple Dilation",
+    "genre": "Momentum/Grapple Platformer",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "description": "Swing through neon-lit obstacles. When you release all controls, time dilates to a crawl, allowing you to perfectly aim your next grapple.",
+    "controls": "WASD / Arrows to move on ground. Mouse / Touch to aim and fire grapple hook. Release all to slow time.",
+    "createdAt": "2024-05-14",
+    "path": "./games/002-neon-grapple-dilation/index.html",
+    "accentColor": "#ff00ff"
   }
 ];
