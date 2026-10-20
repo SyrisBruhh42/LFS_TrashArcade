@@ -273,6 +273,19 @@ window.ARCADE_REGISTRY = [
     "path": "./games/021-neon-grid-switch/index.html"
   },
   {
+    "id": "022",
+    "slug": "022-clockwork-recoil-dungeon",
+    "title": "Clockwork Recoil Dungeon",
+    "genre": "Pinball/Ricochet Dungeon",
+    "coreMechanic": "Recoil-as-Movement",
+    "setting": "Clockwork Steampunk Foundry",
+    "description": "Navigate a dangerous steampunk foundry by using the recoil of your weapon to bounce and ricochet through rooms.",
+    "controls": "WASD/Arrows to aim, Mouse click or Space to shoot/move. Touch to aim and shoot.",
+    "createdAt": "2024-10-20",
+    "accentColor": "#c7c99b",
+    "path": "./games/022-clockwork-recoil-dungeon/index.html"
+  },
+  {
     "id": "023",
     "slug": "023-cyber-drill-dojo",
     "title": "Cyber Drill Dojo",
