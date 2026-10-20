@@ -37,5 +37,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-24",
     "accentColor": "#c298fa",
     "path": "./games/003-paper-craft-tail-arena/index.html"
+  },
+  {
+    "id": "004",
+    "slug": "004-jungle-ammo-run",
+    "title": "Jungle Ammo Run",
+    "genre": "Bullet-Hell Boss Rush",
+    "coreMechanic": "Limited Ammo Must Be Physically Retrieved",
+    "setting": "Overgrown Jungle Ruins",
+    "description": "Fight an endless boss rush in ancient overgrown ruins. You have limited shots; retrieve your ammo to keep fighting!",
+    "controls": "WASD/Arrows to move, Space/Click to shoot. Touch: Joystick to move, tap right to shoot.",
+    "createdAt": "2024-05-23",
+    "accentColor": "#4cd477",
+    "path": "./games/004-jungle-ammo-run/index.html"
   }
 ];
