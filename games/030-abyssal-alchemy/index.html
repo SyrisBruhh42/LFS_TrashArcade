@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Abyssal Alchemy</title>
+<style>
+  :root {
+    --accent: #c8f6d6;
+    --bg-color: #050a1f;
+    --text-color: #e0f2fe;
+    --font-stack: "Courier New", Courier, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; touch-action: none; }
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-stack);
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  #game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+  }
+  canvas {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 20px rgba(200, 246, 214, 0.2);
+  }
+  .ui-layer {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+  }
+  .screen {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(5, 10, 31, 0.85);
+    pointer-events: auto;
+  }
+  .screen.active { display: flex; }
+  h1 { font-size: 3rem; color: var(--accent); text-shadow: 0 0 10px var(--accent); margin-bottom: 1rem; text-align: center;}
+  h2 { font-size: 2rem; margin-bottom: 1rem; }
+  p { margin-bottom: 1rem; text-align: center; max-width: 600px; line-height: 1.5; }
+  .btn {
+    background: transparent;
+    color: var(--accent);
+    border: 2px solid var(--accent);
+    padding: 0.75rem 2rem;
+    font-size: 1.25rem;
+    font-family: inherit;
+    cursor: pointer;
+    margin: 0.5rem;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+    pointer-events: auto;
+  }
+  .btn:hover, .btn:active {
+    background: var(--accent);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--accent);
+  }
+  #hud {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    display: none;
+    padding: 1rem;
+    justify-content: space-between;
+  }
+  #hud.active { display: flex; }
+  .hud-item { font-size: 1.5rem; text-shadow: 1px 1px 2px #000; pointer-events: auto;}
+  #btn-pause { position: absolute; top: 1rem; right: 1rem; }
+
+  #modal-options {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: #0a1530; border: 2px solid var(--accent); padding: 2rem;
+    display: none; flex-direction: column; align-items: center; z-index: 20; pointer-events: auto;
+    border-radius: 8px; box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    max-height: 90vh; overflow-y: auto;
+  }
+  #modal-options.active { display: flex; }
+  .option-row { display: flex; justify-content: space-between; width: 300px; margin-bottom: 1rem; align-items: center;}
+  .option-row label { font-size: 1.2rem; }
+  input[type="range"] { accent-color: var(--accent); }
+
+  #virtual-controls {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; display: none; z-index: 5;
+  }
+  #joystick-area { position: absolute; bottom: 10%; left: 10%; width: 150px; height: 150px; border-radius: 50%; background: rgba(255,255,255,0.1); pointer-events: auto; display: none; border: 2px solid rgba(255,255,255,0.2);}
+  #joystick-knob { position: absolute; top: 50%; left: 50%; width: 60px; height: 60px; border-radius: 50%; background: rgba(200, 246, 214, 0.4); transform: translate(-50%, -50%); }
+  #btn-action { position: absolute; bottom: 10%; right: 10%; width: 100px; height: 100px; border-radius: 50%; background: rgba(200, 246, 214, 0.2); border: 2px solid rgba(200,246,214,0.5); pointer-events: auto; display: none;}
+  #btn-action:active { background: rgba(200, 246, 214, 0.5); }
+
+  a.arcade-link { color: var(--accent); text-decoration: none; margin-top: 2rem; display: inline-block; font-size: 1.2rem; pointer-events: auto; }
+  a.arcade-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="game-canvas"></canvas>
+
+  <div id="hud" class="ui-layer">
+    <div class="hud-item">Score: <span id="hud-score">0</span><br>Multiplier: <span id="hud-mult">1</span>x</div>
+    <div class="hud-item">Wave: <span id="hud-wave">1</span><br>HP: <span id="hud-hp">100</span>%</div>
+    <button id="btn-pause" class="btn">II</button>
+  </div>
+
+  <div id="screen-title" class="screen active">
+    <h1>Abyssal Alchemy</h1>
+    <p>High Score: <span id="title-high-score">0</span></p>
+    <button id="btn-play" class="btn">Play</button>
+    <button id="btn-howto" class="btn">How to Play</button>
+    <button id="btn-options" class="btn">Options</button>
+    <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+  </div>
+
+  <div id="screen-paused" class="screen">
+    <h2>PAUSED</h2>
+    <button id="btn-resume" class="btn">Resume</button>
+    <button id="btn-restart" class="btn">Restart</button>
+    <button id="btn-options-pause" class="btn">Options</button>
+    <button id="btn-quit" class="btn">Quit to Title</button>
+  </div>
+
+  <div id="screen-gameover" class="screen">
+    <h2>GAME OVER</h2>
+    <p>Final Score: <span id="go-score">0</span></p>
+    <p id="go-new-high" style="display:none; color: var(--accent); font-weight: bold;">NEW HIGH SCORE!</p>
+    <button id="btn-play-again" class="btn">Play Again</button>
+    <button id="btn-go-title" class="btn">Title Screen</button>
+  </div>
+
+  <div id="screen-howto" class="screen">
+    <h2>How to Play</h2>
+    <p><b>Goal:</b> Trigger chain reactions to destroy deep-sea entities and survive.</p>
+    <p><b>Movement:</b> WASD / Arrows / Joystick to move.</p>
+    <p><b>Action:</b> Space / Click / Tap to place an alchemical seed.</p>
+    <p><b>Mechanic:</b> TIME DILATION ON STILLNESS. Stop moving to slow down time, allowing you to carefully plan your seeds.</p>
+    <button id="btn-close-howto" class="btn">Close</button>
+  </div>
+
+  <div id="modal-options">
+    <h2>Options</h2>
+    <div class="option-row">
+      <label>Master Mute</label>
+      <input type="checkbox" id="opt-mute">
+    </div>
+    <div class="option-row">
+      <label>SFX Volume</label>
+      <input type="range" id="opt-sfx" min="0" max="100" value="100">
+    </div>
+    <div class="option-row">
+      <label>Music Volume</label>
+      <input type="range" id="opt-music" min="0" max="100" value="100">
+    </div>
+    <div class="option-row">
+      <label>Screen Shake</label>
+      <select id="opt-shake">
+        <option value="1">100%</option>
+        <option value="0.5">50%</option>
+        <option value="0">Off</option>
+      </select>
+    </div>
+    <div class="option-row">
+      <label>Particles</label>
+      <select id="opt-particles">
+        <option value="1">High</option>
+        <option value="0.5">Low</option>
+      </select>
+    </div>
+    <div class="option-row">
+      <label>Touch Controls</label>
+      <select id="opt-touch">
+        <option value="auto">Auto</option>
+        <option value="always">Always</option>
+        <option value="off">Off</option>
+      </select>
+    </div>
+    <button id="btn-export-save" class="btn" style="font-size: 1rem; padding: 0.5rem 1rem;">Export Save</button>
+    <button id="btn-import-save" class="btn" style="font-size: 1rem; padding: 0.5rem 1rem;">Import Save</button>
+    <button id="btn-reset-save" class="btn" style="font-size: 1rem; padding: 0.5rem 1rem; color: #ff6b6b; border-color: #ff6b6b;">Reset Save</button>
+    <button id="btn-close-options" class="btn">Close</button>
+  </div>
+
+  <div id="virtual-controls">
+    <div id="joystick-area"><div id="joystick-knob"></div></div>
+    <div id="btn-action"></div>
+  </div>
+</div>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+
+    class SaveManager {
+        constructor() {
+            this.saveKey = 'arcade_game_030_030-abyssal-alchemy_v1';
+            this.data = this.load() || this.getDefaults();
+        }
+        getDefaults() {
+            return {
+                highScore: 0, bestWaveOrCombo: 0, totalGamesPlayed: 0, totalScoreAccumulated: 0,
+                unlockedMilestones: [],
+                options: { mute: false, sfxVolume: 100, musicVolume: 100, screenShake: 1, particles: 1, touchControls: 'auto' }
+            };
+        }
+        load() {
+            try {
+                const data = localStorage.getItem(this.saveKey);
+                return data ? JSON.parse(data) : null;
+            } catch (e) { console.warn("SaveManager load failed", e); return null; }
+        }
+        save() {
+            try { localStorage.setItem(this.saveKey, JSON.stringify(this.data)); }
+            catch (e) { console.warn("SaveManager save failed", e); }
+        }
+        updateHigh(score, wave) {
+            if (score > this.data.highScore) this.data.highScore = score;
+            if (wave > this.data.bestWaveOrCombo) this.data.bestWaveOrCombo = wave;
+            this.data.totalGamesPlayed++;
+            this.data.totalScoreAccumulated += score;
+            this.save();
+        }
+        reset() { this.data = this.getDefaults(); this.save(); }
+        export() { return btoa(JSON.stringify(this.data)); }
+        importSave(str) {
+            try {
+                const parsed = JSON.parse(atob(str));
+                if (parsed && typeof parsed === 'object') { this.data = parsed; this.save(); return true; }
+            } catch (e) { return false; }
+            return false;
+        }
+    }
+
+    class InputManager {
+        constructor(canvas, uiContainer) {
+            this.canvas = canvas;
+            this.uiContainer = uiContainer;
+            this.keys = {};
+            this.actionJustPressed = false;
+            this.actionPressed = false;
+            this.pointer = { x: 0, y: 0, active: false };
+            this.touchActive = false;
+
+            // Virtual controls
+            this.joyArea = document.getElementById('joystick-area');
+            this.joyKnob = document.getElementById('joystick-knob');
+            this.btnAction = document.getElementById('btn-action');
+            this.vControls = document.getElementById('virtual-controls');
+
+            this.joyCenter = { x: 0, y: 0 };
+            this.joyPos = { x: 0, y: 0 };
+            this.joyActive = false;
+            this.joyId = null;
+            this.actionTouchId = null;
+
+            this.setupListeners();
+
+            this.resizeObserver = new ResizeObserver(() => this.resize());
+            this.resizeObserver.observe(this.uiContainer);
+            this.resize();
+        }
+
+        resize() {
+            this.rect = this.canvas.getBoundingClientRect();
+            this.scaleX = this.canvas.width / this.rect.width;
+            this.scaleY = this.canvas.height / this.rect.height;
+            if (window.innerWidth < 800 || this.touchActive) {
+                // Show touch controls if auto and on small screen, or if set to always
+                // We'll handle exact visibility logic in GameEngine options
+            }
+        }
+
+        setVirtualControlsVisible(visible) {
+            this.vControls.style.display = visible ? 'block' : 'none';
+            this.joyArea.style.display = visible ? 'block' : 'none';
+            this.btnAction.style.display = visible ? 'block' : 'none';
+        }
+
+        setupListeners() {
+            window.addEventListener('keydown', e => { this.keys[e.code] = true; if (['Space', 'Enter'].includes(e.code)) this.actionJustPressed = true; });
+            window.addEventListener('keyup', e => { this.keys[e.code] = false; });
+
+            this.canvas.addEventListener('pointerdown', e => {
+                if (e.pointerType === 'touch') this.touchActive = true;
+                this.updatePointer(e);
+                this.pointer.active = true;
+                if (!this.joyActive && !this.actionPressed) { // fallback direct click
+                     this.actionJustPressed = true;
+                }
+            });
+            this.canvas.addEventListener('pointermove', e => { if (this.pointer.active) this.updatePointer(e); });
+            this.canvas.addEventListener('pointerup', e => { this.pointer.active = false; });
+            this.canvas.addEventListener('pointercancel', e => { this.pointer.active = false; });
+
+            // Joystick
+            this.joyArea.addEventListener('touchstart', e => this.handleJoyStart(e), {passive: false});
+            this.joyArea.addEventListener('touchmove', e => this.handleJoyMove(e), {passive: false});
+            this.joyArea.addEventListener('touchend', e => this.handleJoyEnd(e), {passive: false});
+            this.joyArea.addEventListener('touchcancel', e => this.handleJoyEnd(e), {passive: false});
+
+            // Action button
+            this.btnAction.addEventListener('touchstart', e => { e.preventDefault(); this.touchActive = true; this.actionJustPressed = true; this.actionPressed = true; this.actionTouchId = e.changedTouches[0].identifier; }, {passive: false});
+            this.btnAction.addEventListener('touchend', e => { e.preventDefault(); for(let i=0; i<e.changedTouches.length; i++) if (e.changedTouches[i].identifier === this.actionTouchId) { this.actionPressed = false; this.actionTouchId = null; } }, {passive: false});
+            this.btnAction.addEventListener('touchcancel', e => { e.preventDefault(); this.actionPressed = false; this.actionTouchId = null; }, {passive: false});
+
+            // Mouse equivalents for virtual controls
+            this.joyArea.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch') { this.handleJoyStart({preventDefault: ()=>{}, changedTouches: [{identifier: 'm', clientX: e.clientX, clientY: e.clientY}]}); } });
+            window.addEventListener('pointermove', e => { if (this.joyId === 'm') this.handleJoyMove({preventDefault: ()=>{}, changedTouches: [{identifier: 'm', clientX: e.clientX, clientY: e.clientY}]}); });
+            window.addEventListener('pointerup', e => { if (this.joyId === 'm') this.handleJoyEnd({preventDefault: ()=>{}, changedTouches: [{identifier: 'm'}]}); });
+
+            this.btnAction.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch') { this.actionJustPressed = true; this.actionPressed = true; this.actionTouchId = 'm'; } });
+            window.addEventListener('pointerup', e => { if (this.actionTouchId === 'm') { this.actionPressed = false; this.actionTouchId = null; } });
+        }
+
+        updatePointer(e) {
+            this.pointer.x = (e.clientX - this.rect.left) * this.scaleX;
+            this.pointer.y = (e.clientY - this.rect.top) * this.scaleY;
+        }
+
+        handleJoyStart(e) {
+            e.preventDefault();
+            this.touchActive = true;
+            if (this.joyActive) return;
+            const touch = e.changedTouches[0];
+            this.joyId = touch.identifier;
+            this.joyActive = true;
+            const rect = this.joyArea.getBoundingClientRect();
+            this.joyCenter = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+            this.updateJoyPos(touch.clientX, touch.clientY);
+        }
+        handleJoyMove(e) {
+            e.preventDefault();
+            if (!this.joyActive) return;
+            for (let i=0; i<e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === this.joyId) {
+                    this.updateJoyPos(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+                }
+            }
+        }
+        handleJoyEnd(e) {
+            e.preventDefault();
+            for (let i=0; i<e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === this.joyId) {
+                    this.joyActive = false;
+                    this.joyId = null;
+                    this.joyPos = { x: 0, y: 0 };
+                    this.joyKnob.style.transform = `translate(-50%, -50%)`;
+                }
+            }
+        }
+        updateJoyPos(cx, cy) {
+            let dx = cx - this.joyCenter.x;
+            let dy = cy - this.joyCenter.y;
+            const maxR = 45; // joy area width/2 - knob width/2 approx
+            const dist = Math.hypot(dx, dy);
+            if (dist > maxR) { dx = (dx/dist)*maxR; dy = (dy/dist)*maxR; }
+            this.joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+            this.joyPos = { x: dx / maxR, y: dy / maxR };
+        }
+
+        getMovement() {
+            let dx = 0, dy = 0;
+            if (this.keys['KeyA'] || this.keys['ArrowLeft']) dx -= 1;
+            if (this.keys['KeyD'] || this.keys['ArrowRight']) dx += 1;
+            if (this.keys['KeyW'] || this.keys['ArrowUp']) dy -= 1;
+            if (this.keys['KeyS'] || this.keys['ArrowDown']) dy += 1;
+
+            if (this.joyActive) {
+                dx += this.joyPos.x;
+                dy += this.joyPos.y;
+            }
+
+            const len = Math.hypot(dx, dy);
+            if (len > 1) { dx /= len; dy /= len; }
+            return { x: dx, y: dy };
+        }
+
+        consumeAction() {
+            if (this.actionJustPressed) {
+                this.actionJustPressed = false;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    class SoundEngine {
+        constructor(saveManager) {
+            this.saveManager = saveManager;
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.masterGain = this.ctx.createGain();
+            this.sfxGain = this.ctx.createGain();
+            this.musicGain = this.ctx.createGain();
+
+            this.sfxGain.connect(this.masterGain);
+            this.musicGain.connect(this.masterGain);
+            this.masterGain.connect(this.ctx.destination);
+
+            this.applyVolumes();
+            this.musicPlaying = false;
+            this.nextNoteTime = 0;
+            this.currentNote = 0;
+            this.sequence = [440, 493, 523, 659, 587, 523, 440, 329]; // A minor ish arpeggio
+        }
+
+        applyVolumes() {
+            const opts = this.saveManager.data.options;
+            this.masterGain.gain.value = opts.mute ? 0 : 1;
+            this.sfxGain.gain.value = opts.sfxVolume / 100;
+            this.musicGain.gain.value = (opts.musicVolume / 100) * 0.15; // lower baseline for music
+        }
+
+        resume() { if (this.ctx.state === 'suspended') this.ctx.resume(); }
+
+        playTone(freq, type, duration, vol=1, slideFreq=null) {
+            this.resume();
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            if (slideFreq) {
+                osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+            }
+
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        }
+
+        playNoise(duration, vol) {
+            this.resume();
+            const bufferSize = this.ctx.sampleRate * duration;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 1000;
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.sfxGain);
+            noise.start();
+        }
+
+        sfxPlaceSeed() { this.playTone(800, 'sine', 0.1, 0.5, 1200); }
+        sfxExplosion() {
+            this.playNoise(0.5, 0.8);
+            this.playTone(150, 'square', 0.4, 0.6, 50);
+        }
+        sfxEnemySpawn() { this.playTone(200, 'triangle', 0.2, 0.4, 100); }
+        sfxHit() { this.playNoise(0.2, 0.5); this.playTone(200, 'sawtooth', 0.1, 0.5, 100); }
+        sfxGameOver() { this.playTone(100, 'sawtooth', 1.0, 0.8, 20); }
+        sfxUI() { this.playTone(600, 'sine', 0.05, 0.3); }
+
+        startMusic() {
+            this.resume();
+            if (this.musicPlaying) return;
+            this.musicPlaying = true;
+            this.nextNoteTime = this.ctx.currentTime + 0.1;
+            this.currentNote = 0;
+            this.scheduleMusic();
+        }
+        stopMusic() { this.musicPlaying = false; }
+
+        scheduleMusic() {
+            if (!this.musicPlaying) return;
+            while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+                const freq = this.sequence[this.currentNote % this.sequence.length] * 0.5; // octave down
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0, this.nextNoteTime);
+                gain.gain.linearRampToValueAtTime(1, this.nextNoteTime + 0.05);
+                gain.gain.linearRampToValueAtTime(0, this.nextNoteTime + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.musicGain);
+                osc.start(this.nextNoteTime);
+                osc.stop(this.nextNoteTime + 0.25);
+
+                this.nextNoteTime += 0.25;
+                this.currentNote++;
+            }
+            this.musicTimer = setTimeout(() => this.scheduleMusic(), 50);
+        }
+    }
+
+    class Entity {
+        constructor(x, y, r) { this.x = x; this.y = y; this.r = r; this.vx = 0; this.vy = 0; this.dead = false; }
+        update(dt, dilation) {
+            this.x += this.vx * dt * dilation;
+            this.y += this.vy * dt * dilation;
+        }
+        draw(ctx) {}
+    }
+
+    class Player extends Entity {
+        constructor(x, y) { super(x, y, 15); this.speed = 200; this.hp = 100; this.cooldown = 0; }
+        update(dt, inputDir, isDilated) {
+            const actualDt = dt; // player moves in real time? Or dilated? Brief: "Stop moving to slow down time".
+            // If we stop moving, time slows. If we move, time is normal.
+            this.vx = inputDir.x * this.speed;
+            this.vy = inputDir.y * this.speed;
+            this.x += this.vx * actualDt;
+            this.y += this.vy * actualDt;
+            if (this.cooldown > 0) this.cooldown -= actualDt;
+            // Bounds check
+            if (this.x < this.r) this.x = this.r;
+            if (this.x > 1280 - this.r) this.x = 1280 - this.r;
+            if (this.y < this.r) this.y = this.r;
+            if (this.y > 720 - this.r) this.y = 720 - this.r;
+        }
+        draw(ctx) {
+            ctx.fillStyle = '#c8f6d6';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+            ctx.fill();
+            // Sub/ship details
+            ctx.fillStyle = '#0a1530';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r * 0.5, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+
+    class Seed extends Entity {
+        constructor(x, y) { super(x, y, 10); this.timer = 2.0; this.pulsing = 0; }
+        update(dt, dilation) {
+            this.pulsing += dt * 5 * dilation;
+            this.timer -= dt * dilation;
+            if (this.timer <= 0) this.explode();
+        }
+        explode() { this.dead = true; } // Handled in engine
+        draw(ctx) {
+            const pulseR = this.r + Math.sin(this.pulsing)*2;
+            ctx.fillStyle = '#ffb347';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, pulseR, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+
+    class Explosion extends Entity {
+        constructor(x, y, maxR) { super(x, y, 0); this.maxR = maxR; this.life = 0.5; this.maxLife = 0.5; }
+        update(dt, dilation) {
+            this.life -= dt * dilation;
+            this.r = this.maxR * (1 - this.life / this.maxLife);
+            if (this.life <= 0) this.dead = true;
+        }
+        draw(ctx) {
+            ctx.fillStyle = `rgba(255, 179, 71, ${this.life / this.maxLife * 0.8})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+
+    class Enemy extends Entity {
+        constructor(x, y, type) {
+            super(x, y, 12);
+            this.type = type;
+            this.speed = type === 'fast' ? 120 : 60;
+            if (type === 'tank') { this.r = 20; this.speed = 30; }
+        }
+        update(dt, dilation, px, py) {
+            const angle = Math.atan2(py - this.y, px - this.x);
+            this.vx = Math.cos(angle) * this.speed;
+            this.vy = Math.sin(angle) * this.speed;
+            super.update(dt, dilation);
+        }
+        draw(ctx) {
+            ctx.fillStyle = this.type === 'fast' ? '#ff6b6b' : (this.type === 'tank' ? '#845ec2' : '#ff9671');
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(Math.atan2(this.vy, this.vx));
+            ctx.beginPath();
+            ctx.moveTo(this.r, 0);
+            ctx.lineTo(-this.r, -this.r*0.8);
+            ctx.lineTo(-this.r*0.5, 0);
+            ctx.lineTo(-this.r, this.r*0.8);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    class Particle {
+        constructor(x, y, vx, vy, color, life) { this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.color=color; this.life=life; this.maxLife=life; }
+        update(dt, dilation) {
+            this.x += this.vx * dt * dilation;
+            this.y += this.vy * dt * dilation;
+            this.life -= dt * dilation;
+        }
+        draw(ctx) {
+            ctx.fillStyle = this.color;
+            ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+            ctx.beginPath(); ctx.arc(this.x, this.y, 2, 0, Math.PI*2); ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    class GameEngine {
+        constructor() {
+            this.canvas = document.getElementById('game-canvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.canvas.width = 1280;
+            this.canvas.height = 720;
+
+            this.save = new SaveManager();
+            this.audio = new SoundEngine(this.save);
+            this.input = new InputManager(this.canvas, document.getElementById('game-container'));
+
+            this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+            this.lastTime = 0;
+
+            this.resetGame();
+
+            // bg stars/bubbles
+            this.bubbles = Array.from({length: 50}, () => ({x: Math.random()*1280, y: Math.random()*720, s: Math.random()*2+1, v: Math.random()*20+10}));
+
+            this.shakeTime = 0;
+
+            window.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'PLAYING') this.pauseGame(); });
+            window.addEventListener('blur', () => { if (this.state === 'PLAYING') this.pauseGame(); });
+
+            requestAnimationFrame(t => this.loop(t));
+        }
+
+        resetGame() {
+            this.player = new Player(640, 360);
+            this.seeds = [];
+            this.explosions = [];
+            this.enemies = [];
+            this.particles = [];
+
+            this.score = 0;
+            this.multiplier = 1;
+            this.multTimer = 0;
+            this.wave = 1;
+            this.waveTimer = 5;
+            this.enemiesToSpawn = 10;
+            this.spawnTimer = 0;
+
+            this.timeDilation = 1.0;
+        }
+
+        startPlay() {
+            this.resetGame();
+            this.state = 'PLAYING';
+            this.audio.startMusic();
+            this.updateHUD();
+        }
+
+        pauseGame() {
+            if (this.state === 'PLAYING') {
+                this.state = 'PAUSED';
+                this.audio.stopMusic();
+                // We will handle UI in the UI script
+            }
+        }
+        resumeGame() {
+            if (this.state === 'PAUSED') {
+                this.state = 'PLAYING';
+                this.audio.startMusic();
+            }
+        }
+        gameOver() {
+            this.state = 'GAME_OVER';
+            this.audio.stopMusic();
+            this.audio.sfxGameOver();
+            this.save.updateHigh(this.score, this.wave);
+        }
+
+        addShake(amount) {
+            this.shakeTime += amount * parseFloat(this.save.data.options.screenShake);
+        }
+
+        spawnParticles(x, y, count, color) {
+            const optP = parseFloat(this.save.data.options.particles);
+            const actualCount = Math.floor(count * optP);
+            for(let i=0; i<actualCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 100 + 50;
+                this.particles.push(new Particle(x, y, Math.cos(angle)*speed, Math.sin(angle)*speed, color, Math.random()*0.5+0.2));
+            }
+        }
+
+        update(dt) {
+            // Background
+            this.bubbles.forEach(b => {
+                b.y -= b.v * dt * this.timeDilation;
+                if (b.y < -10) { b.y = 730; b.x = Math.random()*1280; }
+            });
+
+            if (this.state !== 'PLAYING') return;
+
+            const moveDir = this.input.getMovement();
+            const isMoving = Math.abs(moveDir.x) > 0.1 || Math.abs(moveDir.y) > 0.1;
+
+            // Time-Dilation on Stillness
+            const targetDilation = isMoving ? 1.0 : 0.1;
+            this.timeDilation += (targetDilation - this.timeDilation) * dt * 10;
+
+            this.player.update(dt, moveDir, this.timeDilation);
+
+            if (this.input.consumeAction() && this.player.cooldown <= 0) {
+                this.seeds.push(new Seed(this.player.x, this.player.y));
+                this.player.cooldown = 0.5;
+                this.audio.sfxPlaceSeed();
+            }
+
+            // Multiplier
+            if (this.multTimer > 0) {
+                this.multTimer -= dt;
+                if (this.multTimer <= 0) this.multiplier = 1;
+            }
+
+            // Entities
+            this.seeds.forEach(s => s.update(dt, this.timeDilation));
+
+            // Chain reactions
+            for (let i = this.seeds.length - 1; i >= 0; i--) {
+                const s = this.seeds[i];
+                if (s.dead) {
+                    this.explosions.push(new Explosion(s.x, s.y, 80));
+                    this.audio.sfxExplosion();
+                    this.addShake(0.2);
+                    this.seeds.splice(i, 1);
+                }
+            }
+
+            this.explosions.forEach(e => {
+                e.update(dt, this.timeDilation);
+                // Trigger other seeds
+                this.seeds.forEach(s => {
+                    if (Math.hypot(s.x - e.x, s.y - e.y) < e.r + s.r) s.explode();
+                });
+                // Kill enemies
+                this.enemies.forEach(en => {
+                    if (!en.dead && Math.hypot(en.x - e.x, en.y - e.y) < e.r + en.r) {
+                        en.dead = true;
+                        this.score += 10 * this.multiplier;
+                        this.multiplier++;
+                        this.multTimer = 3.0;
+                        this.spawnParticles(en.x, en.y, 15, en.type==='fast'?'#ff6b6b':'#ff9671');
+                    }
+                });
+            });
+            this.explosions = this.explosions.filter(e => !e.dead);
+
+            // Enemies
+            this.spawnTimer -= dt * this.timeDilation;
+            if (this.enemiesToSpawn > 0 && this.spawnTimer <= 0) {
+                const side = Math.random();
+                let ex, ey;
+                if (side < 0.25) { ex = -20; ey = Math.random()*720; }
+                else if (side < 0.5) { ex = 1300; ey = Math.random()*720; }
+                else if (side < 0.75) { ex = Math.random()*1280; ey = -20; }
+                else { ex = Math.random()*1280; ey = 740; }
+
+                const r = Math.random();
+                let type = 'normal';
+                if (this.wave > 2 && r < 0.3) type = 'fast';
+                if (this.wave > 4 && r > 0.8) type = 'tank';
+
+                this.enemies.push(new Enemy(ex, ey, type));
+                this.enemiesToSpawn--;
+                this.spawnTimer = Math.max(0.2, 1.0 - this.wave*0.1);
+            }
+
+            if (this.enemiesToSpawn <= 0 && this.enemies.length === 0) {
+                this.waveTimer -= dt;
+                if (this.waveTimer <= 0) {
+                    this.wave++;
+                    this.enemiesToSpawn = 10 + this.wave * 5;
+                    this.waveTimer = 3.0;
+                }
+            }
+
+            for (let i = this.enemies.length - 1; i >= 0; i--) {
+                const en = this.enemies[i];
+                en.update(dt, this.timeDilation, this.player.x, this.player.y);
+                if (!en.dead && Math.hypot(en.x - this.player.x, en.y - this.player.y) < en.r + this.player.r) {
+                    en.dead = true;
+                    this.player.hp -= (en.type === 'tank' ? 30 : 10);
+                    this.audio.sfxHit();
+                    this.addShake(0.3);
+                    this.spawnParticles(this.player.x, this.player.y, 20, '#c8f6d6');
+                    if (this.player.hp <= 0) this.gameOver();
+                }
+            }
+            this.enemies = this.enemies.filter(en => !en.dead);
+
+            this.particles.forEach(p => p.update(dt, this.timeDilation));
+            this.particles = this.particles.filter(p => p.life > 0);
+
+            if (this.shakeTime > 0) this.shakeTime -= dt;
+        }
+
+        draw() {
+            // Background
+            this.ctx.fillStyle = '#050a1f';
+            this.ctx.fillRect(0, 0, 1280, 720);
+
+            this.ctx.fillStyle = '#0a1530';
+            this.bubbles.forEach(b => {
+                this.ctx.beginPath(); this.ctx.arc(b.x, b.y, b.s, 0, Math.PI*2); this.ctx.fill();
+            });
+
+            // Grid effect
+            this.ctx.strokeStyle = 'rgba(200, 246, 214, 0.05)';
+            this.ctx.lineWidth = 1;
+            for(let x=0; x<1280; x+=80) { this.ctx.beginPath(); this.ctx.moveTo(x,0); this.ctx.lineTo(x,720); this.ctx.stroke(); }
+            for(let y=0; y<720; y+=80) { this.ctx.beginPath(); this.ctx.moveTo(0,y); this.ctx.lineTo(1280,y); this.ctx.stroke(); }
+
+            this.ctx.save();
+            if (this.shakeTime > 0 && this.state === 'PLAYING') {
+                const mag = Math.min(this.shakeTime * 20, 15);
+                this.ctx.translate((Math.random()-0.5)*mag, (Math.random()-0.5)*mag);
+            }
+
+            // Dilation tint
+            if (this.state === 'PLAYING' && this.timeDilation < 0.9) {
+                this.ctx.fillStyle = `rgba(0, 150, 255, ${(1.0 - this.timeDilation)*0.1})`;
+                this.ctx.fillRect(0, 0, 1280, 720);
+            }
+
+            if (this.state === 'PLAYING' || this.state === 'GAME_OVER' || this.state === 'PAUSED') {
+                this.seeds.forEach(s => s.draw(this.ctx));
+                this.explosions.forEach(e => e.draw(this.ctx));
+                this.enemies.forEach(en => en.draw(this.ctx));
+                this.particles.forEach(p => p.draw(this.ctx));
+                if (this.player.hp > 0) this.player.draw(this.ctx);
+            }
+
+            this.ctx.restore();
+        }
+
+        updateHUD() {
+            if (this.state !== 'PLAYING') return;
+            document.getElementById('hud-score').textContent = this.score;
+            document.getElementById('hud-mult').textContent = this.multiplier;
+            document.getElementById('hud-wave').textContent = this.wave;
+            document.getElementById('hud-hp').textContent = Math.max(0, this.player.hp);
+        }
+
+        loop(timestamp) {
+            let dt = (timestamp - this.lastTime) / 1000;
+            if (dt > 0.1) dt = 0.1;
+            this.lastTime = timestamp;
+
+            this.update(dt);
+            this.draw();
+            if (this.state === 'PLAYING') this.updateHUD();
+
+            requestAnimationFrame(t => this.loop(t));
+        }
+    }
+
+    const engine = new GameEngine();
+
+    // UI Elements
+    const screens = {
+        title: document.getElementById('screen-title'),
+        paused: document.getElementById('screen-paused'),
+        gameover: document.getElementById('screen-gameover'),
+        howto: document.getElementById('screen-howto')
+    };
+    const hud = document.getElementById('hud');
+    const modalOptions = document.getElementById('modal-options');
+
+    function showScreen(id) {
+        Object.values(screens).forEach(s => s.classList.remove('active'));
+        if (id) screens[id].classList.add('active');
+        hud.classList.toggle('active', engine.state === 'PLAYING');
+    }
+
+    function updateOptionsUI() {
+        const opts = engine.save.data.options;
+        document.getElementById('opt-mute').checked = opts.mute;
+        document.getElementById('opt-sfx').value = opts.sfxVolume;
+        document.getElementById('opt-music').value = opts.musicVolume;
+        document.getElementById('opt-shake').value = opts.screenShake;
+        document.getElementById('opt-particles').value = opts.particles;
+        document.getElementById('opt-touch').value = opts.touchControls;
+    }
+
+    function applyTouchOptions() {
+        const touchOpt = engine.save.data.options.touchControls;
+        let showTouch = false;
+        if (touchOpt === 'always') showTouch = true;
+        else if (touchOpt === 'auto' && (window.innerWidth < 800 || engine.input.touchActive)) showTouch = true;
+        engine.input.setVirtualControlsVisible(showTouch && engine.state === 'PLAYING');
+    }
+
+    setInterval(applyTouchOptions, 1000); // Check periodically for touch status
+
+    document.getElementById('title-high-score').textContent = engine.save.data.highScore;
+
+    // Main Buttons
+    document.getElementById('btn-play').addEventListener('click', () => {
+        engine.audio.sfxUI();
+        engine.startPlay();
+        showScreen(null);
+        applyTouchOptions();
+    });
+    document.getElementById('btn-pause').addEventListener('click', () => {
+        engine.audio.sfxUI();
+        engine.pauseGame();
+        showScreen('paused');
+        applyTouchOptions();
+    });
+    document.getElementById('btn-resume').addEventListener('click', () => {
+        engine.audio.sfxUI();
+        engine.resumeGame();
+        showScreen(null);
+        applyTouchOptions();
+    });
+    document.getElementById('btn-restart').addEventListener('click', () => {
+        engine.audio.sfxUI();
+        engine.startPlay();
+        showScreen(null);
+        applyTouchOptions();
+    });
+    document.getElementById('btn-quit').addEventListener('click', () => {
+        engine.audio.sfxUI();
+        engine.state = 'TITLE';
+        engine.audio.stopMusic();
+        document.getElementById('title-high-score').textContent = engine.save.data.highScore;
+        showScreen('title');
+        applyTouchOptions();
+    });
+    document.getElementById('btn-play-again').addEventListener('click', () => {
+        engine.audio.sfxUI();
+        engine.startPlay();
+        showScreen(null);
+        applyTouchOptions();
+    });
+    document.getElementById('btn-go-title').addEventListener('click', () => {
+        engine.audio.sfxUI();
+        engine.state = 'TITLE';
+        document.getElementById('title-high-score').textContent = engine.save.data.highScore;
+        showScreen('title');
+        applyTouchOptions();
+    });
+
+    // How to
+    document.getElementById('btn-howto').addEventListener('click', () => { engine.audio.sfxUI(); showScreen('howto'); });
+    document.getElementById('btn-close-howto').addEventListener('click', () => { engine.audio.sfxUI(); showScreen(engine.state==='TITLE'?'title':'paused'); });
+
+    // Options
+    document.getElementById('btn-options').addEventListener('click', () => { engine.audio.sfxUI(); updateOptionsUI(); modalOptions.classList.add('active'); });
+    document.getElementById('btn-options-pause').addEventListener('click', () => { engine.audio.sfxUI(); updateOptionsUI(); modalOptions.classList.add('active'); });
+    document.getElementById('btn-close-options').addEventListener('click', () => { engine.audio.sfxUI(); modalOptions.classList.remove('active'); applyTouchOptions(); });
+
+    document.getElementById('opt-mute').addEventListener('change', e => { engine.save.data.options.mute = e.target.checked; engine.save.save(); engine.audio.applyVolumes(); });
+    document.getElementById('opt-sfx').addEventListener('input', e => { engine.save.data.options.sfxVolume = e.target.value; engine.save.save(); engine.audio.applyVolumes(); if(!engine.save.data.options.mute) engine.audio.sfxUI(); });
+    document.getElementById('opt-music').addEventListener('input', e => { engine.save.data.options.musicVolume = e.target.value; engine.save.save(); engine.audio.applyVolumes(); });
+    document.getElementById('opt-shake').addEventListener('change', e => { engine.save.data.options.screenShake = e.target.value; engine.save.save(); });
+    document.getElementById('opt-particles').addEventListener('change', e => { engine.save.data.options.particles = e.target.value; engine.save.save(); });
+    document.getElementById('opt-touch').addEventListener('change', e => { engine.save.data.options.touchControls = e.target.value; engine.save.save(); applyTouchOptions(); });
+
+    // Save management
+    document.getElementById('btn-export-save').addEventListener('click', () => {
+        engine.audio.sfxUI();
+        const data = engine.save.export();
+        navigator.clipboard.writeText(data).then(() => alert('Save copied to clipboard!'));
+    });
+    document.getElementById('btn-import-save').addEventListener('click', () => {
+        engine.audio.sfxUI();
+        const data = prompt('Paste save data here:');
+        if (data) {
+            if (engine.save.importSave(data)) {
+                alert('Save imported successfully!');
+                document.getElementById('title-high-score').textContent = engine.save.data.highScore;
+                updateOptionsUI();
+                engine.audio.applyVolumes();
+            } else {
+                alert('Invalid save data.');
+            }
+        }
+    });
+
+    let resetClicks = 0;
+    const btnReset = document.getElementById('btn-reset-save');
+    btnReset.addEventListener('click', () => {
+        engine.audio.sfxUI();
+        resetClicks++;
+        if (resetClicks === 1) {
+            btnReset.textContent = "Click again to confirm reset";
+            setTimeout(() => { resetClicks = 0; btnReset.textContent = "Reset Save"; }, 3000);
+        } else {
+            engine.save.reset();
+            alert('Save reset.');
+            resetClicks = 0;
+            btnReset.textContent = "Reset Save";
+            document.getElementById('title-high-score').textContent = engine.save.data.highScore;
+            updateOptionsUI();
+            engine.audio.applyVolumes();
+        }
+    });
+
+    // State polling for UI updates
+    setInterval(() => {
+        if (engine.state === 'GAME_OVER') {
+            if (!screens.gameover.classList.contains('active')) {
+                document.getElementById('go-score').textContent = engine.score;
+                const newHigh = document.getElementById('go-new-high');
+                if (engine.score >= engine.save.data.highScore && engine.score > 0) {
+                    newHigh.style.display = 'block';
+                } else {
+                    newHigh.style.display = 'none';
+                }
+                showScreen('gameover');
+                applyTouchOptions();
+            }
+        }
+    }, 100);
+
+});
+</script>
+</body>
+</html>
