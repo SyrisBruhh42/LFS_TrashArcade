@@ -76,5 +76,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-18",
     "accentColor": "#9a5695",
     "path": "./games/006-arctic-perimeter/index.html"
+  },
+  {
+    "id": "007",
+    "slug": "007-cell-drill-polarity",
+    "title": "Cell Drill Polarity",
+    "genre": "Subterranean Drilling/Mining Roguelite",
+    "coreMechanic": "Polarity/Magnetism Switching",
+    "setting": "Microscopic Cell Interior",
+    "description": "Drill deep into the microscopic cellular membrane. Switch your polarity to attract resources and repel hazardous antibodies while avoiding crushing pressure.",
+    "controls": "WASD/Arrows/Drag to move. Space/Tap to switch polarity.",
+    "createdAt": "2026-10-20",
+    "accentColor": "#b95b9d",
+    "path": "./games/007-cell-drill-polarity/index.html"
   }
 ];
