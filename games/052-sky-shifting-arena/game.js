@@ -322,13 +322,26 @@ class Enemy {
         this.x = x;
         this.y = y;
         this.radius = 10;
-        this.speed = 100 + Math.random() * 50;
+        this.speed = 100;
         this.color = '#e94560';
         this.health = 20;
         this.active = true;
     }
 
-    update(dt, playerX, playerY, arena) {
+    update(dt, playerX, playerY, arena, engine) {
+        this.move(dt, playerX, playerY);
+
+        if (this.x < arena.x || this.x > arena.x + arena.w || this.y < arena.y || this.y > arena.y + arena.h) {
+            this.health -= 10 * dt;
+        }
+
+        if (this.health <= 0 && this.active) {
+            this.active = false;
+            if (this.onDeath) this.onDeath(engine);
+        }
+    }
+
+    move(dt, playerX, playerY) {
         const dx = playerX - this.x;
         const dy = playerY - this.y;
         const dist = Math.hypot(dx, dy);
@@ -337,13 +350,28 @@ class Enemy {
             this.x += (dx / dist) * this.speed * dt;
             this.y += (dy / dist) * this.speed * dt;
         }
+    }
 
-        // Arena bounds (take damage if outside)
-        if (this.x < arena.x || this.x > arena.x + arena.w || this.y < arena.y || this.y > arena.y + arena.h) {
-            this.health -= 10 * dt;
-        }
+    onDeath(engine) {}
 
-        if (this.health <= 0) this.active = false;
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class Swarmer extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.radius = 8;
+        this.speed = 150 + Math.random() * 50;
+        this.color = '#ff9f43';
+        this.health = 10;
     }
 
     draw(ctx) {
@@ -356,6 +384,257 @@ class Enemy {
         ctx.lineTo(-this.radius, this.radius);
         ctx.closePath();
         ctx.fill();
+        ctx.restore();
+    }
+}
+
+class RangedSniper extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.radius = 12;
+        this.speed = 50 + Math.random() * 20;
+        this.color = '#10ac84';
+        this.health = 20;
+        this.fireTimer = 2;
+        this.telegraphTimer = 0;
+    }
+
+    move(dt, playerX, playerY) {
+        const dx = playerX - this.x;
+        const dy = playerY - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 300) {
+            this.x += (dx / dist) * this.speed * dt;
+            this.y += (dy / dist) * this.speed * dt;
+        } else if (dist < 200) {
+            this.x -= (dx / dist) * this.speed * dt;
+            this.y -= (dy / dist) * this.speed * dt;
+        }
+    }
+
+    update(dt, playerX, playerY, arena, engine) {
+        super.update(dt, playerX, playerY, arena, engine);
+        this.fireTimer -= dt;
+        if (this.fireTimer <= 0.5 && this.telegraphTimer <= 0) {
+             this.telegraphTimer = 0.5;
+        }
+        if (this.telegraphTimer > 0) {
+             this.telegraphTimer -= dt;
+        }
+
+        if (this.fireTimer <= 0) {
+            const dx = playerX - this.x;
+            const dy = playerY - this.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 0) {
+                // start projectile slightly offset so it doesn't spawn inside
+                let px = this.x + (dx/dist)*this.radius*1.5;
+                let py = this.y + (dy/dist)*this.radius*1.5;
+                engine.projectiles.push(new Projectile(px, py, dx/dist, dy/dist, false));
+                engine.audio.playShoot();
+            }
+            this.fireTimer = 2 + Math.random();
+            this.telegraphTimer = 0;
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = this.color;
+
+        if (this.telegraphTimer > 0) {
+             ctx.strokeStyle = 'red';
+             ctx.lineWidth = 2;
+             ctx.beginPath();
+             ctx.arc(0, 0, this.radius + 5, 0, Math.PI * 2);
+             ctx.stroke();
+        }
+
+        ctx.fillRect(-this.radius, -this.radius, this.radius*2, this.radius*2);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(-this.radius/2, -this.radius/2, this.radius, this.radius);
+        ctx.restore();
+    }
+}
+
+class ShieldedBruiser extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.radius = 18;
+        this.speed = 40 + Math.random() * 20;
+        this.color = '#2e86de';
+        this.health = 80;
+        this.chargeTimer = 3;
+        this.isCharging = false;
+    }
+
+    update(dt, playerX, playerY, arena, engine) {
+        super.update(dt, playerX, playerY, arena, engine);
+        this.chargeTimer -= dt;
+        if (this.chargeTimer <= 1.0) {
+            this.speed = 10; // slow down before charge
+        }
+        if (this.chargeTimer <= 0) {
+            this.isCharging = true;
+            this.speed = 200; // rush
+            this.chargeTimer = 4;
+        }
+        if (this.isCharging && this.chargeTimer < 3.5) {
+            this.isCharging = false;
+            this.speed = 40 + Math.random() * 20;
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = this.chargeTimer <= 1.0 ? '#ff4757' : this.color;
+        ctx.beginPath();
+        // Hexagon
+        for (let i = 0; i < 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            const px = Math.cos(angle) * this.radius;
+            const py = Math.sin(angle) * this.radius;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = this.isCharging ? 4 : 2;
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class Splitter extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.radius = 14;
+        this.speed = 80 + Math.random() * 30;
+        this.color = '#9b59b6';
+        this.health = 30;
+    }
+
+    onDeath(engine) {
+        engine.enemies.push(new Splitterling(this.x - 10, this.y - 10));
+        engine.enemies.push(new Splitterling(this.x + 10, this.y + 10));
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(-5, -5, 3, 0, Math.PI*2);
+        ctx.arc(5, 5, 3, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class Splitterling extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.radius = 7;
+        this.speed = 180 + Math.random() * 40;
+        this.color = '#8e44ad';
+        this.health = 10;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class EnemyHazard {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 30;
+        this.duration = 5;
+    }
+    update(dt, playerX, playerY, engine) {
+        this.duration -= dt;
+        const dist = Math.hypot(this.x - playerX, this.y - playerY);
+        if (dist < this.radius + engine.player.radius) {
+            engine.player.health -= 5 * dt;
+            engine.updateHUD();
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, this.duration);
+        ctx.fillStyle = 'rgba(211, 84, 0, 0.5)';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#d35400';
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class HazardSpawner extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.radius = 15;
+        this.speed = 90 + Math.random() * 20;
+        this.color = '#feca57';
+        this.health = 40;
+        this.dropTimer = 3;
+        this.telegraphTimer = 0;
+    }
+
+    update(dt, playerX, playerY, arena, engine) {
+        super.update(dt, playerX, playerY, arena, engine);
+        this.dropTimer -= dt;
+        if (this.dropTimer <= 1.0 && this.telegraphTimer <= 0) {
+             this.telegraphTimer = 1.0;
+        }
+        if (this.telegraphTimer > 0) {
+             this.telegraphTimer -= dt;
+        }
+
+        if (this.dropTimer <= 0) {
+            // Drop a hazard zone
+            if (!engine.enemyHazards) engine.enemyHazards = [];
+            engine.enemyHazards.push(new EnemyHazard(this.x, this.y));
+            this.dropTimer = 3 + Math.random() * 2;
+            this.telegraphTimer = 0;
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = this.color;
+        if (this.telegraphTimer > 0) {
+             // flash white
+             if (Math.floor(Date.now() / 100) % 2 === 0) ctx.fillStyle = '#fff';
+        }
+        ctx.beginPath();
+        ctx.moveTo(0, -this.radius);
+        ctx.lineTo(this.radius, 0);
+        ctx.lineTo(0, this.radius);
+        ctx.lineTo(-this.radius, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#d35400';
+        ctx.lineWidth = 2;
+        ctx.stroke();
         ctx.restore();
     }
 }
@@ -464,6 +743,7 @@ class GameEngine {
 
         this.worldBg = new ParallaxBackground();
         this.hazards = new HazardManager();
+        this.enemyHazards = [];
         this.updateHUD();
     }
 
@@ -473,7 +753,9 @@ class GameEngine {
         const r = Math.max(this.arena.w, this.arena.h) * 0.8;
         const ex = this.arena.x + this.arena.w/2 + Math.cos(angle) * r;
         const ey = this.arena.y + this.arena.h/2 + Math.sin(angle) * r;
-        this.enemies.push(new Enemy(ex, ey));
+        const types = [Swarmer, RangedSniper, ShieldedBruiser, Splitter, HazardSpawner];
+        const EnemyClass = types[Math.floor(Math.random() * types.length)];
+        this.enemies.push(new EnemyClass(ex, ey));
     }
 
     updateHUD() {
@@ -506,6 +788,14 @@ class GameEngine {
         this.arena.update(dt);
         this.worldBg.update(dt);
         this.hazards.update(dt, this.arena, this.player, this.enemies, this.projectiles, this.audio);
+        if (this.enemyHazards) {
+            for (let i = this.enemyHazards.length - 1; i >= 0; i--) {
+                this.enemyHazards[i].update(dt, this.player.x, this.player.y, this);
+                if (this.enemyHazards[i].duration <= 0) {
+                    this.enemyHazards.splice(i, 1);
+                }
+            }
+        }
 
 
         if (aimVec.firing && this.player.fireCooldown <= 0) {
@@ -519,6 +809,15 @@ class GameEngine {
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             let p = this.projectiles[i];
             p.update(dt, this.arena);
+            if (!p.isPlayer && p.active) {
+                const dist = Math.hypot(p.x - this.player.x, p.y - this.player.y);
+                if (dist < p.radius + this.player.radius) {
+                    this.player.health -= 10;
+                    p.active = false;
+                    this.audio.playHit();
+                    this.updateHUD();
+                }
+            }
             if (!p.active) this.projectiles.splice(i, 1);
         }
 
@@ -539,7 +838,7 @@ class GameEngine {
 
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             let e = this.enemies[i];
-            e.update(dt, this.player.x, this.player.y, this.arena);
+            e.update(dt, this.player.x, this.player.y, this.arena, this);
 
             // Player vs Enemy
             const dist = Math.hypot(this.player.x - e.x, this.player.y - e.y);
@@ -559,6 +858,7 @@ class GameEngine {
                         e.health -= 10;
                         p.active = false;
                         if (e.health <= 0) {
+                            if (e.onDeath) e.onDeath(this);
                             this.score += 10 * this.wave;
                             this.audio.playExplosion();
                             this.updateHUD();
@@ -614,6 +914,9 @@ class GameEngine {
 
         if (this.hazards) {
             this.hazards.draw(this.ctx);
+        }
+        if (this.enemyHazards) {
+            this.enemyHazards.forEach(h => h.draw(this.ctx));
         }
 
         this.projectiles.forEach(p => p.draw(this.ctx));
