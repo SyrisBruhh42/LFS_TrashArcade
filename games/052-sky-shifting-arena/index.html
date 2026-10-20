@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sky Shifting Arena</title>
     <link rel="stylesheet" href="style.css">
+    <script defer src="player.js"></script>
     <script defer src="game.js"></script>
 </head>
 <body>
@@ -29,6 +30,9 @@
                     <div class="health-bar-container">
                         <div id="health-bar" class="health-bar-fill"></div>
                     </div>
+                    <div class="dash-bar-container">
+                        <div id="dash-bar" class="dash-bar-fill"></div>
+                    </div>
                 </div>
             </div>
 
@@ -49,6 +53,7 @@
             <div id="touch-controls" class="hidden">
                 <div id="touch-left-zone" class="touch-zone"></div>
                 <div id="touch-right-zone" class="touch-zone"></div>
+                <div id="touch-dash-btn" class="touch-btn">Dash</div>
             </div>
         </div>
     </div>

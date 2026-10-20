@@ -75,12 +75,14 @@ class InputManager {
         this.mouse = { x: 0, y: 0, down: false };
         this.touchLeft = { active: false, id: null, originX: 0, originY: 0, dx: 0, dy: 0 };
         this.touchRight = { active: false, id: null, originX: 0, originY: 0, dx: 0, dy: 0 };
+        this.dashPressed = false;
         this.isTouchDevice = false;
 
-        window.addEventListener('keydown', e => this.keys[e.code] = true);
+        window.addEventListener('keydown', e => { this.keys[e.code] = true; if(e.code === 'Space' || e.code === 'ShiftLeft') this.dashPressed = true; });
         window.addEventListener('keyup', e => this.keys[e.code] = false);
         window.addEventListener('mousemove', e => this.updateMouse(e));
-        window.addEventListener('mousedown', e => { this.mouse.down = true; this.updateMouse(e); });
+        window.addEventListener('mousedown', e => { if (e.button === 0) this.mouse.down = true; if (e.button === 2) this.dashPressed = true; this.updateMouse(e); });
+        window.addEventListener('contextmenu', e => e.preventDefault());
         window.addEventListener('mouseup', () => this.mouse.down = false);
 
         // Touch events on specific zones
@@ -97,6 +99,11 @@ class InputManager {
             rightZone.addEventListener('touchmove', e => this.handleTouchMove(e, 'right'), {passive: false});
             rightZone.addEventListener('touchend', e => this.handleTouchEnd(e, 'right'));
             rightZone.addEventListener('touchcancel', e => this.handleTouchEnd(e, 'right'));
+
+            const dashBtn = document.getElementById('touch-dash-btn');
+            if (dashBtn) {
+                dashBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.dashPressed = true; }, {passive: false});
+            }
 
             // Generic touch start to detect device and init audio
             window.addEventListener('touchstart', () => { this.isTouchDevice = true; document.getElementById('touch-controls').classList.remove('hidden'); }, {once:true});
@@ -174,7 +181,9 @@ class InputManager {
         if (mag > 0) {
             vx /= mag; vy /= mag;
         }
-        return { x: vx, y: vy };
+        const dash = this.dashPressed;
+        this.dashPressed = false; // consume
+        return { x: vx, y: vy, dash: dash };
     }
 
     getAimVector(playerX, playerY) {
@@ -197,67 +206,6 @@ class InputManager {
 }
 
 // --- ENGINE BASE ---
-
-class Player {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.radius = 12;
-        this.speed = 200;
-        this.vx = 0;
-        this.vy = 0;
-        this.aimX = 1;
-        this.aimY = 0;
-        this.color = '#59c297';
-        this.health = 100;
-        this.maxHealth = 100;
-        this.fireCooldown = 0;
-        this.fireRate = 0.15;
-    }
-
-    update(dt, inputVec, aimVec, arena) {
-        this.vx = inputVec.x * this.speed;
-        this.vy = inputVec.y * this.speed;
-
-        // Tentative move
-        let nextX = this.x + this.vx * dt;
-        let nextY = this.y + this.vy * dt;
-
-        // Arena bounds collision
-        if (nextX < arena.x + this.radius) nextX = arena.x + this.radius;
-        if (nextX > arena.x + arena.w - this.radius) nextX = arena.x + arena.w - this.radius;
-        if (nextY < arena.y + this.radius) nextY = arena.y + this.radius;
-        if (nextY > arena.y + arena.h - this.radius) nextY = arena.y + arena.h - this.radius;
-
-        this.x = nextX;
-        this.y = nextY;
-
-        if (aimVec.x !== 0 || aimVec.y !== 0) {
-            this.aimX = aimVec.x;
-            this.aimY = aimVec.y;
-        }
-
-        if (this.fireCooldown > 0) this.fireCooldown -= dt;
-    }
-
-    draw(ctx) {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(Math.atan2(this.aimY, this.aimX));
-
-        // Body
-        ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Turret
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, -4, this.radius + 8, 8);
-
-        ctx.restore();
-    }
-}
 
 class Projectile {
     constructor(x, y, dx, dy, isPlayer) {
@@ -563,6 +511,13 @@ class GameEngine {
         const hpPercent = Math.max(0, this.player.health / this.player.maxHealth) * 100;
         healthBar.style.width = `${hpPercent}%`;
         healthBar.style.backgroundColor = hpPercent > 30 ? '#59c297' : '#e94560';
+
+        const dashBar = document.getElementById('dash-bar');
+        if (dashBar) {
+            const dashReadyPercent = Math.max(0, 1 - (this.player.dashCooldown / this.player.dashCooldownMax)) * 100;
+            dashBar.style.width = `${dashReadyPercent}%`;
+            dashBar.style.backgroundColor = dashReadyPercent >= 100 ? '#00d2ff' : '#555555';
+        }
     }
 
     update(dt) {
@@ -580,6 +535,7 @@ class GameEngine {
         if (aimVec.firing && this.player.fireCooldown <= 0) {
             this.projectiles.push(new Projectile(this.player.x, this.player.y, aimVec.x, aimVec.y, true));
             this.player.fireCooldown = this.player.fireRate;
+            this.player.recoilOffset = 5;
             this.audio.playShoot();
         }
 
