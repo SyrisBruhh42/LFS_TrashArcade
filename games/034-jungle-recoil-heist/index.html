@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Jungle Recoil Heist</title>
+  <style>
+    :root {
+      --bg: #1a1e16;
+      --fg: #bad97b;
+      --accent: #5e8c31;
+      --danger: #d94a38;
+      --overlay: rgba(26, 30, 22, 0.85);
+    }
+    body, html {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background: var(--bg); color: var(--fg);
+      font-family: monospace;
+      overflow: hidden;
+      touch-action: none; user-select: none;
+      display: flex; justify-content: center; align-items: center;
+    }
+    #game-container {
+      position: relative;
+      width: 100%; height: 100%;
+      max-width: 1280px; max-height: 720px;
+      aspect-ratio: 16/9;
+      background: #2a3324;
+      overflow: hidden;
+    }
+    canvas {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 1;
+    }
+    .screen {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 10; display: none; flex-direction: column;
+      justify-content: center; align-items: center;
+      background: var(--overlay);
+    }
+    .screen.active { display: flex; }
+    h1 { font-size: 4rem; margin: 0 0 1rem; text-shadow: 2px 2px var(--accent); text-align: center; }
+    button {
+      background: var(--bg); color: var(--fg);
+      border: 2px solid var(--accent);
+      padding: 1rem 2rem; margin: 0.5rem;
+      font-size: 1.5rem; font-family: inherit;
+      cursor: pointer; transition: all 0.2s;
+    }
+    button:hover { background: var(--accent); color: var(--bg); }
+    #hud {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 5; pointer-events: none;
+      display: none; justify-content: space-between; padding: 1rem; box-sizing: border-box;
+      font-size: 1.5rem;
+    }
+    #hud.active { display: flex; }
+    .hud-element { background: rgba(0,0,0,0.5); padding: 0.5rem; border-radius: 5px; }
+    #btn-pause { position: absolute; top: 1rem; right: 1rem; pointer-events: auto; }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas" width="1280" height="720"></canvas>
+
+    <div id="hud">
+      <div class="hud-element">Score: <span id="score">0</span></div>
+      <button id="btn-pause">II</button>
+    </div>
+
+    <div id="screen-title" class="screen active">
+      <h1>Jungle Recoil Heist</h1>
+      <button id="btn-play">Play</button>
+      <button id="btn-howto">How to Play</button>
+      <button id="btn-options-title">Options</button>
+      <a href="../../index.html" style="color:var(--fg); margin-top:2rem;">Back to Arcade</a>
+    </div>
+
+    <div id="screen-paused" class="screen">
+      <h1>PAUSED</h1>
+      <button id="btn-resume">Resume</button>
+      <button id="btn-restart">Restart</button>
+      <button id="btn-options-pause">Options</button>
+      <button id="btn-quit">Quit to Title</button>
+      <a href="../../index.html" style="color:var(--fg); margin-top:2rem;">Back to Arcade</a>
+    </div>
+
+    <div id="screen-gameover" class="screen">
+      <h1>GAME OVER</h1>
+      <div id="final-stats" style="font-size:1.5rem; margin-bottom:1rem;"></div>
+      <button id="btn-play-again">Play Again</button>
+      <button id="btn-title-go">Title Screen</button>
+    </div>
+
+    <div id="screen-options" class="screen">
+      <h1>Options</h1>
+      <div><label>Master Vol: <input type="range" id="opt-master" min="0" max="100"></label></div>
+      <div><label>SFX Vol: <input type="range" id="opt-sfx" min="0" max="100"></label></div>
+      <div><label>Music Vol: <input type="range" id="opt-music" min="0" max="100"></label></div>
+      <div><button id="btn-export">Export Save</button> <button id="btn-import">Import Save</button></div>
+      <div><button id="btn-reset">Reset Save</button></div>
+      <button id="btn-close-options">Close</button>
+    </div>
+
+    <div id="screen-howto" class="screen">
+      <h1>How To Play</h1>
+      <p style="max-width: 600px; text-align: center; font-size: 1.2rem; line-height: 1.5;">
+        You are a thief infiltrating overgrown ruins.
+        <br><br>
+        Movement is restricted to the recoil of your gun. Click or Touch in the opposite direction you want to move.
+        <br><br>
+        Evade guards' line of sight and collect artifacts. If you are spotted, it's game over!
+      </p>
+      <button id="btn-close-howto">Close</button>
+    </div>
+  </div>
+
+  <script>
+
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('game-container');
+
+
+    // Audio System
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+    let masterGain, sfxGain, musicGain;
+    let synthLoopInterval;
+
+    function initAudio() {
+      if (audioCtx) return;
+      audioCtx = new AudioContext();
+
+      masterGain = audioCtx.createGain();
+      sfxGain = audioCtx.createGain();
+      musicGain = audioCtx.createGain();
+
+      sfxGain.connect(masterGain);
+      musicGain.connect(masterGain);
+      masterGain.connect(audioCtx.destination);
+
+      updateVolumes();
+      startMusic();
+    }
+
+    function updateVolumes() {
+      if (!audioCtx) return;
+      const opts = saveManager.data.options;
+      masterGain.gain.setValueAtTime(opts.masterVol / 100, audioCtx.currentTime);
+      sfxGain.gain.setValueAtTime(opts.sfxVol / 100, audioCtx.currentTime);
+      musicGain.gain.setValueAtTime(opts.musicVol / 100 * 0.5, audioCtx.currentTime);
+    }
+
+    function playSound(type) {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(sfxGain);
+
+      const t = audioCtx.currentTime;
+
+      if (type === 'shoot') {
+         osc.type = 'square';
+         osc.frequency.setValueAtTime(200, t);
+         osc.frequency.exponentialRampToValueAtTime(50, t + 0.1);
+         gain.gain.setValueAtTime(0.5, t);
+         gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+         osc.start(t);
+         osc.stop(t + 0.1);
+      } else if (type === 'hit') {
+         osc.type = 'sawtooth';
+         osc.frequency.setValueAtTime(100, t);
+         osc.frequency.linearRampToValueAtTime(300, t + 0.1);
+         gain.gain.setValueAtTime(0.8, t);
+         gain.gain.linearRampToValueAtTime(0.01, t + 0.1);
+         osc.start(t);
+         osc.stop(t + 0.1);
+      } else if (type === 'collect') {
+         osc.type = 'sine';
+         osc.frequency.setValueAtTime(400, t);
+         osc.frequency.setValueAtTime(600, t + 0.1);
+         gain.gain.setValueAtTime(0, t);
+         gain.gain.linearRampToValueAtTime(0.5, t + 0.05);
+         gain.gain.linearRampToValueAtTime(0, t + 0.2);
+         osc.start(t);
+         osc.stop(t + 0.2);
+      } else if (type === 'gameover') {
+         osc.type = 'sawtooth';
+         osc.frequency.setValueAtTime(150, t);
+         osc.frequency.exponentialRampToValueAtTime(20, t + 1.0);
+         gain.gain.setValueAtTime(0.8, t);
+         gain.gain.linearRampToValueAtTime(0.01, t + 1.0);
+         osc.start(t);
+         osc.stop(t + 1.0);
+      }
+    }
+
+    function startMusic() {
+      let notes = [220, 246, 261, 293, 329]; // minor pentatonic
+      let step = 0;
+
+      synthLoopInterval = setInterval(() => {
+        if (!audioCtx || audioCtx.state !== 'running' || gameState !== 'PLAYING') return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(musicGain);
+
+        osc.type = 'triangle';
+        const t = audioCtx.currentTime;
+        osc.frequency.setValueAtTime(notes[step % notes.length] / 2, t);
+
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.2, t + 0.05);
+        gain.gain.linearRampToValueAtTime(0, t + 0.2);
+
+        osc.start(t);
+        osc.stop(t + 0.2);
+
+        step++;
+      }, 250);
+    }
+
+    // Hook audio initialization to first user interaction
+    window.addEventListener('pointerdown', initAudio, {once: true});
+    window.addEventListener('keydown', initAudio, {once: true});
+
+    // Bind volume updates
+    ['master', 'sfx', 'music'].forEach(t => {
+      document.getElementById(`opt-${t}`).addEventListener('input', updateVolumes);
+    });
+
+    // Resize Observer for logical scaling
+    let scaleX = 1, scaleY = 1;
+    const resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        const rect = entry.contentRect;
+        scaleX = 1280 / rect.width;
+        scaleY = 720 / rect.height;
+      }
+    });
+    resizeObserver.observe(container);
+
+    // Input Management
+    const Input = {
+      pointerX: 640, pointerY: 360, isDown: false, justPressed: false
+    };
+
+    function updatePointer(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+      if (clientX === undefined) return;
+      Input.pointerX = (clientX - rect.left) * scaleX;
+      Input.pointerY = (clientY - rect.top) * scaleY;
+    }
+
+    window.addEventListener('pointerdown', (e) => {
+      updatePointer(e);
+      Input.isDown = true;
+      Input.justPressed = true;
+    });
+    window.addEventListener('touchstart', (e) => {
+      updatePointer(e);
+      Input.isDown = true;
+      Input.justPressed = true;
+    }, {passive: false});
+
+    window.addEventListener('pointermove', updatePointer);
+    window.addEventListener('touchmove', updatePointer, {passive: false});
+
+    window.addEventListener('pointerup', () => Input.isDown = false);
+    window.addEventListener('touchend', () => Input.isDown = false);
+
+
+    // Save Manager
+    const SAVE_KEY = 'arcade_game_034_034-jungle-recoil-heist_v1';
+    class SaveManager {
+      constructor() {
+        this.data = {
+          highScore: 0,
+          totalGamesPlayed: 0,
+          totalScoreAccumulated: 0,
+          bestWaveOrCombo: 0,
+          unlockedMilestones: [],
+          options: { masterVol: 80, sfxVol: 80, musicVol: 80 }
+        };
+        this.load();
+      }
+      load() {
+        try {
+          const stored = localStorage.getItem(SAVE_KEY);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            this.data = { ...this.data, ...parsed, options: { ...this.data.options, ...(parsed.options || {}) } };
+          }
+        } catch (e) { console.warn('Failed to load save', e); }
+      }
+      save() {
+        try {
+          localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+        } catch (e) { console.warn('Failed to save', e); }
+      }
+      reset() {
+        this.data = {
+          highScore: 0, totalGamesPlayed: 0, totalScoreAccumulated: 0, bestWaveOrCombo: 0, unlockedMilestones: [],
+          options: { masterVol: 80, sfxVol: 80, musicVol: 80 }
+        };
+        this.save();
+      }
+    }
+    const saveManager = new SaveManager();
+
+    // UI State Management
+    const screens = {
+      TITLE: document.getElementById('screen-title'),
+      PLAYING: document.getElementById('hud'),
+      PAUSED: document.getElementById('screen-paused'),
+      GAME_OVER: document.getElementById('screen-gameover'),
+      OPTIONS: document.getElementById('screen-options'),
+      HOWTO: document.getElementById('screen-howto')
+    };
+
+    function showScreen(name) {
+      Object.values(screens).forEach(s => s.classList.remove('active'));
+      if (screens[name]) screens[name].classList.add('active');
+      if (name === 'OPTIONS' || name === 'HOWTO') {
+         if (gameState === 'PLAYING') screens['PLAYING'].classList.add('active'); // keep hud under
+      }
+    }
+
+    function changeState(newState) {
+      gameState = newState;
+      if (newState === 'PLAYING') showScreen('PLAYING');
+      else if (newState === 'TITLE') showScreen('TITLE');
+      else if (newState === 'PAUSED') showScreen('PAUSED');
+      else if (newState === 'GAME_OVER') showScreen('GAME_OVER');
+    }
+
+    document.getElementById('btn-play').addEventListener('click', () => { initGame(); changeState('PLAYING'); });
+    document.getElementById('btn-play-again').addEventListener('click', () => { initGame(); changeState('PLAYING'); });
+    document.getElementById('btn-pause').addEventListener('click', () => { changeState('PAUSED'); });
+    document.getElementById('btn-resume').addEventListener('click', () => { changeState('PLAYING'); });
+    document.getElementById('btn-restart').addEventListener('click', () => { initGame(); changeState('PLAYING'); });
+    document.getElementById('btn-quit').addEventListener('click', () => { changeState('TITLE'); });
+    document.getElementById('btn-title-go').addEventListener('click', () => { changeState('TITLE'); });
+
+    let returnScreen = 'TITLE';
+    document.getElementById('btn-options-title').addEventListener('click', () => { returnScreen = 'TITLE'; showScreen('OPTIONS'); });
+    document.getElementById('btn-options-pause').addEventListener('click', () => { returnScreen = 'PAUSED'; showScreen('OPTIONS'); });
+    document.getElementById('btn-close-options').addEventListener('click', () => { showScreen(returnScreen); });
+
+    document.getElementById('btn-howto').addEventListener('click', () => { returnScreen = 'TITLE'; showScreen('HOWTO'); });
+    document.getElementById('btn-close-howto').addEventListener('click', () => { showScreen(returnScreen); });
+
+    // Auto pause on blur
+    window.addEventListener('blur', () => { if (gameState === 'PLAYING') changeState('PAUSED'); });
+    window.addEventListener('visibilitychange', () => { if (document.hidden && gameState === 'PLAYING') changeState('PAUSED'); });
+
+    // Options UI bindings
+    ['master', 'sfx', 'music'].forEach(t => {
+      const el = document.getElementById(`opt-${t}`);
+      el.value = saveManager.data.options[`${t}Vol`];
+      el.addEventListener('input', (e) => {
+        saveManager.data.options[`${t}Vol`] = parseInt(e.target.value);
+        saveManager.save();
+      });
+    });
+
+    let resetConfirm = false;
+    document.getElementById('btn-reset').addEventListener('click', (e) => {
+      if (!resetConfirm) {
+        resetConfirm = true;
+        e.target.innerText = "Confirm Reset?";
+        setTimeout(() => { resetConfirm = false; e.target.innerText = "Reset Save"; }, 3000);
+      } else {
+        saveManager.reset();
+        ['master', 'sfx', 'music'].forEach(t => document.getElementById(`opt-${t}`).value = saveManager.data.options[`${t}Vol`]);
+        e.target.innerText = "Reset Save";
+        resetConfirm = false;
+      }
+    });
+
+    document.getElementById('btn-export').addEventListener('click', () => {
+      navigator.clipboard.writeText(btoa(JSON.stringify(saveManager.data)));
+      alert("Save data copied to clipboard!");
+    });
+    document.getElementById('btn-import').addEventListener('click', () => {
+      const data = prompt("Paste save data:");
+      if (data) {
+        try {
+          const parsed = JSON.parse(atob(data));
+          saveManager.data = { ...saveManager.data, ...parsed };
+          saveManager.save();
+          ['master', 'sfx', 'music'].forEach(t => document.getElementById(`opt-${t}`).value = saveManager.data.options[`${t}Vol`]);
+          alert("Save imported!");
+        } catch (e) { alert("Invalid save data"); }
+      }
+    });
+
+
+
+    // Game Loop
+    let lastTime = performance.now();
+    let gameState = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+
+    function gameLoop(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      if (gameState === 'PLAYING') {
+        update(dt);
+        draw(ctx);
+      }
+
+      Input.justPressed = false; // Reset single-frame inputs
+      requestAnimationFrame(gameLoop);
+    }
+
+
+    // Game Entities & Logic
+    const game = {
+      player: { x: 100, y: 360, vx: 0, vy: 0, radius: 15, cooldown: 0 },
+      bullets: [],
+      particles: [],
+      score: 0,
+      wave: 1
+    };
+
+    function initGame() {
+      game.player = { x: 100, y: 360, vx: 0, vy: 0, radius: 15, cooldown: 0 };
+      game.bullets = [];
+      game.particles = [];
+      game.score = 0;
+      game.wave = 1;
+      document.getElementById('score').innerText = game.score;
+      initLevel();
+    }
+
+    function spawnParticles(x, y, color, count, speed) {
+      for(let i=0; i<count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const v = Math.random() * speed;
+        game.particles.push({
+          x: x, y: y,
+          vx: Math.cos(angle)*v, vy: Math.sin(angle)*v,
+          life: 1.0, color: color
+        });
+      }
+    }
+
+    function update(dt) {
+      // Player Physics
+      game.player.x += game.player.vx * dt;
+      game.player.y += game.player.vy * dt;
+
+      // Friction
+      game.player.vx *= 0.95;
+      game.player.vy *= 0.95;
+
+      // Bounds
+      if (game.player.x < game.player.radius) { game.player.x = game.player.radius; game.player.vx *= -0.5; }
+      if (game.player.x > 1280 - game.player.radius) { game.player.x = 1280 - game.player.radius; game.player.vx *= -0.5; }
+      if (game.player.y < game.player.radius) { game.player.y = game.player.radius; game.player.vy *= -0.5; }
+      if (game.player.y > 720 - game.player.radius) { game.player.y = 720 - game.player.radius; game.player.vy *= -0.5; }
+
+      // Shooting & Recoil
+      if (game.player.cooldown > 0) game.player.cooldown -= dt;
+      if (Input.justPressed && game.player.cooldown <= 0) {
+         if (audioCtx) {
+           if (audioCtx.state === 'suspended') audioCtx.resume();
+           playSound('shoot');
+         }
+
+         const dx = Input.pointerX - game.player.x;
+         const dy = Input.pointerY - game.player.y;
+         const dist = Math.hypot(dx, dy) || 1;
+         const nx = dx / dist;
+         const ny = dy / dist;
+
+         // Shoot Bullet
+         game.bullets.push({
+           x: game.player.x + nx * game.player.radius,
+           y: game.player.y + ny * game.player.radius,
+           vx: nx * 800, vy: ny * 800,
+           life: 2.0
+         });
+
+         // Recoil (move player opposite to aim)
+         game.player.vx -= nx * 400;
+         game.player.vy -= ny * 400;
+
+         game.player.cooldown = 0.25;
+         spawnParticles(game.player.x, game.player.y, '#ffffff', 5, 50);
+      }
+
+      // Bullets
+      for (let i = game.bullets.length - 1; i >= 0; i--) {
+        const b = game.bullets[i];
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.life -= dt;
+        if (b.life <= 0 || b.x < 0 || b.x > 1280 || b.y < 0 || b.y > 720) {
+          game.bullets.splice(i, 1);
+        }
+      }
+
+      // Particles
+      for (let i = game.particles.length - 1; i >= 0; i--) {
+        const p = game.particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt * 2;
+        if (p.life <= 0) game.particles.splice(i, 1);
+      }
+
+      updateLevel(dt);
+    }
+
+    // Level & Stealth Logic
+    let guards = [];
+    let walls = [];
+    let artifacts = [];
+
+    function initLevel() {
+      guards = [];
+      walls = [];
+      artifacts = [];
+
+      // Outer Walls
+      walls.push({x:0, y:0, w:1280, h:20});
+      walls.push({x:0, y:700, w:1280, h:20});
+      walls.push({x:0, y:0, w:20, h:720});
+      walls.push({x:1260, y:0, w:20, h:720});
+
+      // Random Ruins Walls
+      for(let i=0; i<5 + game.wave; i++) {
+         walls.push({
+           x: 100 + Math.random() * 1000,
+           y: 100 + Math.random() * 500,
+           w: 50 + Math.random() * 150,
+           h: 50 + Math.random() * 150
+         });
+      }
+
+      // Guards
+      for(let i=0; i<3 + Math.floor(game.wave/2); i++) {
+        guards.push({
+          x: 200 + Math.random() * 900,
+          y: 100 + Math.random() * 500,
+          vx: (Math.random() - 0.5) * 100,
+          vy: (Math.random() - 0.5) * 100,
+          radius: 15,
+          angle: 0,
+          fov: Math.PI / 3, // 60 degrees
+          viewDist: 300
+        });
+      }
+
+      // Artifacts
+      for(let i=0; i<3; i++) {
+        artifacts.push({
+          x: 200 + Math.random() * 900,
+          y: 100 + Math.random() * 500,
+          radius: 10,
+          collected: false
+        });
+      }
+
+      game.player.x = 50; game.player.y = 360;
+      game.player.vx = 0; game.player.vy = 0;
+    }
+
+    function lineIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+      const denom = (y4-y3)*(x2-x1) - (x4-x3)*(y2-y1);
+      if (denom == 0) return null;
+      const ua = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / denom;
+      const ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom;
+      if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) {
+        return { x: x1 + ua*(x2-x1), y: y1 + ua*(y2-y1) };
+      }
+      return null;
+    }
+
+    function segmentIntersectsRect(x1, y1, x2, y2, r) {
+      if (lineIntersect(x1, y1, x2, y2, r.x, r.y, r.x+r.w, r.y)) return true;
+      if (lineIntersect(x1, y1, x2, y2, r.x, r.y+r.h, r.x+r.w, r.y+r.h)) return true;
+      if (lineIntersect(x1, y1, x2, y2, r.x, r.y, r.x, r.y+r.h)) return true;
+      if (lineIntersect(x1, y1, x2, y2, r.x+r.w, r.y, r.x+r.w, r.y+r.h)) return true;
+      return false;
+    }
+
+    function hasLineOfSight(x1, y1, x2, y2) {
+      for(let w of walls) {
+        if (segmentIntersectsRect(x1, y1, x2, y2, w)) return false;
+      }
+      return true;
+    }
+
+    function circleRectCollide(c, r) {
+      let testX = c.x;
+      let testY = c.y;
+      if (c.x < r.x) testX = r.x;
+      else if (c.x > r.x + r.w) testX = r.x + r.w;
+      if (c.y < r.y) testY = r.y;
+      else if (c.y > r.y + r.h) testY = r.y + r.h;
+      let dx = c.x - testX;
+      let dy = c.y - testY;
+      return (dx*dx + dy*dy) <= (c.radius * c.radius);
+    }
+
+    function doGameOver() {
+       changeState('GAME_OVER');
+       if (audioCtx) playSound('gameover');
+       if (game.score > saveManager.data.highScore) {
+         saveManager.data.highScore = game.score;
+       }
+       saveManager.data.totalGamesPlayed++;
+       saveManager.data.totalScoreAccumulated += game.score;
+       if (game.wave > saveManager.data.bestWaveOrCombo) {
+         saveManager.data.bestWaveOrCombo = game.wave;
+       }
+       saveManager.save();
+
+       let statsHtml = `Score: ${game.score} <br> Wave: ${game.wave} <br> High Score: ${saveManager.data.highScore}`;
+       document.getElementById('final-stats').innerHTML = statsHtml;
+    }
+
+    function updateLevel(dt) {
+      // Player Wall Collisions (simple bounce)
+      for(let w of walls) {
+        if (circleRectCollide(game.player, w)) {
+          game.player.vx *= -1;
+          game.player.vy *= -1;
+          game.player.x += game.player.vx * dt;
+          game.player.y += game.player.vy * dt;
+        }
+      }
+
+      // Artifact Collection
+      let allCollected = true;
+      for(let a of artifacts) {
+        if (!a.collected) {
+           allCollected = false;
+           let dx = game.player.x - a.x;
+           let dy = game.player.y - a.y;
+           if (dx*dx + dy*dy < (game.player.radius + a.radius)*(game.player.radius + a.radius)) {
+             a.collected = true;
+             game.score += 100;
+             document.getElementById('score').innerText = game.score;
+             spawnParticles(a.x, a.y, '#f5ca53', 20, 100);
+             if (audioCtx) playSound('collect');
+           }
+        }
+      }
+
+      if (allCollected) {
+         game.wave++;
+         initLevel();
+         return;
+      }
+
+      // Guard Update
+      for(let g of guards) {
+        g.x += g.vx * dt;
+        g.y += g.vy * dt;
+
+        // Bounce Guards off walls/edges
+        let bounced = false;
+        if (g.x < 20 || g.x > 1260) { g.vx *= -1; bounced=true; }
+        if (g.y < 20 || g.y > 700) { g.vy *= -1; bounced=true; }
+        for(let w of walls) {
+          if (circleRectCollide(g, w)) { g.vx *= -1; g.vy *= -1; bounced=true; break; }
+        }
+        if (bounced) {
+           g.x += g.vx * dt * 2; g.y += g.vy * dt * 2;
+        }
+
+        g.angle = Math.atan2(g.vy, g.vx);
+
+        // Line of sight check to player
+        let dx = game.player.x - g.x;
+        let dy = game.player.y - g.y;
+        let dist = Math.hypot(dx, dy);
+
+        if (dist < g.viewDist) {
+           let toPlayerAngle = Math.atan2(dy, dx);
+           let angleDiff = Math.abs(toPlayerAngle - g.angle);
+           while(angleDiff > Math.PI) angleDiff -= Math.PI*2;
+           angleDiff = Math.abs(angleDiff);
+
+           if (angleDiff < g.fov / 2) {
+              if (hasLineOfSight(g.x, g.y, game.player.x, game.player.y)) {
+                 // Player spotted!
+                 spawnParticles(game.player.x, game.player.y, '#d94a38', 30, 200);
+                 doGameOver();
+                 return;
+              }
+           }
+        }
+
+        // Guard hit by bullet (stun/kill)
+        for(let i=game.bullets.length-1; i>=0; i--) {
+           let b = game.bullets[i];
+           let bdx = b.x - g.x;
+           let bdy = b.y - g.y;
+           if (bdx*bdx + bdy*bdy < g.radius*g.radius) {
+              game.bullets.splice(i, 1);
+              spawnParticles(g.x, g.y, '#85bddb', 15, 100);
+              // Simple stun: reverse direction and slow down
+              g.vx *= -0.5; g.vy *= -0.5;
+              if (audioCtx) playSound('hit');
+              game.score += 10;
+              document.getElementById('score').innerText = game.score;
+           }
+        }
+      }
+    }
+
+
+
+
+    function draw(ctx) {
+      ctx.fillStyle = '#1a1e16'; // Dark background
+      ctx.fillRect(0, 0, 1280, 720);
+
+      // Draw grid / texture
+      ctx.strokeStyle = '#2a3324';
+      ctx.lineWidth = 2;
+      for(let x=0; x<1280; x+=40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,720); ctx.stroke(); }
+      for(let y=0; y<720; y+=40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(1280,y); ctx.stroke(); }
+
+      // Draw Walls (Jungle Ruins)
+      for(let w of walls) {
+        ctx.fillStyle = '#3a4a2b';
+        ctx.fillRect(w.x, w.y, w.w, w.h);
+        ctx.strokeStyle = '#5e8c31';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(w.x, w.y, w.w, w.h);
+
+        // Vines/Moss detail
+        ctx.fillStyle = '#5e8c31';
+        for(let i=0; i<w.w/20; i++) {
+           ctx.fillRect(w.x + i*20 + 5, w.y, 5, 10 + Math.random()*15);
+        }
+      }
+
+      // Draw Artifacts
+      for(let a of artifacts) {
+        if(!a.collected) {
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, a.radius, 0, Math.PI*2);
+          ctx.fillStyle = '#f5ca53';
+          ctx.fill();
+          ctx.shadowColor = '#f5ca53';
+          ctx.shadowBlur = 10;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      }
+
+      // Draw Guards
+      for(let g of guards) {
+        // Draw FOV cone
+        ctx.beginPath();
+        ctx.moveTo(g.x, g.y);
+        ctx.arc(g.x, g.y, g.viewDist, g.angle - g.fov/2, g.angle + g.fov/2);
+        ctx.lineTo(g.x, g.y);
+        ctx.fillStyle = 'rgba(217, 74, 56, 0.15)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(217, 74, 56, 0.5)';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(g.x, g.y, g.radius, 0, Math.PI*2);
+        ctx.fillStyle = '#d94a38';
+        ctx.fill();
+
+        // Guard Direction Indicator
+        ctx.beginPath();
+        ctx.moveTo(g.x, g.y);
+        ctx.lineTo(g.x + Math.cos(g.angle)*g.radius*1.5, g.y + Math.sin(g.angle)*g.radius*1.5);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Draw Particles
+      for(let p of game.particles) {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Draw Bullets
+      for(let b of game.bullets) {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      // Draw Player
+      if (gameState === 'PLAYING') {
+        ctx.beginPath();
+        ctx.arc(game.player.x, game.player.y, game.player.radius, 0, Math.PI*2);
+        ctx.fillStyle = '#bad97b';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Aiming Line
+        if (!Input.isDown) {
+           ctx.beginPath();
+           ctx.moveTo(game.player.x, game.player.y);
+           let dx = Input.pointerX - game.player.x;
+           let dy = Input.pointerY - game.player.y;
+           let dist = Math.hypot(dx, dy) || 1;
+           ctx.lineTo(game.player.x + (dx/dist)*30, game.player.y + (dy/dist)*30);
+           ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+           ctx.stroke();
+        }
+      }
+    }
+
+
+    requestAnimationFrame(gameLoop);
+
+  </script>
+</body>
+</html>
