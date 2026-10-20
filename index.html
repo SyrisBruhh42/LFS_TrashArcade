@@ -596,7 +596,7 @@
 
           const idBadge = document.createElement('span');
           idBadge.className = 'card-id-badge';
-          idBadge.textContent = '#' + game.id;
+          idBadge.textContent = '#' + game.id + (game.phase ? (game.phase === '10' ? ' ★ v10' : ' • P' + game.phase + '/10') : '');
           thumb.appendChild(idBadge);
 
           const scoreBadge = document.createElement('span');

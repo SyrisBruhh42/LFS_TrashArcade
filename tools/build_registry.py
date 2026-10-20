@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 GAMES = ROOT / "games"
 OUT = GAMES / "registry.js"
-FIELDS = ("id", "slug", "title", "genre", "coreMechanic", "setting", "description", "controls", "createdAt", "accentColor")
+FIELDS = ("id", "slug", "title", "genre", "coreMechanic", "setting", "description", "controls", "createdAt", "accentColor", "phase")
 
 
 def build() -> str:

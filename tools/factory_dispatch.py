@@ -47,8 +47,8 @@ PAUSE_LABEL = "factory:pause"
 FAIL_LABEL = "gate-failed"
 GATE_MARKER = "<!-- arcade-gate-report -->"
 NUDGE = ("Proceed autonomously without asking questions. Make the best reasonable decision yourself, follow "
-         "AGENTS.md, keep the scope to one new game in its own new folder, make `python3 tools/preflight.py` "
-         "print PREFLIGHT OK, and finish by opening the pull request.")
+         "AGENTS.md and your assigned SESSION DESIGN BRIEF phase, touch only your assigned game folder, make "
+         "`python3 tools/preflight.py` print PREFLIGHT OK, and finish by opening the pull request.")
 
 
 class ApiError(Exception):
@@ -320,12 +320,42 @@ def assign_id(state: dict) -> str:
     return f"{max(ids or [0]) + 1:03d}"
 
 
+def quarantined_game_ids(state: dict, max_phase_fails: int = 3) -> set[str]:
+    counts: Counter[tuple[str, str]] = Counter()
+    for v in state.get("sessions", {}).values():
+        gid = str(v.get("game_id", ""))
+        ph = str(v.get("phase", ""))
+        out = str(v.get("outcome", ""))
+        if gid and ph and out.startswith("failed"):
+            counts[(gid, ph)] += 1
+    return {gid for (gid, _), n in counts.items() if n >= max_phase_fails}
+
+
 def dispatch(cfg: dict, state: dict, dry: bool) -> None:
-    gid = assign_id(state)
-    in_flight = [v["triple"] for v in state["sessions"].values() if not v.get("outcome") and v.get("triple")]
-    brief = json.loads(subprocess.run([sys.executable, str(ROOT / "tools" / "pick_brief.py"), "--json", "--id", gid,
-                                       "--exclude-json", json.dumps(in_flight)],
-                                      capture_output=True, text=True, check=True, cwd=ROOT).stdout)
+    next_new_gid = assign_id(state)
+    in_flight_triples = [v["triple"] for v in state["sessions"].values() if not v.get("outcome") and v.get("triple")]
+    in_flight_ids = {str(v["game_id"]) for v in state["sessions"].values() if not v.get("outcome") and v.get("game_id")}
+    exclude_ids = sorted(in_flight_ids | quarantined_game_ids(state))
+
+    brief = json.loads(subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools" / "pick_brief.py"),
+            "--json",
+            "--id",
+            next_new_gid,
+            "--exclude-json",
+            json.dumps(in_flight_triples),
+            "--exclude-ids",
+            json.dumps(exclude_ids),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=ROOT,
+    ).stdout)
+    gid = str(brief["id"])
+    phase = str(brief.get("phase", "1"))
     prompt = PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n" + brief["markdown"] + lessons_block(state, cfg["lesson_count"])
     title = f"game {gid}: {brief['label']}"[:120]
     body = {
@@ -336,7 +366,7 @@ def dispatch(cfg: dict, state: dict, dry: bool) -> None:
         "requirePlanApproval": False,
     }
     if dry:
-        log("dry_run_dispatch", title=title, prompt_chars=len(prompt))
+        log("dry_run_dispatch", title=title, game_id=gid, phase=phase, mode=brief.get("mode"), prompt_chars=len(prompt))
         print("\n----- PROMPT PREVIEW -----\n" + prompt + "\n--------------------------")
         return
     session = None
@@ -359,11 +389,18 @@ def dispatch(cfg: dict, state: dict, dry: bool) -> None:
             if attempt == 2:
                 raise
     sid = session.get("id") or session.get("name", "").split("/")[-1]
-    state["sessions"][sid] = {"created": iso(now()), "title": title, "game_id": gid,
-                              "triple": [brief["genre"], brief["twist"], brief["setting"]],
-                              "label": brief["label"], "state": session.get("state", "QUEUED")}
+    state["sessions"][sid] = {
+        "created": iso(now()),
+        "title": title,
+        "game_id": gid,
+        "phase": phase,
+        "mode": brief.get("mode", "new"),
+        "triple": [brief["genre"], brief["twist"], brief["setting"]],
+        "label": brief["label"],
+        "state": session.get("state", "QUEUED"),
+    }
     state["max_game_id"] = max(int(state.get("max_game_id", 0)), int(gid))
-    log("dispatched", session=sid, title=title, url=session.get("url", ""))
+    log("dispatched", session=sid, game_id=gid, phase=phase, title=title, url=session.get("url", ""))
 
 
 # --------------------------------------------------------------------------- main
@@ -371,8 +408,17 @@ def status(state: dict) -> None:
     sess = state.get("sessions", {})
     outcomes = Counter((v.get("outcome") or "in_flight").split(":")[0] for v in sess.values())
     day = sum(1 for v in sess.values() if now() - parse_ts(v["created"]) < timedelta(hours=24))
+    wip = {}
+    for manifest in sorted((ROOT / "games").glob("*/game.json")):
+        try:
+            m = json.loads(manifest.read_text(encoding="utf-8"))
+            if "phase" in m and int(m.get("phase", "10")) < 10:
+                wip[manifest.parent.name] = f"{m['phase']}/10"
+        except Exception:
+            pass
     print(json.dumps({"tracked": len(sess), "outcomes": outcomes, "dispatched_24h": day,
                       "max_game_id": state.get("max_game_id", 0),
+                      "wip_phased_games": wip,
                       "api_fail_streak": state.get("api_fail_streak", 0),
                       "top_lessons": [m for m, _ in Counter(state.get("lessons", [])).most_common(5)]}, indent=1))
 

@@ -1,6 +1,6 @@
 {
-  "schema": 1,
-  "_note": "Design axes. The dispatcher assigns one value from each axis per session, preferring the least-used combinations. tools/check_games.py rejects values not listed here and repeated genre+twist+setting triples. Add values freely; never rename or remove one that a merged game uses.",
+  "schema": 2,
+  "_note": "Design axes and 10-session phased assembly pipeline. The dispatcher assigns one compatible genre+twist+setting per new game and advances each game through phases 1..10 across 10 sequential sessions.",
   "genres": [
     "Twin-Stick Arena",
     "Gravity/Orbital Physics Action",
@@ -25,6 +25,81 @@
     "Sacrifice Health for Overdrive Power",
     "Echo/Ghost Self-Cooperation"
   ],
+  "compatible_twists": {
+    "Twin-Stick Arena": [
+      "Recoil-as-Movement",
+      "Risk/Reward Tether or Tail Growth",
+      "Limited Ammo Must Be Physically Retrieved",
+      "Shrinking Arena / Shifting Geometry",
+      "Sacrifice Health for Overdrive Power"
+    ],
+    "Gravity/Orbital Physics Action": [
+      "Recoil-as-Movement",
+      "Polarity/Magnetism Switching",
+      "Risk/Reward Tether or Tail Growth",
+      "Shrinking Arena / Shifting Geometry"
+    ],
+    "Tactical Grid/Turn-Based Blitz": [
+      "Time-Dilation on Stillness",
+      "Shrinking Arena / Shifting Geometry",
+      "Sacrifice Health for Overdrive Power",
+      "Echo/Ghost Self-Cooperation"
+    ],
+    "Rhythm/Beat-Synced Reflex": [
+      "Polarity/Magnetism Switching",
+      "Shrinking Arena / Shifting Geometry",
+      "Sacrifice Health for Overdrive Power",
+      "Echo/Ghost Self-Cooperation"
+    ],
+    "Pinball/Ricochet Dungeon": [
+      "Polarity/Magnetism Switching",
+      "Limited Ammo Must Be Physically Retrieved",
+      "Shrinking Arena / Shifting Geometry",
+      "Sacrifice Health for Overdrive Power"
+    ],
+    "Momentum/Grapple Platformer": [
+      "Recoil-as-Movement",
+      "Time-Dilation on Stillness",
+      "Polarity/Magnetism Switching",
+      "Risk/Reward Tether or Tail Growth"
+    ],
+    "Wave-Defense Tower Micro-Strategy": [
+      "Polarity/Magnetism Switching",
+      "Risk/Reward Tether or Tail Growth",
+      "Shrinking Arena / Shifting Geometry",
+      "Sacrifice Health for Overdrive Power",
+      "Echo/Ghost Self-Cooperation"
+    ],
+    "Bullet-Hell Boss Rush": [
+      "Time-Dilation on Stillness",
+      "Polarity/Magnetism Switching",
+      "Limited Ammo Must Be Physically Retrieved",
+      "Sacrifice Health for Overdrive Power"
+    ],
+    "Alchemy/Chain-Reaction Puzzle Action": [
+      "Polarity/Magnetism Switching",
+      "Risk/Reward Tether or Tail Growth",
+      "Shrinking Arena / Shifting Geometry"
+    ],
+    "Directional Parry/Slash Arcade": [
+      "Time-Dilation on Stillness",
+      "Polarity/Magnetism Switching",
+      "Shrinking Arena / Shifting Geometry",
+      "Sacrifice Health for Overdrive Power"
+    ],
+    "Subterranean Drilling/Mining Roguelite": [
+      "Recoil-as-Movement",
+      "Polarity/Magnetism Switching",
+      "Risk/Reward Tether or Tail Growth",
+      "Sacrifice Health for Overdrive Power"
+    ],
+    "Stealth/Line-of-Sight Heist": [
+      "Time-Dilation on Stillness",
+      "Limited Ammo Must Be Physically Retrieved",
+      "Shrinking Arena / Shifting Geometry",
+      "Echo/Ghost Self-Cooperation"
+    ]
+  },
   "settings": [
     "Junkyard Robot Scrapheap",
     "Neon Synthwave City",
@@ -42,5 +117,57 @@
     "Candy Factory Conveyor Line",
     "Cyber Samurai Dojo",
     "Floating Sky Islands"
-  ]
+  ],
+  "phases": {
+    "1": {
+      "title": "Phase 1/10 — Core Playable Foundation & Signature Mechanic",
+      "min_js_lines": 450,
+      "focus": "Create the game folder, manifest (`\"phase\": \"1\"`), responsive Canvas + ResizeObserver harness, unified InputManager (Keyboard/Mouse + Touch), baseline SaveManager + SoundEngine, and a 100% playable core gameplay loop implementing the Genre x Twist mechanic with initial enemies and scoring."
+    },
+    "2": {
+      "title": "Phase 2/10 — Player Mastery, Secondary Tactical Ability & Reactive Vector Rig",
+      "min_js_lines": 600,
+      "focus": "Deepen player control and physics (`player.js` or expanded player subsystem): add a secondary tactical ability/dash/overdrive skill with cooldown HUD indicator, multi-part procedural player vector sprite with reactive animations (recoil, thrust, aim telegraph, invulnerability blink), and tight collision/momentum tuning. Set `\"phase\": \"2\"` in `game.json`."
+    },
+    "3": {
+      "title": "Phase 3/10 — Procedural World, Parallax Environment & Interactive Stage Hazards",
+      "min_js_lines": 750,
+      "focus": "Bring the Axis C visual setting to life (`world.js` or environment subsystem): implement at least 3 animated parallax background layers themed to the setting, plus interactive stage hazards/obstacles (destructible cover, environmental traps, conveyor/gravity zones, or shifting geometry) that dynamically affect both player and enemies. Set `\"phase\": \"3\"` in `game.json`."
+    },
+    "4": {
+      "title": "Phase 4/10 — Diverse Enemy Roster & AI State Machines",
+      "min_js_lines": 900,
+      "focus": "Expand enemy variety (`enemies.js` or enemy subsystem) to at least 5 distinct enemy archetypes (e.g. Swarmer, Ranged Sniper, Shielded Bruiser, Splitter/Spawner, Area-Denial Hazard), each with unique procedural vector geometry, pre-attack visual telegraphs, and distinct AI movement behaviors. Set `\"phase\": \"4\"` in `game.json`."
+    },
+    "5": {
+      "title": "Phase 5/10 — Multi-Phase Boss Encounters & Attack Patterns",
+      "min_js_lines": 1050,
+      "focus": "Implement multi-phase Boss Encounters (`bosses.js` or boss subsystem) triggered every 5th wave (or milestone score): create at least 2 distinct Bosses with animated boss health bars, warning banners, phase transitions at 50% HP, and bespoke attack patterns that challenge the player's Axis B twist. Set `\"phase\": \"5\"` in `game.json`."
+    },
+    "6": {
+      "title": "Phase 6/10 — Wave Director, In-Run Upgrade Draft & Combo Multipliers",
+      "min_js_lines": 1200,
+      "focus": "Add deep run-to-run progression (`progression.js` or upgrade subsystem): build a between-wave Upgrade/Perk Draft modal (or interactive tactical upgrade choice) offering 3 randomized build upgrades (from a pool of 8+ perks/mutators) when clearing waves, plus physical field pickups and a risk/reward combo multiplier decay bar. Set `\"phase\": \"6\"` in `game.json`."
+    },
+    "7": {
+      "title": "Phase 7/10 — High-Impact Arcade Juice, Particle Emitters & Combat VFX",
+      "min_js_lines": 1350,
+      "focus": "Maximize visual feedback (`vfx.js` or juice subsystem): add directional particle emitters for hits/thrusters/explosions, hit-stop freeze frames on critical impacts and boss kills, directional screen shake respecting Options intensity, floating combat damage/combo popups with smooth easing, and motion trails/afterimages. Set `\"phase\": \"7\"` in `game.json`."
+    },
+    "8": {
+      "title": "Phase 8/10 — Multi-Voice Web Audio Synthesizer & Dynamic Adaptive Soundtrack",
+      "min_js_lines": 1500,
+      "focus": "Upgrade `SoundEngine` (`audio.js` or audio subsystem) into a rich procedural Web Audio synthesizer: create a multi-voice procedural background synth/arpeggiator + percussion loop that shifts tempo/filter intensity during Boss waves and low-HP states, plus 10+ distinct synthesized SFX across all weapons, abilities, enemy hits, upgrades, and UI buttons. Set `\"phase\": \"8\"` in `game.json`."
+    },
+    "9": {
+      "title": "Phase 9/10 — Complete Accessibility, Ergonomic Touch UI & 6 Unlockable Milestones",
+      "min_js_lines": 1650,
+      "focus": "Complete all UI, accessibility, and persistence features (`ui.js` or UI subsystem): verify Master Mute + SFX/Music sliders, Screen Shake (100%/50%/Off), Particle Density (High/Low), working High-Contrast/Colorblind palette mode, live on-screen FPS counter toggle, Touch Controls (Auto/Always/Off + Left/Right handedness swap), Base64 Save Export/Import + 2-step Reset, and 6 earnable Milestones/Badges shown on Title and Game Over screens. Set `\"phase\": \"9\"` in `game.json`."
+    },
+    "10": {
+      "title": "Phase 10/10 — Final Integration, Balance Tuning, QA Audit & Masterpiece Release",
+      "min_js_lines": 1750,
+      "focus": "Perform the final integration and balance pass across all modules: tune wave pacing, enemy spawn weights, boss HP, and upgrade scaling so early waves are welcoming and late waves are thrilling; add an interactive tutorial/hint overlay on Wave 1; eliminate any runtime edge cases or memory leaks; and set `\"phase\": \"10\"` in `game.json` to graduate the game as a finished 10-Session Arcade Masterpiece."
+    }
+  }
 }

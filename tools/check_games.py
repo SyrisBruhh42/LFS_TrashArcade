@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -27,8 +28,10 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 FILE_RE = re.compile(r"^(index\.html|game\.json|[a-z0-9][a-z0-9_-]{0,40}\.(js|css))$")
 REQUIRED = ("id", "slug", "title", "genre", "coreMechanic", "setting", "description", "controls", "createdAt", "accentColor")
-OPTIONAL = ("legacy",)
-LEGACY_MAX_ID = 2  # games 001-002 predate the factory; they may skip setting/save-key/back-link checks
+OPTIONAL = ("legacy", "phase")
+LEGACY_MAX_ID = 2   # games 001-002 predate the factory
+V1_MAX_ID = 51      # games 001-051 are v1 single-session games; 052+ use the 10-session phased assembly pipeline
+TOTAL_PHASES = 10
 MAX_FILE_BYTES = 1_500_000
 MAX_FOLDER_BYTES = 3_000_000
 MARKERS = (
@@ -41,6 +44,7 @@ MARKERS = (
 )
 SCRIPT_RE = re.compile(r"<script\b([^>]*)>([\s\S]*?)</script\s*>", re.I)
 SVG_NS_RE = re.compile(r"https?://www\.w3\.org/(?:2000/svg|1999/xlink|1999/xhtml|XML/1998/namespace)", re.I)
+STUB_RE = re.compile(r"//\s*(?:TODO\b|FIXME\b|To be implemented\b|placeholder\b)", re.I)
 FORBIDDEN = (
     (re.compile(r"<script[^>]*\btype\s*=\s*['\"]?module", re.I), "<script type=\"module\"> is forbidden (blocked over file://)"),
     (re.compile(r"https?://", re.I), "external URL (http:// or https://) found; everything must be inline and offline"),
@@ -49,6 +53,32 @@ FORBIDDEN = (
     (re.compile(r"\bimport\s*\("), "dynamic import() is forbidden (blocked over file://)"),
     (re.compile(r"\bXMLHttpRequest\b"), "XMLHttpRequest is forbidden (blocked over file://)"),
 )
+
+SMOKE_SNIPPET = """
+<script>
+window.addEventListener('error', (e) => console.error('SMOKE_UNCAUGHT: ' + (e.message || e.error)));
+window.addEventListener('unhandledrejection', (e) => console.error('SMOKE_UNCAUGHT: ' + e.reason));
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    try {
+      const btns = Array.from(document.querySelectorAll('button, .btn'));
+      const play = btns.find(b => /play|start|launch/i.test(b.innerText || b.textContent));
+      if (play) play.click();
+      window.dispatchEvent(new KeyboardEvent('keydown', {key: 'd', code: 'KeyD', bubbles: true}));
+      window.dispatchEvent(new KeyboardEvent('keydown', {key: ' ', code: 'Space', bubbles: true}));
+      setTimeout(() => {
+        const c = document.querySelector('canvas');
+        if (!c || c.width === 0 || c.height === 0) {
+          console.error('SMOKE_FAIL: canvas missing or 0x0 dimensions');
+        }
+      }, 200);
+    } catch (err) {
+      console.error('SMOKE_FAIL: ' + err.message);
+    }
+  }, 200);
+});
+</script>
+"""
 
 
 class Report:
@@ -68,6 +98,13 @@ def is_legacy(meta: dict) -> bool:
         return bool(meta.get("legacy")) and int(meta.get("id", "999")) <= LEGACY_MAX_ID
     except ValueError:
         return False
+
+
+def is_v2_phased(meta: dict) -> bool:
+    try:
+        return int(meta.get("id", "0")) > V1_MAX_ID
+    except ValueError:
+        return True
 
 
 def check_manifest(folder: Path, rep: Report) -> dict | None:
@@ -110,6 +147,13 @@ def check_manifest(folder: Path, rep: Report) -> dict | None:
             rep.err(where, f"`coreMechanic` must be one of factory/axes.json twists (got `{meta.get('coreMechanic')}`).")
         if meta.get("setting") not in AXES["settings"]:
             rep.err(where, f"`setting` must be one of factory/axes.json settings (got `{meta.get('setting')}`).")
+    if is_v2_phased(meta):
+        ph = str(meta.get("phase", ""))
+        if ph not in AXES.get("phases", {}):
+            rep.err(where, f"game.json `phase` is required for id > {V1_MAX_ID:03d} and must be \"1\"..\"{TOTAL_PHASES}\" (got `{ph}`).")
+        compat = AXES.get("compatible_twists", {}).get(meta.get("genre", ""), AXES["twists"])
+        if meta.get("coreMechanic") not in compat:
+            rep.err(where, f"`coreMechanic` `{meta.get('coreMechanic')}` is not in the compatible twists for `{meta.get('genre')}`.")
     for k, lo, hi in (("description", 10, 300), ("controls", 5, 300)):
         if isinstance(meta.get(k), str) and not lo <= len(meta[k]) <= hi:
             rep.err(where, f"`{k}` must be {lo}-{hi} characters.")
@@ -142,13 +186,14 @@ def check_files(folder: Path, meta: dict | None, rep: Report, js_files: list[tup
         return
     html = index.read_text(encoding="utf-8", errors="replace")
     combined = html
+    js_only_blobs: list[str] = []
     inline_count = 0
     for m in SCRIPT_RE.finditer(html):
         attrs, body = m.group(1) or "", m.group(2) or ""
         src = re.search(r"""\bsrc\s*=\s*['"]([^'"]+)['"]""", attrs, re.I)
         typ = re.search(r"""\btype\s*=\s*['"]?([^'"\s>]+)""", attrs, re.I)
         if typ and typ.group(1).lower() not in ("text/javascript", "application/javascript", "module"):
-            continue  # data blocks (e.g. application/json, text/plain) are not executed
+            continue
         if src:
             ref = src.group(1)
             if "/" in ref.replace("./", "", 1) or ".." in ref or not FILE_RE.match(ref.replace("./", "", 1)):
@@ -158,10 +203,13 @@ def check_files(folder: Path, meta: dict | None, rep: Report, js_files: list[tup
             if not local.is_file():
                 rep.err(where, f"script src `{ref}` does not exist.")
                 continue
-            combined += "\n" + local.read_text(encoding="utf-8", errors="replace")
+            src_txt = local.read_text(encoding="utf-8", errors="replace")
+            combined += "\n" + src_txt
+            js_only_blobs.append(src_txt)
             js_files.append((where, str(local)))
         elif body.strip():
             inline_count += 1
+            js_only_blobs.append(body)
             tmp = tempfile.NamedTemporaryFile("w", suffix=f"__{folder.name}__inline{inline_count}.js", delete=False, encoding="utf-8")
             tmp.write(body)
             tmp.close()
@@ -182,6 +230,17 @@ def check_files(folder: Path, meta: dict | None, rep: Report, js_files: list[tup
             rep.err(where, f"localStorage key must be exactly `{key}` (namespaced save data).")
         if "../../index.html" not in combined:
             rep.err(where, "missing `Back to Arcade` link to `../../index.html`.")
+
+    if meta and is_v2_phased(meta):
+        all_js_text = "\n".join(js_only_blobs)
+        stub_m = STUB_RE.search(all_js_text)
+        if stub_m:
+            rep.err(where, f"unfinished stub comment `{stub_m.group(0).strip()}` is forbidden; implement all features completely.")
+        non_empty_js = sum(1 for line in all_js_text.splitlines() if line.strip() and not line.strip().startswith("//"))
+        ph = str(meta.get("phase", "1"))
+        min_lines = int(AXES.get("phases", {}).get(ph, {}).get("min_js_lines", 450))
+        if non_empty_js < min_lines:
+            rep.err(where, f"Phase {ph} requires at least {min_lines} non-empty JS lines (found {non_empty_js}).")
 
 
 def run_js_syntax(js_files: list[tuple[str, str]], rep: Report) -> None:
@@ -205,6 +264,62 @@ def run_js_syntax(js_files: list[tuple[str, str]], rep: Report) -> None:
             Path(p).unlink(missing_ok=True)
 
 
+def run_chrome_smoke(metas: list[tuple[Path, dict]], rep: Report) -> None:
+    chrome = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
+    if not chrome:
+        return
+    # Identify target v2 folders modified against origin/main (or latest v2 game folder)
+    changed_folders: set[str] = set()
+    try:
+        diff_out = subprocess.run(["git", "diff", "--name-only", "origin/main...HEAD"], cwd=ROOT, capture_output=True, text=True).stdout
+        for line in diff_out.splitlines():
+            parts = line.strip().split("/")
+            if len(parts) >= 2 and parts[0] == "games":
+                changed_folders.add(parts[1])
+    except Exception:
+        pass
+
+    v2_metas = [(f, m) for f, m in metas if is_v2_phased(m)]
+    targets = [(f, m) for f, m in v2_metas if f.name in changed_folders]
+    if not targets and v2_metas:
+        targets = [v2_metas[-1]]
+
+    for folder, _ in targets:
+        where = f"games/{folder.name}"
+        index = folder / "index.html"
+        if not index.is_file():
+            continue
+        smoke_file = folder / "__smoke_test__.html"
+        try:
+            html = index.read_text(encoding="utf-8", errors="replace")
+            smoke_file.write_text(html + "\n" + SMOKE_SNIPPET, encoding="utf-8")
+            res = subprocess.run(
+                [
+                    chrome,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--no-sandbox",
+                    "--allow-file-access-from-files",
+                    "--virtual-time-budget=1200",
+                    "--enable-logging=stderr",
+                    "--v=0",
+                    f"file://{smoke_file}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            for line in res.stderr.splitlines():
+                if re.search(r"Uncaught|SMOKE_FAIL|SMOKE_UNCAUGHT", line):
+                    clean = re.sub(r"^.*?INFO:CONSOLE:\d+\]\s*", "", line).strip()
+                    rep.err(where, f"Runtime browser smoke test failed: {clean[:220]}")
+                    break
+        except Exception:
+            pass
+        finally:
+            smoke_file.unlink(missing_ok=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--strict", action="store_true")
@@ -226,6 +341,7 @@ def main() -> int:
         if meta:
             metas.append((folder, meta))
     run_js_syntax(js_files, rep)
+    run_chrome_smoke(metas, rep)
 
     seen: dict[str, dict[str, str]] = {"id": {}, "title": {}, "triple": {}}
     for folder, meta in metas:

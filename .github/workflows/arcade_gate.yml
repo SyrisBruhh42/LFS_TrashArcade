@@ -55,12 +55,12 @@ jobs:
           git -c http.https://github.com/.extraheader="$AUTH" fetch --no-tags origin "+refs/pull/${PR}/head:refs/remotes/pr/head"
           git cat-file -e "${HEAD_SHA}^{commit}"
 
-      - name: Path guard (one new game folder, additions only)
+      - name: Path guard (one target game folder, valid phase transition)
         run: python3 tools/path_guard.py --base "origin/${BASE_REF}" --head "${HEAD_SHA}" 2>&1 | tee -a report.txt; exit "${PIPESTATUS[0]}"
 
-      - name: Overlay the PR's new files onto trusted main
+      - name: Overlay the PR's added/modified game files onto trusted main
         run: |
-          git diff --name-only --diff-filter=A "origin/${BASE_REF}...${HEAD_SHA}" > added.txt
+          git diff --name-only --diff-filter=AM "origin/${BASE_REF}...${HEAD_SHA}" > added.txt
           cat added.txt
           xargs -r -a added.txt git checkout "${HEAD_SHA}" --
 
