@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Clockwork Recoil Dungeon</title>
+  <style>
+    :root {
+      --accent: #c7c99b;
+      --bg: #1a1512;
+      --panel: rgba(40, 30, 25, 0.9);
+      --text: #e0d8c8;
+      --font: "Courier New", Courier, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000;
+      color: var(--text);
+      font-family: var(--font);
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      pointer-events: auto;
+    }
+
+    .screen.active {
+      display: flex;
+    }
+
+    h1 {
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      margin-bottom: 10px;
+      text-align: center;
+      text-shadow: 2px 2px 0 #000;
+    }
+
+    h2 {
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      background: var(--panel);
+      color: var(--accent);
+      border: 2px solid var(--accent);
+      padding: 12px 24px;
+      margin: 8px;
+      font-family: var(--font);
+      font-size: 1.2rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 200px;
+      text-align: center;
+    }
+
+    .btn:hover {
+      background: var(--accent);
+      color: #000;
+    }
+
+    .btn:active {
+      transform: scale(0.95);
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 2px solid var(--accent);
+      padding: 20px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      margin: 20px;
+    }
+
+    /* HUD */
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: none;
+    }
+
+    #hud.active {
+      display: block;
+    }
+
+    .hud-top {
+      position: absolute;
+      top: 10px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 1.5rem;
+      font-weight: bold;
+      text-shadow: 1px 1px 0 #000;
+    }
+
+    #btn-pause-hud {
+      pointer-events: auto;
+      background: var(--panel);
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      width: 40px;
+      height: 40px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Touch Controls */
+    #touch-controls {
+      position: absolute;
+      bottom: 20px;
+      left: 0;
+      width: 100%;
+      height: 120px;
+      pointer-events: none;
+      display: none;
+      justify-content: space-between;
+      padding: 0 20px;
+    }
+
+    #touch-controls.active {
+      display: flex;
+    }
+
+    .joystick-zone, .button-zone {
+      width: 120px;
+      height: 120px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      border: 2px dashed rgba(199, 201, 155, 0.3);
+      position: relative;
+      pointer-events: auto;
+    }
+
+    .joystick-knob {
+      width: 50px;
+      height: 50px;
+      background: rgba(199, 201, 155, 0.5);
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .options-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      border-bottom: 1px solid rgba(199, 201, 155, 0.2);
+      padding-bottom: 10px;
+    }
+
+    .options-row label {
+      flex: 1;
+    }
+
+    .options-row input[type="range"] {
+      flex: 1;
+    }
+
+    .options-row select, .options-row button {
+      flex: 1;
+      background: #000;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 5px;
+      font-family: var(--font);
+    }
+
+    .back-link {
+      margin-top: 20px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 1rem;
+      pointer-events: auto;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+
+    #export-data {
+      width: 100%;
+      height: 60px;
+      background: #000;
+      color: var(--text);
+      border: 1px solid var(--accent);
+      margin-top: 5px;
+      font-family: monospace;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="game-canvas"></canvas>
+
+  <div id="hud" class="ui-layer">
+    <div class="hud-top">
+      <div>Score: <span id="hud-score">0</span></div>
+      <div>Wave: <span id="hud-wave">1</span></div>
+      <button id="btn-pause-hud">II</button>
+    </div>
+  </div>
+
+  <div id="touch-controls" class="ui-layer">
+    <div id="touch-joystick" class="joystick-zone">
+      <div id="touch-knob" class="joystick-knob"></div>
+    </div>
+    <div id="touch-fire" class="button-zone">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:rgba(199,201,155,0.8);font-weight:bold;">FIRE</div>
+    </div>
+  </div>
+
+  <div class="ui-layer">
+    <!-- TITLE SCREEN -->
+    <div id="screen-title" class="screen active">
+      <h1>Clockwork Recoil Dungeon</h1>
+      <p>High Score: <span id="title-highscore">0</span></p>
+      <button class="btn" id="btn-play">Play</button>
+      <button class="btn" id="btn-howto">How to Play</button>
+      <button class="btn" id="btn-options-title">Options</button>
+      <a href="../../index.html" class="back-link">Back to Arcade</a>
+    </div>
+
+    <!-- PAUSED SCREEN -->
+    <div id="screen-paused" class="screen">
+      <h1>PAUSED</h1>
+      <button class="btn" id="btn-resume">Resume</button>
+      <button class="btn" id="btn-restart">Restart</button>
+      <button class="btn" id="btn-options-pause">Options</button>
+      <button class="btn" id="btn-quit">Quit to Title</button>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div id="screen-gameover" class="screen">
+      <h1>GEARS CRUSHED</h1>
+      <h2 id="gameover-msg">Run Breakdown</h2>
+      <div class="panel" style="text-align:center;">
+        <p>Score: <span id="go-score">0</span></p>
+        <p>Wave: <span id="go-wave">0</span></p>
+        <p id="go-highscore-banner" style="color:var(--accent); font-weight:bold; display:none;">NEW HIGH SCORE!</p>
+      </div>
+      <button class="btn" id="btn-play-again">Play Again</button>
+      <button class="btn" id="btn-to-title">Title Screen</button>
+    </div>
+
+    <!-- OPTIONS MODAL -->
+    <div id="screen-options" class="screen">
+      <h1>OPTIONS</h1>
+      <div class="panel">
+        <div class="options-row">
+          <label>Master Mute</label>
+          <input type="checkbox" id="opt-mute">
+        </div>
+        <div class="options-row">
+          <label>SFX Volume</label>
+          <input type="range" id="opt-sfx" min="0" max="100" value="100">
+        </div>
+        <div class="options-row">
+          <label>Music Volume</label>
+          <input type="range" id="opt-music" min="0" max="100" value="100">
+        </div>
+        <div class="options-row">
+          <label>Screen Shake</label>
+          <select id="opt-shake">
+            <option value="100">100%</option>
+            <option value="50">50%</option>
+            <option value="0">Off</option>
+          </select>
+        </div>
+        <div class="options-row">
+          <label>Particles</label>
+          <select id="opt-particles">
+            <option value="high">High</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div class="options-row">
+          <label>Touch Controls</label>
+          <select id="opt-touch">
+            <option value="auto">Auto</option>
+            <option value="always">Always</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+
+        <hr style="border-color:var(--accent); margin:20px 0;">
+        <h3>Save Data</h3>
+        <div class="options-row">
+          <button id="btn-export-save">Export Save</button>
+          <button id="btn-import-save">Import Save</button>
+        </div>
+        <textarea id="export-data" placeholder="Paste save data here to import..."></textarea>
+        <div style="margin-top:10px;">
+          <button id="btn-reset-save" style="background:#422; color:#f88; border-color:#f88; padding:5px; width:100%;">Reset Save</button>
+        </div>
+      </div>
+      <button class="btn" id="btn-close-options">Close</button>
+    </div>
+
+    <!-- HOW TO PLAY MODAL -->
+    <div id="screen-howto" class="screen">
+      <h1>HOW TO PLAY</h1>
+      <div class="panel">
+        <p><strong>Recoil is Movement!</strong></p>
+        <p>You cannot move normally. You must shoot to push yourself backwards through the steampunk foundry.</p>
+        <ul>
+          <li><strong>Mouse/Keyboard:</strong> WASD/Arrows or Mouse to aim. Click or Space to shoot/move.</li>
+          <li><strong>Touch:</strong> Left stick aims, right area shoots.</li>
+        </ul>
+        <p>Bounce off walls to gain combo multipliers. Smash enemies before they hit you!</p>
+      </div>
+      <button class="btn" id="btn-close-howto">Got It</button>
+    </div>
+  </div>
+</div>
+
+<script defer src="./game.js"></script>
+</body>
+</html>
