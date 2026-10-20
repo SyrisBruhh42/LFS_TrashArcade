@@ -661,5 +661,19 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-21",
     "accentColor": "#5074de",
     "path": "./games/051-orbital-overdrive/index.html"
+  },
+  {
+    "id": "052",
+    "slug": "052-sky-shifting-arena",
+    "title": "Sky Shifting Arena",
+    "genre": "Twin-Stick Arena",
+    "coreMechanic": "Shrinking Arena / Shifting Geometry",
+    "setting": "Floating Sky Islands",
+    "description": "Survive on shifting floating islands! Battle enemies with twin-stick controls while the arena geometry constantly shrinks and shifts.",
+    "controls": "WASD/Arrows to move, Mouse to aim and auto-shoot. Touch: Left side for movement, Right side to aim/shoot.",
+    "createdAt": "2024-10-25",
+    "accentColor": "#59c297",
+    "phase": "1",
+    "path": "./games/052-sky-shifting-arena/index.html"
   }
 ];
