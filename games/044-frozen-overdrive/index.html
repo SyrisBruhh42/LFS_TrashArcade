@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Frozen Overdrive</title>
+<style>
+  :root { --accent: #585ed8; --bg: #0b0c10; --text: #c5c6c7; }
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: monospace; overflow: hidden; touch-action: none; user-select: none; }
+  #game-container { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+  canvas { background: #1f2833; box-shadow: 0 0 20px var(--accent); max-width: 100%; max-height: 100%; object-fit: contain; }
+  #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; }
+  .screen { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(11, 12, 16, 0.85); pointer-events: auto; }
+  .screen.active { display: flex; }
+  h1 { font-size: 4rem; color: var(--accent); text-shadow: 0 0 10px var(--accent); margin-bottom: 0.5rem; text-align: center;}
+  button { background: transparent; border: 2px solid var(--accent); color: var(--accent); padding: 10px 20px; font-size: 1.5rem; margin: 10px; cursor: pointer; transition: all 0.2s; font-family: monospace; text-transform: uppercase; }
+  button:hover { background: var(--accent); color: var(--bg); box-shadow: 0 0 15px var(--accent); }
+  .hud { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; font-size: 1.2rem; text-shadow: 1px 1px 2px #000; pointer-events: none; z-index: 10;}
+  #pause-btn { pointer-events: auto; background: rgba(0,0,0,0.5); border: 1px solid var(--accent); border-radius: 4px; padding: 5px 10px; }
+  .hidden { display: none !important; }
+  .options-group { margin: 10px 0; display: flex; align-items: center; gap: 10px; }
+  input[type="range"] { accent-color: var(--accent); }
+  textarea { background: #000; color: #fff; border: 1px solid var(--accent); width: 80%; height: 60px; margin-top: 10px; font-family: monospace; }
+  a.back-link { position: absolute; bottom: 20px; color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--text); pointer-events: auto;}
+  a.back-link:hover { color: var(--accent); border-color: var(--accent); }
+  #touch-controls { position: absolute; bottom: 10%; width: 100%; height: 30%; pointer-events: none; display: none; }
+  .touch-zone { position: absolute; bottom: 0; width: 40%; height: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(88, 94, 216, 0.2); pointer-events: auto; border-radius: 20px; display: flex; justify-content: center; align-items: center; }
+  #touch-left { left: 5%; }
+  #touch-right { right: 5%; }
+  .joystick-base { width: 100px; height: 100px; border-radius: 50%; border: 2px solid rgba(88,94,216,0.5); position: relative; }
+  .joystick-knob { width: 40px; height: 40px; border-radius: 50%; background: rgba(88,94,216,0.8); position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+  .action-btn { width: 80px; height: 80px; border-radius: 50%; border: 2px solid rgba(88,94,216,0.5); background: rgba(255,255,255,0.1); display: flex; justify-content: center; align-items: center; font-weight: bold;}
+  .action-btn:active { background: rgba(88,94,216,0.5); }
+  .mobile #touch-controls { display: block; }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="game-canvas"></canvas>
+  <div id="ui-layer">
+    <div class="hud hidden" id="hud">
+      <div>Score: <span id="score-display">0</span></div>
+      <div>HP: <span id="hp-display">100</span></div>
+      <button id="pause-btn">II</button>
+    </div>
+
+    <div id="screen-title" class="screen active">
+      <h1>Frozen Overdrive</h1>
+      <button onclick="startGame()">Play</button>
+      <button onclick="showScreen('screen-howto')">How to Play</button>
+      <button onclick="showScreen('screen-options')">Options</button>
+      <a href="../../index.html" class="back-link">Back to Arcade</a>
+    </div>
+
+    <div id="screen-pause" class="screen">
+      <h2>PAUSED</h2>
+      <button onclick="resumeGame()">Resume</button>
+      <button onclick="initGame()">Restart</button>
+      <button onclick="showScreen('screen-options')">Options</button>
+      <button onclick="showScreen('screen-howto')">How to Play</button>
+      <button onclick="showScreen('screen-title')">Quit to Title</button>
+    </div>
+
+    <div id="screen-gameover" class="screen">
+      <h2>GAME OVER</h2>
+      <p>Final Score: <span id="final-score">0</span></p>
+      <p id="new-high-score" class="hidden" style="color: var(--accent); font-weight: bold;">NEW HIGH SCORE!</p>
+      <div id="milestones-unlocked" style="margin: 10px 0; color: #ffd700;"></div>
+      <button onclick="initGame()">Play Again</button>
+      <button onclick="showScreen('screen-title')">Title Screen</button>
+    </div>
+
+    <div id="screen-howto" class="screen">
+      <h2>How to Play</h2>
+      <p>Aim with Mouse/Touch.</p>
+      <p>Click/Tap to launch (Ricochet).</p>
+      <p>While moving, Click/Tap to Sacrifice Health for Overdrive (smash armor).</p>
+      <button onclick="backFromSubscreen()">Back</button>
+    </div>
+
+    <div id="screen-options" class="screen">
+      <h2>Options</h2>
+      <div class="options-group">
+        <label>Master Vol:</label>
+        <input type="range" id="opt-master-vol" min="0" max="100" value="100" onchange="updateOptions()">
+      </div>
+      <div class="options-group">
+        <label>SFX Vol:</label>
+        <input type="range" id="opt-sfx-vol" min="0" max="100" value="100" onchange="updateOptions()">
+      </div>
+      <div class="options-group">
+        <label>Music Vol:</label>
+        <input type="range" id="opt-music-vol" min="0" max="100" value="50" onchange="updateOptions()">
+      </div>
+      <div class="options-group">
+        <label>Screen Shake:</label>
+        <select id="opt-shake" onchange="updateOptions()">
+          <option value="1">100%</option>
+          <option value="0.5">50%</option>
+          <option value="0">Off</option>
+        </select>
+      </div>
+      <div class="options-group">
+        <label>Particles:</label>
+        <select id="opt-particles" onchange="updateOptions()">
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <div class="options-group">
+        <button onclick="exportSave()">Export Save</button>
+        <button onclick="importSave()">Import Save</button>
+        <button id="reset-btn" onclick="resetSave()">Reset Save</button>
+      </div>
+      <textarea id="save-data-box" class="hidden"></textarea>
+      <button onclick="backFromSubscreen()">Back</button>
+    </div>
+  </div>
+
+  <div id="touch-controls">
+    <div id="touch-left" class="touch-zone">
+      <div class="joystick-base" id="joystick-base">
+        <div class="joystick-knob" id="joystick-knob"></div>
+      </div>
+    </div>
+    <div id="touch-right" class="touch-zone">
+      <div class="action-btn" id="action-btn">OVR</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SAVE_KEY = 'arcade_game_044_044-frozen-overdrive_v1';
+  let canvas, ctx, ro;
+  let GAME_WIDTH = 1280;
+  let GAME_HEIGHT = 720;
+  let scale = 1;
+  let state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+  let lastTime = 0;
+  let lastScreen = 'TITLE';
+  let isMobile = false;
+
+  // Options & Save
+  let saveManager = {
+    data: {
+      highScore: 0, bestCombo: 0, gamesPlayed: 0, totalScore: 0,
+      unlockedMilestones: [],
+      options: { master: 100, sfx: 100, music: 50, shake: 1, particles: 'high' }
+    },
+    load() {
+      try {
+        let d = localStorage.getItem(SAVE_KEY);
+        if (d) {
+          let parsed = JSON.parse(d);
+          this.data = { ...this.data, ...parsed };
+          this.data.options = { ...this.data.options, ...parsed.options };
+        }
+      } catch (e) { console.warn("Save load failed", e); }
+      this.applyOptionsToUI();
+    },
+    save() {
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); }
+      catch (e) { console.warn("Save write failed", e); }
+    },
+    applyOptionsToUI() {
+      document.getElementById('opt-master-vol').value = this.data.options.master;
+      document.getElementById('opt-sfx-vol').value = this.data.options.sfx;
+      document.getElementById('opt-music-vol').value = this.data.options.music;
+      document.getElementById('opt-shake').value = this.data.options.shake;
+      document.getElementById('opt-particles').value = this.data.options.particles;
+    }
+  };
+
+  // Audio Engine
+  let audioCtx;
+  const audio = {
+    masterGain: null, sfxGain: null, musicGain: null,
+    init() {
+      if (audioCtx) return;
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContext();
+      this.masterGain = audioCtx.createGain();
+      this.sfxGain = audioCtx.createGain();
+      this.musicGain = audioCtx.createGain();
+
+      this.sfxGain.connect(this.masterGain);
+      this.musicGain.connect(this.masterGain);
+      this.masterGain.connect(audioCtx.destination);
+      this.updateVolumes();
+    },
+    updateVolumes() {
+      if (!audioCtx) return;
+      this.masterGain.gain.value = saveManager.data.options.master / 100;
+      this.sfxGain.gain.value = saveManager.data.options.sfx / 100;
+      this.musicGain.gain.value = (saveManager.data.options.music / 100) * 0.3; // Music naturally quieter
+    },
+    playTone(freq, type, duration, vol=1) {
+      if (!audioCtx) return;
+      let osc = audioCtx.createOscillator();
+      let gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    },
+    playNoise(duration, vol=1) {
+      if (!audioCtx) return;
+      let bufferSize = audioCtx.sampleRate * duration;
+      let buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      let data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+      let noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+      let filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 1000;
+
+      let gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxGain);
+      noise.start();
+    },
+    playMusic() {
+       // Simple arpeggio loop placeholder
+       if(!audioCtx) return;
+       // Logic to trigger notes periodically via scheduling would go here in a full implementation
+    }
+  };
+
+  // Input
+  const input = {
+    keys: {}, mouse: {x: GAME_WIDTH/2, y: GAME_HEIGHT/2, down: false, justDown: false},
+    touchAction: false, aimDir: {x: 0, y: 0}
+  };
+
+  function getMousePos(evt) {
+    let rect = canvas.getBoundingClientRect();
+    return {
+      x: (evt.clientX - rect.left) / scale,
+      y: (evt.clientY - rect.top) / scale
+    };
+  }
+
+  // Game Logic State
+  let game = {
+    score: 0, hp: 100, entities: [], particles: [], shake: 0, wave: 1, overDriveActive: false,
+    player: {x: 640, y: 600, vx: 0, vy: 0, radius: 15, speed: 800, state: 'aiming'} // aiming, moving
+  };
+
+  function spawnEnemy() {
+    game.entities.push({
+      x: 100 + Math.random() * (GAME_WIDTH - 200),
+      y: 100 + Math.random() * (GAME_HEIGHT/2 - 100),
+      radius: 20 + Math.random()*15,
+      type: 'enemy',
+      hp: 2,
+      maxHp: 2,
+      shielded: Math.random() > 0.7
+    });
+  }
+
+  function createParticles(x, y, count, color, speedScale=1) {
+    let limit = saveManager.data.options.particles === 'high' ? count : Math.floor(count/3);
+    for(let i=0; i<limit; i++) {
+      let angle = Math.random() * Math.PI * 2;
+      let speed = Math.random() * 200 * speedScale;
+      game.particles.push({
+        x: x, y: y,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        life: 1, decay: Math.random()*1.5 + 0.5, color: color, size: Math.random()*4+2
+      });
+    }
+  }
+
+  function initGame() {
+    audio.init();
+    saveManager.data.gamesPlayed++;
+    saveManager.save();
+
+    game.score = 0;
+    game.hp = 100;
+    game.wave = 1;
+    game.entities = [];
+    game.particles = [];
+    game.player = {x: GAME_WIDTH/2, y: GAME_HEIGHT - 100, vx: 0, vy: 0, radius: 15, speed: 1200, state: 'aiming'};
+    game.overDriveActive = false;
+
+    for(let i=0; i<5; i++) spawnEnemy();
+
+    updateHUD();
+    changeState('PLAYING');
+  }
+
+  function updateHUD() {
+    document.getElementById('score-display').innerText = game.score;
+    document.getElementById('hp-display').innerText = game.hp;
+  }
+
+  function changeState(newState) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('hud').classList.add('hidden');
+
+    if (newState === 'TITLE') document.getElementById('screen-title').classList.add('active');
+    if (newState === 'PAUSED') document.getElementById('screen-pause').classList.add('active');
+    if (newState === 'GAME_OVER') {
+      document.getElementById('screen-gameover').classList.add('active');
+      document.getElementById('final-score').innerText = game.score;
+      saveManager.data.totalScore += game.score;
+      if (game.score > saveManager.data.highScore) {
+        saveManager.data.highScore = game.score;
+        document.getElementById('new-high-score').classList.remove('hidden');
+      } else {
+        document.getElementById('new-high-score').classList.add('hidden');
+      }
+
+      // Milestones
+      let unlocked = "";
+      if (saveManager.data.gamesPlayed >= 10 && !saveManager.data.unlockedMilestones.includes('veteran')) {
+         saveManager.data.unlockedMilestones.push('veteran');
+         unlocked += "Badge Unlocked: Veteran (10 Games)!<br>";
+      }
+      if (game.score >= 500 && !saveManager.data.unlockedMilestones.includes('sharpshooter')) {
+         saveManager.data.unlockedMilestones.push('sharpshooter');
+         unlocked += "Badge Unlocked: Sharpshooter (500 pts)!<br>";
+      }
+      if (game.score >= 1000 && !saveManager.data.unlockedMilestones.includes('overdriver')) {
+         saveManager.data.unlockedMilestones.push('overdriver');
+         unlocked += "Badge Unlocked: Overdriver (1000 pts)!<br>";
+      }
+      document.getElementById('milestones-unlocked').innerHTML = unlocked;
+      saveManager.save();
+    }
+    if (newState === 'PLAYING') {
+      document.getElementById('hud').classList.remove('hidden');
+    }
+    state = newState;
+  }
+
+  function update(dt) {
+    if (state !== 'PLAYING') return;
+
+    if (game.shake > 0) game.shake -= dt * 10;
+    if (game.shake < 0) game.shake = 0;
+
+    let p = game.player;
+
+    // Input Handling
+    let actionTriggered = input.mouse.justDown || input.touchAction;
+
+    if (p.state === 'aiming') {
+      // Calculate aim direction
+      let dx = input.mouse.x - p.x;
+      let dy = input.mouse.y - p.y;
+      let len = Math.sqrt(dx*dx + dy*dy);
+      if (len > 0) {
+        input.aimDir.x = dx / len;
+        input.aimDir.y = dy / len;
+      }
+
+      if (actionTriggered) {
+        p.vx = input.aimDir.x * p.speed;
+        p.vy = input.aimDir.y * p.speed;
+        p.state = 'moving';
+        audio.playTone(300, 'sine', 0.1);
+      }
+    } else if (p.state === 'moving') {
+      if (actionTriggered && !game.overDriveActive && game.hp > 10) {
+        // Sacrifice HP for Overdrive
+        game.hp -= 10;
+        game.overDriveActive = true;
+        p.speed = 1800; // Boost speed
+        let len = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
+        p.vx = (p.vx/len) * p.speed;
+        p.vy = (p.vy/len) * p.speed;
+        game.shake = 10;
+        audio.playNoise(0.3, 0.8);
+        createParticles(p.x, p.y, 30, '#fff', 2);
+        updateHUD();
+      }
+
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+
+      // Wall Bounce
+      let bounced = false;
+      if (p.x < p.radius) { p.x = p.radius; p.vx *= -1; bounced = true; }
+      if (p.x > GAME_WIDTH - p.radius) { p.x = GAME_WIDTH - p.radius; p.vx *= -1; bounced = true; }
+      if (p.y < p.radius) { p.y = p.radius; p.vy *= -1; bounced = true; }
+
+      // Bottom catch (reset to aim)
+      if (p.y > GAME_HEIGHT - p.radius) {
+        p.y = GAME_HEIGHT - p.radius;
+        p.state = 'aiming';
+        p.vx = 0; p.vy = 0;
+        game.overDriveActive = false;
+        p.speed = 800;
+        audio.playTone(150, 'square', 0.1);
+      }
+
+      if (bounced) {
+        audio.playTone(400, 'triangle', 0.05);
+        createParticles(p.x, p.y, 5, '#88ccff');
+      }
+
+      // Entity Collision
+      for (let i = game.entities.length - 1; i >= 0; i--) {
+        let e = game.entities[i];
+        let dx = p.x - e.x;
+        let dy = p.y - e.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < p.radius + e.radius) {
+          // Bounce off entity
+          let nx = dx/dist; let ny = dy/dist;
+          let dot = p.vx*nx + p.vy*ny;
+          p.vx -= 2*dot*nx;
+          p.vy -= 2*dot*ny;
+
+          // Damage logic
+          let dmg = game.overDriveActive ? 2 : 1;
+          if (e.shielded && !game.overDriveActive) {
+            // Bounce off shield, no damage
+            audio.playTone(600, 'sine', 0.1);
+            createParticles(e.x, e.y, 10, '#4488ff');
+          } else {
+            e.hp -= dmg;
+            if (e.shielded && game.overDriveActive) e.shielded = false; // Break shield
+
+            audio.playNoise(0.1, 0.5);
+            game.shake = 2;
+
+            if (e.hp <= 0) {
+              game.entities.splice(i, 1);
+              game.score += game.overDriveActive ? 20 : 10;
+              createParticles(e.x, e.y, 20, '#ff4444');
+              audio.playTone(200, 'sawtooth', 0.2);
+            } else {
+              createParticles(e.x, e.y, 10, '#ffaa00');
+            }
+          }
+          updateHUD();
+
+          // Slight speed reduction on hit
+          if(!game.overDriveActive) {
+             p.vx *= 0.95; p.vy *= 0.95;
+          }
+        }
+      }
+
+      // Stop condition
+      if(p.state === 'moving' && Math.sqrt(p.vx*p.vx + p.vy*p.vy) < 50 && p.y > GAME_HEIGHT/2) {
+          p.state = 'aiming';
+          game.overDriveActive = false;
+          p.speed = 800;
+      }
+    }
+
+    // Wave clear
+    if (game.entities.length === 0 && p.state === 'aiming') {
+       game.wave++;
+       game.hp = Math.min(100, game.hp + 20); // Heal
+       updateHUD();
+       for(let i=0; i<4 + game.wave; i++) spawnEnemy();
+       audio.playTone(800, 'sine', 0.3);
+    }
+
+    // Game Over condition (out of HP from overdriving too much)
+    if (game.hp <= 0) {
+       changeState('GAME_OVER');
+       audio.playTone(100, 'sawtooth', 1.0);
+    }
+
+    // Particles
+    for (let i = game.particles.length - 1; i >= 0; i--) {
+      let pt = game.particles[i];
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      pt.life -= pt.decay * dt;
+      if (pt.life <= 0) game.particles.splice(i, 1);
+    }
+
+    input.mouse.justDown = false;
+    input.touchAction = false;
+  }
+
+  function draw() {
+    // Clear
+    ctx.fillStyle = '#1f2833';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    if (state === 'TITLE') return;
+
+    ctx.save();
+    let shakeVal = game.shake * saveManager.data.options.shake;
+    if (shakeVal > 0) {
+      ctx.translate((Math.random()-0.5)*shakeVal, (Math.random()-0.5)*shakeVal);
+    }
+
+    // Entities
+    for (let e of game.entities) {
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
+      ctx.fillStyle = e.hp > 1 ? '#ff5555' : '#ffaaaa';
+      ctx.fill();
+
+      if (e.shielded) {
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI*2);
+        ctx.strokeStyle = '#585ed8';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+    }
+
+    // Player
+    let p = game.player;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2);
+    ctx.fillStyle = game.overDriveActive ? '#ffffff' : '#45a29e';
+    ctx.fill();
+
+    if (game.overDriveActive) {
+       ctx.shadowBlur = 20;
+       ctx.shadowColor = '#fff';
+       ctx.beginPath();
+       ctx.arc(p.x, p.y, p.radius+5, 0, Math.PI*2);
+       ctx.strokeStyle = '#fff';
+       ctx.stroke();
+       ctx.shadowBlur = 0;
+    }
+
+    // Aim Line
+    if (p.state === 'aiming') {
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + input.aimDir.x * 150, p.y + input.aimDir.y * 150);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.setLineDash([5, 5]);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Particles
+    for (let pt of game.particles) {
+      ctx.globalAlpha = pt.life;
+      ctx.fillStyle = pt.color;
+      ctx.fillRect(pt.x - pt.size/2, pt.y - pt.size/2, pt.size, pt.size);
+    }
+    ctx.globalAlpha = 1.0;
+
+    ctx.restore();
+  }
+
+  function loop(timestamp) {
+    let dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // Resizing
+  function resize() {
+    let cw = document.getElementById('game-container').clientWidth;
+    let ch = document.getElementById('game-container').clientHeight;
+    let ratio = GAME_WIDTH / GAME_HEIGHT;
+
+    if (cw / ch > ratio) {
+      canvas.style.height = '100%';
+      canvas.style.width = (ch * ratio) + 'px';
+      scale = ch / GAME_HEIGHT;
+    } else {
+      canvas.style.width = '100%';
+      canvas.style.height = (cw / ratio) + 'px';
+      scale = cw / GAME_WIDTH;
+    }
+
+    // Detect mobile for controls
+    isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    if(isMobile) document.body.classList.add('mobile');
+  }
+
+  // Setup
+  window.addEventListener('DOMContentLoaded', () => {
+    canvas = document.getElementById('game-canvas');
+    ctx = canvas.getContext('2d');
+    canvas.width = GAME_WIDTH;
+    canvas.height = GAME_HEIGHT;
+
+    saveManager.load();
+
+    ro = new ResizeObserver(resize);
+    ro.observe(document.getElementById('game-container'));
+    resize();
+
+    // Input Events
+    window.addEventListener('keydown', e => {
+      input.keys[e.code] = true;
+      if (e.code === 'Space') {
+         if(state==='PLAYING') input.mouse.justDown = true;
+      }
+      if (e.code === 'Escape' && state === 'PLAYING') changeState('PAUSED');
+      audio.init();
+    });
+    window.addEventListener('keyup', e => input.keys[e.code] = false);
+
+    canvas.addEventListener('mousemove', e => {
+      let pos = getMousePos(e);
+      input.mouse.x = pos.x; input.mouse.y = pos.y;
+    });
+    canvas.addEventListener('mousedown', e => {
+      if(e.button !== 0) return;
+      input.mouse.down = true; input.mouse.justDown = true;
+      let pos = getMousePos(e);
+      input.mouse.x = pos.x; input.mouse.y = pos.y;
+      audio.init();
+    });
+    canvas.addEventListener('mouseup', e => input.mouse.down = false);
+
+    document.getElementById('pause-btn').addEventListener('click', () => {
+      if(state==='PLAYING') changeState('PAUSED');
+    });
+
+    // Touch Controls
+    const touchArea = document.getElementById('game-container');
+    touchArea.addEventListener('touchstart', e => {
+      if(e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') e.preventDefault();
+      audio.init();
+      // Handle simple tap to aim/shoot if not using virtual stick
+      if(state === 'PLAYING' && !isMobileControlInteracting(e)) {
+         let touch = e.touches[0];
+         let pos = getMousePos(touch);
+         input.mouse.x = pos.x; input.mouse.y = pos.y;
+         input.mouse.justDown = true;
+      }
+    }, {passive: false});
+
+    touchArea.addEventListener('touchmove', e => {
+      if(e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') e.preventDefault();
+      if(state === 'PLAYING' && !isMobileControlInteracting(e)) {
+         let touch = e.touches[0];
+         let pos = getMousePos(touch);
+         input.mouse.x = pos.x; input.mouse.y = pos.y;
+      }
+    }, {passive: false});
+
+    document.getElementById('action-btn').addEventListener('touchstart', e => {
+       e.preventDefault();
+       input.touchAction = true;
+    }, {passive: false});
+
+    // Blur
+    window.addEventListener('blur', () => {
+      if (state === 'PLAYING') changeState('PAUSED');
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && state === 'PLAYING') changeState('PAUSED');
+    });
+
+    requestAnimationFrame(loop);
+  });
+
+  function isMobileControlInteracting(e) {
+      for(let i=0; i<e.touches.length; i++) {
+          let t = e.touches[i].target;
+          if(t.id === 'joystick-base' || t.id === 'joystick-knob' || t.id === 'action-btn' || t.classList.contains('touch-zone')) {
+              return true;
+          }
+      }
+      return false;
+  }
+
+  // UI Flow
+  window.startGame = () => { initGame(); };
+  window.resumeGame = () => { changeState('PLAYING'); };
+  window.showScreen = (id) => {
+    lastScreen = state;
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if(id === 'screen-title') state = 'TITLE';
+  };
+  window.backFromSubscreen = () => {
+    changeState(lastScreen);
+  };
+
+  window.updateOptions = () => {
+    saveManager.data.options.master = parseInt(document.getElementById('opt-master-vol').value);
+    saveManager.data.options.sfx = parseInt(document.getElementById('opt-sfx-vol').value);
+    saveManager.data.options.music = parseInt(document.getElementById('opt-music-vol').value);
+    saveManager.data.options.shake = parseFloat(document.getElementById('opt-shake').value);
+    saveManager.data.options.particles = document.getElementById('opt-particles').value;
+    saveManager.save();
+    audio.updateVolumes();
+  };
+
+  let resetState = 0;
+  window.resetSave = () => {
+    let btn = document.getElementById('reset-btn');
+    if (resetState === 0) {
+      btn.innerText = "Click again to confirm reset";
+      resetState = 1;
+      setTimeout(() => { resetState = 0; btn.innerText = "Reset Save"; }, 3000);
+    } else {
+      localStorage.removeItem(SAVE_KEY);
+      saveManager.data = { highScore: 0, bestCombo: 0, gamesPlayed: 0, totalScore: 0, unlockedMilestones: [], options: { master: 100, sfx: 100, music: 50, shake: 1, particles: 'high' } };
+      saveManager.applyOptionsToUI();
+      btn.innerText = "Reset Save";
+      resetState = 0;
+    }
+  };
+
+  window.exportSave = () => {
+    let b64 = btoa(JSON.stringify(saveManager.data));
+    let box = document.getElementById('save-data-box');
+    box.value = b64;
+    box.classList.remove('hidden');
+    box.select();
+  };
+
+  window.importSave = () => {
+    let box = document.getElementById('save-data-box');
+    box.classList.remove('hidden');
+    let b64 = box.value.trim();
+    if (b64) {
+      try {
+        let parsed = JSON.parse(atob(b64));
+        if (parsed && typeof parsed === 'object') {
+          saveManager.data = parsed;
+          saveManager.save();
+          saveManager.applyOptionsToUI();
+          alert("Save imported!");
+          box.classList.add('hidden');
+        }
+      } catch (e) {
+        alert("Invalid save data.");
+      }
+    } else {
+      alert("Paste save data below and click Import again.");
+    }
+  };
+
+</script>
+</body>
+</html>
