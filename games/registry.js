@@ -141,5 +141,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-24",
     "accentColor": "#6d6451",
     "path": "./games/011-vector-grid-parry/index.html"
+  },
+  {
+    "id": "012",
+    "slug": "012-orbital-forge-recoil",
+    "title": "Orbital Forge Recoil",
+    "genre": "Gravity/Orbital Physics Action",
+    "coreMechanic": "Recoil-as-Movement",
+    "setting": "Volcanic Forge World",
+    "description": "Navigate a volcanic forge world by relying entirely on weapon recoil. Blast your way to safety while orbiting dangerous magma pools.",
+    "controls": "WASD/Arrows or Touch to aim, Space/Click/Touch to fire and recoil in the opposite direction.",
+    "createdAt": "2026-10-20",
+    "accentColor": "#ab4777",
+    "path": "./games/012-orbital-forge-recoil/index.html"
   }
 ];
