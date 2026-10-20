@@ -403,6 +403,19 @@ window.ARCADE_REGISTRY = [
     "path": "./games/031-scrap-retrieval/index.html"
   },
   {
+    "id": "032",
+    "slug": "032-echo-ruins",
+    "title": "Echo Ruins",
+    "genre": "Momentum/Grapple Platformer",
+    "coreMechanic": "Shrinking Arena / Shifting Geometry",
+    "setting": "Overgrown Jungle Ruins",
+    "description": "Grapple and swing through overgrown ruins as the very geometry shifts and arena boundaries close in on you. Master momentum to survive.",
+    "controls": "WASD / Arrows to swing. Mouse / Touch to aim and grapple.",
+    "createdAt": "2024-10-26",
+    "accentColor": "#ddcc73",
+    "path": "./games/032-echo-ruins/index.html"
+  },
+  {
     "id": "033",
     "slug": "033-candy-echo-recoil",
     "title": "Candy Echo Recoil",
