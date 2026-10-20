@@ -427,5 +427,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-11-20",
     "accentColor": "#b75279",
     "path": "./games/033-candy-echo-recoil/index.html"
+  },
+  {
+    "id": "034",
+    "slug": "034-jungle-recoil-heist",
+    "title": "Jungle Recoil Heist",
+    "genre": "Stealth/Line-of-Sight Heist",
+    "coreMechanic": "Recoil-as-Movement",
+    "setting": "Overgrown Jungle Ruins",
+    "description": "Infiltrate ancient overgrown ruins and evade security patrols. You can only move by the recoil of your weapon, so every shot counts.",
+    "controls": "Click/Touch to shoot and move via recoil. Evade guards and collect artifacts.",
+    "createdAt": "2024-05-18",
+    "accentColor": "#bad97b",
+    "path": "./games/034-jungle-recoil-heist/index.html"
   }
 ];
