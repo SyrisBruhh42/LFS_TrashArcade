@@ -219,5 +219,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-03-24",
     "accentColor": "#5be95e",
     "path": "./games/017-sandstorm-grapple/index.html"
+  },
+  {
+    "id": "018",
+    "slug": "018-desert-bazaar-overdrive",
+    "title": "Desert Bazaar Overdrive",
+    "genre": "Wave-Defense Tower Micro-Strategy",
+    "coreMechanic": "Sacrifice Health for Overdrive Power",
+    "setting": "Desert Sandstorm Bazaar",
+    "description": "Defend the desert bazaar from raiders. Build towers and sacrifice health to activate overdrive for massive fire rate boosts.",
+    "controls": "Click/Tap to place towers. Space/Tap overdrive button to sacrifice health for temporary tower boost.",
+    "createdAt": "2024-10-21",
+    "accentColor": "#e8b923",
+    "path": "./games/018-desert-bazaar-overdrive/index.html"
   }
 ];
