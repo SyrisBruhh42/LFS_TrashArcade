@@ -323,5 +323,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-15",
     "accentColor": "#a6a5bf",
     "path": "./games/025-echo-forge-parry/index.html"
+  },
+  {
+    "id": "026",
+    "slug": "026-manor-overdrive-rush",
+    "title": "Manor Overdrive Rush",
+    "genre": "Bullet-Hell Boss Rush",
+    "coreMechanic": "Sacrifice Health for Overdrive Power",
+    "setting": "Haunted Victorian Manor",
+    "description": "Fight ghosts in a haunted manor. Trade your health for raw overdrive power and blast through bullet-hell bosses.",
+    "controls": "WASD/Arrows to move, Mouse to aim and click to shoot. Right click or Shift to sacrifice HP for overdrive. Touch joystick to move, aim to shoot, button to overdrive.",
+    "createdAt": "2024-10-21",
+    "accentColor": "#9fdd81",
+    "path": "./games/026-manor-overdrive-rush/index.html"
   }
 ];
