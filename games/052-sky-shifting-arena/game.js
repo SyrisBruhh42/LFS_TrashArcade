@@ -254,17 +254,6 @@ class Arena {
         this.shiftTimer = 0;
         this.shiftInterval = 5; // seconds
         this.shrinkFactor = 1.0;
-
-        this.islands = [];
-        for(let i=0; i<10; i++) {
-            this.islands.push({
-                x: (Math.random() - 0.5) * 2000,
-                y: (Math.random() - 0.5) * 2000,
-                r: 50 + Math.random() * 150,
-                speed: 10 + Math.random() * 20,
-                offsetY: Math.random() * Math.PI * 2
-            });
-        }
     }
 
     update(dt) {
@@ -281,11 +270,7 @@ class Arena {
         this.x += (this.targetX - this.x) * lerpSpeed * dt;
         this.y += (this.targetY - this.y) * lerpSpeed * dt;
 
-        // Update background islands
-        this.islands.forEach(isl => {
-            isl.y -= isl.speed * dt;
-            if (isl.y < -1000) isl.y = 1000;
-        });
+
     }
 
     pickNewTarget() {
@@ -307,20 +292,6 @@ class Arena {
     }
 
     draw(ctx) {
-        // Draw void/clouds
-        ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(-2000, -2000, 4000, 4000);
-
-        // Draw islands
-        ctx.fillStyle = '#22223b';
-        const t = performance.now() / 1000;
-        this.islands.forEach(isl => {
-            ctx.beginPath();
-            const floatY = Math.sin(t * 2 + isl.offsetY) * 10;
-            ctx.arc(isl.x, isl.y + floatY, isl.r, 0, Math.PI * 2);
-            ctx.fill();
-        });
-
         // Draw Arena Grid / Platform
         ctx.save();
         ctx.translate(this.x, this.y);
@@ -491,6 +462,8 @@ class GameEngine {
         this.spawnTimer = 0;
         this.waveTimer = 0;
 
+        this.worldBg = new ParallaxBackground();
+        this.hazards = new HazardManager();
         this.updateHUD();
     }
 
@@ -531,6 +504,9 @@ class GameEngine {
 
         this.player.update(dt, moveVec, aimVec, this.arena);
         this.arena.update(dt);
+        this.worldBg.update(dt);
+        this.hazards.update(dt, this.arena, this.player, this.enemies, this.projectiles, this.audio);
+
 
         if (aimVec.firing && this.player.fireCooldown <= 0) {
             this.projectiles.push(new Projectile(this.player.x, this.player.y, aimVec.x, aimVec.y, true));
@@ -619,8 +595,12 @@ class GameEngine {
     }
 
     draw() {
-        this.ctx.fillStyle = '#0f0f1a';
-        this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
+        if (this.state !== 'TITLE' && this.worldBg) {
+            this.worldBg.draw(this.ctx);
+        } else {
+            this.ctx.fillStyle = '#0f0f1a';
+            this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
+        }
 
         if (this.state === 'TITLE') return;
 
@@ -631,6 +611,10 @@ class GameEngine {
         this.ctx.translate(camX, camY);
 
         this.arena.draw(this.ctx);
+
+        if (this.hazards) {
+            this.hazards.draw(this.ctx);
+        }
 
         this.projectiles.forEach(p => p.draw(this.ctx));
         this.enemies.forEach(e => e.draw(this.ctx));
