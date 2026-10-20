@@ -622,5 +622,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2026-10-20",
     "accentColor": "#78c94d",
     "path": "./games/048-scrapheap-echo-grapple/index.html"
+  },
+  {
+    "id": "049",
+    "slug": "049-volcanic-time-forge",
+    "title": "Volcanic Time Forge",
+    "genre": "Wave-Defense Tower Micro-Strategy",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Volcanic Forge World",
+    "description": "Defend the Volcanic Forge from incoming threats. Time slows to a crawl when you stop moving or acting, allowing you to carefully plan your tower defenses.",
+    "controls": "WASD/Arrows to move cursor. Mouse Click / Space to place towers. Touch/Drag to aim, tap to build.",
+    "createdAt": "2024-05-18",
+    "accentColor": "#7f5598",
+    "path": "./games/049-volcanic-time-forge/index.html"
   }
 ];
