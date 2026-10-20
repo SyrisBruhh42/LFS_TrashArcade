@@ -154,5 +154,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2026-10-20",
     "accentColor": "#ab4777",
     "path": "./games/012-orbital-forge-recoil/index.html"
+  },
+  {
+    "id": "013",
+    "slug": "013-cyber-shogun-tail-strike",
+    "title": "Cyber Shogun Tail Strike",
+    "genre": "Directional Parry/Slash Arcade",
+    "coreMechanic": "Risk/Reward Tether or Tail Growth",
+    "setting": "Cyber Samurai Dojo",
+    "description": "Deflect projectiles to grow a digital tail. A longer tail boosts your score multiplier but becomes a vulnerable target.",
+    "controls": "WASD/Arrows: Move. Mouse/Arrows: Aim & Slash. Touch: Left joystick move, right tap/swipe slash.",
+    "createdAt": "2024-10-25",
+    "accentColor": "#bd56e6",
+    "path": "./games/013-cyber-shogun-tail-strike/index.html"
   }
 ];
