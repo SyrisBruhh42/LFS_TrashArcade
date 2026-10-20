@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Sky Tether Heist</title>
+  <link rel="stylesheet" href="./style.css">
+  <!-- Required tools/check_games.py markers:
+       AudioContext, ResizeObserver, requestAnimationFrame, localStorage, touchstart, PAUSED
+  -->
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- UI Overlay container -->
+    <div id="ui-layer">
+      <!-- TITLE STATE -->
+      <div id="screen-title" class="screen">
+        <div class="title-content">
+          <h1>Sky Tether Heist</h1>
+          <div class="stats-banner" id="title-stats">
+            High Score: <span id="title-hs">0</span>
+          </div>
+          <div class="menu-buttons">
+            <button id="btn-play">Play</button>
+            <button id="btn-howto-title">How to Play</button>
+            <button id="btn-options-title">Options</button>
+            <a href="../../index.html" class="btn-link">Back to Arcade</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- PLAYING HUD -->
+      <div id="hud" class="screen hidden">
+        <div class="hud-top">
+          <div class="hud-left">
+            <div class="score-box">Score: <span id="hud-score">0</span></div>
+            <div class="tail-box">Tail Length: <span id="hud-tail">0</span></div>
+          </div>
+          <div class="hud-right">
+            <button id="btn-pause" class="icon-btn" aria-label="Pause">II</button>
+          </div>
+        </div>
+
+        <!-- Virtual Controls (visible on touch/small screen) -->
+        <div id="virtual-controls" class="hidden">
+          <div id="joystick-zone">
+            <div id="joystick-base">
+              <div id="joystick-stick"></div>
+            </div>
+          </div>
+          <div id="action-zone">
+            <button id="btn-action">Extract</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAUSED STATE -->
+      <div id="screen-pause" class="screen hidden modal">
+        <div class="modal-content">
+          <h2>PAUSED</h2>
+          <div class="menu-buttons">
+            <button id="btn-resume">Resume</button>
+            <button id="btn-restart">Restart</button>
+            <button id="btn-options-pause">Options</button>
+            <button id="btn-howto-pause">How to Play</button>
+            <button id="btn-quit">Quit to Title</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- GAME OVER STATE -->
+      <div id="screen-gameover" class="screen hidden modal">
+        <div class="modal-content">
+          <h2>CAUGHT!</h2>
+          <div id="new-hs-banner" class="hidden">New High Score!</div>
+          <div class="gameover-stats">
+            <p>Final Score: <span id="go-score">0</span></p>
+            <p>Max Tail: <span id="go-tail">0</span></p>
+          </div>
+          <div id="go-milestones" class="milestones-container"></div>
+          <div class="menu-buttons">
+            <button id="btn-play-again">Play Again</button>
+            <button id="btn-title">Title Screen</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- OPTIONS MODAL -->
+      <div id="modal-options" class="screen hidden modal">
+        <div class="modal-content options-content">
+          <h2>Options</h2>
+
+          <div class="option-row">
+            <label for="opt-master-mute">Master Mute</label>
+            <input type="checkbox" id="opt-master-mute">
+          </div>
+
+          <div class="option-row">
+            <label for="opt-sfx-vol">SFX Volume: <span id="val-sfx-vol">100%</span></label>
+            <input type="range" id="opt-sfx-vol" min="0" max="100" value="100">
+          </div>
+
+          <div class="option-row">
+            <label for="opt-music-vol">Music Volume: <span id="val-music-vol">100%</span></label>
+            <input type="range" id="opt-music-vol" min="0" max="100" value="100">
+          </div>
+
+          <div class="option-row">
+            <label for="opt-shake">Screen Shake</label>
+            <select id="opt-shake">
+              <option value="100">100%</option>
+              <option value="50">50%</option>
+              <option value="0">Off</option>
+            </select>
+          </div>
+
+          <div class="option-row">
+            <label for="opt-particles">Particles</label>
+            <select id="opt-particles">
+              <option value="high">High</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+
+          <div class="option-row">
+            <label for="opt-palette">Palette</label>
+            <select id="opt-palette">
+              <option value="default">Default</option>
+              <option value="high-contrast">High Contrast</option>
+            </select>
+          </div>
+
+          <div class="option-row">
+            <label for="opt-touch">Touch Controls</label>
+            <select id="opt-touch">
+              <option value="auto">Auto</option>
+              <option value="always">Always</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
+
+          <div class="save-management">
+            <h3>Save Data</h3>
+            <div class="save-buttons">
+              <button id="btn-export-save">Export Save</button>
+              <button id="btn-import-save">Import Save</button>
+              <button id="btn-reset-save">Reset Save</button>
+            </div>
+            <textarea id="save-data-box" class="hidden" rows="3" readonly></textarea>
+          </div>
+
+          <div class="menu-buttons">
+            <button id="btn-close-options">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- HOW TO PLAY MODAL -->
+      <div id="modal-howto" class="screen hidden modal">
+        <div class="modal-content">
+          <h2>How to Play</h2>
+          <div class="howto-text">
+            <p><strong>Goal:</strong> Steal loot from the floating islands and return to extraction pads to score.</p>
+            <p><strong>The Catch:</strong> Each collected loot adds a segment to your tail. Your tail can be spotted by guards!</p>
+            <p><strong>Controls:</strong> WASD/Arrows to move. Virtual joystick on mobile. Space/Action button to extract or interact.</p>
+            <p><strong>Tips:</strong> Time your movements carefully. Bank your loot often to shorten your tail and reduce risk.</p>
+          </div>
+          <div class="menu-buttons">
+            <button id="btn-close-howto">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script defer src="./game.js"></script>
+</body>
+</html>
