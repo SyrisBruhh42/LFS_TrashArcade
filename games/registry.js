@@ -102,5 +102,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-10",
     "accentColor": "#85bddb",
     "path": "./games/008-scrapheap-heist/index.html"
+  },
+  {
+    "id": "009",
+    "slug": "009-echo-trench",
+    "title": "Echo Trench",
+    "genre": "Alchemy/Chain-Reaction Puzzle Action",
+    "coreMechanic": "Echo/Ghost Self-Cooperation",
+    "setting": "Deep Ocean Trench",
+    "description": "Trigger deep sea bioluminescent chain reactions alongside your past echoes.",
+    "controls": "WASD/Arrows/Virtual Stick to move, Space/Click/Tap to drop light charges.",
+    "createdAt": "2024-05-24",
+    "accentColor": "#e48154",
+    "path": "./games/009-echo-trench/index.html"
   }
 ];
