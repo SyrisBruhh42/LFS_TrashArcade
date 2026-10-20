@@ -245,5 +245,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-15",
     "accentColor": "#fef4c0",
     "path": "./games/019-sky-tether-heist/index.html"
+  },
+  {
+    "id": "020",
+    "slug": "020-micro-cell-retrieval",
+    "title": "Micro Cell Retrieval",
+    "genre": "Twin-Stick Arena",
+    "coreMechanic": "Limited Ammo Must Be Physically Retrieved",
+    "setting": "Microscopic Cell Interior",
+    "description": "Navigate a microscopic cell, shoot bio-threats, and physically retrieve your limited ammo cells to survive.",
+    "controls": "WASD to move, Mouse to aim/shoot. Touch virtual sticks to move/aim.",
+    "createdAt": "2024-10-20",
+    "accentColor": "#9e72e2",
+    "path": "./games/020-micro-cell-retrieval/index.html"
   }
 ];
