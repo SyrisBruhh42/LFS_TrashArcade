@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Frozen Tail Rhythm</title>
+<style>
+  :root {
+    --bg-color: #0f172a;
+    --text-color: #f1f5f9;
+    --accent: #71c55f;
+    --danger: #ef4444;
+    --ui-bg: rgba(15, 23, 42, 0.8);
+    --panel-bg: rgba(30, 41, 59, 0.9);
+  }
+  body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Courier New', Courier, monospace;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+  }
+  .screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--panel-bg);
+    padding: 2rem;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    pointer-events: auto;
+    text-align: center;
+    box-shadow: 0 0 20px rgba(113, 197, 95, 0.3);
+    max-width: 90%;
+    max-height: 90%;
+    overflow-y: auto;
+  }
+  .screen.active {
+    display: flex;
+  }
+  h1, h2, h3 {
+    margin-top: 0;
+    text-shadow: 0 0 10px var(--accent);
+    color: var(--accent);
+  }
+  h1 { font-size: 2.5rem; text-transform: uppercase; letter-spacing: 2px; }
+  h2 { font-size: 1.8rem; }
+  button {
+    background: transparent;
+    color: var(--text-color);
+    border: 2px solid var(--accent);
+    padding: 0.75rem 1.5rem;
+    margin: 0.5rem;
+    font-size: 1.2rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+  button:hover, button:focus {
+    background: var(--accent);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--accent);
+    outline: none;
+  }
+
+  #hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 1rem;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    font-size: 1.2rem;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px black;
+    z-index: 5;
+  }
+  .hud-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .hud-right { text-align: right; }
+
+  #pause-btn-container {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    pointer-events: auto;
+    z-index: 6;
+  }
+  #pause-btn {
+    padding: 0.5rem 1rem;
+    font-weight: bold;
+  }
+
+  .options-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    width: 100%;
+    text-align: left;
+  }
+  .options-group label {
+    margin-bottom: 0.25rem;
+    color: var(--accent);
+  }
+  .options-group input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .options-group select {
+    width: 100%;
+    padding: 0.5rem;
+    background: var(--bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--accent);
+    font-family: inherit;
+  }
+
+  .controls-guide {
+    text-align: left;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+
+  #virtual-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 50%;
+    pointer-events: none;
+    z-index: 4;
+    display: none;
+  }
+  .v-zone {
+    position: absolute;
+    bottom: 2rem;
+    width: 120px;
+    height: 120px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    pointer-events: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  #v-dpad { left: 2rem; }
+  #v-action { right: 2rem; border-radius: 20px;}
+  .v-knob {
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    transition: transform 0.1s;
+  }
+  .v-text {
+      font-weight: bold;
+      color: rgba(255,255,255,0.7);
+  }
+
+  .hidden { display: none !important; }
+
+  textarea.export-box {
+      width: 100%;
+      height: 80px;
+      background: #000;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      font-family: monospace;
+      padding: 0.5rem;
+      box-sizing: border-box;
+      margin-bottom: 0.5rem;
+  }
+
+  a.back-link {
+      color: var(--accent);
+      text-decoration: none;
+      margin-top: 1rem;
+      display: inline-block;
+      border-bottom: 1px dashed var(--accent);
+  }
+  a.back-link:hover {
+      color: #fff;
+      border-bottom-color: #fff;
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="game-canvas"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="hud-group">
+      <div id="hud-score">Score: 0</div>
+      <div id="hud-multiplier">Combo: 1x</div>
+      <div id="hud-tail">Tail: 0</div>
+    </div>
+    <div class="hud-group hud-right">
+      <div id="hud-wave">Wave: 1</div>
+      <div id="hud-health">Health: 100%</div>
+    </div>
+  </div>
+
+  <div id="pause-btn-container" class="hidden">
+      <button id="pause-btn">II</button>
+  </div>
+
+  <div id="virtual-controls">
+      <div id="v-dpad" class="v-zone"><div id="v-knob" class="v-knob"></div></div>
+      <div id="v-action" class="v-zone"><span class="v-text">SYNC</span></div>
+  </div>
+
+  <div class="ui-layer" id="ui-layer">
+
+    <!-- TITLE SCREEN -->
+    <div id="screen-title" class="screen active">
+      <h1>Frozen Tail Rhythm</h1>
+      <div style="margin-bottom: 1rem;">
+          <span style="color:var(--accent)">High Score: <span id="title-highscore">0</span></span>
+      </div>
+      <button id="btn-play">Play</button>
+      <button id="btn-howto-title">How to Play</button>
+      <button id="btn-options-title">Options</button>
+      <a href="../../index.html" class="back-link">Back to Arcade</a>
+    </div>
+
+    <!-- PAUSE SCREEN -->
+    <div id="screen-paused" class="screen">
+      <h2>PAUSED</h2>
+      <button id="btn-resume">Resume</button>
+      <button id="btn-restart-pause">Restart</button>
+      <button id="btn-options-pause">Options</button>
+      <button id="btn-howto-pause">How to Play</button>
+      <button id="btn-quit">Quit to Title</button>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div id="screen-gameover" class="screen">
+      <h2>SYSTEM FAILURE</h2>
+      <h3 id="go-newhigh" class="hidden" style="color: gold; text-shadow: 0 0 10px gold;">NEW HIGH SCORE!</h3>
+      <div style="font-size: 1.5rem; margin-bottom: 1rem;">Score: <span id="go-score">0</span></div>
+      <div style="margin-bottom: 1.5rem;">
+          Max Combo: <span id="go-combo">0</span> | Max Tail: <span id="go-tail">0</span><br>
+          Wave Reached: <span id="go-wave">0</span>
+      </div>
+      <div id="go-milestones" style="color: var(--accent); margin-bottom: 1rem;"></div>
+      <button id="btn-restart-go">Play Again</button>
+      <button id="btn-title-go">Title Screen</button>
+    </div>
+
+    <!-- HOW TO PLAY SCREEN -->
+    <div id="screen-howto" class="screen">
+      <h2>HOW TO PLAY</h2>
+      <div class="controls-guide">
+          <strong>Goal:</strong> Survive the rhythm-synced hazards of the Arctic Base.<br><br>
+          <strong>Mechanic:</strong> Collect Data Cores to grow your tail. A longer tail increases your score multiplier but makes it harder to dodge hazards.<br><br>
+          <strong>Rhythm Sync:</strong> Move or press SYNC to the beat (background pulse). Perfect timing grants bonus points and brief invulnerability.<br><br>
+          <strong>Desktop:</strong> WASD/Arrows to move. SPACE to Sync.<br>
+          <strong>Touch:</strong> Virtual Joystick to move. Tap SYNC button.
+      </div>
+      <button id="btn-close-howto">Close</button>
+    </div>
+
+    <!-- OPTIONS SCREEN -->
+    <div id="screen-options" class="screen">
+      <h2>OPTIONS</h2>
+      <div style="display:flex; gap: 2rem;">
+          <div style="flex:1;">
+              <div class="options-group">
+                  <label>Master Volume: <span id="val-vol-master">100</span>%</label>
+                  <input type="range" id="opt-vol-master" min="0" max="100" value="100">
+              </div>
+              <div class="options-group">
+                  <label>Music Volume: <span id="val-vol-music">100</span>%</label>
+                  <input type="range" id="opt-vol-music" min="0" max="100" value="100">
+              </div>
+              <div class="options-group">
+                  <label>SFX Volume: <span id="val-vol-sfx">100</span>%</label>
+                  <input type="range" id="opt-vol-sfx" min="0" max="100" value="100">
+              </div>
+              <div class="options-group">
+                  <label>Screen Shake</label>
+                  <select id="opt-shake">
+                      <option value="1">100%</option>
+                      <option value="0.5">50%</option>
+                      <option value="0">Off</option>
+                  </select>
+              </div>
+          </div>
+          <div style="flex:1;">
+             <div class="options-group">
+                  <label>Particles</label>
+                  <select id="opt-particles">
+                      <option value="high">High</option>
+                      <option value="low">Low</option>
+                  </select>
+              </div>
+              <div class="options-group">
+                  <label>Touch Controls</label>
+                  <select id="opt-touch">
+                      <option value="auto">Auto</option>
+                      <option value="always">Always</option>
+                      <option value="off">Off</option>
+                  </select>
+              </div>
+              <div class="options-group" style="margin-top: 1rem;">
+                  <label>Export/Import Save</label>
+                  <textarea id="opt-save-data" class="export-box" placeholder="Paste save data here to import..."></textarea>
+                  <div style="display:flex; gap:0.5rem;">
+                      <button id="btn-export" style="font-size:0.8rem; padding:0.4rem;">Export</button>
+                      <button id="btn-import" style="font-size:0.8rem; padding:0.4rem;">Import</button>
+                  </div>
+                  <button id="btn-reset-save" style="font-size:0.8rem; padding:0.4rem; border-color:var(--danger); color:var(--danger); margin-top:0.5rem;">Reset Save</button>
+              </div>
+          </div>
+      </div>
+      <button id="btn-close-options">Close</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+
+
+
+const SAVE_KEY = "arcade_game_027_027-frozen-tail-rhythm_v1";
+
+// === UTILS ===
+const rand = (min, max) => Math.random() * (max - min) + min;
+const randInt = (min, max) => Math.floor(rand(min, max));
+const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+const dist = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// === SAVE MANAGER ===
+class SaveManager {
+    constructor() {
+        this.data = {
+            highScore: 0,
+            bestWave: 0,
+            maxCombo: 0,
+            maxTail: 0,
+            totalGamesPlayed: 0,
+            totalScoreAccumulated: 0,
+            unlockedMilestones: [],
+            options: {
+                volMaster: 100,
+                volMusic: 100,
+                volSfx: 100,
+                shake: 1,
+                particles: 'high',
+                touch: 'auto'
+            }
+        };
+        this.load();
+    }
+    load() {
+        try {
+            const saved = localStorage.getItem(SAVE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                this.data = { ...this.data, ...parsed, options: { ...this.data.options, ...(parsed.options || {}) } };
+            }
+        } catch(e) { console.warn("Save load failed", e); }
+    }
+    save() {
+        try {
+            localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+        } catch(e) { console.warn("Save failed", e); }
+    }
+    reset() {
+        this.data = {
+            highScore: 0, bestWave: 0, maxCombo: 0, maxTail: 0, totalGamesPlayed: 0, totalScoreAccumulated: 0, unlockedMilestones: [],
+            options: this.data.options
+        };
+        this.save();
+    }
+    export() { return btoa(JSON.stringify(this.data)); }
+    importData(b64) {
+        try {
+            const parsed = JSON.parse(atob(b64));
+            if (parsed && typeof parsed === 'object') {
+                this.data = { ...this.data, ...parsed };
+                this.save();
+                return true;
+            }
+        } catch(e) { return false; }
+        return false;
+    }
+}
+
+// === SOUND ENGINE ===
+class SoundEngine {
+    constructor(saveManager) {
+        this.sm = saveManager;
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.master = this.ctx.createGain();
+        this.musicGain = this.ctx.createGain();
+        this.sfxGain = this.ctx.createGain();
+
+        this.musicGain.connect(this.master);
+        this.sfxGain.connect(this.master);
+        this.master.connect(this.ctx.destination);
+
+        this.updateVolumes();
+        this.musicOsc = null;
+        this.beatInterval = null;
+        this.bpm = 120;
+        this.nextBeatTime = 0;
+        this.beatCount = 0;
+    }
+
+    updateVolumes() {
+        const opts = this.sm.data.options;
+        this.master.gain.value = opts.volMaster / 100;
+        this.musicGain.gain.value = (opts.volMusic / 100) * 0.4;
+        this.sfxGain.gain.value = (opts.volSfx / 100) * 0.6;
+    }
+
+    resume() {
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+    }
+
+    playTone(freq, type, duration, vol=1, slideFreq=null) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        if (slideFreq) {
+            osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+        }
+
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    playNoise(duration, vol) {
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1000;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.sfxGain);
+
+        noise.start();
+    }
+
+    sfx(name) {
+        this.resume();
+        switch(name) {
+            case 'click': this.playTone(600, 'sine', 0.1, 0.5); break;
+            case 'collect': this.playTone(800, 'sine', 0.15, 0.5, 1200); break;
+            case 'hit': this.playNoise(0.3, 0.8); this.playTone(150, 'sawtooth', 0.3, 0.8, 50); break;
+            case 'sync_perfect': this.playTone(1200, 'square', 0.2, 0.6, 2000); break;
+            case 'sync_miss': this.playTone(200, 'sawtooth', 0.2, 0.6, 100); break;
+            case 'gameover': this.playTone(300, 'sawtooth', 1.0, 0.8, 50); break;
+            case 'wave': this.playTone(400, 'sine', 0.5, 0.6, 800); break;
+        }
+    }
+
+    scheduleBeat() {
+        if (!this.isPlaying) return;
+        const secondsPerBeat = 60.0 / this.bpm;
+        while (this.nextBeatTime < this.ctx.currentTime + 0.1) {
+            this.playBeatTone(this.nextBeatTime);
+
+            // Dispatch custom event for game logic to sync to
+            window.dispatchEvent(new CustomEvent('beat', { detail: { time: this.nextBeatTime, count: this.beatCount }}));
+
+            this.nextBeatTime += secondsPerBeat;
+            this.beatCount++;
+        }
+        this.beatInterval = setTimeout(() => this.scheduleBeat(), 25);
+    }
+
+    playBeatTone(time) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = this.beatCount % 4 === 0 ? 'square' : 'triangle';
+        osc.frequency.value = this.beatCount % 4 === 0 ? 220 : 110;
+
+        gain.gain.setValueAtTime(0.3, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+
+        osc.connect(gain);
+        gain.connect(this.musicGain);
+        osc.start(time);
+        osc.stop(time + 0.1);
+    }
+
+    startMusic() {
+        this.resume();
+        this.isPlaying = true;
+        this.beatCount = 0;
+        this.nextBeatTime = this.ctx.currentTime + 0.1;
+        this.scheduleBeat();
+    }
+
+    stopMusic() {
+        this.isPlaying = false;
+        if (this.beatInterval) clearTimeout(this.beatInterval);
+    }
+
+    setBpm(bpm) {
+        this.bpm = bpm;
+    }
+}
+
+// === INPUT MANAGER ===
+class InputManager {
+    constructor(canvas) {
+        this.keys = {};
+        this.mouse = { x: 0, y: 0, down: false };
+        this.touch = { active: false, x: 0, y: 0, startX: 0, startY: 0, id: null };
+        this.actionJustPressed = false;
+        this.canvas = canvas;
+        this.rect = canvas.getBoundingClientRect();
+
+        window.addEventListener('keydown', e => {
+            this.keys[e.code] = true;
+            if (['Space', 'Enter'].includes(e.code)) this.actionJustPressed = true;
+        });
+        window.addEventListener('keyup', e => this.keys[e.code] = false);
+
+        window.addEventListener('resize', () => this.updateRect());
+        this.updateRect();
+
+        // Virtual Controls
+        this.vKnob = document.getElementById('v-knob');
+        this.vDpad = document.getElementById('v-dpad');
+        this.vAction = document.getElementById('v-action');
+        this.vDir = { x: 0, y: 0 };
+        this.hasTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+        if (this.hasTouch) {
+            this.setupVirtualControls();
+        }
+
+        // Prevent default touch behaviors on canvas
+        canvas.addEventListener('touchstart', e => { e.preventDefault(); }, {passive: false});
+        canvas.addEventListener('touchmove', e => { e.preventDefault(); }, {passive: false});
+    }
+
+    updateRect() {
+        this.rect = this.canvas.getBoundingClientRect();
+    }
+
+    getLogicalPos(clientX, clientY) {
+        const scaleX = this.canvas.width / this.rect.width;
+        const scaleY = this.canvas.height / this.rect.height;
+        return {
+            x: (clientX - this.rect.left) * scaleX,
+            y: (clientY - this.rect.top) * scaleY
+        };
+    }
+
+    setupVirtualControls() {
+        // DPAD
+        let dpadTouchId = null;
+        const handleDpadMove = (x, y) => {
+            const drect = this.vDpad.getBoundingClientRect();
+            const cx = drect.left + drect.width/2;
+            const cy = drect.top + drect.height/2;
+            let dx = x - cx;
+            let dy = y - cy;
+            const maxDist = drect.width/2;
+            const dist = Math.hypot(dx, dy);
+            if (dist > maxDist) {
+                dx = (dx/dist) * maxDist;
+                dy = (dy/dist) * maxDist;
+            }
+            this.vKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+            this.vDir.x = dx / maxDist;
+            this.vDir.y = dy / maxDist;
+        };
+
+        this.vDpad.addEventListener('touchstart', e => {
+            e.preventDefault();
+            const t = e.changedTouches[0];
+            dpadTouchId = t.identifier;
+            handleDpadMove(t.clientX, t.clientY);
+        }, {passive: false});
+
+        this.vDpad.addEventListener('touchmove', e => {
+            e.preventDefault();
+            for (let i=0; i<e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === dpadTouchId) {
+                    handleDpadMove(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+                }
+            }
+        }, {passive: false});
+
+        const resetDpad = (e) => {
+            for (let i=0; i<e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === dpadTouchId) {
+                    dpadTouchId = null;
+                    this.vKnob.style.transform = `translate(0px, 0px)`;
+                    this.vDir = { x: 0, y: 0 };
+                }
+            }
+        };
+        this.vDpad.addEventListener('touchend', resetDpad);
+        this.vDpad.addEventListener('touchcancel', resetDpad);
+
+        // ACTION
+        this.vAction.addEventListener('touchstart', e => {
+            e.preventDefault();
+            this.actionJustPressed = true;
+            this.vAction.style.background = 'rgba(255,255,255,0.3)';
+        });
+        this.vAction.addEventListener('touchend', e => {
+            e.preventDefault();
+            this.vAction.style.background = 'rgba(255,255,255,0.1)';
+        });
+    }
+
+    getMovement() {
+        let dx = 0, dy = 0;
+        if (this.keys['KeyW'] || this.keys['ArrowUp']) dy -= 1;
+        if (this.keys['KeyS'] || this.keys['ArrowDown']) dy += 1;
+        if (this.keys['KeyA'] || this.keys['ArrowLeft']) dx -= 1;
+        if (this.keys['KeyD'] || this.keys['ArrowRight']) dx += 1;
+
+        if (dx === 0 && dy === 0) {
+            dx = this.vDir.x;
+            dy = this.vDir.y;
+        } else {
+            // normalize keyboard
+            const len = Math.hypot(dx, dy);
+            dx /= len;
+            dy /= len;
+        }
+        return { x: dx, y: dy };
+    }
+
+    consumeAction() {
+        if (this.actionJustPressed) {
+            this.actionJustPressed = false;
+            return true;
+        }
+        return false;
+    }
+}
+
+// === ENTITIES ===
+
+class Player {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 15;
+        this.speed = 300;
+        this.tail = [];
+        this.tailLength = 0; // target segments
+        this.vx = 0;
+        this.vy = 0;
+        this.invulnTimer = 0;
+        this.syncTimer = 0;
+        this.syncPerfect = false;
+    }
+
+    update(dt, input, canvasWidth, canvasHeight) {
+        const move = input.getMovement();
+
+        // Momentum
+        this.vx = lerp(this.vx, move.x * this.speed, 10 * dt);
+        this.vy = lerp(this.vy, move.y * this.speed, 10 * dt);
+
+        if (this.syncTimer > 0) {
+            // Speed boost during sync
+            this.x += this.vx * 1.5 * dt;
+            this.y += this.vy * 1.5 * dt;
+        } else {
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+        }
+
+        this.x = clamp(this.x, this.radius, canvasWidth - this.radius);
+        this.y = clamp(this.y, this.radius, canvasHeight - this.radius);
+
+        if (this.invulnTimer > 0) this.invulnTimer -= dt;
+        if (this.syncTimer > 0) this.syncTimer -= dt;
+
+        // Tail follow logic
+        this.tail.unshift({x: this.x, y: this.y});
+        if (this.tail.length > this.tailLength * 5) {
+            this.tail.pop();
+        }
+    }
+
+    draw(ctx) {
+        // Draw tail
+        if (this.tail.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(this.tail[0].x, this.tail[0].y);
+            for (let i=1; i<this.tail.length; i++) {
+                ctx.lineTo(this.tail[i].x, this.tail[i].y);
+            }
+            ctx.strokeStyle = this.syncTimer > 0 ? '#fff' : 'rgba(113, 197, 95, 0.7)';
+            ctx.lineWidth = this.radius * 1.5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+        }
+
+        // Draw head
+        ctx.fillStyle = this.invulnTimer > 0 ? ((Date.now() % 200 < 100) ? 'red' : 'white') :
+                        this.syncTimer > 0 ? '#fff' : 'var(--accent)';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+        ctx.fill();
+
+        // Draw eyes
+        ctx.fillStyle = '#000';
+        const eyeOffset = Math.hypot(this.vx, this.vy) > 10 ? Math.atan2(this.vy, this.vx) : 0;
+        ctx.beginPath();
+        ctx.arc(this.x + Math.cos(eyeOffset - 0.5)*5, this.y + Math.sin(eyeOffset - 0.5)*5, 3, 0, Math.PI*2);
+        ctx.arc(this.x + Math.cos(eyeOffset + 0.5)*5, this.y + Math.sin(eyeOffset + 0.5)*5, 3, 0, Math.PI*2);
+        ctx.fill();
+
+        // Sync aura
+        if (this.syncTimer > 0) {
+            ctx.strokeStyle = this.syncPerfect ? 'gold' : '#fff';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 10 + Math.sin(Date.now()*0.01)*5, 0, Math.PI*2);
+            ctx.stroke();
+        }
+    }
+}
+
+class Collectible {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 10;
+        this.life = 10; // seconds before disappearing
+        this.pulse = 0;
+    }
+    update(dt) {
+        this.life -= dt;
+        this.pulse += dt * 5;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#60a5fa'; // Blue data core
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius + Math.sin(this.pulse)*2, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(96, 165, 250, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius + 5 + Math.sin(this.pulse*1.5)*4, 0, Math.PI*2);
+        ctx.stroke();
+    }
+}
+
+class Hazard {
+    constructor(x, y, vx, vy, type) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.type = type; // 'drone', 'laser', 'freeze_burst'
+        this.radius = type === 'drone' ? 12 : type === 'freeze_burst' ? 40 : 5;
+        this.life = type === 'freeze_burst' ? 2 : 10;
+        this.rotation = 0;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt;
+        this.rotation += dt * 2;
+        if (this.type === 'freeze_burst') this.radius += dt * 10;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+
+        if (this.type === 'drone') {
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.moveTo(-this.radius, -this.radius);
+            ctx.lineTo(this.radius, 0);
+            ctx.lineTo(-this.radius, this.radius);
+            ctx.closePath();
+            ctx.fill();
+        } else if (this.type === 'laser') {
+            ctx.fillStyle = 'red';
+            ctx.fillRect(-this.radius*2, -this.radius/2, this.radius*4, this.radius);
+        } else if (this.type === 'freeze_burst') {
+            ctx.fillStyle = `rgba(0, 255, 255, ${Math.max(0, this.life/2)})`;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius, 0, Math.PI*2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        const angle = rand(0, Math.PI*2);
+        const speed = rand(50, 150);
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.life = rand(0.5, 1.5);
+        this.maxLife = this.life;
+        this.color = color;
+        this.size = rand(2, 5);
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+        ctx.globalAlpha = 1;
+    }
+}
+
+// === GAME ENGINE ===
+class GameEngine {
+    constructor() {
+        this.canvas = document.getElementById('game-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.sm = new SaveManager();
+        this.audio = new SoundEngine(this.sm);
+        this.input = new InputManager(this.canvas);
+
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+
+        this.logicalWidth = 1280;
+        this.logicalHeight = 720;
+
+        this.lastTime = performance.now();
+        this.animFrame = null;
+
+        this.entities = {
+            player: null,
+            collectibles: [],
+            hazards: [],
+            particles: []
+        };
+
+        this.runStats = {
+            score: 0,
+            combo: 1,
+            health: 100,
+            wave: 1,
+            waveTimer: 0,
+            maxCombo: 1,
+            maxTail: 0,
+            spawnTimer: 0
+        };
+
+        this.shakeTimer = 0;
+
+        this.ro = new ResizeObserver(() => this.resize());
+        this.ro.observe(this.canvas.parentElement);
+        this.resize();
+
+        this.bindEvents();
+        this.applyOptions();
+
+        window.addEventListener('beat', e => this.onBeat(e.detail));
+
+        // Handle visibility and blur for pause
+        window.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'PLAYING') this.setPause(true); });
+        window.addEventListener('blur', () => { if (this.state === 'PLAYING') this.setPause(true); });
+
+        // Update Title UI
+        document.getElementById('title-highscore').innerText = this.sm.data.highScore;
+
+        requestAnimationFrame(t => this.loop(t));
+    }
+
+    resize() {
+        const parent = this.canvas.parentElement;
+        const pw = parent.clientWidth;
+        const ph = parent.clientHeight;
+
+        this.canvas.width = pw;
+        this.canvas.height = ph;
+
+        this.ctx.scale(pw / this.logicalWidth, ph / this.logicalHeight);
+        this.input.updateRect();
+        this.updateTouchUI();
+    }
+
+    bindEvents() {
+        const getEl = id => document.getElementById(id);
+        const bind = (id, fn) => getEl(id).addEventListener('click', () => { this.audio.sfx('click'); fn(); });
+
+        bind('btn-play', () => this.startGame());
+        bind('btn-howto-title', () => this.showScreen('screen-howto'));
+        bind('btn-options-title', () => this.showScreen('screen-options'));
+
+        bind('btn-resume', () => this.setPause(false));
+        bind('btn-restart-pause', () => this.startGame());
+        bind('btn-options-pause', () => this.showScreen('screen-options'));
+        bind('btn-howto-pause', () => this.showScreen('screen-howto'));
+        bind('btn-quit', () => this.quitToTitle());
+
+        bind('btn-restart-go', () => this.startGame());
+        bind('btn-title-go', () => this.quitToTitle());
+
+        bind('btn-close-howto', () => this.showScreen(this.state === 'PAUSED' ? 'screen-paused' : 'screen-title'));
+        bind('btn-close-options', () => {
+            this.sm.save();
+            this.showScreen(this.state === 'PAUSED' ? 'screen-paused' : 'screen-title');
+        });
+
+        getEl('pause-btn').addEventListener('click', () => {
+            this.audio.sfx('click');
+            if (this.state === 'PLAYING') this.setPause(true);
+        });
+
+        // Options binding
+        const bindOpt = (id, key, labelId, isNum=true) => {
+            const el = getEl(id);
+            el.value = this.sm.data.options[key];
+            if (labelId) getEl(labelId).innerText = el.value;
+            el.addEventListener('input', e => {
+                const val = isNum ? parseFloat(e.target.value) : e.target.value;
+                this.sm.data.options[key] = val;
+                if (labelId) getEl(labelId).innerText = val;
+                this.audio.updateVolumes();
+                this.applyOptions();
+            });
+        };
+
+        bindOpt('opt-vol-master', 'volMaster', 'val-vol-master');
+        bindOpt('opt-vol-music', 'volMusic', 'val-vol-music');
+        bindOpt('opt-vol-sfx', 'volSfx', 'val-vol-sfx');
+        bindOpt('opt-shake', 'shake', null);
+        bindOpt('opt-particles', 'particles', null, false);
+        bindOpt('opt-touch', 'touch', null, false);
+
+        bind('btn-export', () => {
+            getEl('opt-save-data').value = this.sm.export();
+        });
+        bind('btn-import', () => {
+            if (this.sm.importData(getEl('opt-save-data').value)) {
+                alert("Save imported successfully!");
+                this.applyOptions();
+                getEl('title-highscore').innerText = this.sm.data.highScore;
+            } else {
+                alert("Invalid save data.");
+            }
+        });
+
+        let resetClicks = 0;
+        getEl('btn-reset-save').addEventListener('click', (e) => {
+            this.audio.sfx('click');
+            resetClicks++;
+            if (resetClicks === 1) {
+                e.target.innerText = "Click again to confirm reset";
+                setTimeout(() => { resetClicks = 0; e.target.innerText = "Reset Save"; }, 3000);
+            } else if (resetClicks === 2) {
+                this.sm.reset();
+                this.applyOptions();
+                getEl('title-highscore').innerText = "0";
+                e.target.innerText = "Save Reset!";
+                setTimeout(() => { resetClicks = 0; e.target.innerText = "Reset Save"; }, 2000);
+            }
+        });
+    }
+
+    applyOptions() {
+        this.updateTouchUI();
+    }
+
+    updateTouchUI() {
+        const vControls = document.getElementById('virtual-controls');
+        const opt = this.sm.data.options.touch;
+        const needsTouch = this.input.hasTouch || window.innerWidth < 800;
+
+        if (opt === 'always' || (opt === 'auto' && needsTouch)) {
+            vControls.style.display = this.state === 'PLAYING' ? 'block' : 'none';
+        } else {
+            vControls.style.display = 'none';
+        }
+    }
+
+    showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        if (id) {
+            document.getElementById(id).classList.add('active');
+            document.getElementById('ui-layer').style.pointerEvents = 'auto';
+        } else {
+            document.getElementById('ui-layer').style.pointerEvents = 'none';
+        }
+    }
+
+    startGame() {
+        this.state = 'PLAYING';
+        this.showScreen(null);
+        document.getElementById('hud').classList.remove('hidden');
+        document.getElementById('pause-btn-container').classList.remove('hidden');
+
+        this.entities = {
+            player: new Player(this.logicalWidth/2, this.logicalHeight/2),
+            collectibles: [],
+            hazards: [],
+            particles: []
+        };
+
+        this.runStats = {
+            score: 0,
+            combo: 1,
+            health: 100,
+            wave: 1,
+            waveTimer: 0,
+            maxCombo: 1,
+            maxTail: 0,
+            spawnTimer: 0
+        };
+
+        this.sm.data.totalGamesPlayed++;
+
+        this.updateHud();
+        this.updateTouchUI();
+
+        // Start beat
+        this.audio.setBpm(120);
+        this.audio.startMusic();
+
+        this.spawnCollectible();
+    }
+
+    setPause(paused) {
+        if (paused) {
+            this.state = 'PAUSED';
+            this.showScreen('screen-paused');
+            document.getElementById('pause-btn-container').classList.add('hidden');
+            this.updateTouchUI();
+            this.audio.stopMusic();
+        } else {
+            this.state = 'PLAYING';
+            this.showScreen(null);
+            document.getElementById('pause-btn-container').classList.remove('hidden');
+            this.updateTouchUI();
+            this.audio.startMusic();
+            this.lastTime = performance.now(); // prevent huge dt
+        }
+    }
+
+    quitToTitle() {
+        this.state = 'TITLE';
+        this.showScreen('screen-title');
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('pause-btn-container').classList.add('hidden');
+        this.updateTouchUI();
+        this.audio.stopMusic();
+        document.getElementById('title-highscore').innerText = this.sm.data.highScore;
+    }
+
+    onBeat(detail) {
+        if (this.state !== 'PLAYING') return;
+
+        // Visual beat effect on bg
+        this.bgFlash = 0.2;
+
+        // Every 4 beats, maybe spawn something
+        if (detail.count % 4 === 0) {
+            this.spawnHazard();
+        }
+    }
+
+    spawnCollectible() {
+        const padding = 50;
+        const x = rand(padding, this.logicalWidth - padding);
+        const y = rand(padding, this.logicalHeight - padding);
+        this.entities.collectibles.push(new Collectible(x, y));
+    }
+
+    spawnHazard() {
+        const wave = this.runStats.wave;
+        const count = Math.ceil(wave / 2);
+
+        for(let i=0; i<count; i++) {
+            const side = randInt(0, 4);
+            let x, y, vx, vy;
+            const speed = 100 + wave * 20;
+
+            if (side === 0) { x = rand(0, this.logicalWidth); y = -20; vx = rand(-50, 50); vy = speed; } // top
+            else if (side === 1) { x = this.logicalWidth + 20; y = rand(0, this.logicalHeight); vx = -speed; vy = rand(-50, 50); } // right
+            else if (side === 2) { x = rand(0, this.logicalWidth); y = this.logicalHeight + 20; vx = rand(-50, 50); vy = -speed; } // bottom
+            else { x = -20; y = rand(0, this.logicalHeight); vx = speed; vy = rand(-50, 50); } // left
+
+            const type = rand() > 0.8 ? 'freeze_burst' : 'drone';
+            this.entities.hazards.push(new Hazard(x, y, vx, vy, type));
+        }
+    }
+
+    spawnParticles(x, y, color, count) {
+        if (this.sm.data.options.particles === 'low') count = Math.floor(count / 3);
+        for(let i=0; i<count; i++) {
+            this.entities.particles.push(new Particle(x, y, color));
+        }
+    }
+
+    addScore(pts) {
+        const total = pts * this.runStats.combo;
+        this.runStats.score += total;
+        this.sm.data.totalScoreAccumulated += total;
+        this.updateHud();
+    }
+
+    triggerShake(amt) {
+        this.shakeTimer = amt * this.sm.data.options.shake;
+    }
+
+    gameOver() {
+        this.state = 'GAME_OVER';
+        this.audio.stopMusic();
+        this.audio.sfx('gameover');
+
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('pause-btn-container').classList.add('hidden');
+        this.updateTouchUI();
+
+        this.showScreen('screen-gameover');
+
+        // Update stats
+        const isHigh = this.runStats.score > this.sm.data.highScore;
+        if (isHigh) this.sm.data.highScore = this.runStats.score;
+        if (this.runStats.wave > this.sm.data.bestWave) this.sm.data.bestWave = this.runStats.wave;
+        if (this.runStats.maxCombo > this.sm.data.maxCombo) this.sm.data.maxCombo = this.runStats.maxCombo;
+        if (this.runStats.maxTail > this.sm.data.maxTail) this.sm.data.maxTail = this.runStats.maxTail;
+
+        this.sm.save();
+
+        document.getElementById('go-score').innerText = this.runStats.score;
+        document.getElementById('go-combo').innerText = this.runStats.maxCombo + "x";
+        document.getElementById('go-tail').innerText = this.runStats.maxTail;
+        document.getElementById('go-wave').innerText = this.runStats.wave;
+
+        const newHighEl = document.getElementById('go-newhigh');
+        if (isHigh && this.runStats.score > 0) newHighEl.classList.remove('hidden');
+        else newHighEl.classList.add('hidden');
+
+        // Milestones
+        let mText = "";
+        if (this.runStats.wave >= 10 && !this.sm.data.unlockedMilestones.includes('Arctic Survivor')) {
+            this.sm.data.unlockedMilestones.push('Arctic Survivor');
+            mText += "Unlocked Milestone: Arctic Survivor!\n";
+        }
+        if (this.runStats.maxCombo >= 10 && !this.sm.data.unlockedMilestones.includes('Rhythm Master')) {
+            this.sm.data.unlockedMilestones.push('Rhythm Master');
+            mText += "Unlocked Milestone: Rhythm Master!\n";
+        }
+        if (this.runStats.maxTail >= 20 && !this.sm.data.unlockedMilestones.includes('Data Hoarder')) {
+            this.sm.data.unlockedMilestones.push('Data Hoarder');
+            mText += "Unlocked Milestone: Data Hoarder!\n";
+        }
+        document.getElementById('go-milestones').innerText = mText;
+        this.sm.save();
+    }
+
+    updateHud() {
+        document.getElementById('hud-score').innerText = `Score: ${this.runStats.score}`;
+        document.getElementById('hud-multiplier').innerText = `Combo: ${this.runStats.combo}x`;
+        document.getElementById('hud-tail').innerText = `Tail: ${this.entities.player ? this.entities.player.tailLength : 0}`;
+        document.getElementById('hud-wave').innerText = `Wave: ${this.runStats.wave}`;
+        document.getElementById('hud-health').innerText = `Health: ${Math.floor(this.runStats.health)}%`;
+    }
+
+    loop(now) {
+        requestAnimationFrame(t => this.loop(t));
+        const dt = Math.min((now - this.lastTime) / 1000, 0.1);
+        this.lastTime = now;
+
+        if (this.state === 'PLAYING') {
+            this.update(dt);
+        }
+
+        this.draw(dt);
+    }
+
+    update(dt) {
+        const player = this.entities.player;
+
+        // --- INPUT & SYNC ---
+        if (this.input.consumeAction()) {
+            this.audio.resume();
+            const timeSinceBeat = (this.audio.ctx.currentTime - this.audio.nextBeatTime + (60/this.audio.bpm)) % (60/this.audio.bpm);
+            const tolerance = 0.15; // window
+
+            // Allow sync if near previous or next beat
+            if (timeSinceBeat < tolerance || timeSinceBeat > (60/this.audio.bpm) - tolerance) {
+                // Perfect Sync
+                player.syncTimer = 0.5;
+                player.syncPerfect = true;
+                player.invulnTimer = 0.5;
+                this.addScore(100);
+                this.audio.sfx('sync_perfect');
+                this.spawnParticles(player.x, player.y, 'gold', 20);
+                this.triggerShake(0.2);
+            } else {
+                // Miss
+                player.syncTimer = 0.2;
+                player.syncPerfect = false;
+                this.runStats.combo = 1;
+                this.audio.sfx('sync_miss');
+                this.spawnParticles(player.x, player.y, 'red', 10);
+                this.updateHud();
+            }
+        }
+
+        player.update(dt, this.input, this.logicalWidth, this.logicalHeight);
+
+        // --- WAVE PROGRESSION ---
+        this.runStats.waveTimer += dt;
+        if (this.runStats.waveTimer > 15) {
+            this.runStats.waveTimer = 0;
+            this.runStats.wave++;
+            this.audio.sfx('wave');
+            this.audio.setBpm(Math.min(180, this.audio.bpm + 5)); // Speed up
+            this.updateHud();
+            this.triggerShake(0.5);
+        }
+
+        // --- SPAWNING ---
+        this.runStats.spawnTimer += dt;
+        if (this.runStats.spawnTimer > 3 - Math.min(2.5, this.runStats.wave*0.1)) {
+            this.runStats.spawnTimer = 0;
+            if (this.entities.collectibles.length < 3) this.spawnCollectible();
+        }
+
+        // --- UPDATES & COLLISIONS ---
+        for (let i = this.entities.collectibles.length - 1; i >= 0; i--) {
+            const c = this.entities.collectibles[i];
+            c.update(dt);
+
+            if (dist(player.x, player.y, c.x, c.y) < player.radius + c.radius) {
+                // Collect
+                this.audio.sfx('collect');
+                this.spawnParticles(c.x, c.y, '#60a5fa', 15);
+                player.tailLength++;
+                this.runStats.combo = 1 + Math.floor(player.tailLength / 2);
+                if (this.runStats.combo > this.runStats.maxCombo) this.runStats.maxCombo = this.runStats.combo;
+                if (player.tailLength > this.runStats.maxTail) this.runStats.maxTail = player.tailLength;
+
+                this.addScore(50);
+                this.entities.collectibles.splice(i, 1);
+            } else if (c.life <= 0) {
+                this.entities.collectibles.splice(i, 1);
+            }
+        }
+
+        let hit = false;
+        for (let i = this.entities.hazards.length - 1; i >= 0; i--) {
+            const h = this.entities.hazards[i];
+            h.update(dt);
+
+            // Check collision with player
+            if (player.invulnTimer <= 0 && dist(player.x, player.y, h.x, h.y) < player.radius + h.radius) {
+                hit = true;
+                this.spawnParticles(player.x, player.y, '#ef4444', 30);
+            }
+
+            // Check collision with tail (risk factor!)
+            if (!hit && player.invulnTimer <= 0) {
+                // Check every 5th tail segment to save performance
+                for (let j=0; j < player.tail.length; j+=5) {
+                    if (dist(player.tail[j].x, player.tail[j].y, h.x, h.y) < player.radius*1.5 + h.radius) {
+                        hit = true;
+                        this.spawnParticles(h.x, h.y, '#ef4444', 20);
+                        // Cut tail
+                        player.tailLength = Math.max(0, player.tailLength - Math.floor(player.tailLength/2));
+                        player.tail.length = player.tailLength * 5;
+                        this.runStats.combo = 1 + Math.floor(player.tailLength / 2);
+                        break;
+                    }
+                }
+            }
+
+            if (h.x < -100 || h.x > this.logicalWidth+100 || h.y < -100 || h.y > this.logicalHeight+100 || h.life <= 0) {
+                this.entities.hazards.splice(i, 1);
+            }
+        }
+
+        if (hit) {
+            this.audio.sfx('hit');
+            player.invulnTimer = 1.0;
+            this.runStats.health -= 25;
+            this.triggerShake(0.8);
+            this.runStats.combo = 1;
+            player.tailLength = Math.max(0, player.tailLength - 2);
+            this.updateHud();
+
+            if (this.runStats.health <= 0) {
+                this.gameOver();
+            }
+        }
+
+        for (let i = this.entities.particles.length - 1; i >= 0; i--) {
+            const p = this.entities.particles[i];
+            p.update(dt);
+            if (p.life <= 0) this.entities.particles.splice(i, 1);
+        }
+    }
+
+    draw(dt) {
+        // Clear
+        this.ctx.fillStyle = '#0f172a';
+        this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
+
+        this.ctx.save();
+
+        // Shake
+        if (this.shakeTimer > 0) {
+            this.shakeTimer -= dt;
+            const sx = (Math.random()-0.5) * 20 * this.shakeTimer;
+            const sy = (Math.random()-0.5) * 20 * this.shakeTimer;
+            this.ctx.translate(sx, sy);
+        }
+
+        // BG Grid & Pulse
+        this.ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        for(let x=0; x<this.logicalWidth; x+=50) { this.ctx.moveTo(x,0); this.ctx.lineTo(x,this.logicalHeight); }
+        for(let y=0; y<this.logicalHeight; y+=50) { this.ctx.moveTo(0,y); this.ctx.lineTo(this.logicalWidth,y); }
+        this.ctx.stroke();
+
+        if (this.bgFlash && this.bgFlash > 0) {
+            this.ctx.fillStyle = `rgba(113, 197, 95, ${this.bgFlash * 0.5})`;
+            this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
+            this.bgFlash -= dt;
+        }
+
+        if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+            this.entities.collectibles.forEach(c => c.draw(this.ctx));
+            this.entities.hazards.forEach(h => h.draw(this.ctx));
+            if (this.entities.player) this.entities.player.draw(this.ctx);
+            this.entities.particles.forEach(p => p.draw(this.ctx));
+        } else if (this.state === 'TITLE') {
+            // Title screen bg effect
+            this.ctx.fillStyle = 'rgba(255,255,255,0.1)';
+            for(let i=0; i<50; i++) {
+                this.ctx.beginPath();
+                this.ctx.arc(
+                    (Math.sin(Date.now()*0.0001 + i) * 0.5 + 0.5) * this.logicalWidth,
+                    ((Date.now()*0.05 + i*20) % this.logicalHeight),
+                    Math.random()*3, 0, Math.PI*2);
+                this.ctx.fill();
+            }
+        }
+
+        this.ctx.restore();
+    }
+}
+
+const engine = new GameEngine();
+
+});
+</script>
+
+</body>
+</html>
