@@ -518,5 +518,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-31",
     "accentColor": "#b478c1",
     "path": "./games/040-floating-echo-arena/index.html"
+  },
+  {
+    "id": "041",
+    "slug": "041-sandstorm-bazaar-overdrive",
+    "title": "Sandstorm Bazaar Overdrive",
+    "genre": "Bullet-Hell Boss Rush",
+    "coreMechanic": "Risk/Reward Tether or Tail Growth",
+    "setting": "Desert Sandstorm Bazaar",
+    "description": "Fight giant mechanical djinn in a chaotic bazaar. Grow your deadly tail to deal massive damage, but a longer tail makes you an easier target.",
+    "controls": "WASD/Arrows to move, Mouse/Touch to aim. Tail damages enemies automatically. Collect scrap to grow tail.",
+    "createdAt": "2024-05-18",
+    "accentColor": "#505963",
+    "path": "./games/041-sandstorm-bazaar-overdrive/index.html"
   }
 ];
