@@ -117,6 +117,19 @@ window.ARCADE_REGISTRY = [
     "path": "./games/009-echo-trench/index.html"
   },
   {
+    "id": "010",
+    "slug": "010-ricochet-retrieval",
+    "title": "Ricochet Retrieval",
+    "genre": "Pinball/Ricochet Dungeon",
+    "coreMechanic": "Limited Ammo Must Be Physically Retrieved",
+    "setting": "Orbital Space Station",
+    "description": "Navigate an orbital space station arena. Bounce your limited ammo off walls and bumpers to destroy enemies, then retrieve your ammo physically to shoot again.",
+    "controls": "WASD / Joystick to move, Mouse / Touch to aim and shoot. Physically walk over dropped ammo to retrieve it.",
+    "createdAt": "2024-05-30",
+    "accentColor": "#6fa1a2",
+    "path": "./games/010-ricochet-retrieval/index.html"
+  },
+  {
     "id": "011",
     "slug": "011-vector-grid-parry",
     "title": "Vector Grid Parry",
