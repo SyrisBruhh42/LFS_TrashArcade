@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Candy Echo Recoil</title>
+    <link rel="stylesheet" href="game.css">
+    <script defer src="game.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+
+        <div id="ui-layer">
+            <div id="screen-title" class="screen active">
+                <h1>Candy Echo Recoil</h1>
+                <div class="stats">
+                    <p>High Score: <span id="title-highscore">0</span></p>
+                    <p>Milestones: <span id="title-milestones">0/3</span></p>
+                </div>
+                <div class="menu-buttons">
+                    <button id="btn-play">Play</button>
+                    <button id="btn-howto">How to Play</button>
+                    <button id="btn-options">Options</button>
+                    <a href="../../index.html" class="button-link">Back to Arcade</a>
+                </div>
+            </div>
+
+            <div id="screen-playing" class="screen">
+                <div id="hud">
+                    <div class="hud-left">
+                        <span id="hud-score">Score: 0</span><br>
+                        <span id="hud-wave">Wave: 1</span>
+                    </div>
+                    <div class="hud-center">
+                        <div id="combo-container">Combo: x<span id="hud-combo">1</span> <div id="combo-bar-bg"><div id="combo-bar"></div></div></div>
+                    </div>
+                    <div class="hud-right">
+                        <span id="hud-health">HP: 100</span>
+                    </div>
+                </div>
+                <button id="btn-pause" aria-label="Pause">II</button>
+                <div id="mobile-controls" style="display: none;">
+                    <div id="joystick-zone"></div>
+                    <div id="button-zone">
+                        <button id="btn-mobile-fire" class="mobile-btn">FIRE</button>
+                        <button id="btn-mobile-echo" class="mobile-btn">ECHO</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="screen-paused" class="screen modal">
+                <div class="modal-content">
+                    <h2>PAUSED</h2>
+                    <button id="btn-resume">Resume</button>
+                    <button id="btn-restart">Restart</button>
+                    <button id="btn-options-pause">Options</button>
+                    <button id="btn-howto-pause">How to Play</button>
+                    <a href="../../index.html" class="button-link">Quit to Arcade</a>
+                </div>
+            </div>
+
+            <div id="screen-gameover" class="screen modal">
+                <div class="modal-content">
+                    <h2>GAME OVER</h2>
+                    <p>Score: <span id="go-score">0</span></p>
+                    <p id="go-highscore-banner" style="display:none; color: gold;">New High Score!</p>
+                    <p>Wave Reached: <span id="go-wave">0</span></p>
+                    <button id="btn-play-again">Play Again</button>
+                    <button id="btn-title-return">Title Screen</button>
+                </div>
+            </div>
+
+            <div id="modal-options" class="screen modal hidden">
+                <div class="modal-content">
+                    <h2>Options</h2>
+                    <label><input type="checkbox" id="opt-mute"> Master Mute</label>
+                    <label>SFX Volume: <input type="range" id="opt-sfx" min="0" max="100" value="80"> <span id="val-sfx">80</span>%</label>
+                    <label>Music Volume: <input type="range" id="opt-music" min="0" max="100" value="60"> <span id="val-music">60</span>%</label>
+                    <label>Screen Shake:
+                        <select id="opt-shake">
+                            <option value="1">100%</option>
+                            <option value="0.5">50%</option>
+                            <option value="0">Off</option>
+                        </select>
+                    </label>
+                    <label>Particles:
+                        <select id="opt-particles">
+                            <option value="1">High</option>
+                            <option value="0.5">Low</option>
+                        </select>
+                    </label>
+                    <hr>
+                    <button id="btn-export-save">Export Save</button>
+                    <input type="text" id="export-data" readonly style="display:none;">
+                    <button id="btn-import-save">Import Save</button>
+                    <button id="btn-reset-save">Reset Save</button>
+                    <button id="btn-close-options">Close</button>
+                </div>
+            </div>
+
+            <div id="modal-howto" class="screen modal hidden">
+                <div class="modal-content">
+                    <h2>How to Play</h2>
+                    <p><strong>Move/Aim:</strong> WASD / Arrows / Mouse</p>
+                    <p><strong>Fire:</strong> Space / Click. <em>Firing pushes you backward! Use recoil to move!</em></p>
+                    <p><strong>Echo:</strong> Shift / Right Click. Creates a time-delayed ghost that repeats your actions.</p>
+                    <p>Bounce around the candy conveyor, use your echoes to cross-fire at enemies, and survive!</p>
+                    <button id="btn-close-howto">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

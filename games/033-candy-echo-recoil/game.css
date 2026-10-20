@@ -1,0 +1,276 @@
+:root {
+    --bg-color: #1a1520;
+    --accent-color: #b75279;
+    --text-main: #f0e6ea;
+    --ui-bg: rgba(20, 15, 25, 0.85);
+    --btn-bg: #4a2135;
+    --btn-hover: #b75279;
+    --font-stack: "Courier New", Courier, monospace;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    background-color: #000;
+    overflow: hidden;
+    font-family: var(--font-stack);
+    color: var(--text-main);
+    touch-action: none; /* Crucial for touch controls */
+}
+
+#game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--bg-color);
+}
+
+canvas {
+    display: block;
+    image-rendering: pixelated;
+    /* Centered via flex in container */
+}
+
+#ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Let clicks pass through to canvas when appropriate */
+}
+
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    pointer-events: auto; /* Catch clicks for UI */
+}
+
+.screen.active {
+    display: flex;
+}
+
+/* Modals */
+.modal {
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 100;
+}
+
+.modal.hidden {
+    display: none !important;
+}
+
+.modal-content {
+    background: var(--ui-bg);
+    padding: 2rem;
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+    text-align: center;
+    max-width: 90%;
+    max-height: 90%;
+    overflow-y: auto;
+    box-shadow: 0 0 20px var(--accent-color);
+}
+
+.modal-content h2 {
+    margin-bottom: 1.5rem;
+    color: var(--accent-color);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.modal-content p, .modal-content label {
+    margin-bottom: 1rem;
+    display: block;
+}
+
+h1 {
+    font-size: 3rem;
+    color: var(--accent-color);
+    text-shadow: 0 0 10px var(--accent-color), 2px 2px 0 #000;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.stats {
+    background: rgba(0,0,0,0.5);
+    padding: 10px 20px;
+    border-radius: 5px;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 200px;
+}
+
+button, .button-link {
+    background: var(--btn-bg);
+    color: var(--text-main);
+    border: 2px solid var(--accent-color);
+    padding: 10px 20px;
+    font-family: inherit;
+    font-size: 1.1rem;
+    cursor: pointer;
+    text-transform: uppercase;
+    text-decoration: none;
+    text-align: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+    display: inline-block;
+}
+
+button:hover, .button-link:hover {
+    background: var(--btn-hover);
+    box-shadow: 0 0 15px var(--accent-color);
+    transform: scale(1.05);
+}
+
+button:active {
+    transform: scale(0.95);
+}
+
+/* HUD */
+#screen-playing {
+    justify-content: flex-start;
+    pointer-events: none; /* Click goes to canvas */
+}
+
+#hud {
+    width: 100%;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+    font-size: 1.2rem;
+    font-weight: bold;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.hud-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#combo-bar-bg {
+    width: 100px;
+    height: 10px;
+    background: #333;
+    border: 1px solid #fff;
+    margin-top: 5px;
+}
+
+#combo-bar {
+    width: 100%;
+    height: 100%;
+    background: var(--accent-color);
+    transition: width 0.1s linear;
+}
+
+#btn-pause {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    font-size: 1.2rem;
+    font-weight: bold;
+    pointer-events: auto;
+}
+
+/* Mobile Controls */
+#mobile-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 20px;
+    pointer-events: auto;
+}
+
+#joystick-zone {
+    width: 120px;
+    height: 120px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    position: relative;
+    touch-action: none;
+}
+
+.joystick-knob {
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+#button-zone {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.mobile-btn {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: rgba(183, 82, 121, 0.5);
+    border: 2px solid var(--accent-color);
+    font-size: 14px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    touch-action: none;
+}
+
+.mobile-btn:active {
+    background: rgba(183, 82, 121, 0.8);
+}
+
+/* Options */
+input[type=range] {
+    vertical-align: middle;
+}
+input[type=text] {
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 5px;
+    background: #000;
+    color: #fff;
+    border: 1px solid var(--accent-color);
+}
+hr {
+    border: 0;
+    border-top: 1px solid #555;
+    margin: 15px 0;
+}
