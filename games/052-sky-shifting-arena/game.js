@@ -822,18 +822,55 @@ class GameEngine {
         }
 
         // Enemies & Collisions
-        this.spawnTimer -= dt;
-        if (this.spawnTimer <= 0) {
-            this.spawnEnemy();
-            this.spawnTimer = 2.0 / Math.sqrt(this.wave);
+        if (this.isBossWave) {
+            if (!this.currentBoss || !this.currentBoss.active) {
+                // Boss defeated
+                this.isBossWave = false;
+                this.waveTimer = 0;
+                this.wave++;
+                this.arena.shiftInterval = Math.max(2, 5 - this.wave * 0.2);
+                this.updateHUD();
+
+                // Clear enemies/projectiles on boss kill
+                this.enemies = [];
+                this.projectiles = [];
+                this.hazards.covers = [];
+                this.hazards.traps = [];
+            }
+        } else {
+            this.spawnTimer -= dt;
+            if (this.spawnTimer <= 0) {
+                this.spawnEnemy();
+                this.spawnTimer = 2.0 / Math.sqrt(this.wave);
+            }
+
+            this.waveTimer += dt;
+            if (this.waveTimer > 30) {
+                this.waveTimer = 0;
+
+                if ((this.wave + 1) % 5 === 0) {
+                    this.isBossWave = true;
+                    this.bossBannerTimer = 3.0; // 3 seconds banner
+
+                    // Spawn boss
+                    const cx = this.arena.x + this.arena.w / 2;
+                    const cy = this.arena.y + this.arena.h / 2;
+                    if (Math.random() > 0.5) {
+                        this.currentBoss = new TitanBoss(cx, cy);
+                    } else {
+                        this.currentBoss = new PhantomBoss(cx, cy);
+                    }
+                    this.enemies.push(this.currentBoss);
+                } else {
+                    this.wave++;
+                    this.arena.shiftInterval = Math.max(2, 5 - this.wave * 0.2);
+                }
+                this.updateHUD();
+            }
         }
 
-        this.waveTimer += dt;
-        if (this.waveTimer > 30) {
-            this.waveTimer = 0;
-            this.wave++;
-            this.arena.shiftInterval = Math.max(2, 5 - this.wave * 0.2);
-            this.updateHUD();
+        if (this.bossBannerTimer > 0) {
+            this.bossBannerTimer -= dt;
         }
 
         for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -924,6 +961,37 @@ class GameEngine {
         this.player.draw(this.ctx);
 
         this.ctx.restore();
+
+        // Draw Boss UI on top of everything (untransformed)
+        if (this.isBossWave && this.currentBoss && this.currentBoss.active) {
+            // Boss Banner
+            if (this.bossBannerTimer > 0) {
+                this.ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+                this.ctx.fillRect(0, this.logicalHeight / 2 - 50, this.logicalWidth, 100);
+                this.ctx.fillStyle = 'white';
+                this.ctx.font = '40px sans-serif';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(`WARNING: ${this.currentBoss.name} APPROACHES!`, this.logicalWidth / 2, this.logicalHeight / 2 + 15);
+            }
+
+            // Boss Health Bar
+            const hpPercent = Math.max(0, this.currentBoss.health / this.currentBoss.maxHealth);
+            const barW = 600;
+            const barH = 20;
+            const barX = (this.logicalWidth - barW) / 2;
+            const barY = 40;
+
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            this.ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+
+            this.ctx.fillStyle = this.currentBoss.phase === 1 ? '#ff4500' : '#8b0000';
+            this.ctx.fillRect(barX, barY, barW * hpPercent, barH);
+
+            this.ctx.fillStyle = 'white';
+            this.ctx.font = '16px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(this.currentBoss.name, this.logicalWidth / 2, barY + 15);
+        }
     }
 
     loop(now) {
@@ -945,6 +1013,6 @@ class GameEngine {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    const engine = new GameEngine();
+    window.engine = new GameEngine(); const engine = window.engine;
     engine.start();
 });
