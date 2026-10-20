@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ricochet Retrieval</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-layer">
+            <div id="state-title" class="screen active">
+                <h1 class="title">RICOCHET RETRIEVAL</h1>
+                <div class="stats" id="title-stats">High Score: 0</div>
+                <div class="menu-buttons">
+                    <button id="btn-play">Play</button>
+                    <button id="btn-how-to-play">How to Play</button>
+                    <button id="btn-options-title">Options</button>
+                    <button id="btn-back" onclick="window.location.href='../../index.html'">Back to Arcade</button>
+                </div>
+            </div>
+
+            <div id="state-playing" class="screen">
+                <div class="hud">
+                    <div class="hud-left">Score: <span id="hud-score">0</span></div>
+                    <div class="hud-center">Wave: <span id="hud-wave">1</span></div>
+                    <div class="hud-right">Ammo: <span id="hud-ammo">3</span> | Health: <span id="hud-health">3</span></div>
+                </div>
+                <button id="btn-pause" class="icon-button">II</button>
+                <div id="virtual-controls" class="hidden">
+                    <div id="virtual-joystick-move" class="joystick-zone left-zone">
+                        <div class="joystick-base"><div class="joystick-stick"></div></div>
+                    </div>
+                    <div id="virtual-joystick-aim" class="joystick-zone right-zone">
+                        <div class="joystick-base"><div class="joystick-stick"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="state-paused" class="screen">
+                <h2>PAUSED</h2>
+                <div class="menu-buttons">
+                    <button id="btn-resume">Resume</button>
+                    <button id="btn-restart-paused">Restart</button>
+                    <button id="btn-options-paused">Options</button>
+                    <button id="btn-how-to-play-paused">How to Play</button>
+                    <button id="btn-quit" onclick="window.location.href='../../index.html'">Quit to Title</button>
+                </div>
+            </div>
+
+            <div id="state-game-over" class="screen">
+                <h2>GAME OVER</h2>
+                <div id="game-over-stats">
+                    <p>Final Score: <span id="final-score">0</span></p>
+                    <p>Max Wave: <span id="final-wave">0</span></p>
+                    <p id="new-high-score-banner" class="hidden">NEW HIGH SCORE!</p>
+                </div>
+                <div class="menu-buttons">
+                    <button id="btn-play-again">Play Again</button>
+                    <button id="btn-title-from-game-over">Title Screen</button>
+                </div>
+            </div>
+
+            <!-- Modals -->
+            <div id="modal-options" class="modal hidden">
+                <div class="modal-content">
+                    <h2>Options</h2>
+                    <div class="option-row">
+                        <label>Master Volume</label>
+                        <input type="range" id="opt-master-vol" min="0" max="100" value="100">
+                    </div>
+                    <div class="option-row">
+                        <label>SFX Volume</label>
+                        <input type="range" id="opt-sfx-vol" min="0" max="100" value="100">
+                    </div>
+                    <div class="option-row">
+                        <label>Music Volume</label>
+                        <input type="range" id="opt-music-vol" min="0" max="100" value="100">
+                    </div>
+                    <div class="option-row">
+                        <label>Screen Shake</label>
+                        <select id="opt-shake">
+                            <option value="1">100%</option>
+                            <option value="0.5">50%</option>
+                            <option value="0">Off</option>
+                        </select>
+                    </div>
+                    <div class="option-row">
+                        <label>Save Data</label>
+                        <button id="btn-export-save">Export</button>
+                        <button id="btn-import-save">Import</button>
+                        <button id="btn-reset-save">Reset</button>
+                    </div>
+                    <button id="btn-close-options">Close</button>
+                </div>
+            </div>
+
+            <div id="modal-how-to-play" class="modal hidden">
+                <div class="modal-content">
+                    <h2>How to Play</h2>
+                    <p>Move: WASD / Arrows / Virtual Joystick (Left)</p>
+                    <p>Shoot: Mouse Click+Drag / Touch Drag (Right)</p>
+                    <p>Your balls (ammo) bounce off walls and bumpers. They damage enemies at high speed.</p>
+                    <p>You only have 3 balls. You must physically walk over a stopped/slow ball to retrieve it to shoot again!</p>
+                    <button id="btn-close-how-to-play">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script defer src="./engine.js"></script>
+</body>
+</html>
