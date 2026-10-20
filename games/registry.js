@@ -115,5 +115,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-24",
     "accentColor": "#e48154",
     "path": "./games/009-echo-trench/index.html"
+  },
+  {
+    "id": "011",
+    "slug": "011-vector-grid-parry",
+    "title": "Vector Grid Parry",
+    "genre": "Directional Parry/Slash Arcade",
+    "coreMechanic": "Shrinking Arena / Shifting Geometry",
+    "setting": "Retro CRT Vector Grid",
+    "description": "Defend the center in a shrinking, shifting CRT vector grid. Parry and slash geometric foes from all directions before the arena crushes you.",
+    "controls": "WASD/Arrows/Mouse to parry/slash. Touch D-Pad / swipe on mobile.",
+    "createdAt": "2024-05-24",
+    "accentColor": "#6d6451",
+    "path": "./games/011-vector-grid-parry/index.html"
   }
 ];
