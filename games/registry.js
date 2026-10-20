@@ -609,5 +609,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2023-11-01",
     "accentColor": "#aae7db",
     "path": "./games/047-echo-cog/index.html"
+  },
+  {
+    "id": "048",
+    "slug": "048-scrapheap-echo-grapple",
+    "title": "Scrapheap Echo Grapple",
+    "genre": "Momentum/Grapple Platformer",
+    "coreMechanic": "Echo/Ghost Self-Cooperation",
+    "setting": "Junkyard Robot Scrapheap",
+    "description": "Swing through a hazardous junkyard! Record your movements, then spawn an echo ghost to hit switches and cooperatively solve scrapheap platforming puzzles.",
+    "controls": "WASD/Arrows to move. Mouse click/drag to grapple. Press Space to record/play an echo ghost.",
+    "createdAt": "2026-10-20",
+    "accentColor": "#78c94d",
+    "path": "./games/048-scrapheap-echo-grapple/index.html"
   }
 ];
