@@ -167,5 +167,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-25",
     "accentColor": "#bd56e6",
     "path": "./games/013-cyber-shogun-tail-strike/index.html"
+  },
+  {
+    "id": "014",
+    "slug": "014-manor-gravity-shift",
+    "title": "Manor Gravity Shift",
+    "genre": "Gravity/Orbital Physics Action",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Haunted Victorian Manor",
+    "description": "Navigate a haunted manor using orbital gravity physics. Stop moving to slow down time and plan your next jump through time-dilated spectral anomalies.",
+    "controls": "WASD/Arrows to move, Space to jump. Touch joystick and jump button on mobile.",
+    "createdAt": "2026-10-20",
+    "accentColor": "#50b072",
+    "path": "./games/014-manor-gravity-shift/index.html"
   }
 ];
