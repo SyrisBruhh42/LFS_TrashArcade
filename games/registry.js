@@ -583,5 +583,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-24",
     "accentColor": "#46b478",
     "path": "./games/045-cyber-ronin-tether/index.html"
+  },
+  {
+    "id": "046",
+    "slug": "046-neon-core-drill",
+    "title": "Neon Core Drill",
+    "genre": "Subterranean Drilling/Mining Roguelite",
+    "coreMechanic": "Shrinking Arena / Shifting Geometry",
+    "setting": "Neon Synthwave City",
+    "description": "Drill deep beneath the Neon City in an ever-shifting, shrinking subterranean arena. Mine resources, avoid shifting geometry, and survive the rogue AI algorithms.",
+    "controls": "WASD/Arrows to move and drill. Touch/Drag to maneuver. Pause with 'P' or tap.",
+    "createdAt": "2024-10-20",
+    "accentColor": "#58fd7c",
+    "path": "./games/046-neon-core-drill/index.html"
   }
 ];
