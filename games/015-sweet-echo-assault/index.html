@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sweet Echo Assault</title>
+  <style>
+    :root {
+      --accent: #f8cac2;
+      --bg: #1a1515;
+      --text: #f0e6e6;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', Courier, monospace;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    .ui-layer.active {
+      pointer-events: auto;
+    }
+
+    .screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      background: rgba(0,0,0,0.8);
+      padding: 2rem;
+      border: 2px solid var(--accent);
+      border-radius: 10px;
+      pointer-events: auto;
+      max-height: 90%;
+      overflow-y: auto;
+    }
+    .screen.active {
+      display: flex;
+    }
+
+    h1 {
+      color: var(--accent);
+      text-shadow: 0 0 10px var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    button {
+      background: transparent;
+      color: var(--text);
+      border: 2px solid var(--accent);
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 1.2rem;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-radius: 5px;
+    }
+    button:hover, button:focus {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 0 15px var(--accent);
+      outline: none;
+    }
+
+    .hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 10px;
+      box-sizing: border-box;
+      display: none;
+      justify-content: space-between;
+      pointer-events: none;
+      font-size: 1.2rem;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px #000;
+    }
+    .hud.active {
+      display: flex;
+    }
+    .hud-left { text-align: left; }
+    .hud-right { text-align: right; }
+
+    .pause-btn {
+      pointer-events: auto;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 40px;
+      height: 40px;
+      background: rgba(0,0,0,0.5);
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      font-weight: bold;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      z-index: 100;
+    }
+
+    .virtual-controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 40%;
+      pointer-events: none;
+      display: none;
+    }
+    .virtual-controls.active {
+      display: flex;
+      pointer-events: auto;
+    }
+
+    .joystick-area {
+      position: absolute;
+      bottom: 20px;
+      width: 120px;
+      height: 120px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.3);
+    }
+    #joy-left { left: 20px; }
+    #joy-right { right: 20px; }
+
+    .joystick-knob {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 40px;
+      height: 40px;
+      background: rgba(255,255,255,0.5);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .options-group {
+      margin: 10px 0;
+      text-align: left;
+      width: 100%;
+    }
+    .options-group label {
+      display: inline-block;
+      width: 150px;
+    }
+    input[type="range"] {
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+
+  <div class="hud" id="hud">
+    <div class="hud-left">
+      Score: <span id="hud-score">0</span><br>
+      Echoes: <span id="hud-echoes">3</span>
+    </div>
+    <div class="hud-right" style="padding-right: 50px;">
+      Boss: <span id="hud-boss-hp">100%</span>
+    </div>
+  </div>
+
+  <div class="pause-btn" id="btn-pause" style="display:none;">II</div>
+
+  <div class="virtual-controls" id="virtual-controls">
+    <div class="joystick-area" id="joy-left"><div class="joystick-knob" id="knob-left"></div></div>
+    <div class="joystick-area" id="joy-right"><div class="joystick-knob" id="knob-right"></div></div>
+  </div>
+
+  <div class="ui-layer active" id="ui-layer">
+    <!-- TITLE SCREEN -->
+    <div class="screen active" id="screen-title">
+      <h1>Sweet Echo Assault</h1>
+      <p>High Score: <span id="title-high-score">0</span></p>
+      <button id="btn-play">Play</button>
+      <button id="btn-howto">How to Play</button>
+      <button id="btn-options-title">Options</button>
+      <a href="../../index.html" style="color:var(--text); margin-top:15px; text-decoration:none; border-bottom:1px solid;">Back to Arcade</a>
+    </div>
+
+    <!-- HOW TO PLAY SCREEN -->
+    <div class="screen" id="screen-howto">
+      <h2>How to Play</h2>
+      <div style="text-align:left; font-size: 0.9rem; max-width: 400px;">
+        <p><b>Movement:</b> WASD / Arrows / Left Stick</p>
+        <p><b>Aim & Shoot:</b> Mouse / Touch / Right Stick</p>
+        <p><b>Echo Drop:</b> Space / Tap near player. This leaves a ghost that repeats your recent actions.</p>
+        <p><b>Goal:</b> Survive the candy factory conveyor belt and destroy the rogue candy machines!</p>
+      </div>
+      <button id="btn-howto-back">Back</button>
+    </div>
+
+    <!-- PAUSED SCREEN -->
+    <div class="screen" id="screen-paused">
+      <h2>PAUSED</h2>
+      <button id="btn-resume">Resume</button>
+      <button id="btn-restart">Restart</button>
+      <button id="btn-options-pause">Options</button>
+      <button id="btn-quit">Quit to Title</button>
+    </div>
+
+    <!-- OPTIONS SCREEN -->
+    <div class="screen" id="screen-options">
+      <h2>Options</h2>
+      <div class="options-group">
+        <label>Master Volume:</label>
+        <input type="range" id="opt-master" min="0" max="100" value="100">
+      </div>
+      <div class="options-group">
+        <label>SFX Volume:</label>
+        <input type="range" id="opt-sfx" min="0" max="100" value="100">
+      </div>
+      <div class="options-group">
+        <label>Music Volume:</label>
+        <input type="range" id="opt-music" min="0" max="100" value="100">
+      </div>
+      <div class="options-group">
+        <label>Screen Shake:</label>
+        <button id="opt-shake">100%</button>
+      </div>
+      <div class="options-group">
+        <label>Touch Controls:</label>
+        <button id="opt-touch">Auto</button>
+      </div>
+      <div style="margin-top:20px;">
+        <button id="btn-export-save">Export Save</button>
+        <button id="btn-import-save">Import Save</button>
+        <button id="btn-reset-save">Reset Save</button>
+      </div>
+      <button id="btn-options-back" style="margin-top:20px;">Back</button>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div class="screen" id="screen-gameover">
+      <h2 id="gameover-title">GAME OVER</h2>
+      <p>Score: <span id="go-score">0</span></p>
+      <p id="go-highscore-banner" style="color:var(--accent); display:none; font-weight:bold;">NEW HIGH SCORE!</p>
+      <button id="btn-play-again">Play Again</button>
+      <button id="btn-go-title">Title Screen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STATES = { TITLE: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3 };
+
+class Engine {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.lastTime = 0;
+        this.state = STATES.TITLE;
+        this.width = 0;
+        this.height = 0;
+
+        this.initResizeObserver();
+
+        this.loop = this.loop.bind(this);
+        requestAnimationFrame(this.loop);
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && this.state === STATES.PLAYING) {
+                this.setState(STATES.PAUSED);
+            }
+        });
+        window.addEventListener('blur', () => {
+            if (this.state === STATES.PLAYING) {
+                this.setState(STATES.PAUSED);
+            }
+        });
+    }
+
+    initResizeObserver() {
+        const ro = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                this.width = entry.contentRect.width;
+                this.height = entry.contentRect.height;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+            }
+        });
+        ro.observe(document.getElementById('game-container'));
+    }
+
+    setState(newState) {
+        this.state = newState;
+        // UI updates handled externally
+    }
+
+    update(dt) {
+        if (this.state !== STATES.PLAYING) return;
+        if (window.game && window.game.logic) {
+            window.game.logic.update(dt);
+        }
+    }
+
+    draw() {
+        this.ctx.fillStyle = '#1a1515';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        if (this.state === STATES.PLAYING) {
+            if (window.game && window.game.logic) {
+                window.game.logic.draw(this.ctx, this.width, this.height);
+            }
+        }
+    }
+
+    loop(now) {
+        let dt = Math.min((now - this.lastTime) / 1000, 0.1);
+        this.lastTime = now;
+
+        this.update(dt);
+        this.draw();
+
+        requestAnimationFrame(this.loop);
+    }
+}
+
+class InputManager {
+    constructor() {
+        this.keys = {};
+        this.mouse = { x: 0, y: 0, down: false };
+        this.touchLeft = { active: false, x: 0, y: 0, dirX: 0, dirY: 0, id: null };
+        this.touchRight = { active: false, x: 0, y: 0, dirX: 0, dirY: 0, id: null };
+        this.hasTouched = false;
+
+        window.addEventListener('keydown', e => this.keys[e.code] = true);
+        window.addEventListener('keyup', e => this.keys[e.code] = false);
+
+        window.addEventListener('mousemove', e => {
+            this.mouse.x = e.clientX;
+            this.mouse.y = e.clientY;
+        });
+        window.addEventListener('mousedown', () => { this.mouse.down = true; this.resumeAudio(); });
+        window.addEventListener('mouseup', () => this.mouse.down = false);
+
+        const container = document.getElementById('game-container');
+        container.addEventListener('touchstart', e => this.handleTouch(e, true), {passive: false});
+        container.addEventListener('touchmove', e => this.handleTouch(e, true), {passive: false});
+        container.addEventListener('touchend', e => this.handleTouchEnd(e), {passive: false});
+        container.addEventListener('touchcancel', e => this.handleTouchEnd(e), {passive: false});
+        container.addEventListener('pointerdown', () => this.resumeAudio(), {passive: true});
+    }
+
+    resumeAudio() {
+        if (window.game && window.game.audio && window.game.audio.ctx.state === 'suspended') {
+            window.game.audio.ctx.resume();
+        }
+    }
+
+    handleTouch(e, isDown) {
+        if(e.target.tagName === 'BUTTON' || e.target.tagName === 'A' || e.target.tagName === 'INPUT') return;
+        e.preventDefault();
+        this.hasTouched = true;
+        this.resumeAudio();
+
+        const rect = document.getElementById('game-container').getBoundingClientRect();
+        const halfWidth = rect.width / 2;
+
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            const x = t.clientX - rect.left;
+            const y = t.clientY - rect.top;
+
+            if (e.type === 'touchstart' && window.game && window.game.logic && Math.hypot(x - window.game.logic.player.x, y - window.game.logic.player.y) < 60) {
+                 this.echoTap = true;
+            }
+            else if (x < halfWidth) {
+                // Left stick (movement)
+                if (!this.touchLeft.active || this.touchLeft.id === t.identifier) {
+                    this.touchLeft.active = true;
+                    this.touchLeft.id = t.identifier;
+                    this.touchLeft.x = x;
+                    this.touchLeft.y = y;
+                }
+            } else {
+                // Right stick (aim/shoot)
+                if (!this.touchRight.active || this.touchRight.id === t.identifier) {
+                    this.touchRight.active = true;
+                    this.touchRight.id = t.identifier;
+                    this.touchRight.x = x;
+                    this.touchRight.y = y;
+                }
+            }
+        }
+    }
+
+    handleTouchEnd(e) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            if (this.touchLeft.id === t.identifier) {
+                this.touchLeft.active = false;
+                this.touchLeft.id = null;
+            }
+            if (this.touchRight.id === t.identifier) {
+                this.touchRight.active = false;
+                this.touchRight.id = null;
+            }
+        }
+    }
+}
+
+class SaveManager {
+    constructor() {
+        this.key = 'arcade_game_015_015-sweet-echo-assault_v1';
+        this.data = this.load();
+    }
+    load() {
+        let def = {
+            highScore: 0,
+            bestWaveOrCombo: 0,
+            totalGamesPlayed: 0,
+            totalScoreAccumulated: 0,
+            unlockedMilestones: [],
+            options: { master: 100, sfx: 100, music: 100, shake: 1, touch: 'Auto' }
+        };
+        try {
+            const raw = localStorage.getItem(this.key);
+            if (raw) return { ...def, ...JSON.parse(raw) };
+        } catch (e) { console.warn("Save load failed", e); }
+        return def;
+    }
+    save() {
+        try {
+            localStorage.setItem(this.key, JSON.stringify(this.data));
+        } catch (e) { console.warn("Save write failed", e); }
+    }
+    reset() {
+        try { localStorage.removeItem(this.key); } catch (e) {}
+        this.data = this.load();
+    }
+}
+
+class SoundEngine {
+    constructor(saveManager) {
+        this.save = saveManager;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.connect(this.ctx.destination);
+
+        this.sfxGain = this.ctx.createGain();
+        this.sfxGain.connect(this.masterGain);
+
+        this.musicGain = this.ctx.createGain();
+        this.musicGain.connect(this.masterGain);
+
+        this.updateVolumes();
+    }
+
+    updateVolumes() {
+        this.masterGain.gain.value = this.save.data.options.master / 100;
+        this.sfxGain.gain.value = this.save.data.options.sfx / 100;
+        this.musicGain.gain.value = this.save.data.options.music / 100;
+    }
+
+    playShoot() {
+        if(this.ctx.state !== 'running') return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.1);
+    }
+
+    playEcho() {
+        if(this.ctx.state !== 'running') return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(800, this.ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + 0.1);
+        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.2);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.2);
+    }
+
+    playHit() {
+        if(this.ctx.state !== 'running') return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.2);
+    }
+}
+
+class GameLogic {
+    constructor(engine, input, audio, save) {
+        this.engine = engine;
+        this.input = input;
+        this.audio = audio;
+        this.save = save;
+
+        this.reset();
+    }
+
+    reset() {
+        this.player = { x: 0, y: 0, r: 15, speed: 300, hp: 3, echoes: 3, timer: 0 };
+        this.boss = { x: 0, y: 0, r: 60, hp: 1000, maxHp: 1000, angle: 0, stateTimer: 0 };
+        this.bullets = [];
+        this.bossBullets = [];
+        this.particles = [];
+        this.echoes = [];
+        this.recordBuffer = []; // stores {t, x, y, sx, sy, shooting}
+        this.time = 0;
+        this.score = 0;
+        this.beltOffset = 0;
+        this.screenShake = 0;
+
+        document.getElementById('hud-score').innerText = '0';
+        document.getElementById('hud-echoes').innerText = '3';
+        document.getElementById('hud-boss-hp').innerText = '100%';
+    }
+
+    start() {
+        this.reset();
+        this.player.x = this.engine.width / 2;
+        this.player.y = this.engine.height * 0.8;
+        this.boss.x = this.engine.width / 2;
+        this.boss.y = this.engine.height * 0.2;
+    }
+
+    update(dt) {
+        this.time += dt;
+        this.beltOffset = (this.beltOffset + 100 * dt) % 40;
+        if (this.screenShake > 0) this.screenShake -= dt;
+
+        let dx = 0, dy = 0;
+        if (this.input.keys['KeyW'] || this.input.keys['ArrowUp']) dy -= 1;
+        if (this.input.keys['KeyS'] || this.input.keys['ArrowDown']) dy += 1;
+        if (this.input.keys['KeyA'] || this.input.keys['ArrowLeft']) dx -= 1;
+        if (this.input.keys['KeyD'] || this.input.keys['ArrowRight']) dx += 1;
+
+        if (this.input.touchLeft.active) {
+            let cx = this.input.touchLeft.x - (120/2 + 20);
+            let cy = this.input.touchLeft.y - (this.engine.height - 120/2 - 20); // rough estimation, ideally we'd pass UI bounds
+            // Simplification: just use the raw coordinates assuming they are absolute
+            dx = (this.input.touchLeft.x - 80) / 40;
+            dy = (this.input.touchLeft.y - (this.engine.height - 80)) / 40;
+            let len = Math.hypot(dx, dy);
+            if(len > 1) { dx /= len; dy /= len; }
+        }
+
+        if (dx !== 0 || dy !== 0) {
+            let len = Math.hypot(dx, dy);
+            dx /= len; dy /= len;
+        }
+
+        this.player.x += dx * this.player.speed * dt;
+        this.player.y += dy * this.player.speed * dt;
+
+        // Belt moves player slightly down
+        this.player.y += 20 * dt;
+
+        this.player.x = Math.max(this.player.r, Math.min(this.engine.width - this.player.r, this.player.x));
+        this.player.y = Math.max(this.player.r, Math.min(this.engine.height - this.player.r, this.player.y));
+
+        let isShooting = false;
+        let sx = 0, sy = 0;
+
+        if (this.input.mouse.down) {
+            sx = this.input.mouse.x - this.player.x;
+            sy = this.input.mouse.y - this.player.y;
+            let len = Math.hypot(sx, sy);
+            if(len > 0) { sx /= len; sy /= len; isShooting = true; }
+        } else if (this.input.touchRight.active) {
+            sx = (this.input.touchRight.x - (this.engine.width - 80)) / 40;
+            sy = (this.input.touchRight.y - (this.engine.height - 80)) / 40;
+            let len = Math.hypot(sx, sy);
+            if(len > 0.2) { sx /= len; sy /= len; isShooting = true; }
+        }
+
+        this.player.timer += dt;
+        if (isShooting && this.player.timer > 0.15) {
+            this.bullets.push({ x: this.player.x, y: this.player.y, vx: sx * 600, vy: sy * 600, r: 4 });
+            this.player.timer = 0;
+            this.audio.playShoot();
+        }
+
+        // Record Echo
+        this.recordBuffer.push({ t: this.time, x: this.player.x, y: this.player.y, sx: sx, sy: sy, shooting: isShooting });
+        if (this.recordBuffer.length > 300) this.recordBuffer.shift(); // keep 5 seconds at 60fps
+
+        if (this.input.keys['Space']) {
+            this.tryDropEcho();
+            this.input.keys['Space'] = false;
+        } else if ((this.input.mouse.down || this.input.hasTouched) && !isShooting) {
+            // Drop echo if tapped/clicked near player
+            let tapX = this.input.mouse.x;
+            let tapY = this.input.mouse.y;
+
+            if (this.input.touchLeft.active && !this.input.touchRight.active) {
+                 // In touch mode, tapping right side without dragging acts as drop echo.
+                 // We don't have tap coordinates easily from our custom touch manager, so we check if touched on screen right half
+                 // But simply dropping if not moving right stick is easier
+                 this.tryDropEcho();
+            } else if (this.input.mouse.down && Math.hypot(tapX - this.player.x, tapY - this.player.y) < 60) {
+                 this.tryDropEcho();
+                 this.input.mouse.down = false;
+            }
+        }
+
+        // We handle echo dropping natively via touch manager now
+        if (this.input.echoTap) {
+            this.tryDropEcho();
+            this.input.echoTap = false;
+        }
+
+        // Update Echoes
+        for (let i = this.echoes.length - 1; i >= 0; i--) {
+            let e = this.echoes[i];
+            e.life -= dt;
+            if (e.life <= 0) {
+                this.echoes.splice(i, 1);
+                continue;
+            }
+
+            // Replay from buffer
+            let pbTime = this.time - e.delay;
+            let frame = e.buffer.find(b => b.t >= pbTime) || e.buffer[e.buffer.length-1];
+            if (frame) {
+                e.x = frame.x;
+                e.y = frame.y;
+                e.timer += dt;
+                if (frame.shooting && e.timer > 0.15) {
+                    this.bullets.push({ x: e.x, y: e.y, vx: frame.sx * 600, vy: frame.sy * 600, r: 4 });
+                    e.timer = 0;
+                    this.audio.playShoot();
+                }
+            }
+        }
+
+        // Update bullets
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            let b = this.bullets[i];
+            b.x += b.vx * dt;
+            b.y += b.vy * dt;
+            if (b.x < 0 || b.x > this.engine.width || b.y < 0 || b.y > this.engine.height) {
+                this.bullets.splice(i, 1);
+            } else if (Math.hypot(b.x - this.boss.x, b.y - this.boss.y) < this.boss.r) {
+                this.boss.hp -= 10;
+                this.score += 10;
+                this.bullets.splice(i, 1);
+                this.audio.playHit();
+                for(let j=0; j<5; j++) this.particles.push({x:b.x, y:b.y, vx:(Math.random()-0.5)*200, vy:(Math.random()-0.5)*200, life:0.3, c:'#f8cac2'});
+            }
+        }
+
+        // Boss Logic
+        this.boss.stateTimer += dt;
+        this.boss.angle += dt;
+        this.boss.x = this.engine.width / 2 + Math.sin(this.boss.angle) * 100;
+
+        if (this.boss.stateTimer > 0.5) {
+            this.boss.stateTimer = 0;
+            let ways = 8;
+            for(let i=0; i<ways; i++) {
+                let a = (Math.PI * 2 / ways) * i + this.boss.angle;
+                this.bossBullets.push({ x: this.boss.x, y: this.boss.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, r: 6 });
+            }
+        }
+
+        // Boss Bullets
+        for (let i = this.bossBullets.length - 1; i >= 0; i--) {
+            let b = this.bossBullets[i];
+            b.x += b.vx * dt;
+            b.y += b.vy * dt;
+            b.y += 50 * dt; // belt pushes bullets too
+            if (b.x < 0 || b.x > this.engine.width || b.y < 0 || b.y > this.engine.height) {
+                this.bossBullets.splice(i, 1);
+            } else if (Math.hypot(b.x - this.player.x, b.y - this.player.y) < this.player.r) {
+                this.bossBullets.splice(i, 1);
+                this.player.hp--;
+                this.screenShake = 0.5;
+                this.audio.playHit();
+                for(let j=0; j<15; j++) this.particles.push({x:this.player.x, y:this.player.y, vx:(Math.random()-0.5)*300, vy:(Math.random()-0.5)*300, life:0.5, c:'#fff'});
+                if (this.player.hp <= 0) {
+                    window.game.gameOver(this.score);
+                }
+            }
+        }
+
+        // Particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+
+        document.getElementById('hud-score').innerText = this.score;
+        document.getElementById('hud-echoes').innerText = this.player.echoes;
+        document.getElementById('hud-boss-hp').innerText = Math.max(0, Math.floor((this.boss.hp / this.boss.maxHp) * 100)) + '%';
+
+        if (this.boss.hp <= 0) {
+            this.boss.hp = this.boss.maxHp + 500;
+            this.boss.maxHp = this.boss.hp;
+            this.player.echoes++;
+            this.score += 1000;
+            for(let j=0; j<50; j++) this.particles.push({x:this.boss.x, y:this.boss.y, vx:(Math.random()-0.5)*500, vy:(Math.random()-0.5)*500, life:1, c:'#f8cac2'});
+        }
+    }
+
+    tryDropEcho() {
+        if (this.player.echoes > 0 && this.recordBuffer.length > 60) {
+            this.player.echoes--;
+            this.echoes.push({
+                buffer: JSON.parse(JSON.stringify(this.recordBuffer)),
+                delay: this.time - this.recordBuffer[0].t,
+                life: 5,
+                x: this.player.x,
+                y: this.player.y,
+                timer: 0
+            });
+            this.audio.playEcho();
+            this.recordBuffer = []; // reset so echoes don't overlap history
+        }
+    }
+
+    draw(ctx, w, h) {
+        ctx.save();
+        if (this.screenShake > 0) {
+            let amt = (this.screenShake * 10) * (this.save.data.options.shake || 1);
+            ctx.translate((Math.random()-0.5)*amt, (Math.random()-0.5)*amt);
+        }
+
+        // Draw Conveyor Belt
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        for (let i = -40; i < h; i += 40) {
+            let y = i + this.beltOffset;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+        }
+
+        // Echoes
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = '#88f';
+        for (let e of this.echoes) {
+            ctx.beginPath(); ctx.arc(e.x, e.y, this.player.r, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.globalAlpha = 1.0;
+
+        // Player
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(this.player.x, this.player.y, this.player.r, 0, Math.PI*2); ctx.fill();
+
+        // Boss
+        ctx.fillStyle = '#f8cac2';
+        ctx.beginPath(); ctx.arc(this.boss.x, this.boss.y, this.boss.r, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.fillRect(this.boss.x - 20, this.boss.y - 10, 10, 10);
+        ctx.fillRect(this.boss.x + 10, this.boss.y - 10, 10, 10);
+        ctx.fillRect(this.boss.x - 20, this.boss.y + 10, 40, 5);
+
+        // Bullets
+        ctx.fillStyle = '#ff0';
+        for (let b of this.bullets) {
+            ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle = '#f00';
+        for (let b of this.bossBullets) {
+            ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
+        }
+
+        // Particles
+        for (let p of this.particles) {
+            ctx.fillStyle = p.c;
+            ctx.globalAlpha = p.life;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.globalAlpha = 1.0;
+
+        ctx.restore();
+
+        // Update virtual joysticks visually
+        if (this.input.hasTouched || this.save.data.options.touch === 'Always') {
+            const leftKnob = document.getElementById('knob-left');
+            const rightKnob = document.getElementById('knob-right');
+
+            if (this.input.touchLeft.active) {
+                leftKnob.style.transform = `translate(-50%, -50%) translate(${Math.max(-40, Math.min(40, this.input.touchLeft.x - 80))}px, ${Math.max(-40, Math.min(40, this.input.touchLeft.y - (h - 80)))}px)`;
+            } else {
+                leftKnob.style.transform = 'translate(-50%, -50%)';
+            }
+
+            if (this.input.touchRight.active) {
+                rightKnob.style.transform = `translate(-50%, -50%) translate(${Math.max(-40, Math.min(40, this.input.touchRight.x - (w - 80)))}px, ${Math.max(-40, Math.min(40, this.input.touchRight.y - (h - 80)))}px)`;
+            } else {
+                rightKnob.style.transform = 'translate(-50%, -50%)';
+            }
+        }
+    }
+}
+
+class Game {
+    constructor() {
+        this.save = new SaveManager();
+        this.audio = new SoundEngine(this.save);
+        this.engine = new Engine();
+        this.input = new InputManager();
+        this.logic = new GameLogic(this.engine, this.input, this.audio, this.save);
+        this.initUI();
+    }
+
+    initUI() {
+        const hideAll = () => document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+        const show = id => { hideAll(); document.getElementById(id).classList.add('active'); };
+        const uiLayer = document.getElementById('ui-layer');
+
+        this.ui = { hideAll, show, uiLayer };
+
+        document.getElementById('btn-play').addEventListener('click', () => this.startPlay());
+        document.getElementById('btn-play-again').addEventListener('click', () => this.startPlay());
+
+        document.getElementById('btn-pause').addEventListener('click', () => {
+            this.engine.setState(STATES.PAUSED);
+            show('screen-paused');
+            uiLayer.classList.add('active');
+            document.getElementById('btn-pause').style.display = 'none';
+        });
+
+        document.getElementById('btn-resume').addEventListener('click', () => {
+            this.engine.setState(STATES.PLAYING);
+            hideAll();
+            uiLayer.classList.remove('active');
+            document.getElementById('btn-pause').style.display = 'flex';
+        });
+
+        document.getElementById('btn-restart').addEventListener('click', () => this.startPlay());
+
+        ['btn-quit', 'btn-go-title'].forEach(id => {
+            document.getElementById(id).addEventListener('click', () => {
+                this.engine.setState(STATES.TITLE);
+                show('screen-title');
+                uiLayer.classList.add('active');
+                document.getElementById('hud').classList.remove('active');
+                document.getElementById('btn-pause').style.display = 'none';
+            });
+        });
+
+        // Options routing
+        let prevScreen = 'screen-title';
+        document.getElementById('btn-options-title').addEventListener('click', () => { prevScreen = 'screen-title'; show('screen-options'); });
+        document.getElementById('btn-options-pause').addEventListener('click', () => { prevScreen = 'screen-paused'; show('screen-options'); });
+        document.getElementById('btn-options-back').addEventListener('click', () => show(prevScreen));
+
+        // Options actions
+        const optMaster = document.getElementById('opt-master');
+        const optSfx = document.getElementById('opt-sfx');
+        const optMusic = document.getElementById('opt-music');
+        const optShake = document.getElementById('opt-shake');
+        const optTouch = document.getElementById('opt-touch');
+
+        optMaster.value = this.save.data.options.master;
+        optSfx.value = this.save.data.options.sfx;
+        optMusic.value = this.save.data.options.music;
+        optShake.innerText = this.save.data.options.shake === 1 ? '100%' : (this.save.data.options.shake === 0.5 ? '50%' : 'Off');
+        optTouch.innerText = this.save.data.options.touch;
+
+        const updateAudio = () => {
+            this.save.data.options.master = parseInt(optMaster.value);
+            this.save.data.options.sfx = parseInt(optSfx.value);
+            this.save.data.options.music = parseInt(optMusic.value);
+            this.audio.updateVolumes();
+            this.save.save();
+        };
+        optMaster.addEventListener('input', updateAudio);
+        optSfx.addEventListener('input', updateAudio);
+        optMusic.addEventListener('input', updateAudio);
+
+        optShake.addEventListener('click', () => {
+            if (this.save.data.options.shake === 1) this.save.data.options.shake = 0.5;
+            else if (this.save.data.options.shake === 0.5) this.save.data.options.shake = 0;
+            else this.save.data.options.shake = 1;
+            optShake.innerText = this.save.data.options.shake === 1 ? '100%' : (this.save.data.options.shake === 0.5 ? '50%' : 'Off');
+            this.save.save();
+        });
+
+        optTouch.addEventListener('click', () => {
+            if (this.save.data.options.touch === 'Auto') this.save.data.options.touch = 'Always';
+            else if (this.save.data.options.touch === 'Always') this.save.data.options.touch = 'Off';
+            else this.save.data.options.touch = 'Auto';
+            optTouch.innerText = this.save.data.options.touch;
+            this.save.save();
+        });
+
+        // Save management
+        document.getElementById('btn-export-save').addEventListener('click', () => {
+            navigator.clipboard.writeText(btoa(JSON.stringify(this.save.data))).then(() => alert('Save copied to clipboard!'));
+        });
+        document.getElementById('btn-import-save').addEventListener('click', () => {
+            const str = prompt('Paste your save data:');
+            if (str) {
+                try {
+                    const parsed = JSON.parse(atob(str));
+                    if (parsed) {
+                        this.save.data = parsed;
+                        this.save.save();
+                        alert('Save imported successfully! Reloading...');
+                        location.reload();
+                    }
+                } catch(e) { alert('Invalid save data.'); }
+            }
+        });
+
+        let resetConfirm = false;
+        const resetBtn = document.getElementById('btn-reset-save');
+        resetBtn.addEventListener('click', () => {
+            if (!resetConfirm) {
+                resetConfirm = true;
+                resetBtn.innerText = 'Click again to confirm reset';
+                setTimeout(() => { resetConfirm = false; resetBtn.innerText = 'Reset Save'; }, 3000);
+            } else {
+                this.save.reset();
+                location.reload();
+            }
+        });
+
+        // HowTo routing
+        document.getElementById('btn-howto').addEventListener('click', () => show('screen-howto'));
+        document.getElementById('btn-howto-back').addEventListener('click', () => show('screen-title'));
+    }
+
+    startPlay() {
+        this.engine.setState(STATES.PLAYING);
+        this.logic.start();
+        this.ui.hideAll();
+        this.ui.uiLayer.classList.remove('active');
+        document.getElementById('hud').classList.add('active');
+        document.getElementById('btn-pause').style.display = 'flex';
+
+        if (this.input.hasTouched || this.save.data.options.touch === 'Always') {
+            document.getElementById('virtual-controls').classList.add('active');
+        }
+    }
+
+    gameOver(score) {
+        this.engine.setState(STATES.GAME_OVER);
+        this.ui.show('screen-gameover');
+        this.ui.uiLayer.classList.add('active');
+        document.getElementById('hud').classList.remove('active');
+        document.getElementById('btn-pause').style.display = 'none';
+        document.getElementById('virtual-controls').classList.remove('active');
+
+        document.getElementById('go-score').innerText = score;
+
+        this.save.data.totalGamesPlayed++;
+        this.save.data.totalScoreAccumulated += score;
+
+        if (score > this.save.data.highScore) {
+            this.save.data.highScore = score;
+            document.getElementById('go-highscore-banner').style.display = 'block';
+        } else {
+            document.getElementById('go-highscore-banner').style.display = 'none';
+        }
+        document.getElementById('title-high-score').innerText = this.save.data.highScore;
+        this.save.save();
+    }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    window.game = new Game();
+});
+</script>
+
+</body>
+</html>
