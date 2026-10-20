@@ -89,5 +89,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2026-10-20",
     "accentColor": "#b95b9d",
     "path": "./games/007-cell-drill-polarity/index.html"
+  },
+  {
+    "id": "008",
+    "slug": "008-scrapheap-heist",
+    "title": "Scrapheap Heist",
+    "genre": "Stealth/Line-of-Sight Heist",
+    "coreMechanic": "Sacrifice Health for Overdrive Power",
+    "setting": "Junkyard Robot Scrapheap",
+    "description": "Sneak past rusty sentries and sacrifice your own durability to overdrive your movement and steal the scrap.",
+    "controls": "WASD/Arrows to move. SPACE to sacrifice health for Overdrive. Touch screen to show virtual joystick.",
+    "createdAt": "2024-05-10",
+    "accentColor": "#85bddb",
+    "path": "./games/008-scrapheap-heist/index.html"
   }
 ];
