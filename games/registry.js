@@ -180,5 +180,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2026-10-20",
     "accentColor": "#50b072",
     "path": "./games/014-manor-gravity-shift/index.html"
+  },
+  {
+    "id": "015",
+    "slug": "015-sweet-echo-assault",
+    "title": "Sweet Echo Assault",
+    "genre": "Bullet-Hell Boss Rush",
+    "coreMechanic": "Echo/Ghost Self-Cooperation",
+    "setting": "Candy Factory Conveyor Line",
+    "description": "Battle a rogue candy machine on a moving conveyor belt. Create time-delayed echoes of yourself to multiply your firepower and survive the bullet-hell onslaught.",
+    "controls": "WASD/Arrows to move, Mouse/Touch to aim and shoot. Space/Tap to drop an Echo.",
+    "createdAt": "2024-10-25",
+    "accentColor": "#f8cac2",
+    "path": "./games/015-sweet-echo-assault/index.html"
   }
 ];
