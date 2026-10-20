@@ -1,0 +1,12 @@
+{
+  "id": "045",
+  "slug": "045-cyber-ronin-tether",
+  "title": "Cyber Ronin Tether",
+  "genre": "Gravity/Orbital Physics Action",
+  "coreMechanic": "Risk/Reward Tether or Tail Growth",
+  "setting": "Cyber Samurai Dojo",
+  "description": "Master gravity and grow your energy tether to defeat rogue programs in the Cyber Dojo. Swing, slash, and risk losing your tail for high scores.",
+  "controls": "WASD/Arrows to move. Click/Space to grapple and slash. Touch/Drag to maneuver, tap to attack.",
+  "createdAt": "2024-05-24",
+  "accentColor": "#46b478"
+}

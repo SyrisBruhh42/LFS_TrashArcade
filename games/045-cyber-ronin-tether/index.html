@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Cyber Ronin Tether</title>
+<style>
+  :root {
+    --accent: #46b478;
+    --bg-color: #0d1117;
+    --text-color: #c9d1d9;
+    --font: 'Courier New', Courier, monospace;
+  }
+  body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font);
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+  #ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+  }
+  .screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(13, 17, 23, 0.85);
+    pointer-events: auto;
+  }
+  .screen.active {
+    display: flex;
+  }
+  h1 {
+    font-size: 3rem;
+    color: var(--accent);
+    text-shadow: 0 0 10px var(--accent);
+    margin-bottom: 0.5rem;
+    text-align: center;
+  }
+  h2 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    text-align: center;
+  }
+  .btn {
+    background: transparent;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    padding: 10px 20px;
+    font-size: 1.2rem;
+    font-family: var(--font);
+    cursor: pointer;
+    margin: 10px;
+    border-radius: 5px;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    pointer-events: auto;
+  }
+  .btn:hover {
+    background: var(--accent);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--accent);
+  }
+  .hub-link {
+    position: absolute;
+    bottom: 20px;
+    color: var(--text-color);
+    text-decoration: none;
+    font-size: 0.9rem;
+    pointer-events: auto;
+  }
+  .hub-link:hover {
+    text-decoration: underline;
+    color: var(--accent);
+  }
+  #hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    display: none;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  #hud.active {
+    display: block;
+  }
+  .hud-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-shadow: 0 0 5px #000;
+  }
+  #btn-pause {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0,0,0,0.5);
+    border: 2px solid var(--text-color);
+    color: var(--text-color);
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    border-radius: 5px;
+    pointer-events: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  #btn-pause:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Options Modal */
+  #options-modal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #161b22;
+    border: 2px solid var(--accent);
+    padding: 30px;
+    border-radius: 10px;
+    z-index: 100;
+    display: none;
+    flex-direction: column;
+    min-width: 300px;
+    pointer-events: auto;
+  }
+  #options-modal.active {
+    display: flex;
+  }
+  .option-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+  }
+  .option-row label {
+    font-size: 1.1rem;
+  }
+  .option-row input[type="range"] {
+    width: 150px;
+  }
+  textarea {
+    width: 100%;
+    height: 60px;
+    margin-bottom: 10px;
+    background: #0d1117;
+    color: var(--text-color);
+    border: 1px solid var(--accent);
+    font-family: var(--font);
+    resize: none;
+  }
+
+  /* Touch Controls */
+  #touch-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    width: 100%;
+    display: none;
+    justify-content: space-between;
+    padding: 0 20px;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+  #touch-controls.active {
+    display: flex;
+  }
+  .touch-zone {
+    width: 120px;
+    height: 120px;
+    background: rgba(70, 180, 120, 0.2);
+    border: 2px solid rgba(70, 180, 120, 0.5);
+    border-radius: 50%;
+    pointer-events: auto;
+    position: relative;
+  }
+  .touch-stick {
+    width: 40px;
+    height: 40px;
+    background: rgba(70, 180, 120, 0.6);
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .touch-btn {
+    width: 80px;
+    height: 80px;
+    background: rgba(70, 180, 120, 0.2);
+    border: 2px solid rgba(70, 180, 120, 0.5);
+    border-radius: 50%;
+    pointer-events: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5rem;
+    color: rgba(255,255,255,0.7);
+  }
+  .stats-container {
+    margin: 20px 0;
+    font-size: 1.2rem;
+    text-align: center;
+  }
+  .instructions {
+    max-width: 600px;
+    text-align: center;
+    margin: 20px;
+    line-height: 1.5;
+  }
+  .milestones {
+    margin-top: 10px;
+    font-size: 1rem;
+    color: #ffd700;
+  }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="game-canvas"></canvas>
+
+  <div id="ui-layer">
+    <!-- Title Screen -->
+    <div id="screen-title" class="screen active">
+      <h1>CYBER RONIN TETHER</h1>
+      <div class="stats-container">
+        <div>High Score: <span id="title-highscore">0</span></div>
+        <div class="milestones" id="title-milestones"></div>
+      </div>
+      <button class="btn" id="btn-play">Play</button>
+      <button class="btn" id="btn-howto">How to Play</button>
+      <button class="btn" id="btn-options-title">Options</button>
+      <a href="../../index.html" class="hub-link">Back to Arcade</a>
+    </div>
+
+    <!-- How To Play Screen -->
+    <div id="screen-howto" class="screen">
+      <h2>HOW TO PLAY</h2>
+      <div class="instructions">
+        <p>You are a Cyber Ronin in the virtual Dojo.</p>
+        <p><b>Movement:</b> WASD / Arrows / Left Joystick</p>
+        <p><b>Grapple/Slash:</b> Click / Space / Right Button</p>
+        <p>Grapple onto anchor points to swing using orbital physics.</p>
+        <p>Collect energy nodes to grow your tether (tail). Longer tethers score higher combo multipliers, but if enemies hit your tail, you take damage!</p>
+        <p>Risk it all for the High Score.</p>
+      </div>
+      <button class="btn" id="btn-howto-back">Back</button>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud">
+      <div class="hud-top">
+        <div>Score: <span id="hud-score">0</span></div>
+        <div>Tail Length: <span id="hud-tail">0</span></div>
+      </div>
+      <button id="btn-pause">II</button>
+    </div>
+
+    <!-- Pause Screen -->
+    <div id="screen-paused" class="screen">
+      <h2>PAUSED</h2>
+      <button class="btn" id="btn-resume">Resume</button>
+      <button class="btn" id="btn-restart">Restart</button>
+      <button class="btn" id="btn-options-pause">Options</button>
+      <button class="btn" id="btn-quit">Quit to Title</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="screen-gameover" class="screen">
+      <h2>SYSTEM FAILURE</h2>
+      <div class="stats-container">
+        <div>Final Score: <span id="go-score">0</span></div>
+        <div id="go-highscore-banner" style="color: #ffd700; display: none;">NEW HIGH SCORE!</div>
+        <div class="milestones" id="go-milestones"></div>
+      </div>
+      <button class="btn" id="btn-playagain">Play Again</button>
+      <button class="btn" id="btn-gotitle">Title Screen</button>
+    </div>
+
+    <!-- Options Modal -->
+    <div id="options-modal">
+      <h2>OPTIONS</h2>
+      <div class="option-row">
+        <label>Master Mute</label>
+        <input type="checkbox" id="opt-mute">
+      </div>
+      <div class="option-row">
+        <label>SFX Vol</label>
+        <input type="range" id="opt-sfx" min="0" max="100" value="80">
+      </div>
+      <div class="option-row">
+        <label>Music Vol</label>
+        <input type="range" id="opt-music" min="0" max="100" value="60">
+      </div>
+      <div class="option-row">
+        <label>Screen Shake</label>
+        <select id="opt-shake">
+          <option value="100">100%</option>
+          <option value="50">50%</option>
+          <option value="0">Off</option>
+        </select>
+      </div>
+      <div class="option-row">
+        <label>Particles</label>
+        <select id="opt-particles">
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <div style="margin-top: 15px;">
+        <button class="btn" style="width: 100%; margin: 5px 0;" id="btn-export">Export Save</button>
+        <button class="btn" style="width: 100%; margin: 5px 0;" id="btn-import">Import Save</button>
+        <textarea id="save-data-textarea" placeholder="Paste save data here to import..."></textarea>
+        <button class="btn" style="width: 100%; margin: 5px 0; border-color: #ff4444; color: #ff4444;" id="btn-reset">Reset Save</button>
+      </div>
+      <button class="btn" style="margin-top: 20px;" id="btn-close-options">Close</button>
+    </div>
+
+    <!-- Touch Controls Layer -->
+    <div id="touch-controls">
+      <div class="touch-zone" id="touch-joystick">
+        <div class="touch-stick" id="touch-stick"></div>
+      </div>
+      <div class="touch-btn" id="touch-action">SLASH</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Base script wrapper - content to be injected
+window.addEventListener('DOMContentLoaded', () => {
+
+class SaveManager {
+    constructor() {
+        this.key = 'arcade_game_045_045-cyber-ronin-tether_v1';
+        this.defaultData = {
+            highScore: 0,
+            bestTail: 0,
+            totalGamesPlayed: 0,
+            totalScoreAccumulated: 0,
+            unlockedMilestones: [],
+            options: {
+                mute: false,
+                sfxVol: 80,
+                musicVol: 60,
+                shake: 100,
+                particles: 'high'
+            }
+        };
+        this.data = this.load();
+    }
+
+    load() {
+        try {
+            const stored = localStorage.getItem(this.key);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                return { ...this.defaultData, ...parsed, options: { ...this.defaultData.options, ...parsed.options } };
+            }
+        } catch (e) {
+            console.warn("localStorage read failed, using memory", e);
+        }
+        return JSON.parse(JSON.stringify(this.defaultData));
+    }
+
+    save() {
+        try {
+            localStorage.setItem(this.key, JSON.stringify(this.data));
+        } catch (e) {
+            console.warn("localStorage write failed", e);
+        }
+    }
+
+    export() {
+        return btoa(JSON.stringify(this.data));
+    }
+
+    importData(base64Str) {
+        try {
+            const parsed = JSON.parse(atob(base64Str));
+            if (parsed && typeof parsed === 'object') {
+                this.data = { ...this.defaultData, ...parsed, options: { ...this.defaultData.options, ...(parsed.options || {}) } };
+                this.save();
+                return true;
+            }
+        } catch (e) {
+            console.error("Import failed", e);
+        }
+        return false;
+    }
+
+    reset() {
+        this.data = JSON.parse(JSON.stringify(this.defaultData));
+        try {
+            localStorage.removeItem(this.key);
+        } catch (e) {}
+    }
+}
+
+class UIManager {
+    constructor(engine) {
+        this.engine = engine;
+        this.screens = {
+            title: document.getElementById('screen-title'),
+            howto: document.getElementById('screen-howto'),
+            playing: document.getElementById('hud'),
+            paused: document.getElementById('screen-paused'),
+            gameover: document.getElementById('screen-gameover')
+        };
+        this.optionsModal = document.getElementById('options-modal');
+        this.touchControls = document.getElementById('touch-controls');
+
+        this.setupEventListeners();
+        this.updateTitleStats();
+    }
+
+    showScreen(name) {
+        Object.values(this.screens).forEach(s => s.classList.remove('active'));
+        if (this.screens[name]) {
+            this.screens[name].classList.add('active');
+        }
+    }
+
+    updateTitleStats() {
+        document.getElementById('title-highscore').textContent = this.engine.saveManager.data.highScore;
+        const ms = this.engine.saveManager.data.unlockedMilestones;
+        document.getElementById('title-milestones').innerHTML = ms.length > 0 ? "Milestones: " + ms.join(", ") : "";
+    }
+
+    setupEventListeners() {
+        // Title
+        document.getElementById('btn-play').addEventListener('click', () => this.engine.startGame());
+        document.getElementById('btn-howto').addEventListener('click', () => this.showScreen('howto'));
+        document.getElementById('btn-options-title').addEventListener('click', () => this.showOptions());
+
+        // How To
+        document.getElementById('btn-howto-back').addEventListener('click', () => {
+            if (this.engine.state === 'PAUSED') this.showScreen('paused');
+            else this.showScreen('title');
+        });
+
+        // HUD
+        document.getElementById('btn-pause').addEventListener('click', () => this.engine.pauseGame());
+
+        // Paused
+        document.getElementById('btn-resume').addEventListener('click', () => this.engine.resumeGame());
+        document.getElementById('btn-restart').addEventListener('click', () => this.engine.startGame());
+        document.getElementById('btn-options-pause').addEventListener('click', () => this.showOptions());
+        document.getElementById('btn-quit').addEventListener('click', () => this.engine.quitToTitle());
+
+        // Game Over
+        document.getElementById('btn-playagain').addEventListener('click', () => this.engine.startGame());
+        document.getElementById('btn-gotitle').addEventListener('click', () => this.engine.quitToTitle());
+
+        // Options
+        document.getElementById('btn-close-options').addEventListener('click', () => this.hideOptions());
+
+        const bindOpt = (id, key, event, type) => {
+            const el = document.getElementById(id);
+            if (type === 'checkbox') el.checked = this.engine.saveManager.data.options[key];
+            else el.value = this.engine.saveManager.data.options[key];
+
+            el.addEventListener(event, (e) => {
+                this.engine.saveManager.data.options[key] = type === 'checkbox' ? e.target.checked : (type === 'number' ? Number(e.target.value) : e.target.value);
+                this.engine.saveManager.save();
+                this.engine.onOptionsChanged();
+            });
+        };
+
+        bindOpt('opt-mute', 'mute', 'change', 'checkbox');
+        bindOpt('opt-sfx', 'sfxVol', 'input', 'number');
+        bindOpt('opt-music', 'musicVol', 'input', 'number');
+        bindOpt('opt-shake', 'shake', 'change', 'number');
+        bindOpt('opt-particles', 'particles', 'change', 'string');
+
+        // Export/Import/Reset
+        const ta = document.getElementById('save-data-textarea');
+        document.getElementById('btn-export').addEventListener('click', () => {
+            ta.value = this.engine.saveManager.export();
+            ta.select();
+        });
+        document.getElementById('btn-import').addEventListener('click', () => {
+            if (ta.value && this.engine.saveManager.importData(ta.value)) {
+                alert("Import successful!");
+                this.updateTitleStats();
+            } else {
+                alert("Invalid save data.");
+            }
+        });
+        let resetClicks = 0;
+        const btnReset = document.getElementById('btn-reset');
+        btnReset.addEventListener('click', () => {
+            resetClicks++;
+            if (resetClicks === 1) {
+                btnReset.textContent = "Click again to confirm reset";
+            } else {
+                this.engine.saveManager.reset();
+                resetClicks = 0;
+                btnReset.textContent = "Reset Save";
+                this.updateTitleStats();
+                alert("Save reset.");
+            }
+        });
+    }
+
+    showOptions() {
+        this.optionsModal.classList.add('active');
+    }
+
+    hideOptions() {
+        this.optionsModal.classList.remove('active');
+    }
+}
+
+
+class ParticleSystem {
+    constructor() { this.particles = []; }
+    spawn(x, y, count, color, speed) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const v = Math.random() * speed;
+            this.particles.push({
+                x, y, vx: Math.cos(angle)*v, vy: Math.sin(angle)*v,
+                life: 1.0, color, size: Math.random() * 4 + 2
+            });
+        }
+    }
+    update(dt) {
+        for(let i=this.particles.length-1; i>=0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt * 2;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+    }
+}
+
+class TailNode {
+    constructor(x, y) { this.x = x; this.y = y; }
+}
+
+class Player {
+    constructor(engine) {
+        this.engine = engine;
+        this.x = 640; this.y = 360;
+        this.vx = 0; this.vy = 0;
+        this.radius = 12;
+        this.tail = [];
+        this.tailLength = 0; // Risk/Reward length
+        this.grapplePoint = null;
+        this.grappleDist = 0;
+        this.state = 'FREE'; // FREE, GRAPPLED, SLASHING
+        this.slashTimer = 0;
+        this.gravity = 400;
+        this.energy = 100;
+        this.combo = 1;
+    }
+
+    update(dt) {
+        const input = this.engine.input.getAxis();
+
+        if (this.state === 'FREE') {
+            this.vy += this.gravity * dt;
+            this.vx += input.x * 600 * dt; // Air control
+
+            // Friction/Drag
+            this.vx *= 0.99;
+            this.vy *= 0.99;
+        } else if (this.state === 'GRAPPLED') {
+            // Pendulum physics
+            const dx = this.x - this.grapplePoint.x;
+            const dy = this.y - this.grapplePoint.y;
+            const dist = Math.hypot(dx, dy);
+
+            // Gravity
+            this.vy += this.gravity * dt;
+
+            // Tension
+            if (dist > this.grappleDist) {
+                const nx = dx / dist;
+                const ny = dy / dist;
+                const vdot = this.vx * nx + this.vy * ny;
+                this.vx -= vdot * nx;
+                this.vy -= vdot * ny;
+
+                // Pull back
+                this.x = this.grapplePoint.x + nx * this.grappleDist;
+                this.y = this.grapplePoint.y + ny * this.grappleDist;
+            }
+
+            // Swing control
+            const tangentX = -dy / dist;
+            const tangentY = dx / dist;
+            this.vx += input.x * tangentX * 800 * dt;
+            this.vy += input.x * tangentY * 800 * dt;
+
+            this.grappleDist -= input.y * 300 * dt; // Reel in/out
+            if (this.grappleDist < 50) this.grappleDist = 50;
+        }
+
+        if (this.state === 'SLASHING') {
+            this.slashTimer -= dt;
+            if (this.slashTimer <= 0) this.state = 'FREE';
+        }
+
+        // Handle input actions
+        if (this.engine.input.isAction()) {
+            if (this.state === 'FREE' && this.slashTimer <= 0) {
+                // Try to grapple
+                let bestNode = null;
+                let bestDist = 300;
+                this.engine.nodes.forEach(n => {
+                    const d = Math.hypot(this.x - n.x, this.y - n.y);
+                    if (d < bestDist && n.type === 'ANCHOR') { bestDist = d; bestNode = n; }
+                });
+
+                if (bestNode) {
+                    this.state = 'GRAPPLED';
+                    this.grapplePoint = bestNode;
+                    this.grappleDist = bestDist;
+                    this.engine.sound.sfxGrapple();
+
+                    // Juice: screen shake on grapple
+                    if (this.engine.saveManager.data.options.shake > 0) {
+                        this.engine.shake = 5 * (this.engine.saveManager.data.options.shake / 100);
+                    }
+                } else if (this.energy > 20) {
+                    // Slash
+                    this.state = 'SLASHING';
+                    this.slashTimer = 0.2;
+                    this.energy -= 20;
+                    this.engine.sound.sfxSlash();
+
+                    // Boost in direction of mouse or movement
+                    const mouse = this.engine.input.mouse;
+                    let angle;
+                    if (mouse.x !== 0 && mouse.y !== 0) {
+                        angle = Math.atan2(mouse.y * 720 - this.y, mouse.x * 1280 - this.x);
+                    } else {
+                        angle = Math.atan2(this.vy, this.vx);
+                    }
+                    this.vx = Math.cos(angle) * 800;
+                    this.vy = Math.sin(angle) * 800;
+                }
+            }
+        } else {
+            if (this.state === 'GRAPPLED') {
+                this.state = 'FREE'; // Release
+            }
+        }
+
+        // Apply velocity
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        // Tail kinematics
+        this.tail.unshift(new TailNode(this.x, this.y));
+        if (this.tail.length > this.tailLength * 5 + 5) {
+            this.tail.pop();
+        }
+
+        // Boundary check (Game Over if falling off)
+        if (this.y > 800 || this.x < -100 || this.x > 1380 || this.y < -100) {
+            this.engine.gameOver();
+        }
+    }
+}
+
+class GameNode {
+    constructor(x, y, type) {
+        this.x = x; this.y = y; this.type = type; // ANCHOR, ENERGY, ENEMY
+        this.active = true;
+        this.radius = type === 'ANCHOR' ? 15 : (type === 'ENERGY' ? 10 : 20);
+        this.timer = 0;
+    }
+}
+
+class GameEngine {
+    constructor() {
+        this.saveManager = new SaveManager();
+        this.ui = new UIManager(this);
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+        this.canvas = document.getElementById('game-canvas');
+        this.ctx = this.canvas.getContext('2d');
+
+        // Logical resolution
+        this.canvas.width = 1280;
+        this.canvas.height = 720;
+
+        this.input = new InputManager(this.canvas, this.ui);
+        this.sound = new SoundEngine(this.saveManager);
+
+        this.lastTime = 0;
+
+        // Resize Observer
+        this.resizeObserver = new ResizeObserver(entries => {
+            // CSS handles scaling via canvas { width: 100%, height: 100% } and flex container.
+            // Logical coordinates remain 1280x720.
+        });
+        this.resizeObserver.observe(document.getElementById('game-container'));
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && this.state === 'PLAYING') this.pauseGame();
+        });
+        window.addEventListener('blur', () => {
+            if (this.state === 'PLAYING') this.pauseGame();
+        });
+
+    }
+
+    startGame() {
+        this.state = 'PLAYING';
+        this.ui.showScreen('playing');
+        // Reset game state...
+    }
+
+    pauseGame() {
+        if (this.state === 'PLAYING') {
+            this.state = 'PAUSED';
+            this.ui.showScreen('paused');
+        }
+    }
+
+    resumeGame() {
+        if (this.state === 'PAUSED') {
+            this.state = 'PLAYING';
+            this.ui.showScreen('playing');
+        }
+    }
+
+    quitToTitle() {
+        this.state = 'TITLE';
+        this.ui.showScreen('title');
+        this.ui.updateTitleStats();
+    }
+
+    onOptionsChanged() {
+        this.sound.applyOptions();
+    }
+
+    startLoop() {
+        requestAnimationFrame((t) => this.loop(t));
+    }
+
+    loop(timestamp) {
+        let dt = (timestamp - this.lastTime) / 1000;
+        if (dt > 0.1) dt = 0.1; // Cap dt
+        this.lastTime = timestamp;
+
+        if (this.state === 'PLAYING') {
+            this.update(dt);
+        }
+
+        this.draw();
+
+        requestAnimationFrame((t) => this.loop(t));
+    }
+
+
+    startGame() {
+        this.state = 'PLAYING';
+        this.ui.showScreen('playing');
+        this.sound.sfxUI();
+        this.sound.startMusic();
+
+        this.player = new Player(this);
+        this.nodes = [];
+        this.particles = new ParticleSystem();
+        this.score = 0;
+        this.shake = 0;
+        this.waveTimer = 0;
+
+        // Initial nodes
+        this.nodes.push(new GameNode(640, 200, 'ANCHOR'));
+        this.nodes.push(new GameNode(400, 300, 'ENERGY'));
+        this.nodes.push(new GameNode(880, 300, 'ENERGY'));
+
+        this.updateHUD();
+    }
+
+    pauseGame() {
+        if (this.state === 'PLAYING') {
+            this.state = 'PAUSED';
+            this.ui.showScreen('paused');
+            this.sound.sfxUI();
+        }
+    }
+
+    resumeGame() {
+        if (this.state === 'PAUSED') {
+            this.state = 'PLAYING';
+            this.ui.showScreen('playing');
+            this.sound.sfxUI();
+        }
+    }
+
+    quitToTitle() {
+        this.state = 'TITLE';
+        this.ui.showScreen('title');
+        this.ui.updateTitleStats();
+        this.sound.sfxUI();
+        this.sound.stopMusic();
+    }
+
+    gameOver() {
+        this.state = 'GAME_OVER';
+        this.sound.stopMusic();
+        this.sound.sfxHit();
+
+        // Save stats
+        let newHighScore = false;
+        if (this.score > this.saveManager.data.highScore) {
+            this.saveManager.data.highScore = this.score;
+            newHighScore = true;
+        }
+        if (this.player.tailLength > this.saveManager.data.bestTail) {
+            this.saveManager.data.bestTail = this.player.tailLength;
+        }
+        this.saveManager.data.totalGamesPlayed++;
+        this.saveManager.data.totalScoreAccumulated += this.score;
+
+        // Milestones
+        const ms = this.saveManager.data.unlockedMilestones;
+        let newMs = [];
+        if (this.score >= 1000 && !ms.includes('Novice Ronin')) { ms.push('Novice Ronin'); newMs.push('Novice Ronin'); }
+        if (this.score >= 5000 && !ms.includes('Master Ronin')) { ms.push('Master Ronin'); newMs.push('Master Ronin'); }
+        if (this.player.tailLength >= 20 && !ms.includes('Long Tail')) { ms.push('Long Tail'); newMs.push('Long Tail'); }
+
+        this.saveManager.save();
+
+        this.ui.showScreen('gameover');
+        document.getElementById('go-score').textContent = this.score;
+        document.getElementById('go-highscore-banner').style.display = newHighScore ? 'block' : 'none';
+        document.getElementById('go-milestones').innerHTML = newMs.length > 0 ? "Unlocked: " + newMs.join(", ") : "";
+    }
+
+    update(dt) {
+        this.player.update(dt);
+        this.particles.update(dt);
+
+        if (this.shake > 0) {
+            this.shake -= dt * 10;
+            if (this.shake < 0) this.shake = 0;
+        }
+
+        // Procedural Generation
+        this.waveTimer -= dt;
+        if (this.waveTimer <= 0) {
+            this.waveTimer = 2.0;
+            const x = Math.random() * 1000 + 140;
+            const y = Math.random() * 400 + 50;
+            const rand = Math.random();
+            if (rand < 0.3) this.nodes.push(new GameNode(x, y, 'ANCHOR'));
+            else if (rand < 0.7) this.nodes.push(new GameNode(x, y, 'ENERGY'));
+            else this.nodes.push(new GameNode(x, y, 'ENEMY'));
+
+            // Clean up old nodes
+            if (this.nodes.length > 20) this.nodes.shift();
+        }
+
+        // Energy recharge
+        this.player.energy = Math.min(100, this.player.energy + 10 * dt);
+
+        // Collisions
+        for (let i = this.nodes.length - 1; i >= 0; i--) {
+            let n = this.nodes[i];
+            const dist = Math.hypot(this.player.x - n.x, this.player.y - n.y);
+
+            if (n.type === 'ENERGY' && dist < this.player.radius + n.radius) {
+                this.player.tailLength++;
+                this.player.combo = 1 + Math.floor(this.player.tailLength / 5);
+                this.score += 10 * this.player.combo;
+                this.sound.sfxCollect();
+                this.particles.spawn(n.x, n.y, 10, '#46b478', 100);
+                this.nodes.splice(i, 1);
+                this.updateHUD();
+            } else if (n.type === 'ENEMY') {
+                // Check player hit
+                if (dist < this.player.radius + n.radius) {
+                    if (this.player.state === 'SLASHING') {
+                        // Destroy enemy
+                        this.score += 50 * this.player.combo;
+                        this.sound.sfxSlash(); // Hit sound reuse
+                        this.particles.spawn(n.x, n.y, 20, '#ff4444', 200);
+                        this.nodes.splice(i, 1);
+                        this.updateHUD();
+                    } else {
+                        // Hit by enemy
+                        this.takeDamage();
+                        this.nodes.splice(i, 1);
+                    }
+                } else {
+                    // Check tail hit (Risk/Reward)
+                    for (let t = 0; t < this.player.tail.length; t += 5) {
+                        if (!this.player.tail[t]) continue;
+                        const tDist = Math.hypot(this.player.tail[t].x - n.x, this.player.tail[t].y - n.y);
+                        if (tDist < n.radius) {
+                            // Tail severed
+                            this.player.tailLength = Math.max(0, this.player.tailLength - 5);
+                            this.player.combo = 1 + Math.floor(this.player.tailLength / 5);
+                            this.player.tail.splice(t); // Cut tail array
+                            this.takeDamage();
+                            this.nodes.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    takeDamage() {
+        this.sound.sfxHit();
+        this.shake = 10 * (this.saveManager.data.options.shake / 100);
+        this.particles.spawn(this.player.x, this.player.y, 30, '#ff0000', 300);
+
+        // Simple lives: if tail is 0 and hit, die
+        if (this.player.tailLength <= 0) {
+            this.gameOver();
+        } else {
+            this.player.tailLength = Math.floor(this.player.tailLength / 2);
+            this.player.combo = 1 + Math.floor(this.player.tailLength / 5);
+            this.updateHUD();
+        }
+    }
+
+    updateHUD() {
+        document.getElementById('hud-score').textContent = this.score;
+        document.getElementById('hud-tail').textContent = this.player.tailLength;
+    }
+
+
+
+    draw() {
+        // Screen Shake
+        this.ctx.save();
+        if (this.shake > 0) {
+            const dx = (Math.random() - 0.5) * this.shake * 2;
+            const dy = (Math.random() - 0.5) * this.shake * 2;
+            this.ctx.translate(dx, dy);
+        }
+
+        // Cyber Dojo Background
+        const grad = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+        grad.addColorStop(0, '#0d1117');
+        grad.addColorStop(1, '#161b22');
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Grid Lines
+        this.ctx.strokeStyle = 'rgba(70, 180, 120, 0.1)';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        for (let x = 0; x <= this.canvas.width; x += 80) { this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.canvas.height); }
+        for (let y = 0; y <= this.canvas.height; y += 80) { this.ctx.moveTo(0, y); this.ctx.lineTo(this.canvas.width, y); }
+        this.ctx.stroke();
+
+        if (this.state === 'TITLE' || this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+            if (this.player) {
+                // Draw Nodes
+                this.nodes.forEach(n => {
+                    this.ctx.beginPath();
+                    this.ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+                    if (n.type === 'ANCHOR') {
+                        this.ctx.fillStyle = '#888';
+                        this.ctx.fill();
+                        this.ctx.strokeStyle = '#fff';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.stroke();
+                    } else if (n.type === 'ENERGY') {
+                        this.ctx.fillStyle = '#46b478';
+                        this.ctx.fill();
+                        this.ctx.shadowBlur = 10;
+                        this.ctx.shadowColor = '#46b478';
+                    } else if (n.type === 'ENEMY') {
+                        this.ctx.fillStyle = '#ff4444';
+                        this.ctx.fill();
+                        this.ctx.shadowBlur = 15;
+                        this.ctx.shadowColor = '#ff4444';
+                        // spikes
+                        this.ctx.strokeStyle = '#fff';
+                        for(let i=0; i<4; i++){
+                            this.ctx.moveTo(n.x, n.y);
+                            this.ctx.lineTo(n.x + Math.cos(i*Math.PI/2)*25, n.y + Math.sin(i*Math.PI/2)*25);
+                        }
+                        this.ctx.stroke();
+                    }
+                    this.ctx.shadowBlur = 0; // reset
+                });
+
+                // Draw Tether (Grapple)
+                if (this.player.state === 'GRAPPLED' && this.player.grapplePoint) {
+                    this.ctx.strokeStyle = '#c9d1d9';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(this.player.x, this.player.y);
+                    this.ctx.lineTo(this.player.grapplePoint.x, this.player.grapplePoint.y);
+                    this.ctx.stroke();
+                }
+
+                // Draw Tail
+                if (this.player.tail.length > 1) {
+                    this.ctx.strokeStyle = '#46b478';
+                    this.ctx.lineWidth = Math.min(8, 2 + this.player.tailLength / 5);
+                    this.ctx.lineCap = 'round';
+                    this.ctx.lineJoin = 'round';
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(this.player.x, this.player.y);
+                    for (let i = 1; i < this.player.tail.length; i++) {
+                        this.ctx.lineTo(this.player.tail[i].x, this.player.tail[i].y);
+                    }
+                    this.ctx.stroke();
+                }
+
+                // Draw Player
+                this.ctx.fillStyle = '#fff';
+                this.ctx.beginPath();
+                this.ctx.arc(this.player.x, this.player.y, this.player.radius, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                // Slash Arc
+                if (this.player.state === 'SLASHING') {
+                    this.ctx.strokeStyle = '#fff';
+                    this.ctx.lineWidth = 4;
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.player.x, this.player.y, this.player.radius + 15, -Math.PI/2, Math.PI);
+                    this.ctx.stroke();
+                }
+
+                // Energy Bar
+                this.ctx.fillStyle = '#444';
+                this.ctx.fillRect(this.player.x - 15, this.player.y + 20, 30, 4);
+                this.ctx.fillStyle = '#46b478';
+                this.ctx.fillRect(this.player.x - 15, this.player.y + 20, 30 * (this.player.energy / 100), 4);
+
+                // Particles
+                if (this.saveManager.data.options.particles === 'high') {
+                    this.particles.particles.forEach(p => {
+                        this.ctx.globalAlpha = p.life;
+                        this.ctx.fillStyle = p.color;
+                        this.ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+                    });
+                    this.ctx.globalAlpha = 1.0;
+                }
+            }
+        }
+        this.ctx.restore();
+    }
+
+
+}
+
+const engine = new GameEngine();
+
+class InputManager {
+    constructor(canvas, ui) {
+        this.canvas = canvas;
+        this.ui = ui;
+        this.keys = {};
+        this.mouse = { x: 0, y: 0, down: false };
+        this.touchActive = false;
+        this.touchJoystick = { x: 0, y: 0, active: false };
+        this.touchAction = false;
+
+        window.addEventListener('keydown', e => { this.keys[e.code] = true; });
+        window.addEventListener('keyup', e => { this.keys[e.code] = false; });
+
+        canvas.addEventListener('mousemove', e => {
+            if (this.touchActive) return;
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouse.x = (e.clientX - rect.left) / (rect.width / canvas.width);
+            this.mouse.y = (e.clientY - rect.top) / (rect.height / canvas.height);
+        });
+
+        canvas.addEventListener('mousedown', e => {
+            if (this.touchActive) return;
+            this.mouse.down = true;
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (this.touchActive) return;
+            this.mouse.down = false;
+        });
+
+        // Touch
+        const tZone = document.getElementById('touch-joystick');
+        const tStick = document.getElementById('touch-stick');
+        const tBtn = document.getElementById('touch-action');
+
+        const updateStick = (e) => {
+            e.preventDefault();
+            this.touchActive = true;
+            this.ui.touchControls.classList.add('active');
+            const touch = e.touches[0];
+            const rect = tZone.getBoundingClientRect();
+            let dx = touch.clientX - (rect.left + rect.width/2);
+            let dy = touch.clientY - (rect.top + rect.height/2);
+            const maxR = rect.width/2;
+            const dist = Math.hypot(dx, dy);
+            if (dist > maxR) {
+                dx = (dx/dist) * maxR;
+                dy = (dy/dist) * maxR;
+            }
+            tStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+            this.touchJoystick.x = dx / maxR;
+            this.touchJoystick.y = dy / maxR;
+        };
+
+        tZone.addEventListener('touchstart', (e) => { this.touchJoystick.active = true; updateStick(e); });
+        tZone.addEventListener('touchmove', updateStick);
+        const resetStick = (e) => {
+            e.preventDefault();
+            this.touchJoystick.active = false;
+            this.touchJoystick.x = 0;
+            this.touchJoystick.y = 0;
+            tStick.style.transform = 'translate(-50%, -50%)';
+        };
+        tZone.addEventListener('touchend', resetStick);
+        tZone.addEventListener('touchcancel', resetStick);
+
+        const tapBtn = (e) => { e.preventDefault(); this.touchAction = true; this.touchActive = true; this.ui.touchControls.classList.add('active'); };
+        const relBtn = (e) => { e.preventDefault(); this.touchAction = false; };
+        tBtn.addEventListener('touchstart', tapBtn);
+        tBtn.addEventListener('touchend', relBtn);
+        tBtn.addEventListener('touchcancel', relBtn);
+    }
+
+    getAxis() {
+        let x = 0, y = 0;
+        if (this.keys['KeyW'] || this.keys['ArrowUp']) y -= 1;
+        if (this.keys['KeyS'] || this.keys['ArrowDown']) y += 1;
+        if (this.keys['KeyA'] || this.keys['ArrowLeft']) x -= 1;
+        if (this.keys['KeyD'] || this.keys['ArrowRight']) x += 1;
+
+        if (this.touchJoystick.active) {
+            x = this.touchJoystick.x;
+            y = this.touchJoystick.y;
+        }
+
+        const len = Math.hypot(x, y);
+        if (len > 1) { x /= len; y /= len; }
+        return { x, y };
+    }
+
+    isAction() {
+        return this.keys['Space'] || this.mouse.down || this.touchAction;
+    }
+}
+
+
+class SoundEngine {
+    constructor(saveManager) {
+        this.saveManager = saveManager;
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.masterGain = this.ctx.createGain();
+        this.sfxGain = this.ctx.createGain();
+        this.musicGain = this.ctx.createGain();
+
+        this.sfxGain.connect(this.masterGain);
+        this.musicGain.connect(this.masterGain);
+        this.masterGain.connect(this.ctx.destination);
+
+        this.applyOptions();
+
+        // Resume on first interaction
+        const resume = () => {
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+            document.removeEventListener('pointerdown', resume);
+            document.removeEventListener('keydown', resume);
+        };
+        document.addEventListener('pointerdown', resume);
+        document.addEventListener('keydown', resume);
+
+        this.musicOsc = null;
+        this.musicInterval = null;
+        this.isPlayingMusic = false;
+    }
+
+    applyOptions() {
+        const opts = this.saveManager.data.options;
+        this.masterGain.gain.value = opts.mute ? 0 : 1;
+        this.sfxGain.gain.value = opts.sfxVol / 100;
+        this.musicGain.gain.value = opts.musicVol / 100;
+    }
+
+    playTone(freq, type, duration, vol=1, slideFreq=null) {
+        if (this.saveManager.data.options.mute || this.saveManager.data.options.sfxVol === 0) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        if (slideFreq) {
+            osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+        }
+
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    playNoise(duration, vol=1) {
+        if (this.saveManager.data.options.mute || this.saveManager.data.options.sfxVol === 0) return;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1000;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.sfxGain);
+
+        noise.start();
+    }
+
+    sfxGrapple() { this.playTone(600, 'sine', 0.2, 0.5, 1200); }
+    sfxSlash() { this.playNoise(0.1, 0.8); this.playTone(800, 'square', 0.1, 0.3, 200); }
+    sfxCollect() { this.playTone(1200, 'sine', 0.1, 0.4, 2000); setTimeout(() => this.playTone(1600, 'sine', 0.1, 0.4, 2400), 100); }
+    sfxHit() { this.playNoise(0.3, 1); this.playTone(200, 'sawtooth', 0.3, 0.8, 50); }
+    sfxUI() { this.playTone(800, 'sine', 0.05, 0.3); }
+
+    startMusic() {
+        if (this.isPlayingMusic) return;
+        this.isPlayingMusic = true;
+
+        const notes = [220, 261.63, 329.63, 392.00]; // A minor pentatonic-ish
+        let step = 0;
+
+        const playNextNote = () => {
+            if (!this.isPlayingMusic) return;
+            const freq = notes[step % notes.length] * (Math.random() > 0.8 ? 2 : 1);
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'square';
+            osc.frequency.value = freq / 2;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(400, this.ctx.currentTime);
+            filter.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.2);
+
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.musicGain);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.2);
+
+            step++;
+            this.musicInterval = setTimeout(playNextNote, 250);
+        };
+        playNextNote();
+    }
+
+    stopMusic() {
+        this.isPlayingMusic = false;
+        clearTimeout(this.musicInterval);
+    }
+}
+
+window.engine = engine;
+engine.startLoop();
+
+});
+</script>
+</body>
+</html>
