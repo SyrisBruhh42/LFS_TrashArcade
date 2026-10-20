@@ -24,18 +24,5 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2026-10-20",
     "accentColor": "#ff00ff",
     "path": "./games/002-neon-grapple-dilation/index.html"
-  },
-  {
-    "id": "003",
-    "slug": "003-gate-probe",
-    "title": "Gate Probe",
-    "genre": "Twin-Stick Arena",
-    "coreMechanic": "Recoil-as-Movement",
-    "setting": "Junkyard Robot Scrapheap",
-    "description": "Gate probe used to test the pipeline; removed after the test.",
-    "controls": "None.",
-    "createdAt": "2026-10-20",
-    "accentColor": "#33ccff",
-    "path": "./games/003-gate-probe/index.html"
   }
 ];
