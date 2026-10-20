@@ -1,0 +1,256 @@
+:root {
+  --bg-color: #1a1c23;
+  --text-color: #e0e0e0;
+  --accent: #78c94d;
+  --accent-hover: #5ba337;
+  --panel-bg: rgba(20, 22, 28, 0.9);
+  --ui-font: 'Courier New', Courier, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body, html {
+  width: 100%;
+  height: 100%;
+  background-color: #000;
+  overflow: hidden;
+  font-family: var(--ui-font);
+  color: var(--text-color);
+  touch-action: none;
+}
+
+#game-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+canvas {
+  display: block;
+  image-rendering: pixelated;
+  /* Logical size will be maintained by game.js ResizeObserver */
+}
+
+#ui-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: var(--panel-bg);
+  pointer-events: auto;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.title-text {
+  font-size: 3rem;
+  color: var(--accent);
+  margin-bottom: 1rem;
+  text-shadow: 2px 2px 0 #000;
+  text-align: center;
+}
+
+.stats-box {
+  background: rgba(0,0,0,0.5);
+  padding: 1rem;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  font-size: 1.2rem;
+}
+
+.btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 250px;
+}
+
+button {
+  font-family: var(--ui-font);
+  background: #333;
+  color: var(--text-color);
+  border: 2px solid #555;
+  padding: 0.8rem;
+  font-size: 1.2rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  pointer-events: auto;
+}
+
+button:hover, button:active {
+  background: var(--accent);
+  border-color: var(--text-color);
+  color: #000;
+}
+
+.back-link {
+  margin-top: 2rem;
+  color: #888;
+  text-decoration: none;
+  font-size: 1rem;
+  pointer-events: auto;
+}
+
+.back-link:hover {
+  color: var(--text-color);
+}
+
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+.hud-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-size: 1.5rem;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.icon-btn {
+  padding: 0.5rem 1rem;
+  font-weight: bold;
+}
+
+.hud-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+#ghost-status {
+  background: rgba(0,0,0,0.5);
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+}
+
+/* Touch Controls */
+#touch-controls {
+  pointer-events: auto;
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+}
+
+#dpad {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dpad-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+#dpad button, #action-btns button {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  opacity: 0.6;
+}
+
+/* Modals */
+.modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+  z-index: 100;
+}
+
+.modal-content {
+  background: #222;
+  border: 2px solid var(--accent);
+  padding: 2rem;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.option-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.save-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.save-actions button {
+  font-size: 0.9rem;
+  padding: 0.5rem;
+}
+
+#save-data-box {
+  width: 100%;
+  height: 60px;
+  margin-top: 0.5rem;
+  font-family: monospace;
+  background: #111;
+  color: #fff;
+  border: 1px solid #555;
+  padding: 0.5rem;
+}
+
+.howto-content {
+  max-width: 600px;
+  margin: 2rem;
+  line-height: 1.6;
+}
+
+.howto-content p {
+  margin-bottom: 1rem;
+}
