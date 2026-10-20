@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Candy Conveyor Slash</title>
+    <style>
+        :root {
+            --accent: #b6c9ba;
+            --bg: #1a1a1a;
+            --text: #ffffff;
+            --panel: rgba(0, 0, 0, 0.85);
+            --danger: #e74c3c;
+            --energy: #f1c40f;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            touch-action: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+        }
+
+        canvas {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: var(--panel);
+            z-index: 10;
+            transition: opacity 0.3s;
+        }
+
+        .hidden { display: none !important; }
+
+        h1 { font-size: 3rem; color: var(--accent); margin-bottom: 0.5rem; text-align: center; text-transform: uppercase; text-shadow: 2px 2px 0px #000; }
+        h2 { font-size: 2rem; margin-bottom: 1rem; color: var(--accent); }
+        p { font-size: 1.2rem; margin-bottom: 1rem; text-align: center; max-width: 80%; line-height: 1.4; }
+
+        .btn {
+            background: transparent;
+            color: var(--accent);
+            border: 2px solid var(--accent);
+            padding: 10px 20px;
+            font-size: 1.5rem;
+            margin: 10px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .btn:hover {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .hud {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 5;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .hud-left, .hud-right { display: flex; flex-direction: column; }
+        .hud-right { align-items: flex-end; }
+
+        .hud-text { font-size: 1.5rem; color: #fff; text-shadow: 2px 2px 0px #000; margin-bottom: 5px; }
+        .score-text { font-size: 2rem; color: var(--accent); font-weight: bold; }
+
+        .ammo-container { display: flex; gap: 5px; margin-top: 10px; }
+        .ammo-slot { width: 20px; height: 20px; border: 2px solid var(--accent); border-radius: 50%; }
+        .ammo-filled { background: var(--energy); border-color: var(--energy); box-shadow: 0 0 10px var(--energy); }
+
+        .btn-pause {
+            position: absolute;
+            top: 20px; right: 20px;
+            pointer-events: auto;
+            background: rgba(0,0,0,0.5);
+            border: 2px solid var(--accent);
+            color: var(--accent);
+            width: 40px; height: 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 6;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        /* Modal */
+        .modal {
+            background: #111; border: 2px solid var(--accent);
+            padding: 30px; border-radius: 10px;
+            max-width: 600px; width: 90%;
+            max-height: 90vh; overflow-y: auto;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        .options-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; margin: 20px 0;
+            text-align: right; align-items: center;
+        }
+
+        .options-grid label { font-size: 1.2rem; }
+        .options-grid input[type="range"] { width: 100%; }
+        .options-grid select, .options-grid button {
+            padding: 5px; font-size: 1rem; background: #000; color: var(--accent); border: 1px solid var(--accent); font-family: inherit;
+        }
+
+        .textarea-save { width: 100%; height: 60px; background: #000; color: var(--accent); border: 1px solid var(--accent); margin-top: 10px; font-family: monospace; }
+
+        /* Touch Controls */
+        #touch-controls {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 50%;
+            pointer-events: none; z-index: 6;
+            display: flex; justify-content: space-between; align-items: flex-end; padding: 20px;
+        }
+
+        .dpad, .action-btns { pointer-events: auto; display: flex; opacity: 0.5; }
+        .action-btns { align-items: flex-end; justify-content: center; width: 120px; height: 120px; }
+
+        .dpad { position: relative; width: 150px; height: 150px; }
+        .dpad-btn { position: absolute; background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; color: #fff; font-weight: bold; }
+        .dpad-up { top: 0; left: 50px; width: 50px; height: 50px; }
+        .dpad-down { bottom: 0; left: 50px; width: 50px; height: 50px; }
+        .dpad-left { top: 50px; left: 0; width: 50px; height: 50px; }
+        .dpad-right { top: 50px; right: 0; width: 50px; height: 50px; }
+
+        .action-btn { width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 2px solid #fff; display: flex; justify-content: center; align-items: center; color: #fff; font-weight: bold; font-size: 1.2rem; }
+
+        .arcade-link { margin-top: 20px; color: #888; text-decoration: none; font-size: 1rem; border-bottom: 1px solid #888; padding-bottom: 2px; }
+        .arcade-link:hover { color: var(--accent); border-color: var(--accent); }
+
+        #stats-panel { background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; border: 1px solid var(--accent); margin-bottom: 20px; min-width: 250px;}
+        .stat-line { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- HUD -->
+    <div id="ui-hud" class="hud hidden">
+        <div class="hud-left">
+            <div class="hud-text">Score: <span id="hud-score" class="score-text">0</span></div>
+            <div class="hud-text">Wave: <span id="hud-wave">1</span></div>
+            <div class="hud-text">Combo: x<span id="hud-combo">1</span></div>
+        </div>
+        <div class="hud-right" style="margin-right: 50px;">
+            <div class="hud-text" style="color: var(--danger);">HP: <span id="hud-hp">3</span></div>
+            <div class="hud-text">Energy:</div>
+            <div id="hud-ammo" class="ammo-container">
+                <!-- Ammo slots generated in JS -->
+            </div>
+        </div>
+    </div>
+
+    <button id="btn-pause-game" class="btn-pause hidden">II</button>
+
+    <!-- Title Screen -->
+    <div id="ui-title" class="overlay">
+        <h1>Candy Conveyor Slash</h1>
+
+        <div id="stats-panel">
+            <div class="stat-line"><span>High Score:</span> <span id="stat-highscore">0</span></div>
+            <div class="stat-line"><span>Max Combo:</span> <span id="stat-maxcombo">0</span></div>
+            <div class="stat-line"><span>Total Plays:</span> <span id="stat-plays">0</span></div>
+        </div>
+
+        <button id="btn-play" class="btn">Play</button>
+        <button id="btn-howto" class="btn">How to Play</button>
+        <button id="btn-options-title" class="btn">Options</button>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+    </div>
+
+    <!-- How to Play -->
+    <div id="ui-howto" class="overlay hidden">
+        <div class="modal">
+            <h2>How to Play</h2>
+            <p>You are stationed on the Candy Factory Conveyor Line. Rogue candies are attacking!</p>
+            <p style="text-align: left; margin-top: 15px;">
+                <strong>Movement:</strong> WASD / Arrows / D-Pad<br>
+                <strong>Attack (Slash):</strong> Space / Click / Tap<br>
+                <strong>Parry:</strong> Slash right before an attack hits you!<br><br>
+                <strong>Mechanic:</strong> Slashes use Energy. When you slash, the energy crystal drops on the conveyor. You MUST physically walk over it to retrieve it! No energy = no slash.
+            </p>
+            <button id="btn-close-howto" class="btn" style="margin-top: 20px;">Close</button>
+        </div>
+    </div>
+
+    <!-- Options Modal -->
+    <div id="ui-options" class="overlay hidden">
+        <div class="modal">
+            <h2>Options</h2>
+            <div class="options-grid">
+                <label>Master Volume</label>
+                <input type="range" id="opt-vol-master" min="0" max="100" value="100">
+
+                <label>Music Volume</label>
+                <input type="range" id="opt-vol-music" min="0" max="100" value="80">
+
+                <label>SFX Volume</label>
+                <input type="range" id="opt-vol-sfx" min="0" max="100" value="100">
+
+                <label>Screen Shake</label>
+                <select id="opt-shake">
+                    <option value="1">100%</option>
+                    <option value="0.5">50%</option>
+                    <option value="0">Off</option>
+                </select>
+
+                <label>Particles</label>
+                <select id="opt-particles">
+                    <option value="high">High</option>
+                    <option value="low">Low</option>
+                </select>
+
+                <label>Touch Controls</label>
+                <select id="opt-touch">
+                    <option value="auto">Auto</option>
+                    <option value="always">Always On</option>
+                    <option value="off">Off</option>
+                </select>
+            </div>
+
+            <div style="width: 100%; border-top: 1px solid #333; padding-top: 15px; margin-top: 10px;">
+                <h3 style="color: var(--accent); text-align: center; margin-bottom: 10px;">Save Data</h3>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="btn-export-save" class="btn" style="font-size: 1rem;">Export</button>
+                    <button id="btn-import-save" class="btn" style="font-size: 1rem;">Import</button>
+                    <button id="btn-reset-save" class="btn" style="font-size: 1rem; color: var(--danger); border-color: var(--danger);">Reset Data</button>
+                </div>
+                <textarea id="save-data-text" class="textarea-save hidden" placeholder="Paste save data here..."></textarea>
+                <button id="btn-confirm-import" class="btn hidden" style="font-size: 1rem; width: 100%;">Confirm Import</button>
+            </div>
+
+            <button id="btn-close-options" class="btn" style="margin-top: 20px;">Done</button>
+        </div>
+    </div>
+
+    <!-- Paused -->
+    <div id="ui-paused" class="overlay hidden" style="background: rgba(0,0,0,0.9);">
+        <h1>PAUSED</h1>
+        <button id="btn-resume" class="btn">Resume</button>
+        <button id="btn-restart-pause" class="btn">Restart</button>
+        <button id="btn-options-pause" class="btn">Options</button>
+        <button id="btn-quit" class="btn">Quit to Title</button>
+    </div>
+
+    <!-- Game Over -->
+    <div id="ui-gameover" class="overlay hidden" style="background: rgba(0,0,0,0.95);">
+        <h1 style="color: var(--danger);">GAME OVER</h1>
+        <div class="modal" style="background: transparent; border: none;">
+            <h2 id="go-score" style="font-size: 3rem;">Score: 0</h2>
+            <div id="go-highscore-banner" class="hidden" style="color: #f1c40f; font-size: 1.5rem; margin-bottom: 10px; animation: pulse 1s infinite;">NEW HIGH SCORE!</div>
+            <p>Wave Reached: <span id="go-wave">1</span></p>
+            <p>Max Combo: x<span id="go-combo">1</span></p>
+
+            <div style="margin-top: 30px; display: flex; flex-direction: column; align-items: center;">
+                <button id="btn-play-again" class="btn" style="font-size: 2rem;">Play Again</button>
+                <button id="btn-title-go" class="btn">Title Screen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Touch Controls Container -->
+    <div id="touch-controls" class="hidden">
+        <div class="dpad" id="touch-dpad">
+            <div class="dpad-btn dpad-up" data-dir="up">W</div>
+            <div class="dpad-btn dpad-down" data-dir="down">S</div>
+            <div class="dpad-btn dpad-left" data-dir="left">A</div>
+            <div class="dpad-btn dpad-right" data-dir="right">D</div>
+        </div>
+        <div class="action-btns">
+            <div class="action-btn" id="touch-action">SLASH</div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @keyframes pulse { 0% { opacity: 0.5; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.5; transform: scale(0.95); } }
+</style>
+
+<script defer src="./game.js"></script>
+</body>
+</html>
