@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Micro Cell Retrieval</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #111;
+      overflow: hidden;
+      font-family: sans-serif;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      color: #fff;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      pointer-events: none;
+    }
+    .ui-layer.active {
+      display: flex;
+      pointer-events: auto;
+    }
+    .ui-overlay {
+      background: rgba(0, 0, 0, 0.7);
+      padding: 20px 40px;
+      border-radius: 10px;
+      border: 2px solid #9e72e2;
+    }
+    h1 {
+      color: #9e72e2;
+      font-size: 3em;
+      margin-bottom: 10px;
+      text-shadow: 0 0 10px #9e72e2;
+    }
+    h2 {
+      color: #fff;
+      font-size: 2em;
+    }
+    p {
+      font-size: 1.2em;
+      margin: 10px 0;
+    }
+    button {
+      background: #9e72e2;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 1.2em;
+      margin: 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      pointer-events: auto;
+    }
+    button:hover {
+      background: #b892f2;
+    }
+    a {
+      color: #aaa;
+      text-decoration: none;
+      margin-top: 20px;
+      pointer-events: auto;
+    }
+    a:hover {
+      color: #fff;
+    }
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 5;
+      pointer-events: none;
+      padding: 20px;
+      box-sizing: border-box;
+      display: none;
+    }
+    #hud.active {
+      display: block;
+    }
+    #score-display {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      font-size: 1.5em;
+      font-weight: bold;
+    }
+    #health-display {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      font-size: 1.5em;
+      font-weight: bold;
+      color: #ff5555;
+    }
+    #wave-display {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      font-size: 1.5em;
+      font-weight: bold;
+    }
+    #ammo-display {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      font-size: 1.5em;
+      font-weight: bold;
+      color: #55ff55;
+    }
+    #pause-btn {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid #9e72e2;
+      color: #fff;
+      padding: 5px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    #touch-controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 50%;
+      z-index: 6;
+      pointer-events: none;
+      display: none;
+    }
+    .joystick-zone {
+      position: absolute;
+      bottom: 20px;
+      width: 120px;
+      height: 120px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      pointer-events: auto;
+    }
+    #left-joystick {
+      left: 20px;
+    }
+    #right-joystick {
+      right: 20px;
+    }
+    .joystick-knob {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 40px;
+      height: 40px;
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .options-modal {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #222;
+      padding: 20px;
+      border: 2px solid #9e72e2;
+      border-radius: 10px;
+      z-index: 20;
+      display: none;
+      pointer-events: auto;
+      text-align: left;
+    }
+    .options-modal.active {
+      display: block;
+    }
+    .options-modal label {
+      display: block;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div id="score-display">Score: 0</div>
+      <div id="health-display">HP: 3</div>
+      <div id="wave-display">Wave: 1</div>
+      <div id="ammo-display">Ammo: 3/3</div>
+      <button id="pause-btn">II</button>
+    </div>
+
+    <div id="touch-controls">
+      <div id="left-joystick" class="joystick-zone"><div class="joystick-knob"></div></div>
+      <div id="right-joystick" class="joystick-zone"><div class="joystick-knob"></div></div>
+    </div>
+
+    <!-- TITLE STATE -->
+    <div id="ui-title" class="ui-layer active">
+      <div class="ui-overlay">
+        <h1>Micro Cell Retrieval</h1>
+        <p>High Score: <span id="high-score">0</span></p>
+        <button id="btn-play">Play</button>
+        <button id="btn-howto">How to Play</button>
+        <button id="btn-options">Options</button>
+        <br>
+        <a href="../../index.html">Back to Arcade</a>
+      </div>
+    </div>
+
+    <!-- PAUSED STATE -->
+    <div id="ui-paused" class="ui-layer">
+      <div class="ui-overlay">
+        <h2>PAUSED</h2>
+        <button id="btn-resume">Resume</button>
+        <button id="btn-restart">Restart</button>
+        <button id="btn-options-pause">Options</button>
+        <br>
+        <a href="../../index.html">Back to Arcade</a>
+      </div>
+    </div>
+
+    <!-- GAME OVER STATE -->
+    <div id="ui-gameover" class="ui-layer">
+      <div class="ui-overlay">
+        <h2>GAME OVER</h2>
+        <p>Score: <span id="final-score">0</span></p>
+        <p id="new-high-score-msg" style="display: none; color: #ffcc00;">New High Score!</p>
+        <button id="btn-play-again">Play Again</button>
+        <br>
+        <button id="btn-title">Title Screen</button>
+      </div>
+    </div>
+
+    <!-- HOW TO PLAY -->
+    <div id="ui-howto" class="ui-layer">
+      <div class="ui-overlay" style="max-width: 400px; text-align: left;">
+        <h2>How to Play</h2>
+        <p><b>Movement:</b> WASD / Arrows or Left Virtual Stick</p>
+        <p><b>Aim/Shoot:</b> Mouse or Right Virtual Stick</p>
+        <p><b>Mechanic:</b> You have limited ammo! When you shoot, your bullet drops as an ammo cell. You MUST physically walk over it to retrieve it and reload.</p>
+        <div style="text-align: center;">
+          <button id="btn-close-howto">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- OPTIONS -->
+    <div id="ui-options" class="options-modal">
+      <h2>Options</h2>
+      <label>Master Volume: <input type="range" id="opt-master-vol" min="0" max="100" value="100"></label>
+      <label>SFX Volume: <input type="range" id="opt-sfx-vol" min="0" max="100" value="100"></label>
+      <label>Music Volume: <input type="range" id="opt-music-vol" min="0" max="100" value="100"></label>
+      <label>Screen Shake:
+        <select id="opt-shake">
+          <option value="1">100%</option>
+          <option value="0.5">50%</option>
+          <option value="0">Off</option>
+        </select>
+      </label>
+      <div style="margin-top: 10px;">
+        <button id="btn-export-save" style="font-size: 0.9em;">Export Save</button>
+        <button id="btn-import-save" style="font-size: 0.9em;">Import Save</button>
+        <button id="btn-reset-save" style="font-size: 0.9em; background: #c33;">Reset Save</button>
+      </div>
+      <div style="text-align: right; margin-top: 20px;">
+        <button id="btn-close-options">Close</button>
+      </div>
+    </div>
+
+  </div>
+  <script defer src="./game.js"></script>
+</body>
+</html>
