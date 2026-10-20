@@ -466,5 +466,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-04-20",
     "accentColor": "#5be29e",
     "path": "./games/036-gothic-drill-sacrifice/index.html"
+  },
+  {
+    "id": "037",
+    "slug": "037-candy-conveyor-slash",
+    "title": "Candy Conveyor Slash",
+    "genre": "Directional Parry/Slash Arcade",
+    "coreMechanic": "Limited Ammo Must Be Physically Retrieved",
+    "setting": "Candy Factory Conveyor Line",
+    "description": "Slash rogue candies on the conveyor belt, parry their attacks, and retrieve your limited supply of candy-slicing energy to survive.",
+    "controls": "WASD/Arrows to move, Space/Click to parry/slash. Move over energy to retrieve it. Touch supported.",
+    "createdAt": "2023-10-25",
+    "accentColor": "#b6c9ba",
+    "path": "./games/037-candy-conveyor-slash/index.html"
   }
 ];
