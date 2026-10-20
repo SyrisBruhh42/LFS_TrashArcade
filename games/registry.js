@@ -26,3 +26,4 @@ window.ARCADE_REGISTRY = [
     "path": "./games/002-neon-grapple-dilation/index.html"
   }
 ];
+// tamper

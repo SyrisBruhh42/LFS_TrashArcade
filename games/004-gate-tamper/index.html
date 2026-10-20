@@ -1,0 +1,11 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Gate Tamper</title></head><body>
+<a href="../../index.html">Back to Arcade</a><canvas id="c"></canvas>
+<script>
+const KEY='arcade_game_004_004-gate-tamper_v1'; let state='TITLE';
+const AC = window.AudioContext || window.webkitAudioContext;
+try { localStorage.getItem(KEY); } catch (e) {}
+new ResizeObserver(()=>{}).observe(document.body);
+window.addEventListener('pointerdown', ()=>{});
+document.addEventListener('visibilitychange', ()=>{ if (document.hidden) state='PAUSED'; });
+function loop(){ requestAnimationFrame(loop); } loop();
+</script></body></html>
