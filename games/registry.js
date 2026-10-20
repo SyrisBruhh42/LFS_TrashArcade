@@ -557,5 +557,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-18",
     "accentColor": "#c8d186",
     "path": "./games/043-trench-recoil-tactics/index.html"
+  },
+  {
+    "id": "044",
+    "slug": "044-frozen-overdrive",
+    "title": "Frozen Overdrive",
+    "genre": "Pinball/Ricochet Dungeon",
+    "coreMechanic": "Sacrifice Health for Overdrive Power",
+    "setting": "Frozen Arctic Research Base",
+    "description": "Bounce through a frozen arctic research base, sacrificing health to power up your ricochets.",
+    "controls": "Desktop: WASD/Arrows to move, Space/Click to Overdrive. Touch: Drag to aim/move, tap to Overdrive.",
+    "createdAt": "2024-10-20",
+    "accentColor": "#585ed8",
+    "path": "./games/044-frozen-overdrive/index.html"
   }
 ];
