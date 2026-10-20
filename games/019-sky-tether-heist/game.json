@@ -1,0 +1,12 @@
+{
+  "id": "019",
+  "slug": "019-sky-tether-heist",
+  "title": "Sky Tether Heist",
+  "genre": "Stealth/Line-of-Sight Heist",
+  "coreMechanic": "Risk/Reward Tether or Tail Growth",
+  "setting": "Floating Sky Islands",
+  "description": "Infiltrate floating islands to collect treasures. Beware, every treasure you steal grows your tether tail, making it harder to stay hidden from patrols!",
+  "controls": "WASD/Arrows/Virtual Stick to move. Space/Tap to interact at extraction zones.",
+  "createdAt": "2024-05-15",
+  "accentColor": "#fef4c0"
+}
