@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Manor Overdrive Rush</title>
+<style>
+  body { margin: 0; padding: 0; background-color: #000; color: #fff; overflow: hidden; font-family: monospace; user-select: none; touch-action: none; }
+  #game-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+  canvas { background-color: #0a110a; box-shadow: 0 0 20px rgba(159, 221, 129, 0.5); }
+  #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.8); pointer-events: auto; }
+  .screen.active { display: flex; }
+  h1 { font-size: 48px; color: #9fdd81; text-shadow: 2px 2px #336633; margin-bottom: 10px; text-align: center; }
+  h2 { font-size: 32px; color: #9fdd81; margin-bottom: 20px; }
+  button { padding: 10px 20px; font-size: 20px; margin: 5px; cursor: pointer; background: #223322; color: #9fdd81; border: 2px solid #9fdd81; font-family: monospace; }
+  button:hover { background: #9fdd81; color: #000; }
+  #hud { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; font-size: 20px; text-shadow: 1px 1px #000; display: none; pointer-events: none; color: #9fdd81; }
+  #hud.active { display: flex; }
+  .hud-btn { pointer-events: auto; background: transparent; border: 1px solid #9fdd81; color: #9fdd81; padding: 5px 10px; cursor: pointer; }
+  a { color: #9fdd81; text-decoration: none; margin-top: 20px; display: block; }
+  a:hover { text-decoration: underline; }
+  #pause-btn { font-size: 24px; padding: 2px 10px; }
+  #options-panel { background: #112211; padding: 20px; border: 2px solid #9fdd81; display: flex; flex-direction: column; align-items: center; max-height: 80%; overflow-y: auto; }
+  .opt-row { margin: 10px 0; display: flex; justify-content: space-between; width: 300px; align-items: center; }
+  .opt-row label { width: 150px; }
+  .opt-row input, .opt-row select, .opt-row button { width: 140px; }
+
+  /* Touch Controls */
+  #touch-controls { position: absolute; bottom: 10px; left: 10px; right: 10px; height: 150px; display: none; pointer-events: none; justify-content: space-between; }
+  #touch-controls.active { display: flex; }
+  .touch-zone { width: 150px; height: 150px; pointer-events: auto; position: relative; }
+  #joystick-base { width: 100px; height: 100px; border-radius: 50%; background: rgba(159, 221, 129, 0.2); border: 2px solid rgba(159, 221, 129, 0.5); position: absolute; bottom: 20px; left: 20px; display: none;}
+  #joystick-knob { width: 40px; height: 40px; border-radius: 50%; background: rgba(159, 221, 129, 0.8); position: absolute; top: 30px; left: 30px; display: none;}
+
+  #btn-overdrive-touch { width: 80px; height: 80px; border-radius: 50%; background: rgba(255, 69, 0, 0.3); border: 2px solid rgba(255, 69, 0, 0.8); position: absolute; bottom: 20px; right: 20px; color: #fff; font-size: 14px; display: flex; justify-content: center; align-items: center; pointer-events: auto;}
+  #btn-shoot-touch { width: 100px; height: 100px; border-radius: 50%; background: rgba(159, 221, 129, 0.3); border: 2px solid rgba(159, 221, 129, 0.8); position: absolute; bottom: 110px; right: 20px; color: #fff; font-size: 16px; display: flex; justify-content: center; align-items: center; pointer-events: auto; display: none; } /* Just use right side for aim dragging */
+
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="game-canvas" width="1280" height="720"></canvas>
+  <div id="ui-layer">
+
+    <div id="hud">
+      <div>Score: <span id="score-val">0</span> | Wave: <span id="wave-val">1</span></div>
+      <div>HP: <span id="hp-val">3</span> <span id="overdrive-indicator" style="color: #ff4500; display:none;">[OVERDRIVE]</span></div>
+      <button class="hud-btn" id="pause-btn">II</button>
+    </div>
+
+    <div id="touch-controls">
+      <div class="touch-zone" id="touch-left">
+        <div id="joystick-base"><div id="joystick-knob"></div></div>
+      </div>
+      <div class="touch-zone" id="touch-right">
+         <div id="btn-overdrive-touch">OD(-1HP)</div>
+      </div>
+    </div>
+
+    <div id="screen-title" class="screen active">
+      <h1>Manor Overdrive Rush</h1>
+      <p>High Score: <span id="title-highscore">0</span></p>
+      <button id="btn-play">Play</button>
+      <button id="btn-howto-title">How to Play</button>
+      <button id="btn-options-title">Options</button>
+      <a href="../../index.html">Back to Arcade</a>
+    </div>
+
+    <div id="screen-howto" class="screen">
+      <h2>How to Play</h2>
+      <p>WASD / Arrows to Move.</p>
+      <p>Mouse/Touch Drag on Right Side to aim and shoot.</p>
+      <p><b>Sacrifice Health for Overdrive Power!</b></p>
+      <p>Press SHIFT, Right Click, or OD button to lose 1 HP but gain</p>
+      <p>massive damage and fire rate for 5 seconds.</p>
+      <button id="btn-close-howto">Close</button>
+    </div>
+
+    <div id="screen-options" class="screen">
+      <div id="options-panel">
+        <h2>Options</h2>
+        <div class="opt-row"><label>Master Mute</label><input type="checkbox" id="opt-mute"></div>
+        <div class="opt-row"><label>SFX Vol</label><input type="range" id="opt-sfx" min="0" max="100" value="100"></div>
+        <div class="opt-row"><label>Music Vol</label><input type="range" id="opt-music" min="0" max="100" value="100"></div>
+        <div class="opt-row"><label>Screen Shake</label><select id="opt-shake"><option value="1">100%</option><option value="0.5">50%</option><option value="0">Off</option></select></div>
+        <div class="opt-row"><label>Particles</label><select id="opt-particles"><option value="high">High</option><option value="low">Low</option></select></div>
+        <div class="opt-row"><label>Touch Controls</label><select id="opt-touch"><option value="auto">Auto</option><option value="always">Always</option><option value="off">Off</option></select></div>
+        <div class="opt-row"><button id="btn-export">Export Save</button></div>
+        <div class="opt-row"><button id="btn-import">Import Save</button></div>
+        <div class="opt-row"><button id="btn-reset">Reset Save</button></div>
+        <textarea id="save-data-box" style="display:none; width:100%; height:60px; margin-top:10px;"></textarea>
+        <button id="btn-close-options" style="margin-top:20px;">Close</button>
+      </div>
+    </div>
+
+    <div id="screen-pause" class="screen">
+      <h2>PAUSED</h2>
+      <button id="btn-resume">Resume</button>
+      <button id="btn-restart-pause">Restart</button>
+      <button id="btn-options-pause">Options</button>
+      <button id="btn-howto-pause">How to Play</button>
+      <button id="btn-quit-pause">Quit to Title</button>
+      <a href="../../index.html">Back to Arcade</a>
+    </div>
+
+    <div id="screen-gameover" class="screen">
+      <h2>GAME OVER</h2>
+      <p>Score: <span id="go-score">0</span></p>
+      <p>High Score: <span id="go-highscore">0</span></p>
+      <div id="go-newhigh" style="display:none; color: yellow; font-weight: bold; margin-bottom: 10px;">NEW HIGH SCORE!</div>
+      <p id="go-milestones" style="color: #0f0;"></p>
+      <button id="btn-playagain">Play Again</button>
+      <button id="btn-quit-go">Title Screen</button>
+    </div>
+
+  </div>
+</div>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+
+
+
+// --- SAVE MANAGER ---
+const SAVE_KEY = "arcade_game_026_026-manor-overdrive-rush_v1";
+class SaveManager {
+    constructor() {
+        this.data = {
+            highScore: 0,
+            bestWaveOrCombo: 0,
+            totalGamesPlayed: 0,
+            totalScoreAccumulated: 0,
+            unlockedMilestones: [],
+            options: { mute: false, sfx: 100, music: 100, shake: 1, particles: 'high', touch: 'auto' }
+        };
+        this.load();
+    }
+    load() {
+        try {
+            const raw = localStorage.getItem(SAVE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                this.data = { ...this.data, ...parsed };
+                // ensure options exist
+                this.data.options = { ...{ mute: false, sfx: 100, music: 100, shake: 1, particles: 'high', touch: 'auto' }, ...(this.data.options || {}) };
+            }
+        } catch (e) { console.warn("Save load error", e); }
+    }
+    save() {
+        try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); } catch (e) { console.warn("Save write error", e); }
+    }
+    export() { return btoa(JSON.stringify(this.data)); }
+    importSave(b64) {
+        try {
+            const parsed = JSON.parse(atob(b64));
+            if (parsed && typeof parsed === 'object') {
+                this.data = { ...this.data, ...parsed };
+                this.save();
+                return true;
+            }
+        } catch (e) { return false; }
+        return false;
+    }
+    reset() {
+        this.data = { highScore: 0, bestWaveOrCombo: 0, totalGamesPlayed: 0, totalScoreAccumulated: 0, unlockedMilestones: [], options: this.data.options };
+        this.save();
+    }
+    unlock(milestone) {
+        if (!this.data.unlockedMilestones.includes(milestone)) {
+            this.data.unlockedMilestones.push(milestone);
+            this.save();
+            return true;
+        }
+        return false;
+    }
+}
+
+// --- AUDIO SYSTEM ---
+class SoundEngine {
+    constructor(saveManager) {
+        this.save = saveManager;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContextClass();
+        this.masterGain = this.ctx.createGain();
+        this.sfxGain = this.ctx.createGain();
+        this.musicGain = this.ctx.createGain();
+
+        this.sfxGain.connect(this.masterGain);
+        this.musicGain.connect(this.masterGain);
+        this.masterGain.connect(this.ctx.destination);
+        this.updateVolumes();
+
+        this.musicOsc = null;
+        this.isPlayingMusic = false;
+        this.musicInterval = null;
+    }
+    updateVolumes() {
+        const opts = this.save.data.options;
+        this.masterGain.gain.value = opts.mute ? 0 : 1;
+        this.sfxGain.gain.value = opts.sfx / 100;
+        this.musicGain.gain.value = opts.music / 100;
+    }
+    resume() { if (this.ctx.state === 'suspended') this.ctx.resume(); }
+
+    playTone(freq, type, duration, vol=0.5, slideFreq=null) {
+        if (this.save.data.options.mute || this.save.data.options.sfx === 0) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        if (slideFreq) {
+            osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+        }
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    playNoise(duration, vol=0.5) {
+        if (this.save.data.options.mute || this.save.data.options.sfx === 0) return;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const gain = this.ctx.createGain();
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1000;
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.sfxGain);
+
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        noise.start();
+    }
+
+    sfxShoot() { this.playTone(400, 'square', 0.1, 0.2, 800); }
+    sfxHit() { this.playNoise(0.2, 0.4); this.playTone(150, 'sawtooth', 0.2, 0.3, 50); }
+    sfxOverdrive() { this.playTone(800, 'sine', 0.5, 0.5, 1200); this.playTone(400, 'square', 0.5, 0.3, 800); }
+    sfxPlayerHit() { this.playNoise(0.4, 0.8); this.playTone(100, 'sawtooth', 0.4, 0.6, 20); }
+    sfxBossDie() { this.playNoise(1.0, 1.0); this.playTone(50, 'square', 1.0, 0.8, 10); }
+    sfxClick() { this.playTone(600, 'sine', 0.05, 0.3); }
+
+    startMusic() {
+        if (this.isPlayingMusic) return;
+        this.isPlayingMusic = true;
+        let noteIdx = 0;
+        const notes = [110, 130, 110, 146, 110, 130, 98, 110]; // Spooky arpeggio
+        this.musicInterval = setInterval(() => {
+            if (this.save.data.options.mute || this.save.data.options.music === 0) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.value = notes[noteIdx % notes.length];
+            osc.connect(gain);
+            gain.connect(this.musicGain);
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.2);
+            noteIdx++;
+        }, 250);
+    }
+    stopMusic() {
+        this.isPlayingMusic = false;
+        clearInterval(this.musicInterval);
+    }
+}
+
+// --- INPUT MANAGER ---
+class InputManager {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.keys = {};
+        this.mouse = { x: 0, y: 0, leftDown: false, rightDown: false };
+        this.touchLeft = { active: false, x: 0, y: 0, startX: 0, startY: 0, id: null };
+        this.touchRight = { active: false, x: 0, y: 0, startX: 0, startY: 0, id: null };
+        this.overdriveBtnDown = false;
+        this.usingTouch = false;
+        this.scaleX = 1;
+        this.scaleY = 1;
+        this.rect = canvas.getBoundingClientRect();
+
+        this.updateScale();
+
+        window.addEventListener('keydown', e => { this.keys[e.code] = true; });
+        window.addEventListener('keyup', e => { this.keys[e.code] = false; });
+
+        window.addEventListener('resize', () => this.updateScale());
+        const ro = new ResizeObserver(() => this.updateScale());
+        ro.observe(canvas);
+
+        canvas.addEventListener('mousemove', e => {
+            if (this.usingTouch) return;
+            this.updateScale();
+            this.mouse.x = (e.clientX - this.rect.left) * this.scaleX;
+            this.mouse.y = (e.clientY - this.rect.top) * this.scaleY;
+        });
+        canvas.addEventListener('mousedown', e => {
+            if (this.usingTouch) return;
+            if (e.button === 0) this.mouse.leftDown = true;
+            if (e.button === 2) this.mouse.rightDown = true;
+        });
+        window.addEventListener('mouseup', e => {
+            if (this.usingTouch) return;
+            if (e.button === 0) this.mouse.leftDown = false;
+            if (e.button === 2) this.mouse.rightDown = false;
+        });
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        // Touch controls
+        const tLeft = document.getElementById('touch-left');
+        const tRight = document.getElementById('game-container'); // Capture touches on whole container for aim
+        const tOd = document.getElementById('btn-overdrive-touch');
+
+        const handleTouchStart = (e) => {
+            this.usingTouch = true;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (e.target === tOd || e.target.parentNode === tOd) {
+                    this.overdriveBtnDown = true;
+                } else if (t.clientX < window.innerWidth / 2) {
+                    this.touchLeft.active = true;
+                    this.touchLeft.id = t.identifier;
+                    this.touchLeft.startX = t.clientX;
+                    this.touchLeft.startY = t.clientY;
+                    this.touchLeft.x = 0;
+                    this.touchLeft.y = 0;
+                    document.getElementById('joystick-base').style.display = 'block';
+                    document.getElementById('joystick-knob').style.display = 'block';
+                    document.getElementById('joystick-base').style.left = (t.clientX - 50) + 'px';
+                    document.getElementById('joystick-base').style.bottom = (window.innerHeight - t.clientY - 50) + 'px';
+                    document.getElementById('joystick-knob').style.left = '30px';
+                    document.getElementById('joystick-knob').style.top = '30px';
+                } else {
+                    this.touchRight.active = true;
+                    this.touchRight.id = t.identifier;
+                    this.updateScale();
+                    this.mouse.x = (t.clientX - this.rect.left) * this.scaleX;
+                    this.mouse.y = (t.clientY - this.rect.top) * this.scaleY;
+                    this.mouse.leftDown = true;
+                }
+            }
+        };
+        const handleTouchMove = (e) => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (this.touchLeft.active && t.identifier === this.touchLeft.id) {
+                    let dx = t.clientX - this.touchLeft.startX;
+                    let dy = t.clientY - this.touchLeft.startY;
+                    const maxDist = 40;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > maxDist) {
+                        dx = (dx / dist) * maxDist;
+                        dy = (dy / dist) * maxDist;
+                    }
+                    this.touchLeft.x = dx / maxDist;
+                    this.touchLeft.y = dy / maxDist;
+                    document.getElementById('joystick-knob').style.left = (30 + dx) + 'px';
+                    document.getElementById('joystick-knob').style.top = (30 + dy) + 'px';
+                } else if (this.touchRight.active && t.identifier === this.touchRight.id) {
+                    this.updateScale();
+                    this.mouse.x = (t.clientX - this.rect.left) * this.scaleX;
+                    this.mouse.y = (t.clientY - this.rect.top) * this.scaleY;
+                }
+            }
+        };
+        const handleTouchEnd = (e) => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (this.touchLeft.active && t.identifier === this.touchLeft.id) {
+                    this.touchLeft.active = false;
+                    this.touchLeft.id = null;
+                    this.touchLeft.x = 0;
+                    this.touchLeft.y = 0;
+                    document.getElementById('joystick-base').style.display = 'none';
+                    document.getElementById('joystick-knob').style.display = 'none';
+                } else if (this.touchRight.active && t.identifier === this.touchRight.id) {
+                    this.touchRight.active = false;
+                    this.touchRight.id = null;
+                    this.mouse.leftDown = false;
+                } else if (e.target === tOd || e.target.parentNode === tOd) {
+                    this.overdriveBtnDown = false;
+                }
+            }
+        };
+
+        window.addEventListener('touchstart', handleTouchStart, {passive: false});
+        window.addEventListener('touchmove', handleTouchMove, {passive: false});
+        window.addEventListener('touchend', handleTouchEnd);
+        window.addEventListener('touchcancel', handleTouchEnd);
+
+        // Prevent default touch actions on canvas to avoid scrolling
+        canvas.addEventListener('touchstart', e => e.preventDefault(), {passive: false});
+
+        // Resume audio on first input
+        const resumeAudio = () => { if(window.engine) window.engine.sound.resume(); };
+        window.addEventListener('pointerdown', resumeAudio, {once:true});
+        window.addEventListener('keydown', resumeAudio, {once:true});
+    }
+
+    updateScale() {
+        this.rect = this.canvas.getBoundingClientRect();
+        this.scaleX = this.canvas.width / this.rect.width;
+        this.scaleY = this.canvas.height / this.rect.height;
+    }
+
+    getMovement() {
+        let dx = 0; let dy = 0;
+        if (this.keys['KeyW'] || this.keys['ArrowUp']) dy -= 1;
+        if (this.keys['KeyS'] || this.keys['ArrowDown']) dy += 1;
+        if (this.keys['KeyA'] || this.keys['ArrowLeft']) dx -= 1;
+        if (this.keys['KeyD'] || this.keys['ArrowRight']) dx += 1;
+
+        if (this.touchLeft.active) {
+            dx = this.touchLeft.x;
+            dy = this.touchLeft.y;
+        } else if (dx !== 0 || dy !== 0) {
+            const len = Math.hypot(dx, dy);
+            dx /= len; dy /= len;
+        }
+        return {x: dx, y: dy};
+    }
+
+    isOverdrivePressed() {
+        return this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.mouse.rightDown || this.overdriveBtnDown;
+    }
+}
+
+
+
+
+// --- GAME ENGINE ---
+class GameEngine {
+    constructor() {
+        this.canvas = document.getElementById('game-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.save = new SaveManager();
+        this.sound = new SoundEngine(this.save);
+        this.input = new InputManager(this.canvas);
+
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+        this.lastTime = 0;
+        this.score = 0;
+        this.wave = 1;
+        this.shakeTime = 0;
+
+        this.entities = [];
+        this.particles = [];
+        this.player = null;
+        this.boss = null;
+
+        this.bindUI();
+        this.loop = this.loop.bind(this);
+        requestAnimationFrame(this.loop);
+
+        // Handle blur/visibility to pause
+        window.addEventListener('blur', () => { if (this.state === 'PLAYING') this.setPause(true); });
+        document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'PLAYING') this.setPause(true); });
+    }
+
+    bindUI() {
+        const get = id => document.getElementById(id);
+        const screens = ['title', 'howto', 'options', 'pause', 'gameover'];
+        this.showScreen = (id) => {
+            screens.forEach(s => get(`screen-${s}`).classList.remove('active'));
+            if (id) get(`screen-${id}`).classList.add('active');
+        };
+
+        // Title
+        get('btn-play').onclick = () => this.startGame();
+        get('btn-howto-title').onclick = () => this.showScreen('howto');
+        get('btn-options-title').onclick = () => { this.updateOptionsUI(); this.showScreen('options'); };
+
+        // Howto
+        get('btn-close-howto').onclick = () => this.showScreen(this.state === 'PAUSED' ? 'pause' : 'title');
+
+        // Options
+        get('btn-close-options').onclick = () => { this.saveOptions(); this.showScreen(this.state === 'PAUSED' ? 'pause' : 'title'); };
+        get('btn-export').onclick = () => { get('save-data-box').style.display = 'block'; get('save-data-box').value = this.save.export(); };
+        get('btn-import').onclick = () => { if (this.save.importSave(get('save-data-box').value)) alert('Import successful!'); else alert('Invalid save data.'); };
+        get('btn-reset').onclick = () => {
+            if (get('btn-reset').innerText === "Confirm Reset") { this.save.reset(); get('btn-reset').innerText = "Reset Save"; this.updateOptionsUI(); alert("Save reset."); }
+            else { get('btn-reset').innerText = "Confirm Reset"; setTimeout(() => get('btn-reset').innerText = "Reset Save", 3000); }
+        };
+
+        // Pause
+        get('pause-btn').onclick = () => this.setPause(true);
+        get('btn-resume').onclick = () => this.setPause(false);
+        get('btn-restart-pause').onclick = () => this.startGame();
+        get('btn-options-pause').onclick = () => { this.updateOptionsUI(); this.showScreen('options'); };
+        get('btn-howto-pause').onclick = () => this.showScreen('howto');
+        get('btn-quit-pause').onclick = () => this.setState('TITLE');
+
+        // Game Over
+        get('btn-playagain').onclick = () => this.startGame();
+        get('btn-quit-go').onclick = () => this.setState('TITLE');
+
+        // Options live update
+        ['opt-mute', 'opt-sfx', 'opt-music', 'opt-shake', 'opt-particles', 'opt-touch'].forEach(id => {
+            get(id).onchange = () => this.saveOptions();
+        });
+    }
+
+    updateOptionsUI() {
+        const opts = this.save.data.options;
+        const get = id => document.getElementById(id);
+        get('opt-mute').checked = opts.mute;
+        get('opt-sfx').value = opts.sfx;
+        get('opt-music').value = opts.music;
+        get('opt-shake').value = opts.shake;
+        get('opt-particles').value = opts.particles;
+        get('opt-touch').value = opts.touch;
+    }
+    saveOptions() {
+        const get = id => document.getElementById(id);
+        this.save.data.options = {
+            mute: get('opt-mute').checked,
+            sfx: parseInt(get('opt-sfx').value),
+            music: parseInt(get('opt-music').value),
+            shake: parseFloat(get('opt-shake').value),
+            particles: get('opt-particles').value,
+            touch: get('opt-touch').value
+        };
+        this.save.save();
+        this.sound.updateVolumes();
+        this.updateTouchControlsVisibility();
+    }
+
+    updateTouchControlsVisibility() {
+        const mode = this.save.data.options.touch;
+        const isMobile = window.innerWidth <= 800 || 'ontouchstart' in window;
+        const show = mode === 'always' || (mode === 'auto' && isMobile);
+        document.getElementById('touch-controls').classList.toggle('active', show && this.state === 'PLAYING');
+    }
+
+    setState(newState) {
+        this.state = newState;
+        this.showScreen(newState === 'PLAYING' ? null : newState.toLowerCase().replace('_', ''));
+        document.getElementById('hud').classList.toggle('active', newState === 'PLAYING' || newState === 'PAUSED');
+        this.updateTouchControlsVisibility();
+
+        if (newState === 'TITLE') {
+            document.getElementById('title-highscore').innerText = this.save.data.highScore;
+            this.sound.stopMusic();
+        } else if (newState === 'PLAYING') {
+            this.sound.startMusic();
+        } else if (newState === 'PAUSED') {
+            // keep music playing but maybe low vol
+        } else if (newState === 'GAME_OVER') {
+            this.sound.stopMusic();
+            document.getElementById('go-score').innerText = this.score;
+            document.getElementById('go-highscore').innerText = this.save.data.highScore;
+
+            this.save.data.totalGamesPlayed++;
+            this.save.data.totalScoreAccumulated += this.score;
+
+            if (this.score > this.save.data.highScore) {
+                this.save.data.highScore = this.score;
+                document.getElementById('go-newhigh').style.display = 'block';
+            } else {
+                document.getElementById('go-newhigh').style.display = 'none';
+            }
+            if (this.wave > this.save.data.bestWaveOrCombo) {
+                this.save.data.bestWaveOrCombo = this.wave;
+            }
+
+            let mStr = "";
+            if (this.score >= 10000 && this.save.unlock('Apprentice Hunter')) mStr += "Unlocked: Apprentice Hunter!\n";
+            if (this.score >= 50000 && this.save.unlock('Master Exorcist')) mStr += "Unlocked: Master Exorcist!\n";
+            if (this.wave >= 10 && this.save.unlock('Manor Survivor')) mStr += "Unlocked: Manor Survivor!\n";
+            document.getElementById('go-milestones').innerText = mStr;
+            this.save.save();
+        }
+    }
+
+    setPause(paused) {
+        if (this.state === 'PLAYING' && paused) this.setState('PAUSED');
+        else if (this.state === 'PAUSED' && !paused) {
+            this.lastTime = performance.now();
+            this.setState('PLAYING');
+        }
+    }
+
+    startGame() {
+        this.score = 0;
+        this.wave = 1;
+        this.entities = [];
+        this.particles = [];
+        this.player = new Player(this);
+        this.entities.push(this.player);
+        this.spawnBoss();
+        this.lastTime = performance.now();
+        this.setState('PLAYING');
+    }
+
+    spawnBoss() {
+        this.boss = new Boss(this, this.wave);
+        this.entities.push(this.boss);
+    }
+
+    addScore(pts) {
+        this.score += pts * (this.player.isOverdrive ? 2 : 1);
+    }
+
+    addParticle(x, y, color, speed, size, life) {
+        if (this.save.data.options.particles === 'low' && Math.random() > 0.3) return;
+        this.particles.push({x, y, vx: (Math.random()-0.5)*speed, vy: (Math.random()-0.5)*speed, color, size, life, maxLife: life});
+    }
+
+    screenShake(amt) {
+        this.shakeTime = amt * this.save.data.options.shake;
+    }
+
+    loop(now) {
+        requestAnimationFrame(this.loop);
+        let dt = (now - this.lastTime) / 1000;
+        this.lastTime = now;
+        if (dt > 0.1) dt = 0.1; // cap max dt
+
+        if (this.state === 'PLAYING') {
+            this.update(dt);
+        }
+        this.draw();
+    }
+
+    update(dt) {
+        if (this.shakeTime > 0) this.shakeTime -= dt;
+
+        for (let i = this.entities.length - 1; i >= 0; i--) {
+            let e = this.entities[i];
+            e.update(dt);
+            if (e.dead) this.entities.splice(i, 1);
+        }
+
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+
+        // HUD
+        document.getElementById('score-val').innerText = this.score;
+        document.getElementById('wave-val').innerText = this.wave;
+        document.getElementById('hp-val').innerText = this.player.hp;
+        document.getElementById('overdrive-indicator').style.display = this.player.isOverdrive ? 'inline' : 'none';
+
+        // Wave progression
+        if (this.boss && this.boss.dead) {
+            this.boss = null;
+            this.wave++;
+            this.addScore(1000 * this.wave);
+            setTimeout(() => { if (this.state === 'PLAYING') this.spawnBoss(); }, 2000);
+        }
+
+        if (this.player && this.player.dead) {
+            this.setState('GAME_OVER');
+        }
+    }
+
+    draw() {
+        this.ctx.save();
+        if (this.shakeTime > 0) {
+            const mag = this.shakeTime * 10;
+            this.ctx.translate((Math.random()-0.5)*mag, (Math.random()-0.5)*mag);
+        }
+
+        // Background (Haunted Manor Floor)
+        this.ctx.fillStyle = '#0a110a';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw grid/tiles
+        this.ctx.strokeStyle = '#112211';
+        this.ctx.lineWidth = 2;
+        for (let x = 0; x < this.canvas.width; x += 100) {
+            this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.canvas.height); this.ctx.stroke();
+        }
+        for (let y = 0; y < this.canvas.height; y += 100) {
+            this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.canvas.width, y); this.ctx.stroke();
+        }
+
+        // Entities
+        this.entities.sort((a,b) => a.layer - b.layer);
+        for (let e of this.entities) e.draw(this.ctx);
+
+        // Particles
+        for (let p of this.particles) {
+            this.ctx.globalAlpha = p.life / p.maxLife;
+            this.ctx.fillStyle = p.color;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+            this.ctx.fill();
+        }
+        this.ctx.globalAlpha = 1;
+
+        // Title Screen background effect
+        if (this.state === 'TITLE') {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            // Spooky floating orbs
+            const t = performance.now() / 1000;
+            for(let i=0; i<10; i++) {
+                this.ctx.fillStyle = 'rgba(159, 221, 129, 0.2)';
+                this.ctx.beginPath();
+                this.ctx.arc(this.canvas.width/2 + Math.sin(t+i)*300, this.canvas.height/2 + Math.cos(t*0.8+i*2)*200, 30+Math.sin(t*2+i)*10, 0, Math.PI*2);
+                this.ctx.fill();
+            }
+        }
+
+        this.ctx.restore();
+    }
+}
+
+
+
+
+// --- ENTITIES & MECHANICS ---
+
+class Entity {
+    constructor(game, x, y) {
+        this.game = game;
+        this.x = x; this.y = y;
+        this.vx = 0; this.vy = 0;
+        this.radius = 10;
+        this.dead = false;
+        this.layer = 1; // 0=bg, 1=main, 2=fg
+        this.faction = 0; // 0=neutral, 1=player, 2=enemy
+    }
+    update(dt) { this.x += this.vx * dt; this.y += this.vy * dt; }
+    draw(ctx) {}
+    checkCollision(other) {
+        const dx = this.x - other.x; const dy = this.y - other.y;
+        return (dx*dx + dy*dy) < (this.radius + other.radius)**2;
+    }
+}
+
+class Projectile extends Entity {
+    constructor(game, x, y, vx, vy, faction, color, damage) {
+        super(game, x, y);
+        this.vx = vx; this.vy = vy;
+        this.faction = faction;
+        this.color = color;
+        this.damage = damage;
+        this.radius = 6;
+        this.life = 5; // seconds
+    }
+    update(dt) {
+        super.update(dt);
+        this.life -= dt;
+        if (this.life <= 0) this.dead = true;
+
+        // Check collisions
+        for (let e of this.game.entities) {
+            if (e !== this && !e.dead && e.faction !== 0 && e.faction !== this.faction) {
+                if (this.checkCollision(e)) {
+                    if (e.takeDamage) e.takeDamage(this.damage);
+                    this.dead = true;
+                    for(let i=0; i<5; i++) this.game.addParticle(this.x, this.y, this.color, 100, 2, 0.2);
+                    break;
+                }
+            }
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+
+class Player extends Entity {
+    constructor(game) {
+        super(game, game.canvas.width/2, game.canvas.height*0.8);
+        this.faction = 1;
+        this.radius = 15;
+        this.hp = 3;
+        this.speed = 300;
+        this.fireCooldown = 0;
+
+        this.isOverdrive = false;
+        this.overdriveTimer = 0;
+        this.invulnTimer = 0;
+        this.prevOdPressed = false;
+    }
+
+    takeDamage(amt) {
+        if (this.invulnTimer > 0) return;
+        this.hp -= amt;
+        this.game.sound.sfxPlayerHit();
+        this.game.screenShake(0.3);
+        this.invulnTimer = 1.0;
+        for(let i=0; i<20; i++) this.game.addParticle(this.x, this.y, '#fff', 200, 3, 0.5);
+        if (this.hp <= 0) {
+            this.dead = true;
+            this.game.sound.sfxBossDie();
+        }
+    }
+
+    activateOverdrive() {
+        if (this.hp > 1 && !this.isOverdrive) {
+            this.hp -= 1;
+            this.isOverdrive = true;
+            this.overdriveTimer = 5.0; // 5 seconds of overdrive
+            this.game.sound.sfxOverdrive();
+            this.game.screenShake(0.5);
+            for(let i=0; i<30; i++) this.game.addParticle(this.x, this.y, '#ff4500', 300, 4, 1.0);
+        }
+    }
+
+    update(dt) {
+        if (this.invulnTimer > 0) this.invulnTimer -= dt;
+
+        // Movement
+        const mov = this.game.input.getMovement();
+        this.vx = mov.x * this.speed;
+        this.vy = mov.y * this.speed;
+        super.update(dt);
+
+        // Bounds
+        this.x = Math.max(this.radius, Math.min(this.game.canvas.width - this.radius, this.x));
+        this.y = Math.max(this.radius, Math.min(this.game.canvas.height - this.radius, this.y));
+
+        // Overdrive mechanic
+        const odPressed = this.game.input.isOverdrivePressed();
+        if (odPressed && !this.prevOdPressed) {
+            this.activateOverdrive();
+        }
+        this.prevOdPressed = odPressed;
+
+        if (this.isOverdrive) {
+            this.overdriveTimer -= dt;
+            if (this.overdriveTimer <= 0) {
+                this.isOverdrive = false;
+            }
+            // Trail particles
+            if (Math.random() < 0.5) this.game.addParticle(this.x, this.y, '#ff4500', 50, 2, 0.3);
+        }
+
+        // Shooting
+        this.fireCooldown -= dt;
+        if (this.game.input.mouse.leftDown && this.fireCooldown <= 0) {
+            let dx = this.game.input.mouse.x - this.x;
+            let dy = this.game.input.mouse.y - this.y;
+            let len = Math.hypot(dx, dy);
+            if (len > 0) { dx /= len; dy /= len; } else { dx = 0; dy = -1; }
+
+            const pSpeed = 600;
+            const dmg = this.isOverdrive ? 3 : 1;
+            this.game.sound.sfxShoot();
+
+            if (this.isOverdrive) {
+                this.fireCooldown = 0.08;
+                // Spread shot
+                for(let i=-1; i<=1; i++) {
+                    const angle = Math.atan2(dy, dx) + i*0.15;
+                    this.game.entities.push(new Projectile(this.game, this.x, this.y, Math.cos(angle)*pSpeed, Math.sin(angle)*pSpeed, 1, '#ff4500', dmg));
+                }
+            } else {
+                this.fireCooldown = 0.2;
+                this.game.entities.push(new Projectile(this.game, this.x, this.y, dx*pSpeed, dy*pSpeed, 1, '#9fdd81', dmg));
+            }
+        }
+    }
+
+    draw(ctx) {
+        if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 10) % 2 === 0) return; // Flicker
+
+        ctx.fillStyle = this.isOverdrive ? '#ff4500' : '#fff';
+
+        // Draw Victorian Ghost Hunter hat/cloak shape
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.fill();
+
+        if (this.isOverdrive) {
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#ff4500';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        // Reticle (only for mouse)
+        if (!this.game.input.usingTouch) {
+            ctx.strokeStyle = 'rgba(159, 221, 129, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.game.input.mouse.x, this.game.input.mouse.y, 10, 0, Math.PI*2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(this.game.input.mouse.x - 15, this.game.input.mouse.y);
+            ctx.lineTo(this.game.input.mouse.x + 15, this.game.input.mouse.y);
+            ctx.moveTo(this.game.input.mouse.x, this.game.input.mouse.y - 15);
+            ctx.lineTo(this.game.input.mouse.x, this.game.input.mouse.y + 15);
+            ctx.stroke();
+        }
+    }
+}
+
+
+
+
+class Boss extends Entity {
+    constructor(game, wave) {
+        super(game, game.canvas.width/2, 150);
+        this.faction = 2;
+        this.radius = 40;
+        this.maxHp = 100 + wave * 50;
+        this.hp = this.maxHp;
+        this.wave = wave;
+
+        this.phaseTimer = 0;
+        this.attackTimer = 0;
+        this.attackMode = 0;
+        this.angleOffset = 0;
+
+        // entry animation
+        this.y = -100;
+        this.targetY = 150;
+        this.entryTimer = 2.0;
+    }
+
+    takeDamage(amt) {
+        if (this.entryTimer > 0) return;
+        this.hp -= amt;
+        this.game.sound.sfxHit();
+        this.game.addParticle(this.x + (Math.random()-0.5)*this.radius, this.y + (Math.random()-0.5)*this.radius, '#9fdd81', 100, 3, 0.3);
+        if (this.hp <= 0) {
+            this.dead = true;
+            this.game.sound.sfxBossDie();
+            this.game.screenShake(1.0);
+            for(let i=0; i<100; i++) this.game.addParticle(this.x, this.y, '#9fdd81', 400, 5, 2.0);
+        }
+    }
+
+    update(dt) {
+        super.update(dt);
+
+        if (this.entryTimer > 0) {
+            this.entryTimer -= dt;
+            this.y += (this.targetY - this.y) * dt * 2;
+            return;
+        }
+
+        // Hover movement
+        this.x = this.game.canvas.width/2 + Math.sin(performance.now()/1000) * 200;
+        this.y = this.targetY + Math.cos(performance.now()/800) * 30;
+
+        this.phaseTimer -= dt;
+        if (this.phaseTimer <= 0) {
+            this.phaseTimer = 4.0;
+            this.attackMode = Math.floor(Math.random() * 3);
+        }
+
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) {
+            const pSpeed = 150 + this.wave * 10;
+
+            if (this.attackMode === 0) {
+                // Circle spread
+                this.attackTimer = 1.0 - Math.min(0.8, this.wave * 0.05);
+                this.angleOffset += 0.2;
+                const rays = 8 + Math.min(8, this.wave);
+                for(let i=0; i<rays; i++) {
+                    const angle = this.angleOffset + (Math.PI*2/rays) * i;
+                    this.game.entities.push(new Projectile(this.game, this.x, this.y, Math.cos(angle)*pSpeed, Math.sin(angle)*pSpeed, 2, '#9900ff', 1));
+                }
+            } else if (this.attackMode === 1) {
+                // Aimed spiral
+                this.attackTimer = 0.2;
+                this.angleOffset += 0.3;
+                if (this.game.player) {
+                    let dx = this.game.player.x - this.x;
+                    let dy = this.game.player.y - this.y;
+                    let angle = Math.atan2(dy, dx) + Math.sin(this.angleOffset)*0.5;
+                    this.game.entities.push(new Projectile(this.game, this.x, this.y, Math.cos(angle)*pSpeed*1.5, Math.sin(angle)*pSpeed*1.5, 2, '#ff0000', 1));
+                }
+            } else {
+                // Shotgun burst
+                this.attackTimer = 1.5 - Math.min(1.0, this.wave * 0.1);
+                if (this.game.player) {
+                    let dx = this.game.player.x - this.x;
+                    let dy = this.game.player.y - this.y;
+                    let baseAngle = Math.atan2(dy, dx);
+                    for(let i=-2; i<=2; i++) {
+                        let angle = baseAngle + i*0.2;
+                        this.game.entities.push(new Projectile(this.game, this.x, this.y, Math.cos(angle)*pSpeed*1.2, Math.sin(angle)*pSpeed*1.2, 2, '#ff8800', 1));
+                    }
+                }
+            }
+            this.game.sound.sfxClick();
+        }
+
+        // collision with player
+        if (this.game.player && !this.game.player.dead && this.checkCollision(this.game.player)) {
+            this.game.player.takeDamage(1);
+        }
+    }
+
+    draw(ctx) {
+        // Draw HP Bar
+        if (this.entryTimer <= 0) {
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(this.game.canvas.width/2 - 200, 30, 400, 10);
+            ctx.fillStyle = '#0f0';
+            ctx.fillRect(this.game.canvas.width/2 - 200, 30, 400 * (this.hp/this.maxHp), 10);
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Wave ${this.wave} Boss`, this.game.canvas.width/2, 20);
+        }
+
+        ctx.fillStyle = '#222';
+        ctx.strokeStyle = '#9fdd81';
+        ctx.lineWidth = 4;
+
+        ctx.beginPath();
+        // Spooky shape
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI, true);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius/2, this.y + this.radius/2);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.lineTo(this.x + this.radius/2, this.y + this.radius/2);
+        ctx.lineTo(this.x + this.radius, this.y + this.radius);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Eyes
+        ctx.fillStyle = '#f00';
+        ctx.beginPath(); ctx.arc(this.x - 15, this.y - 10, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(this.x + 15, this.y - 10, 5, 0, Math.PI*2); ctx.fill();
+    }
+}
+
+// --- INITIALIZATION ---
+const engine = new GameEngine();
+// Start in title
+engine.setState('TITLE');
+
+
+
+});
+</script>
+</body>
+</html>
