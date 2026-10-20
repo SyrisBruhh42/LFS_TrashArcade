@@ -1,0 +1,12 @@
+{
+  "id": "023",
+  "slug": "023-cyber-drill-dojo",
+  "title": "Cyber Drill Dojo",
+  "genre": "Subterranean Drilling/Mining Roguelite",
+  "coreMechanic": "Time-Dilation on Stillness",
+  "setting": "Cyber Samurai Dojo",
+  "description": "Descend through the subterranean levels of the Cyber Samurai Dojo. Drill to mine cyber-minerals while time dilates when you are still, allowing you to gracefully dodge obstacles and security routines.",
+  "controls": "WASD/Arrows to move and drill. Release all controls to slow down time.",
+  "createdAt": "2024-10-31",
+  "accentColor": "#42997b"
+}
