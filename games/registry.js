@@ -505,5 +505,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-11-20",
     "accentColor": "#d9a481",
     "path": "./games/039-cellular-chain-collapse/index.html"
+  },
+  {
+    "id": "040",
+    "slug": "040-floating-echo-arena",
+    "title": "Floating Echo Arena",
+    "genre": "Twin-Stick Arena",
+    "coreMechanic": "Echo/Ghost Self-Cooperation",
+    "setting": "Floating Sky Islands",
+    "description": "Fight on floating sky islands using your own delayed ghost echoes to overwhelm enemies in a twin-stick arena.",
+    "controls": "WASD/Arrows to move, Mouse to aim/shoot. Touch virtual joysticks for mobile.",
+    "createdAt": "2024-10-31",
+    "accentColor": "#b478c1",
+    "path": "./games/040-floating-echo-arena/index.html"
   }
 ];
