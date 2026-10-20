@@ -479,5 +479,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2023-10-25",
     "accentColor": "#b6c9ba",
     "path": "./games/037-candy-conveyor-slash/index.html"
+  },
+  {
+    "id": "038",
+    "slug": "038-paper-polarity-beats",
+    "title": "Paper Polarity Beats",
+    "genre": "Rhythm/Beat-Synced Reflex",
+    "coreMechanic": "Polarity/Magnetism Switching",
+    "setting": "Paper Craft Diorama",
+    "description": "Switch between Light and Dark paper to catch incoming beat-synced origami shapes in this rhythmic reflex test.",
+    "controls": "Space/Click/Tap to switch polarity, or drag to move your target zone.",
+    "createdAt": "2026-10-19",
+    "accentColor": "#e8dc6d",
+    "path": "./games/038-paper-polarity-beats/index.html"
   }
 ];
