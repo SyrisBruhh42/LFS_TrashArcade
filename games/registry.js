@@ -50,5 +50,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-23",
     "accentColor": "#4cd477",
     "path": "./games/004-jungle-ammo-run/index.html"
+  },
+  {
+    "id": "005",
+    "slug": "005-sky-recoil-rhythm",
+    "title": "Sky Recoil Rhythm",
+    "genre": "Rhythm/Beat-Synced Reflex",
+    "coreMechanic": "Recoil-as-Movement",
+    "setting": "Floating Sky Islands",
+    "description": "Shoot to move! Survive by blasting enemies to traverse floating sky islands. Time your shots to the beat for massive combos.",
+    "controls": "WASD/Arrows to aim, Space/Click/Touch to shoot and move via recoil.",
+    "createdAt": "2024-10-21",
+    "accentColor": "#e447c0",
+    "path": "./games/005-sky-recoil-rhythm/index.html"
   }
 ];
