@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sky Shifting Arena</title>
+    <link rel="stylesheet" href="style.css">
+    <script defer src="game.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+
+        <div id="ui-layer">
+            <div id="title-screen" class="screen">
+                <h1>Sky Shifting Arena</h1>
+                <p>Survive the shrinking islands!</p>
+                <div class="controls-info">Desktop: WASD + Mouse<br>Touch: Virtual Joysticks</div>
+                <button id="btn-start" class="btn">Start Game</button>
+                <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+            </div>
+
+            <div id="hud-screen" class="screen hidden">
+                <div class="hud-top">
+                    <div id="hud-score">Score: 0</div>
+                    <div id="hud-wave">Wave: 1</div>
+                </div>
+                <div class="hud-bottom">
+                    <div class="health-bar-container">
+                        <div id="health-bar" class="health-bar-fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="pause-screen" class="screen hidden">
+                <h2>PAUSED</h2>
+                <button id="btn-resume" class="btn">Resume</button>
+                <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+            </div>
+
+            <div id="game-over-screen" class="screen hidden">
+                <h2>GAME OVER</h2>
+                <p id="final-score">Score: 0</p>
+                <p id="best-score">Best: 0</p>
+                <button id="btn-restart" class="btn">Try Again</button>
+                <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+            </div>
+
+            <div id="touch-controls" class="hidden">
+                <div id="touch-left-zone" class="touch-zone"></div>
+                <div id="touch-right-zone" class="touch-zone"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
