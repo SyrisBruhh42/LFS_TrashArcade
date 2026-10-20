@@ -10,5 +10,17 @@ window.ARCADE_REGISTRY = [
     createdAt: "2026-10-19",
     path: "./games/001-jules-gba-travelers-chronicle/index.html",
     accentColor: "#f5ca53"
+  },
+  {
+    id: "002",
+    slug: "002-neon-grapple-dilation",
+    title: "Neon Grapple Dilation",
+    genre: "Momentum/Grapple Platformer",
+    coreMechanic: "Time-Dilation on Stillness",
+    description: "Swing through neon-lit obstacles. When you release all controls, time dilates to a crawl, allowing you to perfectly aim your next grapple.",
+    controls: "WASD / Arrows to move on ground. Mouse / Touch to aim and fire grapple hook. Release all to slow time.",
+    createdAt: "2024-05-14",
+    path: "./games/002-neon-grapple-dilation/index.html",
+    accentColor: "#ff00ff"
   }
 ];
