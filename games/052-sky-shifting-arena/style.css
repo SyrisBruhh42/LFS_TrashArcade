@@ -1,0 +1,184 @@
+:root {
+    --bg-color: #1a1a2e;
+    --accent: #59c297;
+    --text-color: #ffffff;
+    --danger: #e94560;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+    touch-action: none;
+}
+
+#game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+canvas {
+    display: block;
+    image-rendering: pixelated;
+}
+
+#ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.screen {
+    z-index: 10;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(26, 26, 46, 0.85);
+    pointer-events: auto;
+    transition: opacity 0.3s ease;
+}
+
+.screen.hidden {
+    display: none;
+    opacity: 0;
+    pointer-events: none;
+}
+
+#hud-screen {
+    background: transparent;
+    pointer-events: none;
+    justify-content: space-between;
+    padding: 20px;
+}
+
+.hud-top {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    font-size: 24px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+}
+
+.hud-bottom {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+h1 {
+    font-size: 48px;
+    margin-bottom: 10px;
+    color: var(--accent);
+    text-shadow: 0 0 10px var(--accent);
+    text-align: center;
+}
+
+h2 {
+    font-size: 36px;
+    margin-bottom: 20px;
+    color: var(--danger);
+    text-shadow: 0 0 10px var(--danger);
+}
+
+p, .controls-info {
+    font-size: 18px;
+    margin-bottom: 30px;
+    text-align: center;
+    line-height: 1.5;
+}
+
+.btn {
+    background: transparent;
+    color: var(--accent);
+    border: 2px solid var(--accent);
+    padding: 15px 40px;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+    margin-bottom: 20px;
+    pointer-events: auto;
+}
+
+.btn:hover {
+    background: var(--accent);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--accent);
+}
+
+.arcade-link {
+    color: #888;
+    text-decoration: none;
+    font-size: 14px;
+    margin-top: 20px;
+    pointer-events: auto;
+    transition: color 0.2s;
+}
+
+.arcade-link:hover {
+    color: white;
+}
+
+.health-bar-container {
+    width: 300px;
+    height: 20px;
+    background: rgba(0,0,0,0.5);
+    border: 2px solid white;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.health-bar-fill {
+    width: 100%;
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.2s ease, background-color 0.2s;
+}
+
+#touch-controls {
+    z-index: 5;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    display: flex;
+}
+
+#touch-controls:not(.hidden) {
+    pointer-events: auto;
+}
+
+.touch-zone {
+    flex: 1;
+    height: 100%;
+}
