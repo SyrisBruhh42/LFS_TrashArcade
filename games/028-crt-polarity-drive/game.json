@@ -1,0 +1,12 @@
+{
+  "id": "028",
+  "slug": "028-crt-polarity-drive",
+  "title": "CRT Polarity Drive",
+  "genre": "Twin-Stick Arena",
+  "coreMechanic": "Polarity/Magnetism Switching",
+  "setting": "Retro CRT Vector Grid",
+  "description": "Navigate a glowing CRT vector arena. Switch polarities to attract or repel geometric foes while weaving through a relentless twin-stick onslaught.",
+  "controls": "WASD/Arrows + Mouse to shoot. Space to switch polarity. Mobile: Virtual twin sticks + Tap to switch.",
+  "createdAt": "2024-11-20",
+  "accentColor": "#e2e769"
+}

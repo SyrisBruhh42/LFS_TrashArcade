@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CRT Polarity Drive</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      color: #e2e769;
+      font-family: 'Courier New', Courier, monospace;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+    }
+    #game-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 1280px;
+      height: 720px;
+      transform-origin: center center;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+    }
+    .screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.85);
+      pointer-events: auto;
+    }
+    .screen.active {
+      display: flex;
+    }
+    .screen h1 {
+      font-size: 64px;
+      margin-bottom: 20px;
+      text-shadow: 0 0 10px #e2e769;
+    }
+    .btn {
+      padding: 15px 30px;
+      margin: 10px;
+      border: 2px solid #e2e769;
+      background: rgba(0, 0, 0, 0.5);
+      color: #e2e769;
+      font-size: 24px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+    .btn:hover {
+      background: #e2e769;
+      color: #000;
+      box-shadow: 0 0 15px #e2e769;
+    }
+    .hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 20px;
+      box-sizing: border-box;
+      display: flex;
+      justify-content: space-between;
+      font-size: 24px;
+      font-weight: bold;
+      pointer-events: none;
+      text-shadow: 0 0 5px #e2e769;
+    }
+    #pause-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      border: 2px solid #e2e769;
+      background: transparent;
+      color: #e2e769;
+      font-size: 24px;
+      font-weight: bold;
+      cursor: pointer;
+      pointer-events: auto;
+      z-index: 10;
+    }
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .options-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 400px;
+    }
+    #touch-controls {
+      position: absolute;
+      bottom: 20px;
+      left: 0;
+      width: 100%;
+      height: 200px;
+      pointer-events: none;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 40px;
+      box-sizing: border-box;
+      opacity: 0.5;
+    }
+    .joystick-zone {
+      width: 150px;
+      height: 150px;
+      border: 2px solid rgba(226, 231, 105, 0.3);
+      border-radius: 50%;
+      position: relative;
+    }
+    .joystick-knob {
+      width: 50px;
+      height: 50px;
+      background: rgba(226, 231, 105, 0.5);
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .action-btn {
+      width: 100px;
+      height: 100px;
+      border: 2px solid rgba(226, 231, 105, 0.5);
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 20px;
+      margin-top: 25px;
+      pointer-events: auto;
+    }
+    .crt-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+      background-size: 100% 4px, 6px 100%;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="game-canvas" width="1280" height="720"></canvas>
+  <div class="crt-overlay"></div>
+
+  <div id="ui-layer">
+    <div id="screen-title" class="screen active">
+      <h1>CRT Polarity Drive</h1>
+      <button class="btn" id="btn-play">Play</button>
+      <button class="btn" id="btn-howto">How to Play</button>
+      <button class="btn" id="btn-options-title">Options</button>
+      <a href="../../index.html" style="text-decoration: none;"><button class="btn">Back to Arcade</button></a>
+      <div style="margin-top:20px;">High Score: <span id="title-highscore">0</span></div>
+    </div>
+
+    <div id="screen-playing" class="screen" style="background:transparent; pointer-events:none;">
+      <div class="hud">
+        <div>Score: <span id="hud-score">0</span></div>
+        <div>Polarity: <span id="hud-polarity">+</span></div>
+        <div>HP: <span id="hud-hp">3</span></div>
+      </div>
+      <button id="pause-btn">II</button>
+      <div id="touch-controls" style="display: none;">
+        <div class="joystick-zone" id="joystick-move" style="pointer-events:auto;">
+          <div class="joystick-knob" id="knob-move"></div>
+        </div>
+        <div class="action-btn" id="btn-switch">SWAP</div>
+        <div class="joystick-zone" id="joystick-aim" style="pointer-events:auto;">
+          <div class="joystick-knob" id="knob-aim"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="screen-paused" class="screen">
+      <h1>PAUSED</h1>
+      <button class="btn" id="btn-resume">Resume</button>
+      <button class="btn" id="btn-restart-pause">Restart</button>
+      <button class="btn" id="btn-options-pause">Options</button>
+      <button class="btn" id="btn-quit">Quit to Title</button>
+    </div>
+
+    <div id="screen-gameover" class="screen">
+      <h1>GAME OVER</h1>
+      <h2>Score: <span id="go-score">0</span></h2>
+      <h3 id="go-newhigh" style="display:none; color:#ff00ff;">NEW HIGH SCORE!</h3>
+      <button class="btn" id="btn-playagain">Play Again</button>
+      <button class="btn" id="btn-title-go">Title Screen</button>
+    </div>
+
+    <div id="screen-options" class="screen">
+      <h1>Options</h1>
+      <div class="options-row">
+        <span>Master Volume</span>
+        <input type="range" id="opt-vol" min="0" max="100" value="100">
+      </div>
+      <div class="options-row">
+        <span>SFX Volume</span>
+        <input type="range" id="opt-sfx" min="0" max="100" value="100">
+      </div>
+      <div class="options-row">
+        <span>Music Volume</span>
+        <input type="range" id="opt-mus" min="0" max="100" value="100">
+      </div>
+      <div class="options-row">
+        <span>Screen Shake</span>
+        <select id="opt-shake">
+          <option value="1">100%</option>
+          <option value="0.5">50%</option>
+          <option value="0">Off</option>
+        </select>
+      </div>
+      <div class="options-grid" style="margin-top: 20px;">
+        <button class="btn" id="btn-export">Export Save</button>
+        <button class="btn" id="btn-import">Import Save</button>
+        <button class="btn" id="btn-reset" style="border-color: red; color: red;">Reset Save</button>
+        <button class="btn" id="btn-close-options">Close</button>
+      </div>
+      <textarea id="save-data" style="width:400px; height:60px; display:none; margin-top:10px; background:#000; color:#e2e769; border:1px solid #e2e769;"></textarea>
+    </div>
+
+    <div id="screen-howto" class="screen">
+      <h1>How to Play</h1>
+      <div style="max-width: 600px; text-align: center; line-height: 1.5; margin-bottom: 20px;">
+        <p><strong>Move:</strong> WASD / Arrows / Left Joystick</p>
+        <p><strong>Shoot:</strong> Mouse Aim & Click / Right Joystick</p>
+        <p><strong>Switch Polarity:</strong> Space / Swap Button</p>
+        <p>Enemies have polarities (+ Red, - Blue). Matching polarity repels them, opposite attracts. Use polarity to group them, then blast them!</p>
+      </div>
+      <button class="btn" id="btn-close-howto">Close</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+class SaveManager {
+  constructor() {
+    this.key = 'arcade_game_028_028-crt-polarity-drive_v1';
+    this.memoryData = this.getDefaults();
+    this.load();
+  }
+
+  getDefaults() {
+    return {
+      highScore: 0,
+      totalGamesPlayed: 0,
+      totalScoreAccumulated: 0,
+      bestWaveOrCombo: 0,
+      unlockedMilestones: [],
+      options: {
+        masterVol: 100,
+        sfxVol: 100,
+        musicVol: 100,
+        shake: 1
+      }
+    };
+  }
+
+  load() {
+    try {
+      const stored = localStorage.getItem(this.key);
+      if (stored) {
+        this.memoryData = { ...this.getDefaults(), ...JSON.parse(stored) };
+      }
+    } catch (e) {
+      console.warn("localStorage read failed, using memory", e);
+    }
+  }
+
+  save() {
+    try {
+      localStorage.setItem(this.key, JSON.stringify(this.memoryData));
+    } catch (e) {
+      console.warn("localStorage write failed", e);
+    }
+  }
+
+  get data() {
+    return this.memoryData;
+  }
+}
+
+class SoundEngine {
+  constructor(saveManager) {
+    this.saveManager = saveManager;
+    this.ctx = null;
+    this.masterGain = null;
+    this.sfxGain = null;
+    this.musicGain = null;
+    this.initialized = false;
+  }
+
+  init() {
+    if (this.initialized) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    this.ctx = new AudioContext();
+
+    this.masterGain = this.ctx.createGain();
+    this.sfxGain = this.ctx.createGain();
+    this.musicGain = this.ctx.createGain();
+
+    this.sfxGain.connect(this.masterGain);
+    this.musicGain.connect(this.masterGain);
+    this.masterGain.connect(this.ctx.destination);
+
+    this.updateVolumes();
+    this.initialized = true;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  updateVolumes() {
+    if (!this.initialized) return;
+    const opts = this.saveManager.data.options;
+    this.masterGain.gain.value = opts.masterVol / 100;
+    this.sfxGain.gain.value = opts.sfxVol / 100;
+    this.musicGain.gain.value = opts.musicVol / 100;
+  }
+
+  playTone(freq, type, duration, vol = 1) {
+    if (!this.initialized) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + duration);
+  }
+
+  playShoot() { this.playTone(800, 'square', 0.1, 0.3); }
+  playHit() { this.playTone(200, 'sawtooth', 0.2, 0.5); }
+  playSwitch() { this.playTone(1200, 'sine', 0.1, 0.4); }
+}
+
+class InputManager {
+  constructor(engine) {
+    this.engine = engine;
+    this.keys = {};
+    this.mouse = { x: 0, y: 0, down: false };
+    this.touch = { active: false, moveActive: false, aimActive: false, move: {x:0, y:0}, aim: {x:0, y:0} };
+    this.init();
+  }
+
+  init() {
+    window.addEventListener('keydown', e => {
+      this.keys[e.code] = true;
+      if (e.code === 'Space') this.engine.handleSwitch();
+      this.engine.resumeAudio();
+    });
+    window.addEventListener('keyup', e => { this.keys[e.code] = false; });
+
+    const canvas = this.engine.canvas;
+    canvas.addEventListener('mousemove', e => this.updateMouse(e));
+    canvas.addEventListener('mousedown', e => {
+      this.mouse.down = true;
+      this.engine.resumeAudio();
+      this.updateMouse(e);
+    });
+    canvas.addEventListener('mouseup', e => { this.mouse.down = false; });
+
+    // Touch setup
+    document.addEventListener('touchstart', e => {
+      this.touch.active = true;
+      this.engine.resumeAudio();
+      this.engine.showTouchControls(true);
+    });
+
+    const moveZone = document.getElementById('joystick-move');
+    const aimZone = document.getElementById('joystick-aim');
+    const switchBtn = document.getElementById('btn-switch');
+
+    const handleTouch = (e, type) => {
+      e.preventDefault();
+      const touches = e.targetTouches;
+      if (touches.length === 0) {
+        if (type === 'move') this.touch.moveActive = false;
+        if (type === 'aim') this.touch.aimActive = false;
+        return;
+      }
+      const rect = e.target.getBoundingClientRect();
+      const touch = touches[0];
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      let dx = touch.clientX - centerX;
+      let dy = touch.clientY - centerY;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const maxDist = rect.width / 2;
+
+      if (dist > maxDist) {
+        dx = (dx / dist) * maxDist;
+        dy = (dy / dist) * maxDist;
+      }
+
+      if (type === 'move') {
+        this.touch.moveActive = true;
+        this.touch.move.x = dx / maxDist;
+        this.touch.move.y = dy / maxDist;
+        document.getElementById('knob-move').style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      } else {
+        this.touch.aimActive = true;
+        this.touch.aim.x = dx / maxDist;
+        this.touch.aim.y = dy / maxDist;
+        document.getElementById('knob-aim').style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      }
+    };
+
+    const resetTouch = (type) => {
+      if (type === 'move') {
+        this.touch.moveActive = false;
+        document.getElementById('knob-move').style.transform = `translate(-50%, -50%)`;
+      } else {
+        this.touch.aimActive = false;
+        document.getElementById('knob-aim').style.transform = `translate(-50%, -50%)`;
+      }
+    }
+
+    moveZone.addEventListener('touchstart', e => handleTouch(e, 'move'), {passive: false});
+    moveZone.addEventListener('touchmove', e => handleTouch(e, 'move'), {passive: false});
+    moveZone.addEventListener('touchend', e => resetTouch('move'));
+
+    aimZone.addEventListener('touchstart', e => handleTouch(e, 'aim'), {passive: false});
+    aimZone.addEventListener('touchmove', e => handleTouch(e, 'aim'), {passive: false});
+    aimZone.addEventListener('touchend', e => resetTouch('aim'));
+
+    switchBtn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      this.engine.handleSwitch();
+    });
+  }
+
+  updateMouse(e) {
+    const rect = this.engine.container.getBoundingClientRect();
+    this.mouse.x = (e.clientX - rect.left) / this.engine.scale;
+    this.mouse.y = (e.clientY - rect.top) / this.engine.scale;
+  }
+}
+
+class Engine {
+  constructor() {
+    this.container = document.getElementById('game-container');
+    this.canvas = document.getElementById('game-canvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.scale = 1;
+    this.saveManager = new SaveManager();
+    this.sound = new SoundEngine(this.saveManager);
+    this.input = new InputManager(this);
+
+    this.state = 'TITLE';
+    this.lastTime = 0;
+    this.animFrame = null;
+
+    this.setupResize();
+    this.setupUI();
+    this.loadHighscore();
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.state === 'PLAYING') {
+        this.changeState('PAUSED');
+      }
+    });
+    window.addEventListener('blur', () => {
+      if (this.state === 'PLAYING') {
+        this.changeState('PAUSED');
+      }
+    });
+
+    this.loop = this.loop.bind(this);
+    requestAnimationFrame(this.loop);
+  }
+
+  setupResize() {
+    const ro = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        const { width, height } = entry.contentRect;
+        const scaleX = width / 1280;
+        const scaleY = height / 720;
+        this.scale = Math.min(scaleX, scaleY);
+        this.container.style.transform = `translate(-50%, -50%) scale(${this.scale})`;
+      }
+    });
+    ro.observe(document.body);
+  }
+
+  setupUI() {
+    const get = id => document.getElementById(id);
+
+    get('btn-play').addEventListener('click', () => this.startGame());
+    get('btn-howto').addEventListener('click', () => this.changeState('HOWTO'));
+    get('btn-options-title').addEventListener('click', () => this.changeState('OPTIONS', 'TITLE'));
+
+    get('pause-btn').addEventListener('click', () => this.changeState('PAUSED'));
+
+    get('btn-resume').addEventListener('click', () => this.changeState('PLAYING'));
+    get('btn-restart-pause').addEventListener('click', () => this.startGame());
+    get('btn-options-pause').addEventListener('click', () => this.changeState('OPTIONS', 'PAUSED'));
+    get('btn-quit').addEventListener('click', () => this.changeState('TITLE'));
+
+    get('btn-playagain').addEventListener('click', () => this.startGame());
+    get('btn-title-go').addEventListener('click', () => this.changeState('TITLE'));
+
+    get('btn-close-howto').addEventListener('click', () => this.changeState('TITLE'));
+    get('btn-close-options').addEventListener('click', () => {
+      this.changeState(this.prevState || 'TITLE');
+    });
+
+    // Options mapping
+    const opts = this.saveManager.data.options;
+    const bindOpt = (id, key, updateFn) => {
+      const el = get(id);
+      el.value = opts[key];
+      el.addEventListener('input', e => {
+        opts[key] = parseFloat(e.target.value);
+        this.saveManager.save();
+        if (updateFn) updateFn();
+      });
+    };
+
+    bindOpt('opt-vol', 'masterVol', () => this.sound.updateVolumes());
+    bindOpt('opt-sfx', 'sfxVol', () => { this.sound.updateVolumes(); this.sound.playShoot(); });
+    bindOpt('opt-mus', 'musicVol', () => this.sound.updateVolumes());
+    bindOpt('opt-shake', 'shake');
+
+    // Save Export/Import
+    let resetClicks = 0;
+    get('btn-reset').addEventListener('click', (e) => {
+      resetClicks++;
+      if (resetClicks === 1) {
+        e.target.textContent = "Click again to confirm reset";
+      } else {
+        this.saveManager.memoryData = this.saveManager.getDefaults();
+        this.saveManager.save();
+        this.loadHighscore();
+        e.target.textContent = "Reset Save";
+        resetClicks = 0;
+        get('opt-vol').value = 100;
+        get('opt-sfx').value = 100;
+        get('opt-mus').value = 100;
+        get('opt-shake').value = 1;
+      }
+    });
+
+    get('btn-export').addEventListener('click', () => {
+      const b64 = btoa(JSON.stringify(this.saveManager.data));
+      const ta = get('save-data');
+      ta.value = b64;
+      ta.style.display = 'block';
+      ta.select();
+      document.execCommand('copy');
+      get('btn-export').textContent = "Copied!";
+      setTimeout(() => get('btn-export').textContent = "Export Save", 2000);
+    });
+
+    get('btn-import').addEventListener('click', () => {
+      const ta = get('save-data');
+      if (ta.style.display === 'none') {
+        ta.style.display = 'block';
+        ta.value = '';
+        ta.placeholder = "Paste Base64 save data here and click Import again";
+      } else {
+        try {
+          const parsed = JSON.parse(atob(ta.value));
+          if (parsed && parsed.options) {
+            this.saveManager.memoryData = parsed;
+            this.saveManager.save();
+            this.loadHighscore();
+            ta.style.display = 'none';
+            get('btn-import').textContent = "Imported!";
+            setTimeout(() => get('btn-import').textContent = "Import Save", 2000);
+          }
+        } catch (e) {
+          alert("Invalid save data");
+        }
+      }
+    });
+  }
+
+  loadHighscore() {
+    document.getElementById('title-highscore').textContent = this.saveManager.data.highScore;
+  }
+
+  resumeAudio() {
+    this.sound.init();
+  }
+
+  showTouchControls(show) {
+    document.getElementById('touch-controls').style.display = show ? 'flex' : 'none';
+  }
+
+  handleSwitch() {
+    if (this.state !== 'PLAYING') return;
+    this.sound.playSwitch();
+    this.player.polarity = this.player.polarity === 1 ? -1 : 1;
+    document.getElementById('hud-polarity').textContent = this.player.polarity === 1 ? '+' : '-';
+    document.getElementById('hud-polarity').style.color = this.player.polarity === 1 ? '#ff4444' : '#4444ff';
+  }
+
+  startGame() {
+    this.resumeAudio();
+    this.changeState('PLAYING');
+
+    this.player = {
+      x: 640, y: 360, vx: 0, vy: 0, speed: 400, radius: 20, polarity: 1, hp: 3,
+      cooldown: 0
+    };
+    document.getElementById('hud-polarity').textContent = '+';
+    document.getElementById('hud-polarity').style.color = '#ff4444';
+    document.getElementById('hud-hp').textContent = this.player.hp;
+
+    this.bullets = [];
+    this.enemies = [];
+    this.particles = [];
+    this.score = 0;
+    this.wave = 1;
+    this.spawnTimer = 0;
+    this.shakeTime = 0;
+
+    document.getElementById('hud-score').textContent = '0';
+  }
+
+  addShake(amt) {
+    this.shakeTime = amt * this.saveManager.data.options.shake;
+  }
+
+  spawnParticles(x, y, color, count) {
+    for (let i=0; i<count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 200 + 50;
+      this.particles.push({
+        x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed,
+        life: 1, color
+      });
+    }
+  }
+
+  spawnEnemy() {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 800;
+    const x = 640 + Math.cos(angle) * dist;
+    const y = 360 + Math.sin(angle) * dist;
+    this.enemies.push({
+      x, y, vx: 0, vy: 0, radius: 25,
+      polarity: Math.random() < 0.5 ? 1 : -1,
+      hp: 2 + Math.floor(this.wave / 2)
+    });
+  }
+
+  gameOver() {
+    this.changeState('GAME_OVER');
+    document.getElementById('go-score').textContent = this.score;
+    const isHigh = this.score > this.saveManager.data.highScore;
+    document.getElementById('go-newhigh').style.display = isHigh ? 'block' : 'none';
+    if (isHigh) {
+      this.saveManager.memoryData.highScore = this.score;
+      this.saveManager.save();
+    }
+  }
+
+  changeState(newState, prevState = null) {
+    if (prevState) this.prevState = prevState;
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-' + newState.toLowerCase().replace('_', '')).classList.add('active');
+    this.state = newState;
+  }
+
+  loop(timestamp) {
+    const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1);
+    this.lastTime = timestamp;
+
+    this.update(dt);
+    this.draw();
+
+    requestAnimationFrame(this.loop);
+  }
+
+  update(dt) {
+    if (this.state !== 'PLAYING') return;
+
+    // Player Input
+    let dx = 0, dy = 0;
+    if (this.input.keys['KeyW'] || this.input.keys['ArrowUp']) dy -= 1;
+    if (this.input.keys['KeyS'] || this.input.keys['ArrowDown']) dy += 1;
+    if (this.input.keys['KeyA'] || this.input.keys['ArrowLeft']) dx -= 1;
+    if (this.input.keys['KeyD'] || this.input.keys['ArrowRight']) dx += 1;
+
+    if (this.input.touch.moveActive) {
+      dx = this.input.touch.move.x;
+      dy = this.input.touch.move.y;
+    }
+
+    const len = Math.sqrt(dx*dx + dy*dy);
+    if (len > 0) {
+      dx /= len; dy /= len;
+    }
+
+    this.player.x += dx * this.player.speed * dt;
+    this.player.y += dy * this.player.speed * dt;
+
+    this.player.x = Math.max(this.player.radius, Math.min(1280 - this.player.radius, this.player.x));
+    this.player.y = Math.max(this.player.radius, Math.min(720 - this.player.radius, this.player.y));
+
+    // Shooting
+    if (this.player.cooldown > 0) this.player.cooldown -= dt;
+    let shootX = 0, shootY = 0, shooting = false;
+
+    if (this.input.touch.aimActive) {
+      shootX = this.input.touch.aim.x;
+      shootY = this.input.touch.aim.y;
+      if (Math.sqrt(shootX*shootX + shootY*shootY) > 0.5) shooting = true;
+    } else if (this.input.mouse.down) {
+      shootX = this.input.mouse.x - this.player.x;
+      shootY = this.input.mouse.y - this.player.y;
+      shooting = true;
+    }
+
+    if (shooting && this.player.cooldown <= 0) {
+      const slen = Math.sqrt(shootX*shootX + shootY*shootY);
+      if (slen > 0) {
+        this.sound.playShoot();
+        this.bullets.push({
+          x: this.player.x, y: this.player.y,
+          vx: (shootX/slen) * 800, vy: (shootY/slen) * 800,
+          radius: 5, life: 2, polarity: this.player.polarity
+        });
+        this.player.cooldown = 0.15;
+      }
+    }
+
+    // Update Bullets
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      let b = this.bullets[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.life -= dt;
+      if (b.life <= 0 || b.x < 0 || b.x > 1280 || b.y < 0 || b.y > 720) {
+        this.bullets.splice(i, 1);
+      }
+    }
+
+    // Spawning
+    this.spawnTimer -= dt;
+    if (this.spawnTimer <= 0) {
+      this.spawnEnemy();
+      this.spawnTimer = Math.max(0.5, 2.0 - this.wave * 0.1);
+    }
+
+    // Update Enemies & Magnetism
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      let e = this.enemies[i];
+
+      // Magnetic effect from player
+      let dx = this.player.x - e.x;
+      let dy = this.player.y - e.y;
+      let distSq = dx*dx + dy*dy;
+      let dist = Math.sqrt(distSq);
+
+      let magForce = 0;
+      if (dist < 400 && dist > 10) {
+        // opposite attracts, same repels
+        let forceDir = (this.player.polarity === e.polarity) ? -1 : 1;
+        magForce = forceDir * 50000 / distSq;
+      }
+
+      // Base movement towards player
+      let bvx = (dx / dist) * (100 + this.wave * 5);
+      let bvy = (dy / dist) * (100 + this.wave * 5);
+
+      e.vx = bvx + (dx / dist) * magForce;
+      e.vy = bvy + (dy / dist) * magForce;
+
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+
+      // Collision with Player
+      if (dist < e.radius + this.player.radius) {
+        this.sound.playHit();
+        this.addShake(0.5);
+        this.player.hp--;
+        document.getElementById('hud-hp').textContent = this.player.hp;
+        this.spawnParticles(this.player.x, this.player.y, '#e2e769', 20);
+        this.enemies.splice(i, 1);
+
+        if (this.player.hp <= 0) {
+          this.gameOver();
+          return;
+        }
+        continue;
+      }
+
+      // Collision with bullets
+      for (let j = this.bullets.length - 1; j >= 0; j--) {
+        let b = this.bullets[j];
+        let bdx = b.x - e.x;
+        let bdy = b.y - e.y;
+        if (bdx*bdx + bdy*bdy < (e.radius + b.radius)*(e.radius + b.radius)) {
+          // Hit!
+          let dmg = (b.polarity === e.polarity) ? 0.5 : 1.5; // Opposites deal more damage
+          e.hp -= dmg;
+          this.spawnParticles(b.x, b.y, b.polarity === 1 ? '#ff4444' : '#4444ff', 5);
+          this.bullets.splice(j, 1);
+
+          if (e.hp <= 0) {
+            this.sound.playHit();
+            this.addShake(0.2);
+            this.spawnParticles(e.x, e.y, e.polarity === 1 ? '#ff4444' : '#4444ff', 15);
+            this.enemies.splice(i, 1);
+            this.score += 10;
+            if (this.score % 100 === 0) this.wave++;
+            document.getElementById('hud-score').textContent = this.score;
+            break;
+          }
+        }
+      }
+    }
+
+    // Update Particles
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      let p = this.particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt * 2;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+
+    if (this.shakeTime > 0) this.shakeTime -= dt;
+  }
+
+  draw() {
+    this.ctx.fillStyle = 'rgba(0,0,0,0.3)'; // CRT ghosting effect
+    this.ctx.fillRect(0, 0, 1280, 720);
+
+    this.ctx.save();
+    if (this.shakeTime > 0) {
+      let shakeAmt = this.shakeTime * 20;
+      this.ctx.translate((Math.random()-0.5)*shakeAmt, (Math.random()-0.5)*shakeAmt);
+    }
+
+    // Draw Grid
+    this.ctx.strokeStyle = 'rgba(226, 231, 105, 0.1)';
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    for (let x=0; x<=1280; x+=80) { this.ctx.moveTo(x,0); this.ctx.lineTo(x,720); }
+    for (let y=0; y<=720; y+=80) { this.ctx.moveTo(0,y); this.ctx.lineTo(1280,y); }
+    this.ctx.stroke();
+
+    if (this.state === 'TITLE') {
+      this.ctx.strokeStyle = '#e2e769';
+      this.ctx.beginPath();
+      for(let i=0; i<20; i++) {
+        this.ctx.moveTo(Math.random() * 1280, Math.random() * 720);
+        this.ctx.lineTo(Math.random() * 1280, Math.random() * 720);
+      }
+      this.ctx.stroke();
+    }
+
+    if (this.state === 'PLAYING') {
+      // Draw Player
+      this.ctx.strokeStyle = this.player.polarity === 1 ? '#ff4444' : '#4444ff';
+      this.ctx.lineWidth = 3;
+      this.ctx.beginPath();
+      this.ctx.arc(this.player.x, this.player.y, this.player.radius, 0, Math.PI*2);
+      this.ctx.stroke();
+
+      // Draw magnetic field hint
+      this.ctx.strokeStyle = this.player.polarity === 1 ? 'rgba(255,68,68,0.2)' : 'rgba(68,68,255,0.2)';
+      this.ctx.beginPath();
+      this.ctx.arc(this.player.x, this.player.y, 400, 0, Math.PI*2);
+      this.ctx.stroke();
+
+      // Draw Bullets
+      for (let b of this.bullets) {
+        this.ctx.fillStyle = b.polarity === 1 ? '#ff4444' : '#4444ff';
+        this.ctx.beginPath();
+        this.ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2);
+        this.ctx.fill();
+      }
+
+      // Draw Enemies
+      for (let e of this.enemies) {
+        this.ctx.strokeStyle = e.polarity === 1 ? '#ff4444' : '#4444ff';
+        this.ctx.lineWidth = 2;
+        this.ctx.save();
+        this.ctx.translate(e.x, e.y);
+        this.ctx.rotate(this.lastTime * 2);
+        this.ctx.beginPath();
+        this.ctx.rect(-e.radius, -e.radius, e.radius*2, e.radius*2);
+        this.ctx.stroke();
+        this.ctx.restore();
+      }
+
+      // Draw Particles
+      for (let p of this.particles) {
+        this.ctx.fillStyle = p.color;
+        this.ctx.globalAlpha = p.life;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, 3, 0, Math.PI*2);
+        this.ctx.fill();
+        this.ctx.globalAlpha = 1;
+      }
+    }
+
+    this.ctx.restore();
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  window.gameEngine = new Engine();
+});
+</script>
+
+</body>
+</html>
