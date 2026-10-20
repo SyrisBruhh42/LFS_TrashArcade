@@ -1,0 +1,178 @@
+name: Arcade Gate
+
+# Straight-live pipeline, hardened against AI tampering (modeled on LFS-Tycoon's capsule gate).
+#
+#  * Pull requests run under `pull_request_target`: the workflow file AND every tool come from trusted `main`.
+#    The PR contributes data only (its newly added game files are overlaid onto main). A PR that edits tools,
+#    workflows, AGENTS.md, the launcher or registry.js is rejected by the path guard, and could not influence
+#    the checks anyway.
+#  * One job per PR: path guard -> overlay -> strict game check -> squash-merge pinned to the exact tested
+#    commit -> rebuild games/registry.js on main. On failure a report comment is posted (the factory harvests
+#    it as lessons) and the PR is labelled `gate-failed`.
+#  * Pushes to main, a nightly audit and manual runs re-verify main (and heal a stale registry). A red
+#    content-only push is reverted automatically; anything else opens a `factory:pause` issue.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  pr-gate:
+    name: Arcade gate
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pr-gate-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out trusted base (tools come from main)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch PR head as data (token scoped to this one command, never persisted)
+        run: |
+          AUTH="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c http.https://github.com/.extraheader="$AUTH" fetch --no-tags origin "+refs/pull/${PR}/head:refs/remotes/pr/head"
+          git cat-file -e "${HEAD_SHA}^{commit}"
+
+      - name: Path guard (one new game folder, additions only)
+        run: python3 tools/path_guard.py --base "origin/${BASE_REF}" --head "${HEAD_SHA}" 2>&1 | tee -a report.txt; exit "${PIPESTATUS[0]}"
+
+      - name: Overlay the PR's new files onto trusted main
+        run: |
+          git diff --name-only --diff-filter=A "origin/${BASE_REF}...${HEAD_SHA}" > added.txt
+          cat added.txt
+          xargs -r -a added.txt git checkout "${HEAD_SHA}" --
+
+      - name: Strict game check (offline laws, subsystems, manifest, JS syntax, uniqueness)
+        run: python3 tools/check_games.py --strict 2>&1 | tee -a report.txt; exit "${PIPESTATUS[0]}"
+
+      - name: Squash-merge the exact tested commit
+        id: merge
+        run: |
+          if [ "$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = "true" ]; then
+            gh pr ready "$PR" -R "$GITHUB_REPOSITORY"
+          fi
+          for i in 1 2 3 4 5; do
+            if gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --squash --delete-branch --match-head-commit "$HEAD_SHA"; then
+              echo "Merged PR #$PR at $HEAD_SHA"; exit 0
+            fi
+            sleep $((i * 10))
+          done
+          echo "MERGE FAILED: could not merge after retries (head moved, id collision or conflict)." | tee -a report.txt
+          exit 1
+
+      - name: Rebuild games/registry.js on main (generated; never edited by game PRs)
+        run: |
+          AUTH="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git config user.name "arcade-gate[bot]"
+          git config user.email "arcade-gate@users.noreply.github.com"
+          for i in 1 2 3 4 5; do
+            git -c http.https://github.com/.extraheader="$AUTH" fetch -q --no-tags origin main
+            git checkout -q -f -B main origin/main
+            git clean -fdq
+            python3 tools/build_registry.py
+            if git diff --quiet -- games/registry.js; then echo "Registry already current."; exit 0; fi
+            git commit -q -m "chore(registry): rebuild after #${PR}" -- games/registry.js
+            if git -c http.https://github.com/.extraheader="$AUTH" push -q origin HEAD:main; then echo "Registry rebuilt."; exit 0; fi
+            sleep $((i * 5))
+          done
+          echo "Registry rebuild could not be pushed after retries."; exit 1
+
+      - name: Report failure on the PR
+        if: failure() && steps.merge.outcome != 'success'
+        run: |
+          {
+            echo "<!-- arcade-gate-report -->"
+            echo "### Arcade gate failed"
+            echo ""
+            echo '```'
+            grep -aE '^(ERROR:|PATH GUARD|FAILED:|MERGE FAILED)' report.txt 2>/dev/null | head -40 \
+              || echo "INFRA: the gate failed before validation ran (not a content error)."
+            echo '```'
+            echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "Fix: edit only your own new game folder, run \`python3 tools/preflight.py\` until it prints PREFLIGHT OK."
+          } > comment.md
+          gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body-file comment.md || true
+          gh label create gate-failed -R "$GITHUB_REPOSITORY" --color D93F0B --force >/dev/null 2>&1 || true
+          gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label gate-failed || true
+
+      - name: Merged but registry rebuild failed -> pause the factory
+        if: failure() && steps.merge.outcome == 'success'
+        run: |
+          gh label create "factory:pause" -R "$GITHUB_REPOSITORY" --color B60205 --force >/dev/null 2>&1 || true
+          if [ -z "$(gh issue list -R "$GITHUB_REPOSITORY" --label factory:pause --state open --json number --jq '.[].number')" ]; then
+            gh issue create -R "$GITHUB_REPOSITORY" --label "factory:pause" \
+              --title "Factory paused: registry rebuild failed after PR #${PR}" \
+              --body "PR #${PR} merged but games/registry.js could not be rebuilt: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Run the Arcade Gate workflow manually (it heals the registry), then close this issue to resume."
+          fi
+
+  main-guard:
+    name: Main guard
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: main-guard
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 2
+
+      - name: Heal a stale registry
+        run: |
+          python3 tools/build_registry.py
+          if ! git diff --quiet -- games/registry.js; then
+            git config user.name "arcade-gate[bot]"
+            git config user.email "arcade-gate@users.noreply.github.com"
+            git commit -q -m "chore(registry): heal stale registry" -- games/registry.js
+            git push -q origin HEAD:main && echo "Registry healed."
+          fi
+
+      - name: Strict game check incl. registry freshness
+        run: python3 tools/check_games.py --strict --check-registry
+
+      - name: On red, revert content-only push or pause the factory
+        if: failure()
+        run: |
+          SHA="${GITHUB_SHA}"
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] \
+             && ! git log -1 --format=%s "$SHA" | grep -q '^Revert' \
+             && ! git diff --name-only "${SHA}^" "$SHA" | grep -qv '^games/'; then
+            git config user.name "arcade-gate[bot]"
+            git config user.email "arcade-gate@users.noreply.github.com"
+            git revert --no-edit "$SHA"
+            git push origin HEAD:main
+            echo "Reverted red content-only commit $SHA."
+            exit 0
+          fi
+          gh label create "factory:pause" -R "$GITHUB_REPOSITORY" --color B60205 --force >/dev/null 2>&1 || true
+          if [ -z "$(gh issue list -R "$GITHUB_REPOSITORY" --label factory:pause --state open --json number --jq '.[].number')" ]; then
+            gh issue create -R "$GITHUB_REPOSITORY" --label "factory:pause" \
+              --title "Factory paused: main is red (${GITHUB_EVENT_NAME})" \
+              --body "Main guard failed on ${SHA}: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. The Jules factory will not dispatch while this issue is open. Fix main, then close this issue to resume."
+          fi

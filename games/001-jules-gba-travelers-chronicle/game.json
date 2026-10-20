@@ -1,0 +1,12 @@
+{
+  "id": "001",
+  "slug": "001-jules-gba-travelers-chronicle",
+  "title": "Jules' GBA: A Traveler's Chronicle",
+  "genre": "Tactical Grid/Turn-Based Blitz",
+  "coreMechanic": "Automation Grid & Party Tactics RPG",
+  "description": "Explore a procedural overworld, build Factorio-style automation belts, craft via JEI recipes, and battle monsters in turn-based tactical party combat.",
+  "controls": "WASD / Arrow Keys to move, Click / Touch D-Pad & Action Buttons to interact",
+  "createdAt": "2026-10-19",
+  "accentColor": "#f5ca53",
+  "legacy": true
+}

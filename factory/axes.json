@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "_note": "Design axes. The dispatcher assigns one value from each axis per session, preferring the least-used combinations. tools/check_games.py rejects values not listed here and repeated genre+twist+setting triples. Add values freely; never rename or remove one that a merged game uses.",
+  "genres": [
+    "Twin-Stick Arena",
+    "Gravity/Orbital Physics Action",
+    "Tactical Grid/Turn-Based Blitz",
+    "Rhythm/Beat-Synced Reflex",
+    "Pinball/Ricochet Dungeon",
+    "Momentum/Grapple Platformer",
+    "Wave-Defense Tower Micro-Strategy",
+    "Bullet-Hell Boss Rush",
+    "Alchemy/Chain-Reaction Puzzle Action",
+    "Directional Parry/Slash Arcade",
+    "Subterranean Drilling/Mining Roguelite",
+    "Stealth/Line-of-Sight Heist"
+  ],
+  "twists": [
+    "Recoil-as-Movement",
+    "Time-Dilation on Stillness",
+    "Polarity/Magnetism Switching",
+    "Risk/Reward Tether or Tail Growth",
+    "Limited Ammo Must Be Physically Retrieved",
+    "Shrinking Arena / Shifting Geometry",
+    "Sacrifice Health for Overdrive Power",
+    "Echo/Ghost Self-Cooperation"
+  ],
+  "settings": [
+    "Junkyard Robot Scrapheap",
+    "Neon Synthwave City",
+    "Deep Ocean Trench",
+    "Clockwork Steampunk Foundry",
+    "Overgrown Jungle Ruins",
+    "Frozen Arctic Research Base",
+    "Volcanic Forge World",
+    "Haunted Victorian Manor",
+    "Orbital Space Station",
+    "Desert Sandstorm Bazaar",
+    "Microscopic Cell Interior",
+    "Paper Craft Diorama",
+    "Retro CRT Vector Grid",
+    "Candy Factory Conveyor Line",
+    "Cyber Samurai Dojo",
+    "Floating Sky Islands"
+  ]
+}
