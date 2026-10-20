@@ -232,5 +232,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-21",
     "accentColor": "#e8b923",
     "path": "./games/018-desert-bazaar-overdrive/index.html"
+  },
+  {
+    "id": "019",
+    "slug": "019-sky-tether-heist",
+    "title": "Sky Tether Heist",
+    "genre": "Stealth/Line-of-Sight Heist",
+    "coreMechanic": "Risk/Reward Tether or Tail Growth",
+    "setting": "Floating Sky Islands",
+    "description": "Infiltrate floating islands to collect treasures. Beware, every treasure you steal grows your tether tail, making it harder to stay hidden from patrols!",
+    "controls": "WASD/Arrows/Virtual Stick to move. Space/Tap to interact at extraction zones.",
+    "createdAt": "2024-05-15",
+    "accentColor": "#fef4c0",
+    "path": "./games/019-sky-tether-heist/index.html"
   }
 ];
