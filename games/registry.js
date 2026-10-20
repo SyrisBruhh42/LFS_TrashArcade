@@ -24,5 +24,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2026-10-20",
     "accentColor": "#ff00ff",
     "path": "./games/002-neon-grapple-dilation/index.html"
+  },
+  {
+    "id": "003",
+    "slug": "003-paper-craft-tail-arena",
+    "title": "Paper Craft Tail Arena",
+    "genre": "Twin-Stick Arena",
+    "coreMechanic": "Risk/Reward Tether or Tail Growth",
+    "setting": "Paper Craft Diorama",
+    "description": "Survive the twin-stick arena where collecting points grows a vulnerable paper tail. Cut your tail to secure points but risk becoming defenseless.",
+    "controls": "WASD to move. Mouse/Right-stick to shoot. Space/Touch-button to cut tail.",
+    "createdAt": "2024-10-24",
+    "accentColor": "#c298fa",
+    "path": "./games/003-paper-craft-tail-arena/index.html"
   }
 ];
