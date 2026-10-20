@@ -258,5 +258,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-20",
     "accentColor": "#9e72e2",
     "path": "./games/020-micro-cell-retrieval/index.html"
+  },
+  {
+    "id": "021",
+    "slug": "021-neon-grid-switch",
+    "title": "Neon Grid Switch",
+    "genre": "Tactical Grid/Turn-Based Blitz",
+    "coreMechanic": "Polarity/Magnetism Switching",
+    "setting": "Neon Synthwave City",
+    "description": "Tactical grid-based puzzle blitz. Switch your polarity to push or pull enemies, align them into traps, and master the magnetic fields in a neon synthwave city.",
+    "controls": "WASD/Arrows/Swipe to move. Space/Enter/Tap self to switch polarity.",
+    "createdAt": "2024-10-31",
+    "accentColor": "#589b70",
+    "path": "./games/021-neon-grid-switch/index.html"
   }
 ];
