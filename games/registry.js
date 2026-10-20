@@ -362,5 +362,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-11-20",
     "accentColor": "#e2e769",
     "path": "./games/028-crt-polarity-drive/index.html"
+  },
+  {
+    "id": "029",
+    "slug": "029-origami-recoil-siege",
+    "title": "Origami Recoil Siege",
+    "genre": "Wave-Defense Tower Micro-Strategy",
+    "coreMechanic": "Recoil-as-Movement",
+    "setting": "Paper Craft Diorama",
+    "description": "Defend your paper craft core against waves of origami enemies. Firing your weapon pushes you backwards, turning your offense into your only means of movement and evasion.",
+    "controls": "Arrow Keys / WASD to Aim, Space/Enter/Click/Tap to Fire (moves you backwards)",
+    "createdAt": "2024-10-24",
+    "accentColor": "#ad5fbb",
+    "path": "./games/029-origami-recoil-siege/index.html"
   }
 ];
