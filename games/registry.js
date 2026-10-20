@@ -401,5 +401,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-25",
     "accentColor": "#c0699a",
     "path": "./games/031-scrap-retrieval/index.html"
+  },
+  {
+    "id": "033",
+    "slug": "033-candy-echo-recoil",
+    "title": "Candy Echo Recoil",
+    "genre": "Pinball/Ricochet Dungeon",
+    "coreMechanic": "Echo/Ghost Self-Cooperation",
+    "setting": "Candy Factory Conveyor Line",
+    "description": "Navigate a crazy candy factory using recoil physics. Create time-delayed echoes to ricochet off them and solve puzzles to clear the conveyor line.",
+    "controls": "WASD/Arrows to move/aim, Space/Click to fire and recoil, Shift to create an echo.",
+    "createdAt": "2024-11-20",
+    "accentColor": "#b75279",
+    "path": "./games/033-candy-echo-recoil/index.html"
   }
 ];
