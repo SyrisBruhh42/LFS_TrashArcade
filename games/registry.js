@@ -544,5 +544,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-05-18",
     "accentColor": "#56b587",
     "path": "./games/042-vector-stealth-retrieve/index.html"
+  },
+  {
+    "id": "043",
+    "slug": "043-trench-recoil-tactics",
+    "title": "Trench Recoil Tactics",
+    "genre": "Tactical Grid/Turn-Based Blitz",
+    "coreMechanic": "Recoil-as-Movement",
+    "setting": "Deep Ocean Trench",
+    "description": "Navigate a deep ocean trench using recoil-as-movement grid tactics. Every shot pushes you back. Survive the blitz.",
+    "controls": "WASD / Arrows to aim and shoot (which moves you backwards). Mouse/Touch to interact.",
+    "createdAt": "2024-05-18",
+    "accentColor": "#c8d186",
+    "path": "./games/043-trench-recoil-tactics/index.html"
   }
 ];
