@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sky Recoil Rhythm</title>
+    <link rel="stylesheet" href="./style.css">
+    <script defer src="./engine.js"></script>
+    <script defer src="./game.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <!-- Canvas for rendering -->
+        <canvas id="game-canvas"></canvas>
+
+        <!-- UI Overlays -->
+        <div id="ui-layer">
+            <!-- TITLE SCREEN -->
+            <div id="screen-title" class="screen active">
+                <h1 class="game-title">SKY RECOIL<br>RHYTHM</h1>
+                <div class="stats-box">
+                    <p>High Score: <span id="title-highscore">0</span></p>
+                    <p>Lifetime Games: <span id="title-games-played">0</span></p>
+                </div>
+                <div class="button-group">
+                    <button id="btn-play" class="btn primary">Play</button>
+                    <button id="btn-how-to-play" class="btn">How to Play</button>
+                    <button id="btn-options" class="btn">Options</button>
+                    <a href="../../index.html" class="btn link">Back to Arcade</a>
+                </div>
+            </div>
+
+            <!-- PLAYING HUD -->
+            <div id="screen-playing" class="screen hidden">
+                <div class="hud-top">
+                    <div class="hud-score">Score: <span id="hud-score-val">0</span></div>
+                    <div class="hud-health">Health: <span id="hud-health-val">3</span></div>
+                </div>
+                <div class="hud-combo">Combo: x<span id="hud-combo-val">1</span></div>
+                <div class="hud-rhythm-bar">
+                    <div id="rhythm-indicator"></div>
+                </div>
+                <button id="btn-pause" class="btn-icon">II</button>
+            </div>
+
+            <!-- HOW TO PLAY -->
+            <div id="screen-how-to-play" class="screen hidden">
+                <h2>How to Play</h2>
+                <div class="htp-content">
+                    <p><strong>Movement:</strong> You can only move by shooting! The recoil pushes you in the opposite direction.</p>
+                    <p><strong>Rhythm:</strong> A beat plays in the background. Shoot ON THE BEAT to gain multiplier combos and jump further.</p>
+                    <p><strong>Goal:</strong> Survive on the floating islands, destroy enemies, and don't fall off.</p>
+                    <hr>
+                    <p><em>Desktop:</em> WASD / Arrows to aim, Space / Click to shoot.</p>
+                    <p><em>Mobile:</em> Use the on-screen joystick to aim and the shoot button.</p>
+                </div>
+                <button id="btn-close-htp" class="btn primary">Got It</button>
+            </div>
+
+            <!-- PAUSED SCREEN -->
+            <div id="screen-paused" class="screen hidden overlay">
+                <h2>PAUSED</h2>
+                <div class="button-group">
+                    <button id="btn-resume" class="btn primary">Resume</button>
+                    <button id="btn-restart" class="btn">Restart</button>
+                    <button id="btn-options-pause" class="btn">Options</button>
+                    <button id="btn-htp-pause" class="btn">How to Play</button>
+                    <a href="../../index.html" class="btn link">Back to Arcade</a>
+                    <button id="btn-quit" class="btn danger">Quit to Title</button>
+                </div>
+            </div>
+
+            <!-- OPTIONS SCREEN -->
+            <div id="screen-options" class="screen hidden overlay">
+                <h2>Options</h2>
+                <div class="options-content">
+                    <label>Master Volume: <input type="range" id="opt-master-vol" min="0" max="100" value="100"></label>
+                    <label>SFX Volume: <input type="range" id="opt-sfx-vol" min="0" max="100" value="100"></label>
+                    <label>Music Volume: <input type="range" id="opt-music-vol" min="0" max="100" value="100"></label>
+                    <label>Screen Shake:
+                        <select id="opt-shake">
+                            <option value="1">100%</option>
+                            <option value="0.5">50%</option>
+                            <option value="0">Off</option>
+                        </select>
+                    </label>
+                    <label>Particles:
+                        <select id="opt-particles">
+                            <option value="high">High</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </label>
+                    <div class="save-actions">
+                        <button id="btn-export-save" class="btn small">Export Save</button>
+                        <button id="btn-import-save" class="btn small">Import Save</button>
+                        <button id="btn-reset-save" class="btn small danger">Reset Save</button>
+                    </div>
+                    <textarea id="save-data-box" class="hidden" rows="3"></textarea>
+                </div>
+                <button id="btn-close-options" class="btn primary">Close</button>
+            </div>
+
+            <!-- GAME OVER SCREEN -->
+            <div id="screen-game-over" class="screen hidden overlay">
+                <h2>GAME OVER</h2>
+                <div class="game-over-stats">
+                    <p id="go-new-high-score" class="hidden pulse">NEW HIGH SCORE!</p>
+                    <p>Score: <span id="go-score">0</span></p>
+                    <p>Max Combo: x<span id="go-combo">0</span></p>
+                    <div id="go-milestones"></div>
+                </div>
+                <div class="button-group">
+                    <button id="btn-play-again" class="btn primary">Play Again</button>
+                    <button id="btn-title-from-go" class="btn">Title Screen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Touch Controls Overlay -->
+        <div id="touch-controls">
+            <div id="touch-joystick-base" class="touch-zone">
+                <div id="touch-joystick-knob"></div>
+            </div>
+            <div id="touch-btn-shoot" class="touch-zone">
+                <span>🎯</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
