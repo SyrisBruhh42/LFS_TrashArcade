@@ -206,5 +206,18 @@ window.ARCADE_REGISTRY = [
     "createdAt": "2024-10-20",
     "accentColor": "#dbd5e3",
     "path": "./games/016-alchemy-foundry-overdrive/index.html"
+  },
+  {
+    "id": "017",
+    "slug": "017-sandstorm-grapple",
+    "title": "Sandstorm Grapple",
+    "genre": "Momentum/Grapple Platformer",
+    "coreMechanic": "Polarity/Magnetism Switching",
+    "setting": "Desert Sandstorm Bazaar",
+    "description": "Swing through a sandstorm bazaar using magnetic grapple points. Switch your polarity to attract or repel to gain momentum.",
+    "controls": "WASD/Arrows to move, Space to jump. Mouse click or Touch to grapple, Shift/Right-click to switch polarity.",
+    "createdAt": "2024-03-24",
+    "accentColor": "#5be95e",
+    "path": "./games/017-sandstorm-grapple/index.html"
   }
 ];
