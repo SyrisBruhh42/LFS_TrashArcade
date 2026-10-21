@@ -72,6 +72,7 @@ class Boss extends Enemy {
         this.onPhaseChange();
     }
     if (this.hp <= 0) {
+        if (window.engine && window.engine.uiManager) window.engine.uiManager.checkMilestone('boss_slayer', 1);
         if (window.engine && window.engine.audio) window.engine.audio.playBossDeath();
         this.active = false;
         return true;

@@ -423,6 +423,10 @@ class GameEngine {
     this.score = 0;
     this.wave = 1;
     this.vfxManager = new VFXManager();
+    if (typeof UIManager !== 'undefined') {
+        this.uiManager = new UIManager(this);
+        this.uiManager.renderMilestones();
+    }
 
     this.setupResizeObserver();
     this.bindUI();
@@ -532,6 +536,7 @@ class GameEngine {
   update(dt) {
     if (this.state !== 'PLAYING') return;
     this.vfxManager.update(dt);
+    if (this.uiManager) this.uiManager.updateFPS(performance.now());
 
     // BGM update
     if (this.audio) {
@@ -1066,6 +1071,8 @@ class EnemyManager {
                   }
               }
               engine.score += 100 * dmgMultiplier;
+              if (engine.uiManager) engine.uiManager.checkMilestone('richochet_god', engine.score);
+              if (engine.uiManager && engine.arena.width <= engine.arena.maxWidth * 0.2) engine.uiManager.checkMilestone('survivor', 1);
               if (typeof Spawner !== 'undefined' && enemy instanceof Spawner) {
                   for (let j = 0; j < 3; j++) {
                       let swarmer = new Swarmer(enemy.x, enemy.y);
@@ -1098,6 +1105,7 @@ class EnemyManager {
     // Wave progression logic: if score passes threshold, increase wave and expand arena slightly
 
     const targetWave = Math.floor(engine.score / 1000) + 1;
+    if (engine.uiManager) engine.uiManager.checkMilestone('deep_diver', targetWave);
     if (targetWave > engine.wave) {
         engine.wave = targetWave;
         // Reward: expand arena slightly

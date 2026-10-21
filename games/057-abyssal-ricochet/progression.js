@@ -61,6 +61,7 @@ class UpgradeManager {
 
   addCombo() {
     this.comboCount++;
+    if (window.engine && window.engine.uiManager) window.engine.uiManager.checkMilestone('combo_master', this.comboCount);
     this.comboMultiplier = 1.0 + (this.comboCount * 0.1);
 
     // Apply Lingering Momentum perk if active
