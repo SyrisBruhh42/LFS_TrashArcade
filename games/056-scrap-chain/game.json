@@ -1,0 +1,13 @@
+{
+  "id": "056",
+  "slug": "056-scrap-chain",
+  "title": "Scrap Chain",
+  "genre": "Alchemy/Chain-Reaction Puzzle Action",
+  "coreMechanic": "Risk/Reward Tether or Tail Growth",
+  "description": "Navigate a junkyard scrapheap, tethering scrap enemies into a tail to detonate them in massive chain-reactions.",
+  "controls": "WASD / Arrows to move. Space / Touch Button to detonate tether.",
+  "createdAt": "2024-10-21",
+  "accentColor": "#6c9b81",
+  "setting": "Junkyard Robot Scrapheap",
+  "phase": "1"
+}
