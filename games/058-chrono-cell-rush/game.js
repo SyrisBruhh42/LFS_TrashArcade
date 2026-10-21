@@ -781,6 +781,121 @@ class HazardPuddle {
   }
 }
 
+class BossViralOverlord extends EnemyBoss {
+  constructor(cx, cy) {
+    super(cx, cy);
+    this.maxHp = 1500;
+    this.hp = 1500;
+    this.radius = 40;
+    this.color = '#aa22aa';
+    this.phase2 = false;
+    this.dashTimer = 0;
+    this.dashTarget = null;
+  }
+  update(dt, manager) {
+    if (this.hp < this.maxHp * 0.5 && !this.phase2) {
+      this.phase2 = true;
+      this.color = '#ff11ff';
+      manager.bullets = [];
+    }
+    this.time += dt;
+    if (!this.phase2) {
+      this.x = this.cx + Math.sin(this.time * 1.5) * 150;
+      this.y = this.cy + Math.cos(this.time * 0.5) * 50;
+      this.shootTimer += dt;
+      if (this.shootTimer > 1.0) {
+        this.shootTimer = 0;
+        for (let i = 0; i < 12; i++) {
+          const angle = (i / 12) * Math.PI * 2 + this.time;
+          manager.bullets.push(new EnemyBullet(this.x, this.y, angle));
+        }
+      }
+    } else {
+      this.dashTimer -= dt;
+      if (this.dashTimer <= 0) {
+        this.dashTimer = 3;
+        const player = window.engine.player;
+        if (player) {
+          this.dashTarget = {x: player.x, y: player.y};
+        } else {
+          this.dashTarget = {x: window.innerWidth/2, y: window.innerHeight/2};
+        }
+      }
+      if (this.dashTarget) {
+        const dx = this.dashTarget.x - this.x;
+        const dy = this.dashTarget.y - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > 10) {
+          this.x += (dx/dist) * 300 * dt;
+          this.y += (dy/dist) * 300 * dt;
+          if (Math.random() < 0.1) {
+            manager.hazards.push(new HazardPuddle(this.x, this.y));
+          }
+        }
+      }
+    }
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = this.color;
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
+    ctx.closePath();
+  }
+}
+
+class BossMito extends EnemyBoss {
+  constructor(cx, cy) {
+    super(cx, cy);
+    this.maxHp = 2500;
+    this.hp = 2500;
+    this.radius = 50;
+    this.color = '#ff8800';
+    this.phase2 = false;
+    this.spiralAngle = 0;
+  }
+  update(dt, manager) {
+    if (this.hp < this.maxHp * 0.5 && !this.phase2) {
+      this.phase2 = true;
+      this.color = '#ff3300';
+      manager.bullets = [];
+    }
+    this.x = window.innerWidth / 2;
+    this.y = 150;
+    this.shootTimer += dt;
+    if (!this.phase2) {
+      if (this.shootTimer > 0.1) {
+        this.shootTimer = 0;
+        this.spiralAngle += 0.2;
+        manager.bullets.push(new EnemyBullet(this.x, this.y, this.spiralAngle));
+        manager.bullets.push(new EnemyBullet(this.x, this.y, this.spiralAngle + Math.PI));
+      }
+    } else {
+      if (this.shootTimer > 0.05) {
+        this.shootTimer = 0;
+        this.spiralAngle -= 0.15;
+        manager.bullets.push(new EnemyBullet(this.x, this.y, this.spiralAngle));
+        manager.bullets.push(new EnemyBullet(this.x, this.y, this.spiralAngle + Math.PI*0.5));
+        manager.bullets.push(new EnemyBullet(this.x, this.y, this.spiralAngle + Math.PI));
+        manager.bullets.push(new EnemyBullet(this.x, this.y, this.spiralAngle + Math.PI*1.5));
+      }
+    }
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = this.color;
+    ctx.fill();
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = '#ffff00';
+    ctx.stroke();
+    ctx.closePath();
+  }
+}
+
 class EnemySwarmer {
   constructor(x, y) {
     this.x = x; this.y = y; this.radius = 12; this.hp = 20;
@@ -945,25 +1060,60 @@ class EnemyHazardMaker {
 class EnemyManager {
 
   constructor() {
-    this.boss = new EnemyBoss(window.innerWidth / 2, 100);
+    this.boss = null;
     this.bullets = [];
     this.enemies = [];
     this.hazards = [];
     this.spawnTimer = 0;
+    this.waveProgress = 0;
+    this.warningTimer = 0;
+    this.bossSpawnedForWave = false;
+    this.bossName = "";
   }
 
   update(dt, player) {
-    this.spawnTimer += dt;
-    if(this.spawnTimer > 3) {
-      this.spawnTimer = 0;
-      const type = Math.floor(Math.random() * 5);
-      let nx = Math.random() > 0.5 ? 0 : window.innerWidth;
+    if (this.warningTimer > 0) {
+      this.warningTimer -= dt;
+      if (this.warningTimer <= 0) {
+        if (window.engine.wave % 10 === 0) {
+          this.boss = new BossMito(window.innerWidth/2, 100);
+          this.bossName = "MITOCHONDRIAL CORE";
+        } else {
+          this.boss = new BossViralOverlord(window.innerWidth/2, 100);
+          this.bossName = "VIRAL OVERLORD";
+        }
+        this.bossSpawnedForWave = true;
+      }
+      return;
+    }
+
+    if (!this.boss) {
+      this.waveProgress += dt;
+      if (this.waveProgress >= 10) {
+        this.waveProgress = 0;
+        window.engine.wave++;
+        this.bossSpawnedForWave = false;
+      }
+      if (window.engine.wave > 0 && window.engine.wave % 5 === 0 && !this.bossSpawnedForWave) {
+        this.warningTimer = 3;
+        return;
+      }
+    }
+
+    if (!this.boss) {
+      this.spawnTimer += dt;
+      const spawnRate = Math.max(0.5, 3 - window.engine.wave * 0.1);
+      if(this.spawnTimer > spawnRate) {
+        this.spawnTimer = 0;
+        const type = Math.floor(Math.random() * 5);
+        let nx = Math.random() > 0.5 ? 0 : window.innerWidth;
       let ny = Math.random() * window.innerHeight;
       if (type === 0) this.enemies.push(new EnemySwarmer(nx, ny));
       else if (type === 1) this.enemies.push(new EnemySniper(nx, ny));
       else if (type === 2) this.enemies.push(new EnemyBruiser(nx, ny));
       else if (type === 3) this.enemies.push(new EnemySpawner(nx, ny));
       else if (type === 4) this.enemies.push(new EnemyHazardMaker(nx, ny));
+      }
     }
 
     for (let i = this.hazards.length - 1; i >= 0; i--) {
@@ -1032,8 +1182,10 @@ class EnemyManager {
       if (this.boss.hp <= 0) {
         window.engine.score += 1000;
         this.boss = null;
-        // Proceed to next wave/boss here in future phases
-        window.engine.setState('GAME_OVER');
+        window.engine.wave++;
+        this.waveProgress = 0;
+        this.bossSpawnedForWave = true;
+        this.bullets = [];
       }
     }
 
@@ -1060,7 +1212,39 @@ class EnemyManager {
   }
 
   draw(ctx) {
-    if (this.boss) this.boss.draw(ctx);
+    if (this.boss) {
+      this.boss.draw(ctx);
+
+      // Boss UI
+      const barW = window.innerWidth * 0.6;
+      const barH = 20;
+      const bx = window.innerWidth / 2 - barW / 2;
+      const by = 20;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(bx, by, barW, barH);
+
+      const hpRatio = Math.max(0, this.boss.hp / (this.boss.maxHp || 100));
+      ctx.fillStyle = this.boss.color || 'red';
+      ctx.fillRect(bx, by, barW * hpRatio, barH);
+
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx, by, barW, barH);
+
+      ctx.fillStyle = '#fff';
+      ctx.font = '16px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(this.bossName || 'BOSS', window.innerWidth/2, by + 15);
+    }
+
+    if (this.warningTimer > 0) {
+      ctx.fillStyle = (Math.floor(this.warningTimer * 5) % 2 === 0) ? '#ff0000' : '#ffffff';
+      ctx.font = 'bold 36px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText("WARNING: " + (window.engine.wave % 10 === 0 ? "MITOCHONDRIAL CORE" : "VIRAL OVERLORD"), window.innerWidth/2, window.innerHeight/2);
+    }
+
     for (const h of this.hazards) {
       h.draw(ctx);
     }
