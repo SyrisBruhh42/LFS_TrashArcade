@@ -107,7 +107,7 @@ class Boss extends Enemy {
 
 class SandstormDjinn extends Boss {
     constructor(x, y, player) {
-        super(x, y, 50, player);
+        super(x, y, 80 + (typeof game !== 'undefined' && game ? game.wave : 1) * 8, player);
         this.name = "Sandstorm Djinn";
         this.color = '#eebb55';
         this.attackTimer = 2.0;
@@ -173,7 +173,7 @@ class SandstormDjinn extends Boss {
 
 class MirageSerpent extends Boss {
     constructor(x, y, player) {
-        super(x, y, 60, player);
+        super(x, y, 100 + (typeof game !== 'undefined' && game ? game.wave : 1) * 10, player);
         this.name = "Mirage Serpent";
         this.color = '#55ee88';
         this.attackTimer = 1.0;

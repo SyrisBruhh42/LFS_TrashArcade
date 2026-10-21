@@ -1619,16 +1619,29 @@ class GameEngine {
         else if (side === 2) { x = Math.random() * this.width; y = this.height + 20; }
         else { x = -20; y = Math.random() * this.height; }
 
-        const speed = 100 + this.wave * 10;
+        const speed = 100 + this.wave * 5; // Gentler scaling
         const r = Math.random();
 
         let enemyType;
-        if (r < 0.2) enemyType = new Swarmer(x, y, speed, this.player);
-        else if (r < 0.4) enemyType = new RangedSniper(x, y, speed, this.player);
-        else if (r < 0.6) enemyType = new Bruiser(x, y, speed, this.player);
-        else if (r < 0.8) enemyType = new Splitter(x, y, speed, this.player);
-        else if (r < 0.95) enemyType = new HazardSpawner(x, y, speed, this.player);
-        else enemyType = new Enemy(x, y, speed, this.player);
+        if (this.wave <= 3) {
+            // Wave 1-3: Simple enemies
+            if (r < 0.5) enemyType = new Swarmer(x, y, speed, this.player);
+            else enemyType = new Enemy(x, y, speed, this.player);
+        } else if (this.wave <= 6) {
+            // Wave 4-6: Introduce Bruisers and Hazards
+            if (r < 0.3) enemyType = new Enemy(x, y, speed, this.player);
+            else if (r < 0.6) enemyType = new Swarmer(x, y, speed, this.player);
+            else if (r < 0.8) enemyType = new Bruiser(x, y, speed, this.player);
+            else enemyType = new HazardSpawner(x, y, speed, this.player);
+        } else {
+            // Wave 7+: Everything
+            if (r < 0.2) enemyType = new Swarmer(x, y, speed, this.player);
+            else if (r < 0.4) enemyType = new RangedSniper(x, y, speed, this.player);
+            else if (r < 0.6) enemyType = new Bruiser(x, y, speed, this.player);
+            else if (r < 0.8) enemyType = new Splitter(x, y, speed, this.player);
+            else if (r < 0.9) enemyType = new HazardSpawner(x, y, speed, this.player);
+            else enemyType = new Enemy(x, y, speed, this.player);
+        }
 
         this.enemies.push(enemyType);
     }
@@ -1895,6 +1908,33 @@ class GameEngine {
         }
     }
 
+
+    drawTutorialOverlay(ctx) {
+        if (this.wave !== 1) return;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(0, this.height - 100, this.width, 100);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '20px monospace';
+        ctx.textAlign = 'center';
+
+        // Show specific hints over time based on wave duration
+        const t = this.time;
+        if (t < 5) {
+            ctx.fillText("WASD/Arrows to move, Space to DASH.", this.width/2, this.height - 60);
+            ctx.fillText("Touch the virtual joystick to move, DASH button to dash.", this.width/2, this.height - 35);
+        } else if (t < 10) {
+            ctx.fillText("Avoid quicksand and red enemies!", this.width/2, this.height - 50);
+        } else if (t < 15) {
+            ctx.fillText("Pick up glowing orbs for points.", this.width/2, this.height - 50);
+        } else if (t < 20) {
+            ctx.fillText("Ghosts repeat your past moves. Collide them with enemies!", this.width/2, this.height - 50);
+        } else {
+            ctx.fillText("Survive the waves!", this.width/2, this.height - 50);
+        }
+        ctx.textAlign = 'left'; // restore
+    }
+
     draw() {
         this.ctx.fillStyle = '#1a1311';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -1966,7 +2006,10 @@ class GameEngine {
 
             if (this.vfx) this.vfx.draw(this.ctx);
 
-            if (this.currentBoss) this.currentBoss.drawUI(this.ctx);
+                        if (this.currentBoss) this.currentBoss.drawUI(this.ctx);
+
+            this.drawTutorialOverlay(this.ctx);
+
 
 
             this.ctx.fillStyle = '#c6f8c8';
@@ -2178,3 +2221,104 @@ class VisualSettingsController {
         this.chromaticAbberation = val * 5;
     }
 }
+
+
+class AnalyticsTracker {
+    constructor() {
+        this.stats = {
+            enemiesDefeated: 0,
+            damageTaken: 0,
+            dashUsed: 0,
+            ghostsSpawned: 0,
+            bossesKilled: 0,
+            timePlayed: 0,
+            distanceTraveled: 0,
+            itemsCollected: 0,
+            wavesCleared: 0,
+            highestCombo: 0,
+            totalScore: 0,
+            totalShots: 0,
+            totalHits: 0,
+            accuracy: 0,
+            damageDealt: 0,
+            restarts: 0,
+            pauses: 0,
+            upgradesBought: 0,
+            optionsChanged: 0,
+            milestonesUnlocked: 0,
+            secretsFound: 0
+        };
+        this.activeSession = true;
+        this.sessionStart = Date.now();
+        this.lastUpdateTime = this.sessionStart;
+    }
+
+    trackEnemyDefeated() {
+        this.stats.enemiesDefeated++;
+    }
+
+    trackDamageTaken(amount) {
+        this.stats.damageTaken += amount;
+    }
+
+    trackDash() {
+        this.stats.dashUsed++;
+    }
+
+    trackGhostSpawn() {
+        this.stats.ghostsSpawned++;
+    }
+
+    trackBossKilled() {
+        this.stats.bossesKilled++;
+    }
+
+    updateTimePlayed() {
+        if (!this.activeSession) return;
+        const now = Date.now();
+        this.stats.timePlayed += (now - this.lastUpdateTime) / 1000;
+        this.lastUpdateTime = now;
+    }
+
+    trackDistance(dist) {
+        this.stats.distanceTraveled += dist;
+    }
+
+    trackItem() {
+        this.stats.itemsCollected++;
+    }
+
+    trackWave() {
+        this.stats.wavesCleared++;
+    }
+
+    trackCombo(combo) {
+        if (combo > this.stats.highestCombo) {
+            this.stats.highestCombo = combo;
+        }
+    }
+
+    printStats() {
+        console.log("AnalyticsTracker Stats:", this.stats);
+    }
+
+    pauseSession() {
+        this.activeSession = false;
+        this.stats.pauses++;
+    }
+
+    resumeSession() {
+        this.activeSession = true;
+        this.lastUpdateTime = Date.now();
+    }
+
+    trackUpgrade(upgradeName) {
+        this.stats.upgradesBought++;
+    }
+
+    trackOptionChange(optionName, value) {
+        this.stats.optionsChanged++;
+    }
+}
+
+const globalAnalytics = new AnalyticsTracker();
