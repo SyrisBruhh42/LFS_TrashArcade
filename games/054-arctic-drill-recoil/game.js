@@ -602,6 +602,7 @@ class GameEngine {
     this.blocks = [];
     this.enemies = [];
     this.crystals = [];
+    this.worldManager = new WorldManager(this.logicalWidth, this.logicalHeight);
     for (let i=0; i<30; i++) {
       this.crystals.push(new IceCrystal(this.logicalWidth, this.logicalHeight));
     }
@@ -816,13 +817,13 @@ class GameEngine {
       if (this.particles[i].life <= 0) this.particles.splice(i, 1);
     }
 
+    this.worldManager.update(dt, this);
     this.checkCollisions();
   };
 
   GameEngine.prototype.draw = function() {
-    // Clear
-    this.ctx.fillStyle = '#0b1a2a'; // Deep arctic water
-    this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
+    // Background layers
+    this.worldManager.drawBackground(this.ctx);
 
     // Draw crystals
     for (const c of this.crystals) {
@@ -844,6 +845,9 @@ class GameEngine {
 
     // Draw particles
     for (const p of this.particles) p.draw(this.ctx);
+
+    // Foreground layers / Hazards
+    this.worldManager.drawForeground(this.ctx);
 
     // UI
     this.ctx.fillStyle = '#fff';
