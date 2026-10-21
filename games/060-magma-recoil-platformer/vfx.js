@@ -86,6 +86,19 @@ class VFXManager {
     }
 
     update(dt) {
+        // Enforce maximum float text capacity to prevent extreme memory leak during long sessions
+        if (this.floatingTexts.length > 100) {
+            this.floatingTexts.splice(0, this.floatingTexts.length - 100);
+        }
+        // Also cleanup trails if trail manager exists
+        if (window.game && window.game.trailManager && window.game.trailManager.trails.length > 200) {
+            window.game.trailManager.trails.splice(0, window.game.trailManager.trails.length - 200);
+        }
+        // Cleanup particles if excessive
+        if (window.game && window.game.particles && window.game.particles.length > 500) {
+            window.game.particles.splice(0, window.game.particles.length - 500);
+        }
+
         if (this.shakeTime > 0) {
             this.shakeTime -= dt;
             let currentMag = this.shakeMagnitude * (this.shakeTime / 0.5); // decay

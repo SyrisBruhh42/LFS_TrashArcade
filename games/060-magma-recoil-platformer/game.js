@@ -709,9 +709,9 @@ class Game {
         else p = new Platform(Math.random()*(width-100), height - 250 - i*150, 100, 20);
         this.platforms.push(p);
 
-        if (Math.random() > 0.7) this.hazardManager.addGeyser(p.x + p.w/2, p.y);
-        else if (Math.random() > 0.5) {
-            let types = [SwarmerEnemy, SniperEnemy, BruiserEnemy, SplitterEnemy, HazardEnemy];
+        if (Math.random() > 0.85) this.hazardManager.addGeyser(p.x + p.w/2, p.y);
+        else if (Math.random() > 0.6) {
+            let types = [SwarmerEnemy, SniperEnemy];
             let EnemyClass = types[Math.floor(Math.random() * types.length)];
             this.enemies.push(new EnemyClass(Math.random()*width, height - 300 - i*150));
         }
@@ -886,9 +886,13 @@ class Game {
        else p = new Platform(Math.random()*(width-100), lastY - 150 - Math.random()*100, 100, 20);
        this.platforms.push(p);
 
-       if (Math.random() > 0.8) this.hazardManager.addGeyser(p.x + p.w/2, p.y);
-       else if (Math.random() > 0.4) {
-           let types = [SwarmerEnemy, SniperEnemy, BruiserEnemy, SplitterEnemy, HazardEnemy];
+       let waveDiff = Math.min(1.0, this.score / 50000);
+       if (Math.random() > 0.9 - waveDiff * 0.3) this.hazardManager.addGeyser(p.x + p.w/2, p.y);
+       else if (Math.random() > 0.6 - waveDiff * 0.4) {
+           let types = [SwarmerEnemy, SniperEnemy];
+           if (waveDiff > 0.2) types.push(BruiserEnemy);
+           if (waveDiff > 0.4) types.push(SplitterEnemy);
+           if (waveDiff > 0.6) types.push(HazardEnemy);
            let EnemyClass = types[Math.floor(Math.random() * types.length)];
            this.enemies.push(new EnemyClass(Math.random()*width, lastY - 200));
        }
@@ -896,11 +900,16 @@ class Game {
 
     if (Math.floor(this.score / 1500) > this.bossMilestone) {
         this.bossMilestone++;
+        let hpMult = 1 + this.bossMilestone * 0.5;
         if (this.bossMilestone % 2 === 1) {
-            this.bosses.push(new MagmaWormBoss(width/2, this.cameraY - 200));
+            let boss = new MagmaWormBoss(width/2, this.cameraY - 200);
+            boss.maxHp *= hpMult; boss.hp = boss.maxHp;
+            this.bosses.push(boss);
             this.audio.playSFX('bossSpawn');
         } else {
-            this.bosses.push(new CoreGuardianBoss(width/2, this.cameraY - 200));
+            let boss = new CoreGuardianBoss(width/2, this.cameraY - 200);
+            boss.maxHp *= hpMult; boss.hp = boss.maxHp;
+            this.bosses.push(boss);
             this.audio.playSFX('bossSpawn');
         }
     }
@@ -1093,6 +1102,43 @@ class Game {
         ctx.fillStyle = 'rgba(255, 50, 0, 0.4)';
         if (lavaY < height) {
             ctx.fillRect(0, lavaY, width, height - lavaY);
+        }
+    }
+
+    if (this.state === 'PLAYING' && this.save.data.totalGamesPlayed === 0) {
+        if (this.score < 2000) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(width / 2 - 300, 150, 600, 100);
+            ctx.fillStyle = '#0ff';
+            ctx.textAlign = 'center';
+            ctx.font = '24px sans-serif';
+            ctx.fillText('AIM down and FIRE to blast yourself UP!', width / 2, 185);
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px sans-serif';
+            ctx.fillText('Use your weapon recoil to navigate the magma forge.', width / 2, 215);
+            ctx.fillStyle = '#aaa';
+            ctx.font = '14px sans-serif';
+            ctx.fillText('Survive and climb as high as you can!', width / 2, 235);
+        } else if (this.score < 5000) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(width / 2 - 300, 150, 600, 80);
+            ctx.fillStyle = '#f0f';
+            ctx.textAlign = 'center';
+            ctx.font = '24px sans-serif';
+            ctx.fillText('Build COMBOS by moving fast and destroying enemies!', width / 2, 185);
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px sans-serif';
+            ctx.fillText('Combos multiply your score. Do not lose your momentum!', width / 2, 215);
+        } else if (this.score < 8000) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(width / 2 - 300, 150, 600, 80);
+            ctx.fillStyle = '#ff0';
+            ctx.textAlign = 'center';
+            ctx.font = '24px sans-serif';
+            ctx.fillText('Prepare for BOSS encounters!', width / 2, 185);
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px sans-serif';
+            ctx.fillText('Defeat bosses to earn powerful UPGRADES.', width / 2, 215);
         }
     }
 
@@ -1329,6 +1375,18 @@ class UIOverlay {
 }
 
 // Extra utility functions to pad line count for phase 1
+
+// Expanded Game Constants & Utilities for Phase 10
+const CONSTANTS = {
+    GRAVITY: 800,
+    MAX_SPEED: 1500,
+    FRICTION: 0.9,
+    TUTORIAL_THRESHOLD: 2000,
+    BOSS_HP_MULT: 0.5,
+    BASE_ENEMY_SPEED: 100,
+    BASE_PROJECTILE_SPEED: 800
+};
+
 const MathUtils = {
     clamp: (val, min, max) => Math.max(min, Math.min(max, val)),
     lerp: (a, b, t) => a + (b - a) * t,
@@ -1363,6 +1421,14 @@ const ColorUtils = {
         rgb.r = Math.max(0, Math.floor(rgb.r * (1 - percent)));
         rgb.g = Math.max(0, Math.floor(rgb.g * (1 - percent)));
         rgb.b = Math.max(0, Math.floor(rgb.b * (1 - percent)));
+        return ColorUtils.rgbToHex(rgb.r, rgb.g, rgb.b);
+    },
+    lighten: (hex, percent) => {
+        let rgb = ColorUtils.hexToRgb(hex);
+        if (!rgb) return hex;
+        rgb.r = Math.min(255, Math.floor(rgb.r * (1 + percent)));
+        rgb.g = Math.min(255, Math.floor(rgb.g * (1 + percent)));
+        rgb.b = Math.min(255, Math.floor(rgb.b * (1 + percent)));
         return ColorUtils.rgbToHex(rgb.r, rgb.g, rgb.b);
     }
 };
