@@ -703,5 +703,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#d8b0e2",
     "phase": "6",
     "path": "./games/054-arctic-drill-recoil/index.html"
+  },
+  {
+    "id": "055",
+    "slug": "055-polarity-diorama",
+    "title": "Polarity Diorama",
+    "genre": "Gravity/Orbital Physics Action",
+    "coreMechanic": "Polarity/Magnetism Switching",
+    "setting": "Paper Craft Diorama",
+    "description": "Control an orbiting magnet in a paper diorama. Switch polarities to pull in opposite charges for points and repel same charges off-screen.",
+    "controls": "WASD / Arrows to change orbit. Space / Tap to switch polarity.",
+    "createdAt": "2026-10-21",
+    "accentColor": "#dd867f",
+    "phase": "1",
+    "path": "./games/055-polarity-diorama/index.html"
   }
 ];
