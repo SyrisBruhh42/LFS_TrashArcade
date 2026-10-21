@@ -35,6 +35,7 @@ class PickupManager {
                 p.life = 0;
                 if (p.type === 'score') game.score += 500;
                 if (p.type === 'combo' && game.comboManager) game.comboManager.addCombo();
+                game.audio.playSFX('pickup');
                 if (p.type === 'health') { game.score += 1000; game.ui.addMessage("Score Boost!", 2); }
             }
         }
@@ -82,7 +83,7 @@ class UpgradeDraft {
         for (let i = 0; i < this.options.length; i++) {
             let bx = startX + i * (boxWidth + gap);
             if (x > bx && x < bx + boxWidth && y > startY && y < startY + boxHeight) {
-                this.options[i].apply(game.player); game.state = 'PLAYING'; return true;
+                this.options[i].apply(game.player); game.audio.playSFX('upgrade'); game.state = 'PLAYING'; return true;
             }
         }
         return true;
