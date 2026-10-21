@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <script defer src="player.js"></script>
     <script defer src="world.js"></script>
+    <script defer src="progression.js"></script>
     <script defer src="game.js"></script>
     <script defer src="bosses.js"></script>
 </head>
@@ -27,6 +28,10 @@
                 <div class="hud-top">
                     <div id="hud-score">Score: 0</div>
                     <div id="hud-wave">Wave: 1</div>
+                    <div id="combo-container">
+                        <div id="combo-multiplier">1.0x</div>
+                        <div class="combo-bar-bg"><div id="combo-bar-fill"></div></div>
+                    </div>
                 </div>
                 <div class="hud-bottom">
                     <div class="health-bar-container">
@@ -42,6 +47,13 @@
                 <h2>PAUSED</h2>
                 <button id="btn-resume" class="btn">Resume</button>
                 <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+            </div>
+
+
+            <div id="upgrade-screen" class="screen hidden">
+                <h2>WAVE CLEARED</h2>
+                <p>Select an Upgrade</p>
+                <div id="upgrade-cards"></div>
             </div>
 
             <div id="game-over-screen" class="screen hidden">
