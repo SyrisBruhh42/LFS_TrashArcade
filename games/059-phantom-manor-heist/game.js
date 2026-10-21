@@ -204,6 +204,11 @@ class Player {
             this.recoil = 1.0;
         }
 
+        if (this.isDashing && window.game && window.game.vfx) {
+            window.game.vfx.addTrail(this.x, this.y, this.radius, this.color);
+            window.game.vfx.emit(this.x, this.y, 1, '#0ff', 50, 0.5, this.aimAngle + Math.PI);
+        }
+
         if (!this.isDashing) {
             this.vx *= Math.pow(this.friction, dt * 60);
             this.vy *= Math.pow(this.friction, dt * 60);
@@ -459,6 +464,7 @@ class Game {
         this.ctx = this.canvas.getContext('2d');
         this.input = new InputManager();
         this.sound = new SoundEngine();
+        this.vfx = new VFXManager();
         this.save = new SaveManager();
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
 
@@ -554,6 +560,12 @@ class Game {
         // initialize audio on first input
         if (!this.sound.ready && (this.input.keys['Space'] || this.input.touch.tap)) {
             this.sound.init();
+        }
+
+        if (this.state === 'PLAYING' && this.vfx && this.vfx.update(dt)) {
+            this.draw();
+            requestAnimationFrame((t) => this.loop(t));
+            return;
         }
 
         this.update(dt);
@@ -665,16 +677,32 @@ class Game {
                     if (Math.hypot(this.player.x - l.x, this.player.y - l.y) < this.player.radius + l.radius) {
                         l.active = false;
                         this.score += this.baseLootScore * this.comboMultiplier;
+                        if (this.vfx) {
+                            this.vfx.addText(this.player.x, this.player.y - 20, '+' + (this.baseLootScore * this.comboMultiplier), '#ff0');
+                            this.vfx.addText(this.player.x, this.player.y - 40, 'x' + (this.comboMultiplier+1), '#f0f');
+                        }
                         this.comboMultiplier++;
                         this.comboTimer = this.maxComboTimer;
                         this.sound.playLoot();
                         if (this.activeBoss && !this.activeBoss.isSpawning && !this.activeBoss.isTransitioning) {
                             this.activeBoss.hp -= (1 + this.bossDamageMod);
+                            if (this.vfx) {
+                                this.vfx.emit(this.activeBoss.x, this.activeBoss.y, 20, '#f00', 200, Math.PI*2, 0);
+                                this.vfx.addText(this.activeBoss.x, this.activeBoss.y - 30, '-' + (1 + this.bossDamageMod), '#f00');
+                                this.vfx.addShake(5, 0.2);
+                                this.vfx.hitStopTimer = 0.05;
+                            }
                             if (this.activeBoss.hp > 0) {
                                 l.x = 50 + Math.random() * (window.innerWidth - 100);
                                 l.y = 50 + Math.random() * (window.innerHeight - 100);
                                 l.active = true;
                             } else {
+                                if (this.vfx) {
+                                    this.vfx.emit(this.activeBoss.x, this.activeBoss.y, 100, '#ff0', 300, Math.PI*2, 0);
+                                    this.vfx.addShake(20, 1.0);
+                                    this.vfx.hitStopTimer = 0.5;
+                                    this.vfx.addText(this.activeBoss.x, this.activeBoss.y, 'BOSS DEFEATED', '#ff0');
+                                }
                                 this.score += 5000 * this.comboMultiplier;
                                 this.comboMultiplier += 5;
                                 this.comboTimer = this.maxComboTimer;
@@ -694,16 +722,32 @@ class Game {
                     if (this.player.echo && Math.hypot(this.player.echo.x - l.x, this.player.echo.y - l.y) < this.player.echo.radius + l.radius) {
                         l.active = false;
                         this.score += this.baseLootScore * this.comboMultiplier;
+                        if (this.vfx) {
+                            this.vfx.addText(this.player.echo.x, this.player.echo.y - 20, '+' + (this.baseLootScore * this.comboMultiplier), '#ff0');
+                            this.vfx.addText(this.player.echo.x, this.player.echo.y - 40, 'x' + (this.comboMultiplier+1), '#f0f');
+                        }
                         this.comboMultiplier++;
                         this.comboTimer = this.maxComboTimer;
                         this.sound.playLoot();
                         if (this.activeBoss && !this.activeBoss.isSpawning && !this.activeBoss.isTransitioning) {
                             this.activeBoss.hp -= (1 + this.bossDamageMod);
+                            if (this.vfx) {
+                                this.vfx.emit(this.activeBoss.x, this.activeBoss.y, 20, '#f00', 200, Math.PI*2, 0);
+                                this.vfx.addText(this.activeBoss.x, this.activeBoss.y - 30, '-' + (1 + this.bossDamageMod), '#f00');
+                                this.vfx.addShake(5, 0.2);
+                                this.vfx.hitStopTimer = 0.05;
+                            }
                             if (this.activeBoss.hp > 0) {
                                 l.x = 50 + Math.random() * (window.innerWidth - 100);
                                 l.y = 50 + Math.random() * (window.innerHeight - 100);
                                 l.active = true;
                             } else {
+                                if (this.vfx) {
+                                    this.vfx.emit(this.activeBoss.x, this.activeBoss.y, 100, '#ff0', 300, Math.PI*2, 0);
+                                    this.vfx.addShake(20, 1.0);
+                                    this.vfx.hitStopTimer = 0.5;
+                                    this.vfx.addText(this.activeBoss.x, this.activeBoss.y, 'BOSS DEFEATED', '#ff0');
+                                }
                                 this.score += 5000 * this.comboMultiplier;
                                 this.comboMultiplier += 5;
                                 this.comboTimer = this.maxComboTimer;
@@ -854,7 +898,8 @@ class Game {
         } else if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
 
             this.ctx.save();
-            this.ctx.translate(-this.cx, -this.cy);
+            let so = this.vfx ? this.vfx.getShakeOffset() : {x:0, y:0};
+            this.ctx.translate(-this.cx + so.x, -this.cy + so.y);
 
             for (let w of this.walls) {
                 this.ctx.fillStyle = '#334';
@@ -898,7 +943,12 @@ class Game {
 
             this.ambientDust.draw(this.ctx);
 
+            if (this.vfx) this.vfx.draw(this.ctx);
+
             this.ctx.restore();
+
+            // Reusing so variable defined at the top of Game.draw
+            if (this.vfx) this.vfx.drawUI(this.ctx, this.cx - so.x, this.cy - so.y);
 
             if (this.activeBoss) {
                 this.activeBoss.drawUI(this.ctx, window.innerWidth, window.innerHeight);
