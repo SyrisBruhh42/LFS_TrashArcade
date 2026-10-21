@@ -759,5 +759,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#ecf7f4",
     "phase": "7",
     "path": "./games/058-chrono-cell-rush/index.html"
+  },
+  {
+    "id": "059",
+    "slug": "059-phantom-manor-heist",
+    "title": "Phantom Manor Heist",
+    "genre": "Stealth/Line-of-Sight Heist",
+    "coreMechanic": "Echo/Ghost Self-Cooperation",
+    "setting": "Haunted Victorian Manor",
+    "description": "Infiltrate a haunted manor, deploying your spectral echo to outwit patrolling guards and steal the cursed loot.",
+    "controls": "WASD/Arrows to move, Space to deploy/recall echo. Touch joysticks to move and action button for echo.",
+    "createdAt": "2023-10-24",
+    "accentColor": "#ada6b9",
+    "phase": "1",
+    "path": "./games/059-phantom-manor-heist/index.html"
   }
 ];
