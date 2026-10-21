@@ -687,7 +687,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move. Touch: Virtual joystick.",
     "createdAt": "2024-10-25",
     "accentColor": "#c6f8c8",
-    "phase": "8",
+    "phase": "9",
     "path": "./games/053-sandstorm-echo-coop/index.html"
   },
   {
