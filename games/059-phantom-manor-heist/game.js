@@ -485,8 +485,11 @@ class Game {
         ];
         this.walls = [...this.baseWalls];
         this.guards = [
-            new Guard(300, 100, [{x:300, y:100}, {x:300, y:400}]),
-            new Guard(600, 400, [{x:600, y:400}, {x:600, y:100}])
+            new Swarmer(300, 100, [{x:300, y:100}, {x:300, y:400}]),
+            new Sniper(600, 400, [{x:600, y:400}, {x:600, y:100}]),
+            new Bruiser(800, 200, [{x:800, y:200}, {x:800, y:600}]),
+            new Spawner(100, 500, [{x:100, y:500}, {x:500, y:500}]),
+            new HazardEnemy(400, 300, [{x:400, y:300}, {x:700, y:300}])
         ];
         this.loot = [
             new Loot(150, 400), new Loot(500, 150), new Loot(700, 300)
@@ -538,6 +541,12 @@ class Game {
                 if (res === true && g.state === 'chase' && !guardSpotted) {
                     this.sound.playSpotted();
                     guardSpotted = true;
+                    } else if (res === 'spawn_swarmer') {
+                        let newWP = [{x: g.x + 50, y: g.y}, {x: g.x - 50, y: g.y}];
+                        let swarmer = new Swarmer(g.x, g.y, newWP);
+                        swarmer.state = 'chase';
+                        swarmer.target = g.target;
+                        this.guards.push(swarmer);
                 } else if (res === 'caught') {
                     this.state = 'GAME_OVER';
                     if (this.score > this.save.data.highScore) {
@@ -570,7 +579,9 @@ class Game {
                     l.y = 50 + Math.random() * (window.innerHeight - 100);
                     l.active = true;
                 });
-                this.guards.push(new Guard(
+                const types = [Swarmer, Sniper, Bruiser, Spawner, HazardEnemy];
+                const Type = types[Math.floor(Math.random()*types.length)];
+                this.guards.push(new Type(
                     window.innerWidth/2, window.innerHeight/2,
                     [{x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight},
                      {x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight}]
