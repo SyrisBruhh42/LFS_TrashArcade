@@ -233,6 +233,10 @@ class GameEngine {
     this.lastTime = 0;
     this.score = 0;
     this.wave = 1;
+    this.combo = 1.0;
+    this.comboTimer = 0;
+    this.comboMaxTimer = 3.0;
+    this.pickups = [];
 
     this.setupResizeObserver();
     this.bindUI();
@@ -307,6 +311,10 @@ class GameEngine {
   startGame() {
     this.score = 0;
     this.wave = 1;
+    this.combo = 1.0;
+    this.comboTimer = 0;
+    this.comboMaxTimer = 3.0;
+    this.pickups = [];
     this.setState('PLAYING');
 
     if (typeof EffectsManager !== 'undefined') this.effectsManager = new EffectsManager();
@@ -314,6 +322,7 @@ class GameEngine {
     if (typeof Player !== 'undefined') this.player = new Player(this.canvas.width/2, this.canvas.height/2);
     if (typeof EnemyManager !== 'undefined') this.enemyManager = new EnemyManager();
     if (typeof EnvironmentManager !== 'undefined') this.environmentManager = new EnvironmentManager(this.canvas.width, this.canvas.height);
+    this.upgradeManager = new UpgradeManager(this);
   }
 
   resumeGame() {
@@ -345,6 +354,15 @@ class GameEngine {
     }
 
     document.getElementById('scoreDisplay').innerText = `SCORE: ${Math.floor(this.score)}`;
+    let comboDisplay = document.getElementById('comboDisplay');
+    if (comboDisplay) {
+        comboDisplay.innerText = `COMBO: ${this.combo.toFixed(1)}x`;
+        document.getElementById('comboBar').style.width = `${Math.max(0, (this.comboTimer / this.comboMaxTimer) * 100)}%`;
+    }
+    let shieldsDisplay = document.getElementById('shieldsDisplay');
+    if (shieldsDisplay && this.player) {
+        shieldsDisplay.innerText = `SHIELDS: ${this.player.shields}/${this.player.maxShields}`;
+    }
     document.getElementById('waveDisplay').innerText = `WAVE: ${this.wave}`;
     if (this.player) {
       let dashDisplay = document.getElementById('dashDisplay');
@@ -359,6 +377,15 @@ class GameEngine {
       }
     }
 
+    // Update combo timer (uses real dt to decay even in slowed time)
+    if (this.combo > 1.0) {
+        this.comboTimer -= dt;
+        if (this.comboTimer <= 0) {
+            this.combo = 1.0;
+            this.comboTimer = 0;
+        }
+    }
+
     // Update player
     if (this.player) this.player.update(dt, this.input);
 
@@ -367,6 +394,24 @@ class GameEngine {
     if (this.environmentManager) this.environmentManager.update(dilatedDt, this.player, this.enemyManager);
     if (this.effectsManager) this.effectsManager.update(dilatedDt);
     if (this.enemyManager) this.enemyManager.update(dilatedDt, this.player);
+
+    for (let i = this.pickups.length - 1; i >= 0; i--) {
+        let p = this.pickups[i];
+        p.update(dt, this.player);
+        if (p.life <= 0) {
+            this.pickups.splice(i, 1);
+            continue;
+        }
+        if (this.player && !this.player.isDashing) {
+            let dx = this.player.x - p.x;
+            let dy = this.player.y - p.y;
+            if (Math.sqrt(dx*dx + dy*dy) < p.radius + this.player.radius) {
+                this.score += 25 * this.combo;
+                if(this.player.shields < this.player.maxShields && Math.random() < 0.1) this.player.shields++;
+                this.pickups.splice(i, 1);
+            }
+        }
+    }
   }
 
   draw() {
@@ -378,10 +423,91 @@ class GameEngine {
       if (this.effectsManager) this.effectsManager.draw(this.ctx);
       if (this.environmentManager) this.environmentManager.drawHazards(this.ctx);
       if (this.enemyManager) this.enemyManager.draw(this.ctx);
+      for(let p of this.pickups) { p.draw(this.ctx); }
       if (this.player) this.player.draw(this.ctx);
       if (this.environmentManager) this.environmentManager.drawForeground(this.ctx);
     }
   }
+}
+
+
+
+class Pickup {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 6;
+        this.life = 10;
+        this.vx = (Math.random() - 0.5) * 100;
+        this.vy = (Math.random() - 0.5) * 100;
+    }
+    update(dt, player) {
+        this.life -= dt;
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.vx *= Math.pow(0.5, dt);
+        this.vy *= Math.pow(0.5, dt);
+
+        if (player) {
+            let dx = player.x - this.x;
+            let dy = player.y - this.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < player.magnetRadius) {
+                this.vx += (dx / dist) * 400 * dt;
+                this.vy += (dy / dist) * 400 * dt;
+            }
+        }
+    }
+    draw(ctx) {
+        if (this.life < 2 && Math.floor(this.life * 10) % 2 === 0) return;
+        ctx.fillStyle = '#00ff00';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+class UpgradeManager {
+    constructor(engine) {
+        this.engine = engine;
+        this.pool = [
+            { id: 'damage', name: 'Raw Power', desc: '+25% Damage', apply: (p) => p.damageMultiplier += 0.25 },
+            { id: 'multishot', name: 'Split Shot', desc: '+1 Projectile', apply: (p) => p.multiShot += 1 },
+            { id: 'firerate', name: 'Overclock', desc: '+20% Fire Rate', apply: (p) => p.fireRateMultiplier += 0.2 },
+            { id: 'pierce', name: 'Armor Piercing', desc: '+1 Pierce', apply: (p) => p.pierceCount += 1 },
+            { id: 'shield', name: 'Deflector', desc: '+1 Max Shield', apply: (p) => { p.maxShields++; p.shields++; } },
+            { id: 'magnet', name: 'Magnetic Field', desc: 'Increased Pickup Range', apply: (p) => p.magnetRadius += 100 },
+            { id: 'speed', name: 'Agility', desc: '+15% Move Speed', apply: (p) => p.baseSpeed *= 1.15 },
+            { id: 'dash', name: 'Quick Step', desc: '-20% Dash Cooldown', apply: (p) => p.dashCooldown *= 0.8 }
+        ];
+    }
+    showDraft() {
+        this.engine.setState('UPGRADE_DRAFT');
+        let optionsDiv = document.getElementById('upgrade-options');
+        optionsDiv.innerHTML = '';
+
+        let shuffled = [...this.pool].sort(() => 0.5 - Math.random());
+        let choices = shuffled.slice(0, 3);
+
+        choices.forEach(choice => {
+            let btn = document.createElement('div');
+            btn.style.border = '2px solid #ecf7f4';
+            btn.style.padding = '15px';
+            btn.style.borderRadius = '5px';
+            btn.style.cursor = 'pointer';
+            btn.style.width = '150px';
+            btn.innerHTML = `<strong style="color: #70e2f9;">${choice.name}</strong><br><br><span style="font-size: 0.8em;">${choice.desc}</span>`;
+
+            btn.onmouseover = () => btn.style.background = '#333';
+            btn.onmouseout = () => btn.style.background = 'transparent';
+
+            btn.onclick = () => {
+                choice.apply(this.engine.player);
+                this.engine.setState('PLAYING');
+            };
+            optionsDiv.appendChild(btn);
+        });
+    }
 }
 
 class Player {
@@ -410,6 +536,16 @@ class Player {
     this.vx = 0;
     this.vy = 0;
     this.recoilTimer = 0;
+
+    // Upgrades
+    this.damageMultiplier = 1.0;
+    this.maxShields = 0;
+    this.shields = 0;
+    this.pierceCount = 0;
+    this.multiShot = 1;
+    this.fireRateMultiplier = 1.0;
+    this.magnetRadius = 50;
+    this.healOnKillChance = 0;
 
     // Visuals
     this.aimAngle = 0;
@@ -517,9 +653,15 @@ class Player {
     }
 
     if ((input.mouse.isDown || input.touch.isDown) && this.shootTimer <= 0 && !this.isDashing) {
-      this.bullets.push(new PlayerBullet(this.x, this.y, this.aimAngle));
+            for(let m = 0; m < this.multiShot; m++) {
+          let spread = (m - (this.multiShot - 1) / 2) * 0.15;
+          let bullet = new PlayerBullet(this.x, this.y, this.aimAngle + spread);
+          bullet.damage = 10 * this.damageMultiplier;
+          bullet.pierce = this.pierceCount;
+          this.bullets.push(bullet);
+      }
       window.engine.audio.playShoot();
-      this.shootTimer = this.shootCooldown;
+      this.shootTimer = this.shootCooldown / this.fireRateMultiplier;
       // Add recoil
       this.vx -= Math.cos(this.aimAngle) * 50;
       this.vy -= Math.sin(this.aimAngle) * 50;
@@ -595,11 +737,15 @@ class PlayerBullet {
   constructor(x, y, angle) {
     this.x = x;
     this.y = y;
-    this.radius = 4;
-    this.speed = 500;
+    this.angle = angle;
+    this.speed = 800;
     this.vx = Math.cos(angle) * this.speed;
     this.vy = Math.sin(angle) * this.speed;
+    this.radius = 4;
     this.color = '#70e2f9';
+    this.damage = 10;
+    this.pierce = 0;
+    this.hitEnemies = [];
   }
 
   update(dt) {
@@ -1122,8 +1268,13 @@ class EnemyManager {
       if (player && !player.isDashing) {
         const dx = player.x - h.x; const dy = player.y - h.y;
         if (Math.sqrt(dx*dx + dy*dy) < h.radius + player.radius) {
-           window.engine.setState('GAME_OVER');
-           return;
+           if (player.shields > 0) {
+               player.shields--;
+               this.hazards.splice(i, 1);
+           } else {
+               window.engine.setState('GAME_OVER');
+               return;
+           }
         }
       }
       if (h.age > h.lifeTime) this.hazards.splice(i, 1);
@@ -1136,28 +1287,43 @@ class EnemyManager {
       if (player) {
         const dx = player.x - e.x; const dy = player.y - e.y;
         if (Math.sqrt(dx*dx + dy*dy) < e.radius + player.radius && !player.isDashing) {
-           window.engine.setState('GAME_OVER');
-           return;
+           if (player.shields > 0) {
+               player.shields--;
+               e.hp -= 1000; // Kill enemy on shield break
+               window.engine.combo = 1.0;
+           } else {
+               window.engine.setState('GAME_OVER');
+               return;
+           }
         }
 
         for (let j = player.bullets.length - 1; j >= 0; j--) {
           let b = player.bullets[j];
           const bx = b.x - e.x; const by = b.y - e.y;
           if (Math.sqrt(bx*bx + by*by) < e.radius + b.radius) {
-             if (e.shield !== undefined && e.shield > 0) {
-                 e.shield -= 10;
-                 if (e.shield < 0) e.shield = 0;
-             } else {
-                 e.hp -= 10;
+             if (!b.hitEnemies.includes(e)) {
+                 b.hitEnemies.push(e);
+                 b.pierce--;
+
+                 if (e.shield !== undefined && e.shield > 0) {
+                     e.shield -= b.damage;
+                     if (e.shield < 0) e.shield = 0;
+                 } else {
+                     e.hp -= b.damage;
+                 }
+                 window.engine.audio.playHit();
+                 window.engine.score += 10 * window.engine.combo;
+                 window.engine.combo = Math.min(window.engine.combo + 0.1, 5.0);
+                 window.engine.comboTimer = window.engine.comboMaxTimer;
+
+                 if (b.pierce < 0) player.bullets.splice(j, 1);
              }
-             player.bullets.splice(j, 1);
-             window.engine.audio.playHit();
-             window.engine.score += 10;
           }
         }
       }
       if (e.hp <= 0) {
-        window.engine.score += 50;
+        window.engine.score += 50 * window.engine.combo;
+        if (Math.random() < 0.2) window.engine.pickups.push(new Pickup(e.x, e.y));
         this.enemies.splice(i, 1);
       }
     }
@@ -1172,20 +1338,28 @@ class EnemyManager {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < b.radius + this.boss.radius) {
-          this.boss.hp -= 10;
-          player.bullets.splice(i, 1);
-          window.engine.audio.playHit();
-          window.engine.score += 50;
+          if (!b.hitEnemies.includes(this.boss)) {
+              b.hitEnemies.push(this.boss);
+              this.boss.hp -= b.damage;
+              window.engine.audio.playHit();
+              window.engine.score += 50 * window.engine.combo;
+              window.engine.combo = Math.min(window.engine.combo + 0.2, 5.0);
+              window.engine.comboTimer = window.engine.comboMaxTimer;
+              b.pierce--;
+              if (b.pierce < 0) player.bullets.splice(i, 1);
+          }
         }
       }
 
       if (this.boss.hp <= 0) {
-        window.engine.score += 1000;
+        window.engine.score += 1000 * window.engine.combo;
+        for(let k=0; k<10; k++) window.engine.pickups.push(new Pickup(this.boss.x + (Math.random()-0.5)*50, this.boss.y + (Math.random()-0.5)*50));
         this.boss = null;
         window.engine.wave++;
         this.waveProgress = 0;
         this.bossSpawnedForWave = true;
         this.bullets = [];
+        window.engine.upgradeManager.showDraft();
       }
     }
 
@@ -1200,8 +1374,15 @@ class EnemyManager {
 
       if (dist < b.radius + player.radius) {
          if (!player.isDashing) {
-           window.engine.setState('GAME_OVER');
-           return; // Player died
+           if (player.shields > 0) {
+               player.shields--;
+               this.bullets.splice(i, 1);
+               window.engine.combo = 1.0;
+               continue;
+           } else {
+               window.engine.setState('GAME_OVER');
+               return; // Player died
+           }
          }
       }
 
