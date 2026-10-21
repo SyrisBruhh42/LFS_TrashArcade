@@ -160,13 +160,25 @@ class GameEngine {
         this.saveManager = new SaveManager();
         this.inputManager = new InputManager();
         this.soundEngine = new SoundEngine();
+        this.uiManager = new UIManager(this);
 
         this.state = 'TITLE';
         this.lastTime = 0;
         this.score = 0;
+        this.colors = {
+            bg: '#222',
+            player: '#6c9b81',
+            tether: '#eee',
+            tail: '#6c9b81',
+            enemy: '#cc6666',
+            boss: '#ffaa44',
+            proj: '#ffaa44',
+            text: '#6c9b81'
+        };
 
         this.bindUI();
         this.setupResizeObserver();
+        this.uiManager.renderMilestones();
 
         document.addEventListener('visibilitychange', () => {
             if(document.hidden && this.state === 'PLAYING'){
@@ -269,6 +281,16 @@ class GameEngine {
 
     startGame() {
         this.score = 0;
+        this.colors = {
+            bg: '#222',
+            player: '#6c9b81',
+            tether: '#eee',
+            tail: '#6c9b81',
+            enemy: '#cc6666',
+            boss: '#ffaa44',
+            proj: '#ffaa44',
+            text: '#6c9b81'
+        };
         this.updateScore(0);
         this.initGame();
         this.setState('PLAYING');
@@ -287,6 +309,7 @@ class GameEngine {
     loop(time) {
         requestAnimationFrame(t => this.loop(t));
         const dt = Math.min((time - this.lastTime) / 1000, 0.1);
+        if(this.uiManager) this.uiManager.update(dt);
         this.lastTime = time;
 
         if (this.state === 'PLAYING') {
@@ -304,7 +327,7 @@ class GameEngine {
 
 
     draw() {
-        this.ctx.fillStyle = '#222';
+        this.ctx.fillStyle = this.colors.bg;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     }
@@ -341,6 +364,9 @@ class Player {
         if (this.dashTimer > 0) return false;
 
         this.dashTimer = this.dashCooldown;
+        if(window.game && window.game.saveManager) {
+            window.game.saveManager.data.dashCount = (window.game.saveManager.data.dashCount || 0) + 1;
+        }
         this.isDashing = true;
         this.dashTimeActive = this.dashDuration;
         this.invulnerableTimer = this.dashDuration + 0.1; // iframe padding
@@ -356,7 +382,7 @@ class Player {
         this.vy = dy * this.dashSpeed;
 
         // Spawn dash start explosion
-        for (let i = 0; i < 10; i++) {
+        let pCount10 = 10; if(window.game && window.game.saveManager && window.game.saveManager.data.options && window.game.saveManager.data.options.particleDensity !== undefined) { pCount10 = Math.max(1, Math.floor(10 * window.game.saveManager.data.options.particleDensity)); } for (let i = 0; i < pCount10; i++) {
             this.trailParticles.push({
                 x: this.x, y: this.y,
                 vx: (Math.random() - 0.5) * 400 - (dx * 200),
@@ -533,7 +559,7 @@ class TetherManager {
         for (let i = 0; i < this.nodes.length; i++) {
             ctx.lineTo(this.nodes[i].x, this.nodes[i].y);
         }
-        ctx.strokeStyle = '#6c9b81';
+        ctx.strokeStyle = window.game && window.game.colors ? window.game.colors.player : '#6c9b81';
         ctx.lineWidth = 4;
         ctx.stroke();
     }
@@ -583,7 +609,7 @@ GameEngine.prototype.spawnEnemy = function() {
 };
 
 GameEngine.prototype.createExplosion = function(x, y, radius, color) {
-    for (let i = 0; i < 15; i++) {
+    let pCount15 = 15; if(window.game && window.game.saveManager && window.game.saveManager.data.options && window.game.saveManager.data.options.particleDensity !== undefined) { pCount15 = Math.max(1, Math.floor(15 * window.game.saveManager.data.options.particleDensity)); } for (let i = 0; i < pCount15; i++) {
         this.particles.push({
             x: x, y: y,
             vx: (Math.random() - 0.5) * 200,
@@ -738,6 +764,7 @@ GameEngine.prototype.update = function(dt) {
 
     this.player.update(dt, inputVec, this.canvas.width, this.canvas.height);
     this.tetherManager.update(dt, this.player);
+            if(this.uiManager) this.uiManager.checkMilestones();
     this.parallax.update(dt, this.player);
     this.hazardManager.update(dt, this);
 

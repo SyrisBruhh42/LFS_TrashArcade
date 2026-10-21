@@ -81,6 +81,11 @@ class VFXManager {
 
     // Additional particle utility for directional particles
     addDirectionalParticles(x, y, dx, dy, count, color, speedBase=100) {
+                let density = 1.0;
+        if(this.engine && this.engine.saveManager && this.engine.saveManager.data && this.engine.saveManager.data.options && this.engine.saveManager.data.options.particleDensity !== undefined) {
+            density = this.engine.saveManager.data.options.particleDensity;
+        }
+        count = Math.max(1, Math.floor(count * density));
         for(let i=0; i<count; i++) {
             let spreadX = (Math.random() - 0.5) * 50;
             let spreadY = (Math.random() - 0.5) * 50;
