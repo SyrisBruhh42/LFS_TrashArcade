@@ -209,3 +209,74 @@ class UIManager {
     }
 }
 window.UIManager = UIManager;
+
+class TutorialOverlay {
+    constructor() {
+        this.alpha = 1.0;
+    }
+    draw(ctx, engine) {
+        if (engine.wave !== 1) return;
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.fillStyle = `rgba(112, 226, 249, ${this.alpha})`;
+        ctx.font = 'bold 24px monospace';
+        ctx.shadowColor = '#000';
+        ctx.shadowBlur = 4;
+
+        let hint = "";
+        let yPos = engine.canvas.height / 2 - 100;
+
+        if (!engine.player.isLaunched) {
+            hint = "DRAG & RELEASE TO LAUNCH!";
+        } else if (engine.score === 0) {
+            hint = "BOUNCE OFF TRENCHES TO DEAL DAMAGE!";
+        } else if (engine.arena.width < engine.arena.maxWidth * 0.5 && engine.score > 0) {
+            hint = "DON'T LET THE TRENCH CRUSH YOU!";
+        }
+
+        if (hint) {
+            this.alpha = Math.min(1.0, this.alpha + 0.05);
+            ctx.fillText(hint, engine.canvas.width / 2, yPos);
+            this.renderHelperIndicators(ctx, engine);
+        } else {
+            this.alpha = Math.max(0.0, this.alpha - 0.05);
+        }
+
+        ctx.restore();
+    }
+
+    renderHelperIndicators(ctx, engine) {
+        if (!engine.player.isLaunched) {
+            ctx.beginPath();
+            ctx.arc(engine.player.x, engine.player.y, 40 + Math.sin(performance.now() / 200) * 10, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(112, 226, 249, ${this.alpha * 0.5})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(engine.player.x, engine.player.y, 30 + Math.cos(performance.now() / 200) * 10, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(112, 226, 249, ${this.alpha * 0.8})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        } else if (engine.score === 0) {
+            // Draw indicators to the nearest wall
+            const p = engine.player;
+            const a = engine.arena;
+            const dists = [
+                p.x - a.x,
+                a.x + a.width - p.x,
+                p.y - a.y,
+                a.y + a.height - p.y
+            ];
+            const minDist = Math.min(...dists);
+            if (minDist < 100) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha * 0.3})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, minDist, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+}
+window.TutorialOverlay = TutorialOverlay;

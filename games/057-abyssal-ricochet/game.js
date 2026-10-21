@@ -511,6 +511,7 @@ class GameEngine {
     if (typeof BossManager !== 'undefined') this.bossManager = new BossManager();
     this.projectiles = [];
     if (typeof UpgradeManager !== 'undefined') this.upgradeManager = new UpgradeManager();
+    if (typeof TutorialOverlay !== 'undefined') this.tutorial = new TutorialOverlay();
   }
 
   resumeGame() {
@@ -561,6 +562,7 @@ class GameEngine {
     if (this.upgradeManager) this.upgradeManager.update(dt, this.player, this.arena, this);
 
     if (this.projectiles) {
+        if (this.projectiles.length > 150) this.projectiles.splice(0, this.projectiles.length - 150);
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             this.projectiles[i].update(dt, this.arena);
             if (this.player && this.projectiles[i].active) {
@@ -625,6 +627,7 @@ class GameEngine {
       if (this.enemyManager) this.enemyManager.draw(this.ctx);
       if (this.bossManager) this.bossManager.draw(this.ctx);
       if (this.upgradeManager) this.upgradeManager.draw(this.ctx);
+      if (this.tutorial) this.tutorial.draw(this.ctx, this);
       if (this.player) this.player.draw(this.ctx);
     if (this.projectiles) {
         for (const proj of this.projectiles) {
@@ -981,11 +984,13 @@ class EnemyManager {
   update(dt, player, engine) {
     if (!player.isLaunched) return; // Don't spawn/update until game starts
 
+    this.spawnInterval = Math.max(0.5, 2.0 - engine.wave * 0.05);
+
     if (!engine.bossManager || (!engine.bossManager.activeBoss && engine.bossManager.warningTimer <= 0)) {
         this.spawnTimer += dt;
-        if (this.spawnTimer >= this.spawnInterval) {
+        if (this.spawnTimer >= this.spawnInterval && this.enemies.length < 50) {
           this.spawnTimer = 0;
-          this.spawnEnemy(engine.arena);
+          this.spawnEnemy(engine.arena, engine.wave);
         }
     }
 
@@ -1145,19 +1150,24 @@ class EnemyManager {
 
   }
 
-  spawnEnemy(arena) {
+  spawnEnemy(arena, wave = 1) {
     if (arena.width <= 0 || arena.height <= 0) return;
     const x = arena.x + Math.random() * arena.width;
     const y = arena.y + Math.random() * arena.height;
 
     let r = Math.random();
-    if (r < 0.2) {
+    let swarmerChance = Math.max(0.05, 0.2 - wave * 0.01);
+    let sniperChance = swarmerChance + 0.2;
+    let bruiserChance = sniperChance + Math.min(0.3, 0.2 + wave * 0.01);
+    let spawnerChance = bruiserChance + 0.2;
+
+    if (r < swarmerChance) {
         this.enemies.push(new Swarmer(x, y));
-    } else if (r < 0.4) {
+    } else if (r < sniperChance) {
         this.enemies.push(new Sniper(x, y));
-    } else if (r < 0.6) {
+    } else if (r < bruiserChance) {
         this.enemies.push(new Bruiser(x, y));
-    } else if (r < 0.8) {
+    } else if (r < spawnerChance) {
         this.enemies.push(new Spawner(x, y));
     } else {
         this.enemies.push(new Hazard(x, y));

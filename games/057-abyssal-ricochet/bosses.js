@@ -12,9 +12,9 @@ class BossManager {
 
     // Select boss based on wave
     if (wave % 10 === 0) {
-        this.pendingBoss = new AbyssalCoreBoss(engine.arena.x + engine.arena.width/2, engine.arena.y + engine.arena.height/2);
+        this.pendingBoss = new AbyssalCoreBoss(engine.arena.x + engine.arena.width/2, engine.arena.y + engine.arena.height/2, wave);
     } else {
-        this.pendingBoss = new TrenchLeviathanBoss(engine.arena.x + engine.arena.width/2, engine.arena.y + engine.arena.height/2);
+        this.pendingBoss = new TrenchLeviathanBoss(engine.arena.x + engine.arena.width/2, engine.arena.y + engine.arena.height/2, wave);
     }
   }
   update(dt, player, engine) {
@@ -82,8 +82,8 @@ class Boss extends Enemy {
   onPhaseChange() {}
 }
 class TrenchLeviathanBoss extends Boss {
-  constructor(x, y) {
-    super(x, y, 2000, "Trench Leviathan");
+  constructor(x, y, wave = 5) {
+    super(x, y, 2000 * (1 + (wave * 0.1)), "Trench Leviathan");
     this.speed = 80;
     this.vx = this.speed;
     this.vy = this.speed;
@@ -132,8 +132,8 @@ class TrenchLeviathanBoss extends Boss {
   }
 }
 class AbyssalCoreBoss extends Boss {
-  constructor(x, y) {
-    super(x, y, 3000, "Abyssal Core");
+  constructor(x, y, wave = 10) {
+    super(x, y, 3000 * (1 + (wave * 0.1)), "Abyssal Core");
     this.radius = 60;
     this.beamAngle = 0;
     this.spawnTimer = 0;
