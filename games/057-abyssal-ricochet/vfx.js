@@ -37,6 +37,13 @@ class VFXManager {
     update(dt) {
         this.hitStop = Math.max(0, this.hitStop - dt);
         this.shake = Math.max(0, this.shake - dt * 20);
+
+        if (this.particles.length > 300) {
+            this.particles.splice(0, this.particles.length - 300);
+        }
+        if (this.texts.length > 50) {
+            this.texts.splice(0, this.texts.length - 50);
+        }
         for (let i = this.particles.length - 1; i >= 0; i--) {
             this.particles[i].update(dt);
             if (this.particles[i].life <= 0) this.particles.splice(i, 1);
