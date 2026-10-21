@@ -731,5 +731,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#6c9b81",
     "phase": "5",
     "path": "./games/056-scrap-chain/index.html"
+  },
+  {
+    "id": "057",
+    "slug": "057-abyssal-ricochet",
+    "title": "Abyssal Ricochet",
+    "genre": "Pinball/Ricochet Dungeon",
+    "coreMechanic": "Shrinking Arena / Shifting Geometry",
+    "setting": "Deep Ocean Trench",
+    "description": "Bounce off the shrinking deep sea trenches and destroy abyssal entities.",
+    "controls": "Desktop: WASD/Arrows to aim, Space to launch. Touch: Drag to aim, release to launch.",
+    "createdAt": "2023-10-24",
+    "accentColor": "#70e2f9",
+    "phase": "1",
+    "path": "./games/057-abyssal-ricochet/index.html"
   }
 ];
