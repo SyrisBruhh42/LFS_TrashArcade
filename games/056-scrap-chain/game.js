@@ -153,45 +153,6 @@ class InputManager {
     }
 }
 
-class SoundEngine {
-    constructor() {
-        this.ctx = null;
-        this.masterGain = null;
-
-        const initAudio = () => {
-            if(!this.ctx){
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                this.ctx = new AudioContext();
-                this.masterGain = this.ctx.createGain();
-                this.masterGain.gain.value = 0.5;
-                this.masterGain.connect(this.ctx.destination);
-            }
-            if(this.ctx.state === 'suspended') this.ctx.resume();
-
-            window.removeEventListener('pointerdown', initAudio);
-            window.removeEventListener('keydown', initAudio);
-        };
-        window.addEventListener('pointerdown', initAudio);
-        window.addEventListener('keydown', initAudio);
-    }
-
-    playSynth(freq, type, duration) {
-        if(!this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-
-        gain.gain.setValueAtTime(1, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-
-        osc.connect(gain);
-        gain.connect(this.masterGain);
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
-    }
-}
-
 class GameEngine {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -251,6 +212,12 @@ class GameEngine {
     }
 
     setState(newState) {
+        if (newState === 'PLAYING') {
+            if(this.soundEngine && this.soundEngine.startMusic) this.soundEngine.startMusic();
+        } else {
+            if(this.soundEngine && this.soundEngine.stopMusic) this.soundEngine.stopMusic();
+        }
+
         this.state = newState;
         this.uiTitle.classList.remove('active');
         this.uiPaused.classList.remove('active');
@@ -335,9 +302,6 @@ class GameEngine {
         }
     }
 
-    update(dt) {
-
-    }
 
     draw() {
         this.ctx.fillStyle = '#222';
@@ -639,7 +603,7 @@ GameEngine.prototype.createExplosion = function(x, y, radius, color) {
 GameEngine.prototype.detonateTether = function() {
     if (this.tetherManager.nodes.length === 0) return;
 
-    this.soundEngine.playSynth(150, 'sawtooth', 0.5);
+    this.soundEngine.playPlayerHitSFX();
 
     let explosionRadius = 60;
 
@@ -722,6 +686,13 @@ GameEngine.prototype.detonateTether = function() {
 GameEngine.prototype.update = function(dt) {
     if (this.state !== 'PLAYING') return;
 
+    const hpPercent = this.player ? (this.player.hp / this.player.maxHp) : 1.0;
+    const isBossWave = this.waveDirector ? this.waveDirector.isBossWave : false;
+    if(this.soundEngine && this.soundEngine.update) {
+        this.soundEngine.update(dt, hpPercent, isBossWave);
+    }
+
+
     if (this.waveDirector) this.waveDirector.update(dt);
     if (this.pickupManager) this.pickupManager.update(dt);
 
@@ -761,7 +732,7 @@ GameEngine.prototype.update = function(dt) {
     let inputVec = this.inputManager.getMovementVector();
     if (this.inputManager.consumeDash()) {
         if (this.player.startDash(inputVec)) {
-            this.soundEngine.playSynth(800, 'sine', 0.2);
+            this.soundEngine.playShootSFX();
         }
     }
 
@@ -807,7 +778,7 @@ GameEngine.prototype.update = function(dt) {
 
         let dist = Math.hypot(this.player.x - p.x, this.player.y - p.y);
         if (dist < this.player.radius + p.radius && this.player.invulnerableTimer <= 0) {
-            this.soundEngine.playSynth(100, 'square', 0.5);
+            this.soundEngine.playDetonateSFX();
             this.setState('GAME_OVER');
             return;
         }
@@ -825,7 +796,7 @@ GameEngine.prototype.update = function(dt) {
                         e.takeDamage(10);
                         this.player.vx = -this.player.vx * 0.5;
                         this.player.vy = -this.player.vy * 0.5;
-                        this.soundEngine.playSynth(300, 'square', 0.2);
+                        this.soundEngine.playDashSFX();
                     } else if (e.shield) {
                         e.shield = false;
                         this.player.vx = -this.player.vx * 0.5;
@@ -839,12 +810,12 @@ GameEngine.prototype.update = function(dt) {
                             this.vfxManager.addScreenShake(2, 0.1);
                         }
                         this.updateScore(10);
-                        this.soundEngine.playSynth(200, 'square', 0.1);
+                        this.soundEngine.playDashSFX();
                         if(this.pickupManager) this.pickupManager.dropPickup(e.x, e.y);
                         if(this.waveDirector) this.waveDirector.onEnemyKilled();
                     }
                 } else {
-                    this.soundEngine.playSynth(100, 'square', 0.5);
+                    this.soundEngine.playDetonateSFX();
                     this.setState('GAME_OVER');
                     return; // Stop updating
                 }
@@ -857,14 +828,14 @@ GameEngine.prototype.update = function(dt) {
                     let distToTail = Math.hypot(lastNode.x - e.x, lastNode.y - e.y);
                     if (distToTail < lastNode.radius + e.radius + 15) {
                         this.tetherManager.addNode(e);
-                        this.soundEngine.playSynth(400, 'sine', 0.1);
+                        this.soundEngine.playScrapPickupSFX();
                         this.comboMultiplier = 1; // reset combo when adding new
                     }
                 } else {
                     let distToTail = Math.hypot(this.player.x - e.x, this.player.y - e.y);
                     if (distToTail < this.player.radius + e.radius + 20 && distToTail >= this.player.radius + e.radius) {
                          this.tetherManager.addNode(e);
-                         this.soundEngine.playSynth(400, 'sine', 0.1);
+                         this.soundEngine.playScrapPickupSFX();
                     }
                 }
             }

@@ -27,12 +27,12 @@ class WaveDirector {
             this.game.projectiles = [];
             this.game.hazardManager.hazards = [];
 
-            this.game.soundEngine.playSynth(400, 'sine', 0.5);
+            this.game.soundEngine.playEnemySpawnSFX();
             setTimeout(() => {
-                this.game.soundEngine.playSynth(600, 'sine', 0.5);
+                this.game.soundEngine.playEnemySpawnSFX();
             }, 100);
             setTimeout(() => {
-                this.game.soundEngine.playSynth(800, 'sine', 0.5);
+                this.game.soundEngine.playEnemySpawnSFX();
                 this.game.setState('UPGRADE_DRAFT');
             }, 200);
 
@@ -116,9 +116,9 @@ class UpgradeManager {
         let upg = this.upgrades.find(u => u.id === id);
         if(upg) {
             upg.apply(this.game);
-            this.game.soundEngine.playSynth(500, 'square', 0.5);
+            this.game.soundEngine.playUpgradeSFX();
             setTimeout(() => {
-                this.game.soundEngine.playSynth(700, 'square', 0.5);
+                this.game.soundEngine.playUpgradeSFX();
             }, 100);
         }
     }
@@ -146,11 +146,11 @@ class Pickup {
             // Collect
             if(this.type === 'combo') {
                 game.comboDecayTimer = game.maxComboDecayTimer;
-                game.soundEngine.playSynth(900, 'sine', 0.2);
+                game.soundEngine.playScrapPickupSFX();
             } else {
                 let sbm = (typeof game.scoreBonusMultiplier !== 'undefined') ? game.scoreBonusMultiplier : 1.0;
                 game.updateScore(Math.floor(250 * sbm * game.comboMultiplier));
-                game.soundEngine.playSynth(700, 'square', 0.2);
+                game.soundEngine.playScrapPickupSFX();
             }
             return true; // remove
         }
