@@ -676,6 +676,7 @@ class Game {
         this.vfx = new VFXManager();
         this.save = new SaveManager();
         this.ui = new UIManager(this);
+        this.tutorial = new Tutorial();
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
 
         this.lastTime = performance.now();
@@ -775,11 +776,7 @@ class Game {
         ];
         this.walls = [...this.baseWalls];
         this.guards = [
-            new Swarmer(300, 100, [{x:300, y:100}, {x:300, y:400}]),
-            new Sniper(600, 400, [{x:600, y:400}, {x:600, y:100}]),
-            new Bruiser(800, 200, [{x:800, y:200}, {x:800, y:600}]),
-            new Spawner(100, 500, [{x:100, y:500}, {x:500, y:500}]),
-            new HazardEnemy(400, 300, [{x:400, y:300}, {x:700, y:300}])
+            new Swarmer(300, 100, [{x:300, y:100}, {x:300, y:400}])
         ];
         this.loot = [
             new Loot(150, 400), new Loot(500, 150), new Loot(700, 300)
@@ -855,6 +852,7 @@ class Game {
             this.walls = [...this.baseWalls, ...this.world.movingWalls];
             this.world.update(dt, this.player, this.guards, this.walls);
             this.ambientDust.update(dt);
+            if (this.tutorial) this.tutorial.update(dt, this);
 
             this.player.update(dt, this.input, this.walls);
             if (this.player.echo) this.player.echo.update(dt, this.input, this.walls);
@@ -1080,11 +1078,15 @@ class Game {
                         if (this.wave % 5 === 0) {
                             this.guards = [];
                             this.loot = [new Loot(window.innerWidth/2, window.innerHeight/2)];
-                            this.activeBoss = this.wave % 10 === 0 ? new MirrorWraith(window.innerWidth/2, 100) : new SpectralWarden(window.innerWidth/2, 100);
+                            let bossHp = 100 + (this.wave * 20);
+                            this.activeBoss = this.wave % 10 === 0 ? new MirrorWraith(window.innerWidth/2, 100, bossHp) : new SpectralWarden(window.innerWidth/2, 100, bossHp);
                         } else {
                             this.score += 500;
                             if (this.loot.length === 1) {
-                                this.loot = [new Loot(150, 400), new Loot(500, 150), new Loot(700, 300)];
+                            this.loot = [];
+                            let numLoot = 3 + Math.floor(this.wave / 3);
+                            for(let j=0; j<numLoot; j++) this.loot.push(new Loot(0,0));
+
                                 if (this.wave % 5 === 0) { // Just defeated a boss wave
                                     this.save.data.bossesDefeated++;
                                 }
@@ -1096,13 +1098,26 @@ class Game {
                                 l.y = 50 + Math.random() * (window.innerHeight - 100);
                                 l.active = true;
                             });
-                            const types = [Swarmer, Sniper, Bruiser, Spawner, HazardEnemy];
-                            const Type = types[Math.floor(Math.random()*types.length)];
+
+                        let availableTypes = [Swarmer];
+                        if (this.wave >= 2) availableTypes.push(Sniper);
+                        if (this.wave >= 3) availableTypes.push(Bruiser);
+                        if (this.wave >= 4) availableTypes.push(Spawner, HazardEnemy);
+
+                        let numGuards = Math.min(1 + Math.floor(this.wave * 1.5), 15);
+                        this.guards = [];
+                        for(let j=0; j<numGuards; j++) {
+                            const Type = availableTypes[Math.floor(Math.random()*availableTypes.length)];
+                            let gx = window.innerWidth/2;
+                            let gy = window.innerHeight/2;
+                            if (Math.random() > 0.5) { gx = Math.random()*window.innerWidth; gy = Math.random() > 0.5 ? 50 : window.innerHeight-50; }
+                            else { gy = Math.random()*window.innerHeight; gx = Math.random() > 0.5 ? 50 : window.innerWidth-50; }
                             this.guards.push(new Type(
-                                window.innerWidth/2, window.innerHeight/2,
+                                gx, gy,
                                 [{x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight},
                                  {x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight}]
                             ));
+                        }
                         }
                         this.state = 'PLAYING';
                     }
@@ -1301,6 +1316,7 @@ class Game {
                 if (this.ui) this.ui.drawMilestones(this.ctx);
             }
         }
+        if (this.tutorial) this.tutorial.draw(this.ctx, this);
         if (this.ui) this.ui.draw(this.ctx);
 
         // Touch UI Rendering based on settings
