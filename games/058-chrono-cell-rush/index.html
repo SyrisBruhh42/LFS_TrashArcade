@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Chrono Cell Rush</title>
+  <style>
+    :root {
+      --accent: #ecf7f4;
+      --bg: #11151c;
+      --text: #ffffff;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: monospace, sans-serif;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+    }
+    #gameContainer {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+    .ui-layer.hidden {
+      display: none;
+    }
+    .ui-box {
+      background: rgba(17, 21, 28, 0.85);
+      border: 2px solid var(--accent);
+      padding: 2rem;
+      border-radius: 8px;
+      text-align: center;
+      pointer-events: auto;
+      max-width: 80%;
+    }
+    h1 {
+      color: var(--accent);
+      margin-top: 0;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    button {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 10px 20px;
+      font-family: inherit;
+      font-size: 1rem;
+      cursor: pointer;
+      margin: 10px;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+    button:hover, button:active {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    a.arcade-link {
+      display: inline-block;
+      margin-top: 20px;
+      color: #888;
+      text-decoration: none;
+      font-size: 0.8rem;
+    }
+    a.arcade-link:hover {
+      color: #fff;
+    }
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 20px;
+      box-sizing: border-box;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .hud-text {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: var(--accent);
+      text-shadow: 1px 1px 2px #000;
+    }
+  </style>
+  <script defer src="./game.js"></script>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud" class="hidden">
+      <div id="scoreDisplay" class="hud-text">SCORE: 0</div>
+      <div id="waveDisplay" class="hud-text">WAVE: 1</div>
+    </div>
+
+    <div id="screen-TITLE" class="ui-layer">
+      <div class="ui-box">
+        <h1>Chrono Cell Rush</h1>
+        <p>Fight inside a cell. Stop moving to slow time.</p>
+        <p>WASD to move, Mouse to aim/shoot.</p>
+        <button id="btn-start">Start Game</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+
+    <div id="screen-PAUSED" class="ui-layer hidden">
+      <div class="ui-box">
+        <h1>Paused</h1>
+        <button id="btn-resume">Resume</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+
+    <div id="screen-GAME_OVER" class="ui-layer hidden">
+      <div class="ui-box">
+        <h1>Defeated</h1>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button id="btn-restart">Play Again</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
