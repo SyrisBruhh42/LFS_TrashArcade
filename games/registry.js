@@ -771,7 +771,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move, Space to deploy/recall echo. Touch joysticks to move and action button for echo.",
     "createdAt": "2023-10-24",
     "accentColor": "#ada6b9",
-    "phase": "2",
+    "phase": "3",
     "path": "./games/059-phantom-manor-heist/index.html"
   }
 ];
