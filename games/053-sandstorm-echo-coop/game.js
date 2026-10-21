@@ -604,6 +604,190 @@ class VisualFXManager {
     }
 }
 
+
+class ParallaxBackground {
+    constructor(width, height) {
+        this.width = width;
+        this.height = height;
+        this.layers = [
+            { speed: 0.1, yOffset: 0, color: '#3b2f2f', pattern: null, numDunes: 3 }, // Distant
+            { speed: 0.3, yOffset: 0, color: '#684d3b', pattern: null, numDunes: 4 }, // Mid
+            { speed: 0.8, yOffset: 0, color: '#916744', pattern: null, numDunes: 5 }  // Near
+        ];
+        this.windSpeed = 100;
+
+        // Pre-generate patterns
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = this.width;
+        tempCanvas.height = 300;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        this.layers.forEach((layer, i) => {
+            tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.fillStyle = layer.color;
+            tempCtx.beginPath();
+            tempCtx.moveTo(0, tempCanvas.height);
+            for (let x = 0; x <= this.width; x += this.width / layer.numDunes) {
+                tempCtx.quadraticCurveTo(x - this.width/(layer.numDunes*2), tempCanvas.height - (50 + i*30), x, tempCanvas.height - Math.random() * 20 - 10);
+            }
+            tempCtx.lineTo(this.width, tempCanvas.height);
+            tempCtx.fill();
+
+            // Add some noise
+            for(let j=0; j<500; j++) {
+                tempCtx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+                tempCtx.fillRect(Math.random() * this.width, tempCanvas.height - 100 + Math.random() * 100, 2, 2);
+            }
+
+            layer.pattern = new Image();
+            layer.pattern.src = tempCanvas.toDataURL();
+        });
+    }
+    update(dt) {
+        this.layers.forEach(layer => {
+            layer.yOffset -= this.windSpeed * layer.speed * dt;
+            if (layer.yOffset <= -this.width) layer.yOffset += this.width;
+            if (layer.yOffset >= this.width) layer.yOffset -= this.width;
+        });
+    }
+    draw(ctx) {
+        ctx.save();
+        this.layers.forEach((layer, i) => {
+            if (layer.pattern && layer.pattern.complete) {
+                // Draw multiple times to cover horizontal wrapping
+                ctx.drawImage(layer.pattern, layer.yOffset, this.height - 300 + i*50);
+                ctx.drawImage(layer.pattern, layer.yOffset + this.width, this.height - 300 + i*50);
+                ctx.drawImage(layer.pattern, layer.yOffset - this.width, this.height - 300 + i*50);
+            }
+        });
+
+        // Draw foreground dust overlay
+        ctx.fillStyle = 'rgba(200, 180, 150, 0.15)';
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        ctx.restore();
+    }
+}
+
+class Hazard extends Entity {
+    constructor(x, y, radius) {
+        super(x, y, radius);
+    }
+    applyEffect(entity, dt) {}
+}
+
+class Quicksand extends Hazard {
+    constructor(x, y, radius) {
+        super(x, y, radius);
+        this.color = '#5a4231';
+    }
+    applyEffect(entity, dt) {
+        if (this.collides(entity)) {
+            entity.vx *= 0.5; // Strong slow down
+            entity.vy *= 0.5;
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+        ctx.fill();
+
+        // Swirl effect
+        ctx.strokeStyle = '#423023';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let angle = (game && game.time) ? game.time : 0;
+        ctx.arc(this.x, this.y, this.radius * 0.7, angle, angle + Math.PI);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 0.4, angle + Math.PI/2, angle + Math.PI*1.5);
+        ctx.stroke();
+    }
+}
+
+class WindZone extends Hazard {
+    constructor(x, y, width, height, dirX, dirY) {
+        // Approximate as a large circle for generic collides, or override
+        super(x + width/2, y + height/2, Math.max(width, height)/2);
+        this.w = width;
+        this.h = height;
+        this.dirX = dirX;
+        this.dirY = dirY;
+        this.force = 400;
+        this.particles = [];
+        for(let i=0; i<10; i++) {
+            this.particles.push({
+                x: Math.random() * this.w,
+                y: Math.random() * this.h,
+                speed: 100 + Math.random() * 200
+            });
+        }
+    }
+    collidesEntity(ent) {
+        const left = this.x - this.w/2 - ent.radius;
+        const right = this.x + this.w/2 + ent.radius;
+        const top = this.y - this.h/2 - ent.radius;
+        const bottom = this.y + this.h/2 + ent.radius;
+        return ent.x > left && ent.x < right && ent.y > top && ent.y < bottom;
+    }
+    applyEffect(entity, dt) {
+        if (this.collidesEntity(entity)) {
+            entity.x += this.dirX * this.force * dt;
+            entity.y += this.dirY * this.force * dt;
+        }
+    }
+    update(dt) {
+        this.particles.forEach(p => {
+            p.x += this.dirX * p.speed * dt;
+            p.y += this.dirY * p.speed * dt;
+            if (p.x > this.w) p.x -= this.w;
+            if (p.x < 0) p.x += this.w;
+            if (p.y > this.h) p.y -= this.h;
+            if (p.y < 0) p.y += this.h;
+        });
+    }
+    draw(ctx) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.fillRect(this.x - this.w/2, this.y - this.h/2, this.w, this.h);
+
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.4)';
+        this.particles.forEach(p => {
+            ctx.fillRect(this.x - this.w/2 + p.x, this.y - this.h/2 + p.y, 10, 2);
+        });
+    }
+}
+
+class DestructibleCrate extends Obstacle {
+    constructor(x, y, w, h) {
+        super(x, y, w, h);
+        this.color = '#c28b55';
+        this.hp = 1;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        const dw = this.w * this.beatScale;
+        const dh = this.h * this.beatScale;
+        const dx = this.x - dw/2;
+        const dy = this.y - dh/2;
+        ctx.fillRect(dx, dy, dw, dh);
+
+        ctx.strokeStyle = '#8a5e35';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(dx, dy, dw, dh);
+
+        // Draw cross lines
+        ctx.beginPath();
+        ctx.moveTo(dx, dy);
+        ctx.lineTo(dx + dw, dy + dh);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(dx + dw, dy);
+        ctx.lineTo(dx, dy + dh);
+        ctx.stroke();
+    }
+}
+
 class GameEngine {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -629,6 +813,12 @@ class GameEngine {
         this.enemies = [];
         this.obstacles = [];
         this.collectibles = [];
+        this.hazards = [];
+        this.crates = [];
+
+        this.background = new ParallaxBackground(this.width, this.height);
+        this.hazards = [];
+        this.crates = [];
 
         this.beatInterval = 0.5;
         this.lastBeat = 0;
@@ -702,6 +892,12 @@ class GameEngine {
         this.enemies = [];
         this.obstacles = [];
         this.collectibles = [];
+        this.hazards = [];
+        this.crates = [];
+
+        this.background = new ParallaxBackground(this.width, this.height);
+        this.hazards = [];
+        this.crates = [];
 
         this.generateLevel();
 
@@ -737,6 +933,35 @@ class GameEngine {
         this.obstacles = [];
         this.enemies = [];
         this.collectibles = [];
+        this.hazards = [];
+        this.crates = [];
+
+        // Spawn Quicksand
+        for (let i=0; i<2; i++) {
+            const x = Math.random() * this.width;
+            const y = Math.random() * this.height;
+            this.hazards.push(new Quicksand(x, y, 60 + Math.random() * 40));
+        }
+
+        // Spawn WindZone
+        if (this.wave % 2 === 0) {
+            const x = this.width / 2;
+            const y = this.height / 2;
+            const dirX = Math.random() > 0.5 ? 1 : -1;
+            this.hazards.push(new WindZone(x, y, this.width, 200, dirX, 0));
+        }
+
+        // Spawn DestructibleCrates
+        for (let i=0; i<3; i++) {
+            const w = 40;
+            const h = 40;
+            const x = Math.random() * (this.width - w);
+            const y = Math.random() * (this.height - h);
+            if (Math.abs(x - this.player.x) > 100 && Math.abs(y - this.player.y) > 100) {
+                this.crates.push(new DestructibleCrate(x, y, w, h));
+            }
+        }
+
 
         for (let i=0; i<5 + this.wave; i++) {
             const w = 50 + Math.random() * 100;
@@ -811,9 +1036,37 @@ class GameEngine {
 
         const axis = this.input.getAxis();
 
+        if (this.background) this.background.update(dt);
+
+        for (const hazard of this.hazards) {
+            hazard.update(dt);
+            hazard.applyEffect(this.player, dt);
+            for (const enemy of this.enemies) hazard.applyEffect(enemy, dt);
+            for (const ghost of this.ghosts) hazard.applyEffect(ghost, dt);
+        }
+
         const oldX = this.player.x;
         const oldY = this.player.y;
         this.player.update(dt, axis);
+
+        for (let i = this.crates.length - 1; i >= 0; i--) {
+            const crate = this.crates[i];
+            crate.update(dt);
+            if (crate.collidesEntity(this.player)) {
+                if (this.player.isDashing) {
+                    this.crates.splice(i, 1);
+                    this.sound.playHit();
+                    this.score += 10;
+                    this.vfx.spawnExplosion(crate.x, crate.y, 20, '#c28b55');
+                    this.vfx.spawnScoreText(crate.x, crate.y, "+10");
+                } else {
+                    this.player.x = oldX;
+                    this.player.y = oldY;
+                    this.player.vx = 0;
+                    this.player.vy = 0;
+                }
+            }
+        }
 
         for (const obs of this.obstacles) {
             if (obs.collidesEntity(this.player)) {
@@ -916,6 +1169,8 @@ class GameEngine {
         const shake = this.vfx ? this.vfx.getShakeOffset() : {x:0, y:0};
         this.ctx.translate(shake.x, shake.y);
 
+        if (this.background) this.background.draw(this.ctx);
+
         this.ctx.strokeStyle = 'rgba(198, 248, 200, 0.1)';
         this.ctx.lineWidth = 1;
         for(let i=0; i<this.width; i+=50) {
@@ -926,7 +1181,9 @@ class GameEngine {
         }
 
         if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+            for (const hazard of this.hazards) hazard.draw(this.ctx);
             for (const obs of this.obstacles) obs.draw(this.ctx);
+            for (const crate of this.crates) crate.draw(this.ctx);
             for (const col of this.collectibles) col.draw(this.ctx);
             for (const ghost of this.ghosts) ghost.draw(this.ctx);
             for (const enemy of this.enemies) enemy.draw(this.ctx);
