@@ -7,13 +7,14 @@ class InputManager {
         window.addEventListener('touchstart', e => this.handleTouchStart(e), {passive: false});
         window.addEventListener('touchmove', e => this.handleTouchMove(e), {passive: false});
         window.addEventListener('touchend', e => this.handleTouchEnd(e), {passive: false});
-        window.addEventListener('mousedown', () => this.touch.tap = true);
+        window.addEventListener('mousedown', (e) => { this.touch.tap = true; this.touch.tapX = e.clientX; this.touch.tapY = e.clientY; });
         window.addEventListener('mouseup', () => this.touch.tap = false);
     }
     handleTouchStart(e) {
         e.preventDefault();
         const touch = e.changedTouches[0];
-        if (touch.clientX > window.innerWidth / 2) {
+        let flip = (window.game && window.game.save && window.game.save.data.touchHandedness === 'Left');
+        if ((!flip && touch.clientX > window.innerWidth / 2) || (flip && touch.clientX < window.innerWidth / 2)) {
             if (touch.clientY < window.innerHeight / 2) {
                 this.touch.dash = true;
             } else {
@@ -24,6 +25,8 @@ class InputManager {
             this.touch.active = true;
             this.touch.startX = touch.clientX;
             this.touch.startY = touch.clientY;
+            this.touch.tapX = touch.clientX;
+            this.touch.tapY = touch.clientY;
             this.touch.x = 0;
             this.touch.y = 0;
         }
@@ -33,7 +36,8 @@ class InputManager {
         if (!this.touch.active) return;
         for(let i=0; i<e.touches.length; i++) {
             const touch = e.touches[i];
-            if (touch.clientX < window.innerWidth / 2) {
+            let flip = (window.game && window.game.save && window.game.save.data.touchHandedness === 'Left');
+            if ((!flip && touch.clientX < window.innerWidth / 2) || (flip && touch.clientX > window.innerWidth / 2)) {
                 this.touch.x = touch.clientX - this.touch.startX;
                 this.touch.y = touch.clientY - this.touch.startY;
                 const max = 50;
@@ -49,7 +53,8 @@ class InputManager {
         e.preventDefault();
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
-            if (touch.clientX > window.innerWidth / 2) {
+            let flip = (window.game && window.game.save && window.game.save.data.touchHandedness === 'Left');
+            if ((!flip && touch.clientX > window.innerWidth / 2) || (flip && touch.clientX < window.innerWidth / 2)) {
                 this.touch.action = false;
                 this.touch.tap = false;
                 this.touch.dash = false;
@@ -204,9 +209,10 @@ class SoundEngine {
             const gain = this.ctx.createGain();
             osc.type = this.isBoss ? 'sawtooth' : 'triangle';
             osc.frequency.setValueAtTime(noteFreq, this.ctx.currentTime);
+            let mv = (window.game && window.game.save) ? (window.game.save.data.masterVolume * window.game.save.data.musicVolume) : 1;
 
-            gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.3 * mv, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01 * mv, this.ctx.currentTime + 0.2);
 
             osc.connect(gain);
             gain.connect(this.bgmGain);
@@ -221,9 +227,10 @@ class SoundEngine {
             osc.type = 'sine';
             osc.frequency.setValueAtTime(150, this.ctx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+            let mv = (window.game && window.game.save) ? (window.game.save.data.masterVolume * window.game.save.data.musicVolume) : 1;
 
-            gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.5 * mv, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01 * mv, this.ctx.currentTime + 0.1);
 
             osc.connect(gain);
             gain.connect(this.bgmGain);
@@ -240,9 +247,10 @@ class SoundEngine {
              bpFilter.frequency.value = 1000;
 
              osc.frequency.setValueAtTime(250, this.ctx.currentTime);
+             let mv = (window.game && window.game.save) ? (window.game.save.data.masterVolume * window.game.save.data.musicVolume) : 1;
 
-             gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
-             gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+             gain.gain.setValueAtTime(0.4 * mv, this.ctx.currentTime);
+             gain.gain.exponentialRampToValueAtTime(0.01 * mv, this.ctx.currentTime + 0.1);
 
              osc.connect(bpFilter);
              bpFilter.connect(gain);
@@ -256,6 +264,7 @@ class SoundEngine {
 
     playToneCustom(freq, type, duration, vol=1, endFreq=null, isSlide=false) {
         if (!this.ready) return;
+        vol *= (window.game && window.game.save) ? (window.game.save.data.masterVolume * window.game.save.data.sfxVolume) : 1;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = type;
@@ -276,6 +285,7 @@ class SoundEngine {
 
     playNoise(duration, vol=1, freq=1000) {
          if (!this.ready) return;
+         vol *= (window.game && window.game.save) ? (window.game.save.data.masterVolume * window.game.save.data.sfxVolume) : 1;
          const bufferSize = this.ctx.sampleRate * duration;
          const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
          const data = buffer.getChannelData(0);
@@ -319,11 +329,39 @@ class SaveManager {
         this.data = this.load();
     }
     load() {
+        let defaultData = {
+            highScore: 0, totalGamesPlayed: 0, totalWaves: 0, bossesDefeated: 0,
+            masterVolume: 1, sfxVolume: 1, musicVolume: 1,
+            screenShake: 1, particleDensity: 1, highContrast: false,
+            showFPS: false, touchControls: 'Auto', touchHandedness: 'Right',
+            milestones: [false, false, false, false, false, false]
+        };
         try {
             const str = localStorage.getItem(this.key);
-            if (str) return JSON.parse(str);
+            if (str) {
+                let parsed = JSON.parse(str);
+                return { ...defaultData, ...parsed };
+            }
         } catch (e) { console.error('Save load failed', e); }
-        return { highScore: 0, totalGamesPlayed: 0 };
+        return defaultData;
+    }
+    exportBase64() {
+        return btoa(JSON.stringify(this.data));
+    }
+    importBase64(str) {
+        try {
+            let parsed = JSON.parse(atob(str));
+            if (parsed && typeof parsed === 'object') {
+                this.data = { ...this.data, ...parsed };
+                this.save();
+                return true;
+            }
+        } catch (e) { console.error('Import failed', e); }
+        return false;
+    }
+    reset() {
+        localStorage.removeItem(this.key);
+        this.data = this.load();
     }
     save() {
         try { localStorage.setItem(this.key, JSON.stringify(this.data)); }
@@ -637,6 +675,7 @@ class Game {
         this.sound = new SoundEngine();
         this.vfx = new VFXManager();
         this.save = new SaveManager();
+        this.ui = new UIManager(this);
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
 
         this.lastTime = performance.now();
@@ -660,6 +699,29 @@ class Game {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
     }
+    checkMilestones() {
+        let m = this.save.data.milestones || [false, false, false, false, false, false];
+        let updated = false;
+
+        // 1. Reach Wave 5
+        if (!m[0] && this.save.data.totalWaves >= 5) { m[0] = true; updated = true; }
+        // 2. Reach Wave 10
+        if (!m[1] && this.save.data.totalWaves >= 10) { m[1] = true; updated = true; }
+        // 3. Score 5000
+        if (!m[2] && this.save.data.highScore >= 5000) { m[2] = true; updated = true; }
+        // 4. Score 10000
+        if (!m[3] && this.save.data.highScore >= 10000) { m[3] = true; updated = true; }
+        // 5. Defeat 5 Bosses
+        if (!m[4] && this.save.data.bossesDefeated >= 5) { m[4] = true; updated = true; }
+        // 6. Play 10 Games
+        if (!m[5] && this.save.data.totalGamesPlayed >= 10) { m[5] = true; updated = true; }
+
+        if (updated) {
+            this.save.data.milestones = m;
+            this.save.save();
+        }
+    }
+
     generateDraftChoices() {
         const pool = [
             {id: 'speed', name: 'Swiftness', desc: '+20 Base Speed'},
@@ -728,6 +790,27 @@ class Game {
         const dt = Math.min((time - this.lastTime) / 1000, 0.1);
         this.lastTime = time;
 
+        if (this.input.touch.tap && this.ui) {
+            let tx = this.input.touch.tapX; let ty = this.input.touch.tapY;
+            if (this.ui.active) {
+                if (this.ui.handleClick(tx, ty)) { this.input.touch.tap = false; }
+            } else if (this.state === 'TITLE') {
+                if (tx > window.innerWidth - 120 && ty < 50) {
+                    this.ui.active = true;
+                    this.input.touch.tap = false;
+                }
+            }
+        }
+        if (this.ui && this.ui.active && this.input.touch.active) {
+             this.ui.handleClick(this.input.touch.startX, this.input.touch.startY);
+        }
+
+        if (this.ui && this.ui.active) {
+             this.draw();
+             requestAnimationFrame((t) => this.loop(t));
+             return;
+        }
+
 
         // initialize audio on first input
         if (!this.sound.ready && (this.input.keys['Space'] || this.input.touch.tap)) {
@@ -758,6 +841,7 @@ class Game {
             if (this.input.consumeTap()) {
                 this.save.data.totalGamesPlayed++;
                 this.save.save();
+                this.checkMilestones();
                 this.reset();
                 this.state = 'PLAYING';
             }
@@ -807,6 +891,7 @@ class Game {
                     if (Math.hypot(this.player.x - h.x, this.player.y - h.y) < h.radius + this.player.radius && this.player.invulnTimer <= 0) {
                         this.state = 'GAME_OVER';
                         if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
+                        this.checkMilestones();
                     }
                     if (this.player.echo && Math.hypot(this.player.echo.x - h.x, this.player.echo.y - h.y) < h.radius + this.player.echo.radius) {
                         this.player.echo = null;
@@ -815,6 +900,7 @@ class Game {
                     if (Math.hypot(this.player.x - h.x, this.player.y - h.y) < h.radius + this.player.radius && this.player.invulnTimer <= 0) {
                         this.state = 'GAME_OVER';
                         if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
+                        this.checkMilestones();
                     }
                 }
             }
@@ -848,6 +934,7 @@ class Game {
                         this.save.data.highScore = this.score;
                         this.save.save();
                     }
+                    this.checkMilestones();
                 }
             }
 
@@ -998,7 +1085,12 @@ class Game {
                             this.score += 500;
                             if (this.loot.length === 1) {
                                 this.loot = [new Loot(150, 400), new Loot(500, 150), new Loot(700, 300)];
+                                if (this.wave % 5 === 0) { // Just defeated a boss wave
+                                    this.save.data.bossesDefeated++;
+                                }
                             }
+                            if (this.wave > this.save.data.totalWaves) this.save.data.totalWaves = this.wave;
+                            this.checkMilestones();
                             this.loot.forEach(l => {
                                 l.x = 50 + Math.random() * (window.innerWidth - 100);
                                 l.y = 50 + Math.random() * (window.innerHeight - 100);
@@ -1075,6 +1167,14 @@ class Game {
             this.ctx.fillText('Tap or Space to Start', this.canvas.width/2, this.canvas.height/2);
             this.ctx.fillText(`High Score: ${this.save.data.highScore}`, this.canvas.width/2, this.canvas.height/2 + 50);
 
+            this.ctx.fillStyle = '#334';
+            this.ctx.fillRect(this.canvas.width - 110, 10, 100, 30);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '16px monospace';
+            this.ctx.fillText('⚙ SETTINGS', this.canvas.width - 60, 30);
+
+            if (this.ui) this.ui.drawMilestones(this.ctx);
+
         } else if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
 
             this.ctx.save();
@@ -1082,7 +1182,7 @@ class Game {
             this.ctx.translate(-this.cx + so.x, -this.cy + so.y);
 
             for (let w of this.walls) {
-                this.ctx.fillStyle = '#334';
+                this.ctx.fillStyle = (this.save && this.save.data.highContrast) ? '#888' : '#334';
                 this.ctx.fillRect(w.x, w.y, w.w, w.h);
             }
 
@@ -1165,6 +1265,14 @@ class Game {
             this.ctx.fillText(`Vel: ${speed.toFixed(0)}`, 20, 110);
 
             // Draw state
+            if (this.save && this.save.data.showFPS) {
+                let now = performance.now();
+                let fps = Math.round(1000 / (now - (this.lastFrameTime || now) || 16));
+                this.lastFrameTime = now;
+                this.ctx.fillStyle = '#0f0';
+                this.ctx.fillText(`FPS: ${fps}`, this.canvas.width - 100, 40);
+            }
+
             if (this.player.isDashing) {
                 this.ctx.fillStyle = '#f0f';
                 this.ctx.fillText('>>> DASHING <<<', 20, 140);
@@ -1190,6 +1298,31 @@ class Game {
                 this.ctx.fillText('CAUGHT!', this.canvas.width/2, this.canvas.height/2 - 30);
                 this.ctx.fillText(`Final Score: ${this.score}`, this.canvas.width/2, this.canvas.height/2);
                 this.ctx.fillText('Tap to return to Title', this.canvas.width/2, this.canvas.height/2 + 40);
+                if (this.ui) this.ui.drawMilestones(this.ctx);
+            }
+        }
+        if (this.ui) this.ui.draw(this.ctx);
+
+        // Touch UI Rendering based on settings
+        if (this.state === 'PLAYING') {
+            let tc = this.save.data.touchControls;
+            let showTouch = false;
+            if (tc === 'Always') showTouch = true;
+            else if (tc === 'Auto' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) showTouch = true;
+
+            if (showTouch) {
+                let flip = this.save.data.touchHandedness === 'Left';
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                // Joystick
+                let jx = flip ? window.innerWidth - 100 : 100;
+                this.ctx.beginPath(); this.ctx.arc(jx, window.innerHeight - 100, 50, 0, Math.PI*2); this.ctx.fill();
+
+                // Action
+                let ax = flip ? 100 : window.innerWidth - 100;
+                this.ctx.beginPath(); this.ctx.arc(ax, window.innerHeight - 100, 40, 0, Math.PI*2); this.ctx.fill();
+                this.ctx.fillStyle = '#fff';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText("SPACE", ax, window.innerHeight - 95);
             }
         }
     }
