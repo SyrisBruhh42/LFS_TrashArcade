@@ -1,0 +1,13 @@
+{
+  "id": "060",
+  "slug": "060-magma-recoil-platformer",
+  "title": "Magma Recoil",
+  "genre": "Momentum/Grapple Platformer",
+  "coreMechanic": "Recoil-as-Movement",
+  "setting": "Volcanic Forge World",
+  "description": "Navigate a treacherous volcanic forge by using your weapon's recoil to launch yourself through the air.",
+  "controls": "WASD/Arrows to aim, Space/Click to fire and recoil, Touch to aim and release to fire.",
+  "createdAt": "2024-05-24",
+  "accentColor": "#e09ff1",
+  "phase": "1"
+}
