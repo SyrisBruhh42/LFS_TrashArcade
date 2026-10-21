@@ -109,6 +109,7 @@
       text-shadow: 1px 1px 2px #000;
     }
   </style>
+  <script defer src="./ui.js"></script>
   <script defer src="./vfx.js"></script>
   <script defer src="./world.js"></script>
   <script defer src="./game.js"></script>
@@ -119,6 +120,8 @@
 <body>
   <div id="gameContainer">
     <canvas id="gameCanvas"></canvas>
+
+    <div id="fpsDisplay" style="position: absolute; top: 10px; right: 10px; color: #0f0; font-family: monospace; font-size: 1rem; z-index: 20; pointer-events: none; display: none;">FPS: 60</div>
 
     <div id="hud" class="hidden">
       <div id="scoreDisplay" class="hud-text">SCORE: 0</div>
@@ -142,8 +145,10 @@
         <p>Bounce off the shrinking trenches.</p>
         <p>Use Mouse/Touch to aim and launch.</p>
         <button id="btn-start">Start Game</button>
+        <button id="btn-options">Options</button>
         <br>
         <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+        <div class="milestonesDisplay"></div>
       </div>
     </div>
 
@@ -173,6 +178,56 @@
         <button id="btn-restart">Play Again</button>
         <br>
         <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+        <div class="milestonesDisplay"></div>
+      </div>
+    </div>
+
+    <div id="screen-OPTIONS" class="ui-layer hidden" style="overflow-y: auto;">
+      <div class="ui-box" style="max-height: 90vh; overflow-y: auto;">
+        <h1>Options</h1>
+        <div style="text-align: left; display: inline-block;">
+          <label><input type="checkbox" id="opt-mute"> Master Mute</label><br>
+          <label>SFX Volume: <input type="range" id="opt-sfx" min="0" max="1" step="0.1"></label><br>
+          <label>Music Volume: <input type="range" id="opt-music" min="0" max="1" step="0.1"></label><br>
+          <label>Screen Shake:
+            <select id="opt-shake">
+              <option value="1">100%</option>
+              <option value="0.5">50%</option>
+              <option value="0">Off</option>
+            </select>
+          </label><br>
+          <label>Particles:
+            <select id="opt-particles">
+              <option value="High">High</option>
+              <option value="Low">Low</option>
+            </select>
+          </label><br>
+          <label><input type="checkbox" id="opt-contrast"> High Contrast</label><br>
+          <label><input type="checkbox" id="opt-fps"> Show FPS</label><br>
+          <label>Touch Controls:
+            <select id="opt-touch">
+              <option value="Auto">Auto</option>
+              <option value="Always">Always</option>
+              <option value="Off">Off</option>
+            </select>
+          </label><br>
+          <label>Handedness:
+            <select id="opt-handedness">
+              <option value="Right">Right Handed</option>
+              <option value="Left">Left Handed</option>
+            </select>
+          </label><br><br>
+          <label>Export Save Data:</label><br>
+          <textarea id="txt-export" rows="2" style="width: 100%;"></textarea><br>
+          <button id="btn-export" style="font-size: 0.8rem; padding: 5px;">Export</button><br>
+          <label>Import Save Data:</label><br>
+          <textarea id="txt-import" rows="2" style="width: 100%;"></textarea><br>
+          <button id="btn-import" style="font-size: 0.8rem; padding: 5px;">Import</button><br>
+          <button id="btn-reset" style="font-size: 0.8rem; padding: 5px; color: red; border-color: red;">Reset Save Data</button>
+          <button id="btn-reset-confirm" style="font-size: 0.8rem; padding: 5px; background: red; color: white; display: none;">Confirm Reset!</button>
+        </div>
+        <br>
+        <button id="btn-options-close">Close</button>
       </div>
     </div>
   </div>

@@ -67,14 +67,18 @@ class VFXManager {
     triggerScreenShake(intensity) { this.shake = intensity; }
     triggerHitStop(duration) { this.hitStop = duration; }
     emitExplosion(x, y, color, count) {
-        for (let i=0; i<count; i++) {
+        const pSetting = (window.engine && window.engine.saveManager && window.engine.saveManager.data && window.engine.saveManager.data.options) ? window.engine.saveManager.data.options.particles : 'High';
+        const finalCount = pSetting === 'Low' ? Math.ceil(count / 2) : count;
+        for (let i=0; i<finalCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 50 + Math.random() * 150;
             this.particles.push(new Particle(x, y, Math.cos(angle)*speed, Math.sin(angle)*speed, color, 0.5 + Math.random()*0.5, 2 + Math.random()*3));
         }
     }
     emitHitSparks(x, y, angle, count) {
-        for (let i=0; i<count; i++) {
+        const pSetting = (window.engine && window.engine.saveManager && window.engine.saveManager.data && window.engine.saveManager.data.options) ? window.engine.saveManager.data.options.particles : 'High';
+        const finalCount = pSetting === 'Low' ? Math.ceil(count / 2) : count;
+        for (let i=0; i<finalCount; i++) {
             const spread = angle + (Math.random()-0.5)*Math.PI/2;
             const speed = 100 + Math.random() * 100;
             this.particles.push(new Particle(x, y, Math.cos(spread)*speed, Math.sin(spread)*speed, '#ffeb3b', 0.2 + Math.random()*0.2, 1 + Math.random()*2));

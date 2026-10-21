@@ -757,7 +757,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD to move. Stop moving to slow time. Mouse to aim/shoot.",
     "createdAt": "2023-10-24",
     "accentColor": "#ecf7f4",
-    "phase": "9",
+    "phase": "10",
     "path": "./games/058-chrono-cell-rush/index.html"
   },
   {
@@ -771,7 +771,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move, Space to deploy/recall echo. Touch joysticks to move and action button for echo.",
     "createdAt": "2023-10-24",
     "accentColor": "#ada6b9",
-    "phase": "1",
+    "phase": "2",
     "path": "./games/059-phantom-manor-heist/index.html"
   }
 ];

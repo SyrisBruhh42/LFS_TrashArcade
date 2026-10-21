@@ -2,6 +2,7 @@ class SaveManager {
   constructor() {
     this.saveKey = 'arcade_game_057_057-abyssal-ricochet_v1';
     this.data = this.load() || this.getDefaults();
+    if (!this.data.options) this.data.options = this.getDefaults().options;
   }
 
   getDefaults() {
@@ -10,6 +11,8 @@ class SaveManager {
       bestWaveOrCombo: 0,
       totalGamesPlayed: 0,
       totalScoreAccumulated: 0,
+      totalBounces: 0,
+      totalBosses: 0,
       unlockedMilestones: [],
       options: {
         masterMute: false,
@@ -18,7 +21,9 @@ class SaveManager {
         screenShake: 1.0,
         particles: 'High',
         highContrast: false,
-        touchControls: 'Auto'
+        showFPS: false,
+        touchControls: 'Auto',
+        handedness: 'Right'
       }
     };
   }
@@ -93,6 +98,7 @@ class InputManager {
     });
 
     this.canvas.addEventListener('touchstart', (e) => {
+      if (this.isTouchDisabled()) return;
       e.preventDefault();
       this.usingTouch = true;
       this.updateTouchPos(e.touches[0]);
@@ -103,11 +109,13 @@ class InputManager {
     }, { passive: false });
 
     this.canvas.addEventListener('touchmove', (e) => {
+      if (this.isTouchDisabled()) return;
       e.preventDefault();
       this.updateTouchPos(e.touches[0]);
     }, { passive: false });
 
     window.addEventListener('touchend', () => {
+      if (this.isTouchDisabled()) return;
       this.touch.isDown = false;
     });
   }
@@ -118,6 +126,12 @@ class InputManager {
     const scaleY = this.canvas.height / rect.height;
     this.mouse.x = (e.clientX - rect.left) * scaleX;
     this.mouse.y = (e.clientY - rect.top) * scaleY;
+  }
+
+  isTouchDisabled() {
+    if (!window.engine || !window.engine.saveManager || !window.engine.saveManager.data || !window.engine.saveManager.data.options) return false;
+    const opt = window.engine.saveManager.data.options;
+    return opt && opt.touchControls === 'Off';
   }
 
   updateTouchPos(touchInfo) {
@@ -154,6 +168,30 @@ class InputManager {
       return true;
     }
     return false;
+  }
+
+  isDashTouch() {
+    if (!this.usingTouch) return false;
+    const opt = (window.engine && window.engine.saveManager && window.engine.saveManager.data && window.engine.saveManager.data.options) ? window.engine.saveManager.data.options : null;
+    const handedness = opt ? opt.handedness : 'Right';
+    const halfWidth = this.canvas.width / 2;
+    if (handedness === 'Right') {
+      return this.touch.x < halfWidth; // Left side dashes
+    } else {
+      return this.touch.x > halfWidth; // Right side dashes
+    }
+  }
+
+  isAimTouch() {
+    if (!this.usingTouch) return false;
+    const opt = (window.engine && window.engine.saveManager && window.engine.saveManager.data && window.engine.saveManager.data.options) ? window.engine.saveManager.data.options : null;
+    const handedness = opt ? opt.handedness : 'Right';
+    const halfWidth = this.canvas.width / 2;
+    if (handedness === 'Right') {
+      return this.touch.x >= halfWidth; // Right side aims
+    } else {
+      return this.touch.x <= halfWidth; // Left side aims
+    }
   }
 
   resetFrame() {
@@ -211,11 +249,24 @@ class SoundEngine {
     this.masterGain.connect(this.compressor);
     this.compressor.connect(this.ctx.destination);
 
-    this.masterGain.gain.value = 0.6;
-    this.musicGain.gain.value = 0.3;
-
     this.initialized = true;
+    this.updateVolumes();
+
     this.nextNoteTime = this.ctx.currentTime + 0.1;
+  }
+
+  updateVolumes() {
+    if (!this.initialized) return;
+    if (!window.engine || !window.engine.saveManager || !window.engine.saveManager.data || !window.engine.saveManager.data.options) return;
+    const opt = window.engine.saveManager.data.options;
+
+    if (opt.masterMute) {
+      this.masterGain.gain.value = 0;
+    } else {
+      this.masterGain.gain.value = 0.6;
+      this.sfxGain.gain.value = opt.sfxVolume;
+      this.musicGain.gain.value = opt.musicVolume * 0.3;
+    }
   }
 
   resume() {
@@ -423,6 +474,7 @@ class GameEngine {
     this.score = 0;
     this.wave = 1;
     this.vfxManager = new VFXManager();
+    if (typeof UIManager !== 'undefined') this.uiManager = new UIManager();
 
     this.setupResizeObserver();
     this.bindUI();
@@ -487,7 +539,7 @@ class GameEngine {
 
     if (newState === 'GAME_OVER') {
       document.getElementById('finalScore').innerText = Math.floor(this.score);
-      this.saveManager.updateHighScore(Math.floor(this.score));
+      if (this.saveManager) this.saveManager.updateHighScore(Math.floor(this.score));
     }
 
     this.state = newState;
@@ -520,7 +572,16 @@ class GameEngine {
 
   loop(now) {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
+    const fps = Math.round(1 / dt);
     this.lastTime = now;
+
+    const fpsEl = document.getElementById('fpsDisplay');
+    if (fpsEl && this.saveManager && this.saveManager.data && this.saveManager.data.options && this.saveManager.data.options.showFPS) {
+      fpsEl.style.display = 'block';
+      fpsEl.textContent = `FPS: ${fps}`;
+    } else if (fpsEl) {
+      fpsEl.style.display = 'none';
+    }
 
     this.update(dt);
     this.draw();
@@ -530,6 +591,7 @@ class GameEngine {
   }
 
   update(dt) {
+    if (this.uiManager) this.uiManager.checkMilestones();
     if (this.state !== 'PLAYING') return;
     this.vfxManager.update(dt);
 
@@ -634,8 +696,10 @@ class GameEngine {
 
 // Instantiate engine when DOM is ready
 window.addEventListener('DOMContentLoaded', () => {
+  if (typeof window.engine === 'undefined') {
   window.engine = new GameEngine();
   window.engine.startLoop();
+}
 });
 
 
@@ -668,12 +732,13 @@ class Arena {
   }
 
   draw(ctx) {
-    ctx.strokeStyle = '#70e2f9'; // accent color
+    const isHC = window.engine && window.engine.saveManager && window.engine.saveManager.data && window.engine.saveManager.data.options && window.engine.saveManager.data.options.highContrast;
+    ctx.strokeStyle = isHC ? '#ffffff' : '#70e2f9'; // accent color
     ctx.lineWidth = 4;
     ctx.strokeRect(this.x, this.y, this.width, this.height);
 
     // Draw some shifting inner geometry lines to emphasize the theme
-    ctx.strokeStyle = 'rgba(112, 226, 249, 0.3)';
+    ctx.strokeStyle = isHC ? 'rgba(255, 255, 255, 1)' : 'rgba(112, 226, 249, 0.3)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(this.x, this.y);
@@ -727,7 +792,7 @@ class Player {
     if (this.trail.length > 10) this.trail.shift();
 
     // Dash input check
-    const touchDoubleTap = input.usingTouch && input.wasTouchPressed();
+    const touchDoubleTap = input.usingTouch && input.wasTouchPressed() && input.isDashTouch();
     if ((input.wasKeyPressed('ShiftLeft') || touchDoubleTap) && this.dashCooldown <= 0) {
       this.isDashing = true;
       this.dashTimer = 0.3;
@@ -811,6 +876,9 @@ class Player {
     if (bounced) {
       if (!this.bouncesThisLaunch) this.bouncesThisLaunch = 0;
       this.bouncesThisLaunch++;
+      if (window.engine && window.engine.saveManager && window.engine.saveManager.data) {
+        window.engine.saveManager.data.totalBounces++;
+      }
       audio.playBounce();
     }
 
@@ -837,13 +905,15 @@ class Player {
       this.aimAngle += 3 * 0.016;
     }
 
-    if (input.usingTouch || input.mouse.isDown) {
+    if ((input.usingTouch && input.isAimTouch()) || input.mouse.isDown) {
         const targetX = input.usingTouch ? input.touch.x : input.mouse.x;
         const targetY = input.usingTouch ? input.touch.y : input.mouse.y;
-        this.aimAngle = Math.atan2(targetY - this.y, targetX - this.x);
+        if (!input.usingTouch || (Math.abs(targetX - input.touch.startX) > 10 || Math.abs(targetY - input.touch.startY) > 10)) {
+           this.aimAngle = Math.atan2(targetY - this.y, targetX - this.x);
+        }
     }
 
-    const touchReleased = input.usingTouch && !input.touch.isDown && input.touch.wasPressed;
+    const touchReleased = input.usingTouch && !input.touch.isDown && input.touch.wasPressed && input.isAimTouch();
     const mouseReleased = !input.usingTouch && !input.mouse.isDown && input.mouse.wasPressed;
 
     if (input.wasKeyPressed('Space') || touchReleased || mouseReleased) {
@@ -858,13 +928,16 @@ class Player {
   draw(ctx) {
     if (this.invulnerableTimer > 0 && Math.floor(this.invulnerableTimer * 20) % 2 === 0) return;
 
+    const isHC = window.engine && window.engine.saveManager && window.engine.saveManager.data && window.engine.saveManager.data.options && window.engine.saveManager.data.options.highContrast;
     // Draw fading trails
-    for (let i = 0; i < this.trail.length; i++) {
-      const alpha = (i + 1) / this.trail.length * 0.4;
-      ctx.fillStyle = `rgba(112, 226, 249, ${alpha})`;
-      ctx.beginPath();
-      ctx.arc(this.trail[i].x, this.trail[i].y, this.radius * 0.8, 0, Math.PI * 2);
-      ctx.fill();
+    if (!isHC) {
+        for (let i = 0; i < this.trail.length; i++) {
+          const alpha = (i + 1) / this.trail.length * 0.4;
+          ctx.fillStyle = `rgba(112, 226, 249, ${alpha})`;
+          ctx.beginPath();
+          ctx.arc(this.trail[i].x, this.trail[i].y, this.radius * 0.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
     }
 
     ctx.save();
@@ -875,8 +948,8 @@ class Player {
 
     // Outer pulsing ring
     const pulseRadius = this.radius * (1 + 0.2 * Math.sin(this.thrustAnim));
-    ctx.strokeStyle = this.isDashing ? '#ffeb3b' : 'rgba(112, 226, 249, 0.5)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = this.isDashing ? '#ffeb3b' : (isHC ? '#ffffff' : 'rgba(112, 226, 249, 0.5)');
+    ctx.lineWidth = isHC ? 4 : 2;
     ctx.beginPath();
     ctx.arc(0, 0, pulseRadius, 0, Math.PI * 2);
     ctx.stroke();
@@ -951,7 +1024,8 @@ class Enemy {
   }
 
   draw(ctx) {
-    ctx.fillStyle = '#ff4444'; // Red enemy
+    const isHC = window.engine && window.engine.saveManager && window.engine.saveManager.data && window.engine.saveManager.data.options && window.engine.saveManager.data.options.highContrast;
+    ctx.fillStyle = isHC ? '#000000' : '#ff4444'; // Red enemy
     ctx.beginPath();
     // Draw a diamond shape for the abyssal entity
     ctx.moveTo(this.x, this.y - this.radius);
@@ -960,8 +1034,8 @@ class Enemy {
     ctx.lineTo(this.x - this.radius, this.y);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = isHC ? '#ff0000' : '#fff';
+    ctx.lineWidth = isHC ? 3 : 1;
     ctx.stroke();
   }
 }

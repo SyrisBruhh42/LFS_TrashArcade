@@ -42,6 +42,9 @@ class BossManager {
               engine.vfxManager.triggerScreenShake(20);
               engine.vfxManager.triggerHitStop(0.5);
           }
+          if (engine.saveManager && engine.saveManager.data) {
+              engine.saveManager.data.totalBosses++;
+          }
           this.activeBoss = null;
           document.getElementById('bossUI').classList.add('hidden');
           engine.score += 5000;
