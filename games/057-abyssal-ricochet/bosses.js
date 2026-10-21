@@ -66,11 +66,13 @@ class Boss extends Enemy {
   }
   takeHit() {
     this.hp -= 100;
+    if (window.engine && window.engine.audio) window.engine.audio.playBossHit();
     if (this.hp <= this.maxHp / 2 && this.phase === 1) {
         this.phase = 2;
         this.onPhaseChange();
     }
     if (this.hp <= 0) {
+        if (window.engine && window.engine.audio) window.engine.audio.playBossDeath();
         this.active = false;
         return true;
     }
