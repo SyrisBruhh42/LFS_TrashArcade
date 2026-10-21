@@ -11,6 +11,7 @@ class InputManager {
             left: ['ArrowLeft', 'KeyA'],
             right: ['ArrowRight', 'KeyD'],
             action: ['Space', 'Enter'],
+            dash: ['ShiftLeft', 'ShiftRight', 'KeyQ'],
             pause: ['Escape', 'KeyP']
         };
 
@@ -259,14 +260,50 @@ class Player {
         this.polarity = POLARITY.POSITIVE;
         this.size = 15;
         this.angularVelocity = 2.0; // rad/s
+        this.dashCooldown = 0;
+        this.dashTimer = 0;
+        this.isDashing = false;
+        this.dashDuration = 0;
+        this.invulnTimer = 0;
+        this.thrustLevel = 0;
+        this.recoilOffset = {x: 0, y: 0};
     }
 
     update(dt, input) {
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+        if (this.dashDuration > 0) {
+            this.dashDuration -= dt;
+            if (this.dashDuration <= 0) this.isDashing = false;
+        }
+        if (this.invulnTimer > 0) this.invulnTimer -= dt;
+
+        this.recoilOffset.x *= 0.9;
+        this.recoilOffset.y *= 0.9;
+
+        let moving = false;
+        const currentAngVel = this.isDashing ? this.angularVelocity * 3 : this.angularVelocity;
+
         if (input.isDown('left')) {
-            this.angle -= this.angularVelocity * dt;
+            this.angle -= currentAngVel * dt;
+            moving = true;
         }
         if (input.isDown('right')) {
-            this.angle += this.angularVelocity * dt;
+            this.angle += currentAngVel * dt;
+            moving = true;
+        }
+
+        if (moving) {
+            this.thrustLevel = Math.min(1.0, this.thrustLevel + dt * 5);
+        } else {
+            this.thrustLevel = Math.max(0, this.thrustLevel - dt * 5);
+        }
+
+        if (input.isJustPressed('dash') && this.dashCooldown <= 0) {
+            this.isDashing = true;
+            this.dashDuration = 0.2;
+            this.dashCooldown = 2.0;
+            this.invulnTimer = 0.3;
+            // The analytics dash call is handled in Engine
         }
 
         if (input.isJustPressed('action') || (input.mouse.down && input.isJustPressed('mouse_left')) || (input.touch.down && input.isJustPressed('touch_tap'))) {
@@ -276,13 +313,41 @@ class Player {
     }
 
     draw(ctx, cx, cy) {
-        const x = cx + Math.cos(this.angle) * this.orbitRadius;
-        const y = cy + Math.sin(this.angle) * this.orbitRadius;
+        if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 20) % 2 === 0) return;
+
+        const rx = cx + Math.cos(this.angle) * this.orbitRadius + this.recoilOffset.x;
+        const ry = cy + Math.sin(this.angle) * this.orbitRadius + this.recoilOffset.y;
+
+        // Draw aim telegraph
+        ctx.beginPath();
+        const moveDir = Math.PI/2; // It moves tangentially
+        // Just draw a line from center to outside as telegraph? Actually it moves around circle.
+        // Telegraph: point forward along the orbit tangent
+        const tangentX = rx + Math.cos(this.angle + Math.PI/2) * 30;
+        const tangentY = ry + Math.sin(this.angle + Math.PI/2) * 30;
+        ctx.moveTo(rx, ry);
+        ctx.lineTo(tangentX, tangentY);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw thrust flame
+        if (this.thrustLevel > 0) {
+            const flameLen = this.size * 1.5 * this.thrustLevel + (Math.random() * 5);
+            // Flame points downwards relative to the player orientation which is usually pointing "up" (angle - PI/2)
+            // But let's just draw it downwards on screen relative to (rx, ry)
+            const flamePts = [
+                {x: rx - this.size * 0.8, y: ry + this.size},
+                {x: rx + this.size * 0.8, y: ry + this.size},
+                {x: rx, y: ry + this.size + flameLen}
+            ];
+            drawPaperPoly(ctx, flamePts, '#ffaa00', '#cc5500');
+        }
 
         const pts = [
-            {x: x, y: y - this.size},
-            {x: x + this.size, y: y + this.size},
-            {x: x - this.size, y: y + this.size}
+            {x: rx, y: ry - this.size},
+            {x: rx + this.size, y: ry + this.size},
+            {x: rx - this.size, y: ry + this.size}
         ];
 
         const color = this.polarity === POLARITY.POSITIVE ? COLORS.POSITIVE : COLORS.NEGATIVE;
@@ -293,7 +358,7 @@ class Player {
         ctx.font = '16px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(this.polarity === POLARITY.POSITIVE ? '+' : '-', x, y + 5);
+        ctx.fillText(this.polarity === POLARITY.POSITIVE ? '+' : '-', rx, ry + 5);
     }
 
     getPos(cx, cy) {
@@ -315,6 +380,8 @@ class Enemy {
 
         this.vx = 0;
         this.vy = 0;
+        this.knockbackX = 0;
+        this.knockbackY = 0;
         this.polarity = Math.random() < 0.5 ? POLARITY.POSITIVE : POLARITY.NEGATIVE;
         this.size = 12;
         this.markedForDeletion = false;
@@ -357,8 +424,10 @@ class Enemy {
         this.vx *= 0.99;
         this.vy *= 0.99;
 
-        this.x += this.vx * dt;
-        this.y += this.vy * dt;
+        this.x += this.vx * dt + this.knockbackX * dt;
+        this.y += this.vy * dt + this.knockbackY * dt;
+        this.knockbackX *= 0.9;
+        this.knockbackY *= 0.9;
     }
 
     draw(ctx) {
@@ -369,6 +438,77 @@ class Enemy {
 
         const color = this.polarity === POLARITY.POSITIVE ? COLORS.POSITIVE : COLORS.NEGATIVE;
         drawPaperPoly(ctx, pts, color);
+    }
+}
+
+
+// Helpful Analytics Tracking for Dash Usage
+class AnalyticsTracker {
+    constructor() {
+        this.events = [];
+        this.sessionStart = performance.now();
+        this.totalDashes = 0;
+        this.totalAbsorbs = 0;
+        this.totalRepels = 0;
+        this.distanceTraveled = 0;
+        this.lastX = 0;
+        this.lastY = 0;
+    }
+
+    logEvent(eventName, data = {}) {
+        this.events.push({
+            time: performance.now() - this.sessionStart,
+            event: eventName,
+            data: data
+        });
+
+        if (this.events.length > 100) {
+            this.events.shift();
+        }
+    }
+
+    recordDash(playerPos) {
+        this.totalDashes++;
+        this.logEvent('dash_used', { x: playerPos.x, y: playerPos.y });
+    }
+
+    recordAbsorb() {
+        this.totalAbsorbs++;
+        this.logEvent('enemy_absorbed', { total: this.totalAbsorbs });
+    }
+
+    recordRepel() {
+        this.totalRepels++;
+        this.logEvent('enemy_repelled', { total: this.totalRepels });
+    }
+
+    updateDistance(x, y) {
+        if (this.lastX !== 0 && this.lastY !== 0) {
+            const dx = x - this.lastX;
+            const dy = y - this.lastY;
+            this.distanceTraveled += Math.sqrt(dx*dx + dy*dy);
+        }
+        this.lastX = x;
+        this.lastY = y;
+    }
+
+    getStats() {
+        return {
+            dashes: this.totalDashes,
+            absorbs: this.totalAbsorbs,
+            repels: this.totalRepels,
+            distance: Math.round(this.distanceTraveled)
+        };
+    }
+
+    printReport() {
+        console.log("--- Analytics Report ---");
+        console.log(`Session Time: ${Math.round((performance.now() - this.sessionStart)/1000)}s`);
+        console.log(`Dashes Used: ${this.totalDashes}`);
+        console.log(`Enemies Absorbed: ${this.totalAbsorbs}`);
+        console.log(`Enemies Repelled: ${this.totalRepels}`);
+        console.log(`Distance Traveled: ${Math.round(this.distanceTraveled)}`);
+        console.log("------------------------");
     }
 }
 
@@ -387,6 +527,7 @@ class GameEngine {
         this.player = new Player();
         this.enemies = [];
         this.particles = [];
+        this.analytics = new AnalyticsTracker();
 
         this.spawnTimer = 0;
         this.spawnRate = 2.0; // seconds
@@ -411,6 +552,7 @@ class GameEngine {
         this.player = new Player();
         this.enemies = [];
         this.particles = [];
+        this.analytics = new AnalyticsTracker();
         this.score = 0;
         this.spawnTimer = 0;
         this.spawnRate = 2.0;
@@ -489,6 +631,10 @@ class GameEngine {
                 this.sound.playSwitch();
             }
 
+            if (this.input.isJustPressed('dash') && this.player.dashCooldown <= 0) {
+                this.analytics.recordDash(this.player.getPos(cx, cy));
+            }
+
             // Mouse/Touch orbit controls (override left/right if clicking/dragging left/right sides)
             if (this.input.mouse.down || this.input.touch.down) {
                 const px = this.input.touch.down ? this.input.touch.x : this.input.mouse.x;
@@ -501,6 +647,7 @@ class GameEngine {
 
             this.player.update(dt, this.input);
             const playerPos = this.player.getPos(cx, cy);
+            this.analytics.updateDistance(playerPos.x, playerPos.y);
 
             // Spawner
             this.spawnTimer -= dt;
@@ -519,32 +666,52 @@ class GameEngine {
                 const dxSun = cx - e.x;
                 const dySun = cy - e.y;
                 if (Math.sqrt(dxSun*dxSun + dySun*dySun) < sunRadius + e.size) {
-                    this.sound.playHitSun();
-                    this.createParticles(e.x, e.y, e.polarity === POLARITY.POSITIVE ? COLORS.POSITIVE : COLORS.NEGATIVE, 20);
-                    this.state = 'GAME_OVER';
-                    if (this.score > this.highScore) {
-                        this.highScore = this.score;
-                        this.saveManager.data.highScore = this.highScore;
-                        this.saveManager.save();
+                    if (this.player.invulnTimer > 0) {
+                        // Skip game over if invulnerable
+                    } else {
+                        this.sound.playHitSun();
+                        this.createParticles(e.x, e.y, e.polarity === POLARITY.POSITIVE ? COLORS.POSITIVE : COLORS.NEGATIVE, 20);
+                        this.state = 'GAME_OVER';
+                        if (this.score > this.highScore) {
+                            this.highScore = this.score;
+                            this.saveManager.data.highScore = this.highScore;
+                            this.saveManager.save();
+                        }
+                        break;
                     }
-                    break;
                 }
 
                 // Collision with Player
                 const dxP = playerPos.x - e.x;
                 const dyP = playerPos.y - e.y;
                 if (Math.sqrt(dxP*dxP + dyP*dyP) < this.player.size + e.size) {
-                    if (e.polarity !== this.player.polarity) {
+                    if (this.player.isDashing) {
+                        e.markedForDeletion = true;
+                        this.score += 20;
+                        this.createParticles(e.x, e.y, '#ffffff', 15);
+                        this.sound.playAbsorb(); // Or a custom hit sound
+                        // Apply recoil to player
+                        const angleP = Math.atan2(dyP, dxP);
+                        this.player.recoilOffset.x += Math.cos(angleP) * 10;
+                        this.player.recoilOffset.y += Math.sin(angleP) * 10;
+                    } else if (e.polarity !== this.player.polarity) {
                         // Absorb
                         this.score += 10;
                         this.sound.playAbsorb();
                         this.createParticles(e.x, e.y, COLORS.SUN, 10);
                         e.markedForDeletion = true;
+                        this.analytics.recordAbsorb();
                     } else {
                         // If same polarity, shouldn't really touch due to repulsion, but if it does (high speed), repel harder
                         e.vx *= -2;
                         e.vy *= -2;
+                        e.knockbackX = e.vx * -3;
+                        e.knockbackY = e.vy * -3;
                         this.sound.playRepel();
+                        // Add small recoil
+                        const angleP = Math.atan2(dyP, dxP);
+                        this.player.recoilOffset.x += Math.cos(angleP) * 5;
+                        this.player.recoilOffset.y += Math.sin(angleP) * 5;
                     }
                 }
 
@@ -553,6 +720,7 @@ class GameEngine {
                     if (e.polarity === this.player.polarity) {
                         // Reward for repelling same polarity off screen
                         this.score += 5;
+                        this.analytics.recordRepel();
                     }
                     e.markedForDeletion = true;
                 }
@@ -623,6 +791,16 @@ class GameEngine {
         ctx.fillText(`Score: ${this.score}`, 20, 20);
         ctx.textAlign = 'right';
         ctx.fillText(`High: ${this.highScore}`, cw - 20, 20);
+
+        // Dash HUD
+        ctx.textAlign = 'center';
+        if (this.player.dashCooldown <= 0) {
+            ctx.fillStyle = '#00ff00';
+            ctx.fillText('DASH: READY', cx, ch - 40);
+        } else {
+            ctx.fillStyle = '#ff0000';
+            ctx.fillText(`DASH CD: ${this.player.dashCooldown.toFixed(1)}`, cx, ch - 40);
+        }
 
 
         if (this.state === 'PAUSED') {
