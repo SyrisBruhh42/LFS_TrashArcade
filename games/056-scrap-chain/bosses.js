@@ -15,11 +15,14 @@ class BossManager {
     doSpawn() {
         let x = this.game.canvas.width / 2;
         let y = -50;
+        let hpMultiplier = 1.0 + (this.bossesSpawned * 0.5);
         if (this.bossesSpawned % 2 === 0) {
             this.activeBoss = new AmalgamBoss(x, y);
         } else {
             this.activeBoss = new TetherBreakerBoss(x, y);
         }
+        this.activeBoss.maxHp *= hpMultiplier;
+        this.activeBoss.hp = this.activeBoss.maxHp;
         this.game.enemies.push(this.activeBoss);
         this.bossesSpawned++;
     }
@@ -35,6 +38,7 @@ class BossManager {
         if (this.activeBoss) {
             if (this.activeBoss.markedForDeath) {
                 this.activeBoss = null;
+                if (this.game.analyticsTracker) this.game.analyticsTracker.recordBossDefeat();
                 this.game.updateScore(1000); // Boss kill bonus
                 let sd = this.game.saveManager.data;
                 if(!sd.unlockedMilestones) sd.unlockedMilestones = [];

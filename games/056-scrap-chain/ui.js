@@ -263,3 +263,41 @@ class UIManager {
         }
     }
 }
+
+class TutorialOverlay {
+    constructor(game) {
+        this.game = game;
+        this.active = true;
+        this.opacity = 1.0;
+    }
+
+    update(dt) {
+        if (!this.active) return;
+        if (this.game.waveDirector && this.game.waveDirector.currentWave > 1) {
+            this.active = false;
+        }
+        if (this.game.score > 2000) {
+            this.opacity = Math.max(0, this.opacity - dt);
+            if (this.opacity <= 0) this.active = false;
+        }
+    }
+
+    draw(ctx) {
+        if (!this.active || this.opacity <= 0) return;
+
+        ctx.save();
+        ctx.globalAlpha = this.opacity;
+        ctx.fillStyle = '#6c9b81';
+        ctx.font = '20px monospace';
+        ctx.textAlign = 'center';
+
+        if (this.game.tetherManager && this.game.tetherManager.nodes.length === 0) {
+            ctx.fillText("Touch scrap to tether it to you!", this.game.canvas.width / 2, this.game.canvas.height / 2 - 100);
+        } else if (this.game.tetherManager && this.game.tetherManager.nodes.length > 0) {
+            ctx.fillText("Press SPACE or Touch Detonate to blast!", this.game.canvas.width / 2, this.game.canvas.height / 2 - 100);
+            ctx.fillText("Longer chain = Bigger blast!", this.game.canvas.width / 2, this.game.canvas.height / 2 - 70);
+        }
+
+        ctx.restore();
+    }
+}

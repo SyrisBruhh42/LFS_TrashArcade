@@ -590,6 +590,8 @@ GameEngine.prototype.initGame = function() {
     this.comboDecayTimer = this.maxComboDecayTimer;
     this.scoreBonusMultiplier = 1.0;
     this.explosionRadiusMod = 1.0;
+    this.analyticsTracker = new AnalyticsTracker(this);
+    this.tutorialOverlay = new TutorialOverlay(this);
 };
 
 GameEngine.prototype.spawnEnemy = function() {
@@ -600,7 +602,7 @@ GameEngine.prototype.spawnEnemy = function() {
     else if (side === 2) { x = Math.random() * this.canvas.width; y = this.canvas.height + 20; }
     else { x = -20; y = Math.random() * this.canvas.height; }
 
-    let type = Math.floor(Math.random() * 5);
+    let type = this.waveDirector ? this.waveDirector.getSpawnType() : Math.floor(Math.random() * 5);
     if (type === 0) this.enemies.push(new SwarmerEnemy(x, y));
     else if (type === 1) this.enemies.push(new BruiserEnemy(x, y));
     else if (type === 2) this.enemies.push(new SniperEnemy(x, y));
@@ -629,6 +631,7 @@ GameEngine.prototype.createExplosion = function(x, y, radius, color) {
 GameEngine.prototype.detonateTether = function() {
     if (this.tetherManager.nodes.length === 0) return;
 
+    if (this.analyticsTracker) this.analyticsTracker.recordDetonation(this.tetherManager.nodes.length);
     this.soundEngine.playPlayerHitSFX();
 
     let explosionRadius = 60;
@@ -686,6 +689,7 @@ GameEngine.prototype.detonateTether = function() {
                         }
                     } else {
                         other.markedForDeath = true;
+                        if (this.analyticsTracker) this.analyticsTracker.recordKill();
                         this.updateScore(50 * this.comboMultiplier);
                         if(this.pickupManager) this.pickupManager.dropPickup(other.x, other.y);
                         if(this.waveDirector) this.waveDirector.onEnemyKilled();
@@ -721,6 +725,7 @@ GameEngine.prototype.update = function(dt) {
 
     if (this.waveDirector) this.waveDirector.update(dt);
     if (this.pickupManager) this.pickupManager.update(dt);
+    if (this.tutorialOverlay) this.tutorialOverlay.update(dt);
 
     // Combo Decay Logic
     if (this.comboMultiplier > 1) {
@@ -831,6 +836,7 @@ GameEngine.prototype.update = function(dt) {
                     } else {
                         // Destroy enemy if player dashes into them
                         e.markedForDeath = true;
+                        if (this.analyticsTracker) this.analyticsTracker.recordKill();
                         if(this.vfxManager) {
                             this.vfxManager.addFloatingText(e.x, e.y, 'DASH!', '#fff', 15);
                             this.vfxManager.triggerHitStop(0.05);
@@ -940,6 +946,9 @@ GameEngine.prototype.draw = function() {
     if (this.bossManager) {
         this.bossManager.draw(this.ctx);
     }
+
+    if(this.tutorialOverlay) this.tutorialOverlay.draw(this.ctx);
+    if(this.analyticsTracker) this.analyticsTracker.draw(this.ctx);
 
     this.ctx.restore();
     if(this.vfxManager) this.vfxManager.drawFloatingTexts(this.ctx);
