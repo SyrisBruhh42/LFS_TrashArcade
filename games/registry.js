@@ -715,7 +715,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD / Arrows to change orbit. Space / Tap to switch polarity.",
     "createdAt": "2026-10-21",
     "accentColor": "#dd867f",
-    "phase": "6",
+    "phase": "7",
     "path": "./games/055-polarity-diorama/index.html"
   },
   {
