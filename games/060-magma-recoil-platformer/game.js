@@ -393,6 +393,7 @@ class Game {
     this.player = null;
     this.bullets = [];
     this.enemies = [];
+    this.enemyBullets = [];
     this.particles = [];
     this.platforms = [];
     this.cameraY = 0;
@@ -428,6 +429,7 @@ class Game {
     this.player = new Player(width/2, height/2);
     this.bullets = [];
     this.enemies = [];
+    this.enemyBullets = [];
     this.particles = [];
     this.platforms = [];
     this.cameraY = 0;
@@ -447,7 +449,11 @@ class Game {
         this.platforms.push(p);
 
         if (Math.random() > 0.7) this.hazardManager.addGeyser(p.x + p.w/2, p.y);
-        else if (Math.random() > 0.5) this.enemies.push(new Enemy(Math.random()*width, height - 300 - i*150));
+        else if (Math.random() > 0.5) {
+            let types = [SwarmerEnemy, SniperEnemy, BruiserEnemy, SplitterEnemy, HazardEnemy];
+            let EnemyClass = types[Math.floor(Math.random() * types.length)];
+            this.enemies.push(new EnemyClass(Math.random()*width, height - 300 - i*150));
+        }
     }
   }
   handlePointerDown(e) {
@@ -525,7 +531,11 @@ class Game {
        this.platforms.push(p);
 
        if (Math.random() > 0.8) this.hazardManager.addGeyser(p.x + p.w/2, p.y);
-       else if (Math.random() > 0.4) this.enemies.push(new Enemy(Math.random()*width, lastY - 200));
+       else if (Math.random() > 0.4) {
+           let types = [SwarmerEnemy, SniperEnemy, BruiserEnemy, SplitterEnemy, HazardEnemy];
+           let EnemyClass = types[Math.floor(Math.random() * types.length)];
+           this.enemies.push(new EnemyClass(Math.random()*width, lastY - 200));
+       }
     }
 
     this.platforms = this.platforms.filter(p => p.y < this.cameraY + height + 200);
@@ -533,7 +543,10 @@ class Game {
     for (let b of this.bullets) b.update(dt);
     this.bullets = this.bullets.filter(b => b.life > 0);
 
-    for (let e of this.enemies) e.update(dt, this.platforms);
+    for (let b of this.enemyBullets) b.update(dt);
+    this.enemyBullets = this.enemyBullets.filter(b => b.life > 0);
+
+    for (let e of this.enemies) e.update(dt, this.platforms, this);
 
     for (let p of this.particles) p.update(dt);
     this.particles = this.particles.filter(p => p.life > 0);
@@ -554,11 +567,22 @@ class Game {
             if (!e.alive) continue;
             let dx = b.x - e.x; let dy = b.y - e.y;
             if (Math.sqrt(dx*dx + dy*dy) < b.radius + e.radius) {
-                e.alive = false;
-                b.life = 0;
-                this.score += 100;
-                this.audio.playExplosion();
-                for(let i=0; i<10; i++) this.particles.push(new Particle(e.x, e.y, '#f00'));
+                if (e.shield > 0) {
+                    e.shield--;
+                    b.life = 0;
+                    this.audio.playExplosion();
+                    for(let i=0; i<5; i++) this.particles.push(new Particle(e.x, e.y, '#fff'));
+                } else {
+                    e.alive = false;
+                    b.life = 0;
+                    this.score += 100;
+                    this.audio.playExplosion();
+                    for(let i=0; i<10; i++) this.particles.push(new Particle(e.x, e.y, '#f00'));
+                    if (e instanceof SplitterEnemy) {
+                        this.enemies.push(new SwarmerEnemy(e.x - 10, e.y));
+                        this.enemies.push(new SwarmerEnemy(e.x + 10, e.y));
+                    }
+                }
             }
         }
     }
@@ -588,6 +612,15 @@ class Game {
             }
         }
     }
+
+    for (let b of this.enemyBullets) {
+        let dx = this.player.x - b.x; let dy = this.player.y - b.y;
+        if (Math.sqrt(dx*dx + dy*dy) < this.player.radius + b.radius && this.player.invulnTime <= 0) {
+            this.state = 'GAME_OVER';
+            if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
+            this.save.data.totalGamesPlayed++; this.save.save();
+        }
+    }
   }
   draw(ctx) {
     if (this.bg) this.bg.draw(ctx, width, height, this.cameraY);
@@ -605,6 +638,7 @@ class Game {
     for (let p of this.particles) p.draw(ctx);
     if (this.trailManager) this.trailManager.draw(ctx);
     for (let b of this.bullets) b.draw(ctx);
+    for (let b of this.enemyBullets) b.draw(ctx);
     if (this.player) this.player.draw(ctx);
 
     ctx.restore();
