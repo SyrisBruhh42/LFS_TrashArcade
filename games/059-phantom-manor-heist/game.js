@@ -471,7 +471,11 @@ class Game {
     reset() {
         this.score = 0;
         this.player = new Player(100, 100);
-        this.walls = [
+        this.world = new World();
+        this.ambientDust = new AmbientDust();
+        this.cx = 0;
+        this.cy = 0;
+        this.baseWalls = [
             {x: 200, y: 100, w: 20, h: 300},
             {x: 400, y: 200, w: 300, h: 20},
             {x: 0, y: 0, w: window.innerWidth, h: 20},
@@ -479,6 +483,7 @@ class Game {
             {x: 0, y: 0, w: 20, h: window.innerHeight},
             {x: window.innerWidth-20, y: 0, w: 20, h: window.innerHeight}
         ];
+        this.walls = [...this.baseWalls];
         this.guards = [
             new Guard(300, 100, [{x:300, y:100}, {x:300, y:400}]),
             new Guard(600, 400, [{x:600, y:400}, {x:600, y:100}])
@@ -517,8 +522,15 @@ class Game {
                 this.state = 'PAUSED';
             }
 
+            this.walls = [...this.baseWalls, ...this.world.movingWalls];
+            this.world.update(dt, this.player, this.guards, this.walls);
+            this.ambientDust.update(dt);
+
             this.player.update(dt, this.input, this.walls);
             if (this.player.echo) this.player.echo.update(dt, this.input, this.walls);
+
+            this.cx += (this.player.x - window.innerWidth/2 - this.cx) * 5 * dt;
+            this.cy += (this.player.y - window.innerHeight/2 - this.cy) * 5 * dt;
 
             let guardSpotted = false;
             for (let g of this.guards) {
@@ -578,8 +590,12 @@ class Game {
         }
     }
     draw() {
-        this.ctx.fillStyle = '#1a1a24';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        if (this.state === 'TITLE' || !this.world) {
+            this.ctx.fillStyle = '#1a1a24';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        } else {
+            this.world.drawBackground(this.ctx, this.cx, this.cy);
+        }
 
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = '#ada6b9';
@@ -592,6 +608,9 @@ class Game {
 
         } else if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
 
+            this.ctx.save();
+            this.ctx.translate(-this.cx, -this.cy);
+
             for (let w of this.walls) {
                 this.ctx.fillStyle = '#334';
                 this.ctx.fillRect(w.x, w.y, w.w, w.h);
@@ -602,6 +621,10 @@ class Game {
 
             if (this.player.echo) this.player.echo.draw(this.ctx);
             this.player.draw(this.ctx);
+
+            this.ambientDust.draw(this.ctx);
+
+            this.ctx.restore();
 
             this.ctx.fillStyle = '#fff';
             this.ctx.font = '20px monospace';
