@@ -512,6 +512,239 @@ class AnalyticsTracker {
     }
 }
 
+
+class BackgroundLayer {
+    constructor(speed, shapes, color) {
+        this.speed = speed;
+        this.shapes = shapes;
+        this.color = color;
+        this.yOffset = 0;
+    }
+    update(dt, ch, cw) {
+        this.yOffset += this.speed * dt;
+        this.shapes.forEach(s => {
+            s.angle += s.rotSpeed * dt;
+            if (s.y + this.yOffset > ch + 100) {
+                s.y = -this.yOffset - 100;
+                s.x = Math.random() * cw;
+            }
+        });
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(0, this.yOffset);
+        this.shapes.forEach(s => {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(s.angle);
+            ctx.fillStyle = this.color;
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+
+            ctx.beginPath();
+            if (s.type === 'square') {
+                ctx.rect(-s.size/2, -s.size/2, s.size, s.size);
+            } else if (s.type === 'triangle') {
+                ctx.moveTo(0, -s.size/2);
+                ctx.lineTo(s.size/2, s.size/2);
+                ctx.lineTo(-s.size/2, s.size/2);
+                ctx.closePath();
+            } else if (s.type === 'cloud') {
+                ctx.arc(-s.size*0.3, 0, s.size*0.4, 0, Math.PI*2);
+                ctx.arc(s.size*0.3, 0, s.size*0.4, 0, Math.PI*2);
+                ctx.arc(0, -s.size*0.2, s.size*0.5, 0, Math.PI*2);
+            } else {
+                ctx.arc(0, 0, s.size/2, 0, Math.PI*2);
+            }
+
+            ctx.fill();
+            if (s.type !== 'cloud') ctx.stroke();
+
+            if (s.type === 'square' || s.type === 'triangle') {
+                 ctx.beginPath();
+                 ctx.moveTo(0,0);
+                 ctx.lineTo(s.size/2, s.size/2);
+                 ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                 ctx.stroke();
+            }
+            ctx.restore();
+        });
+        ctx.restore();
+    }
+}
+
+class DioramaWorld {
+    constructor() {
+        this.layers = [];
+        this.initLayers();
+        this.hazards = [];
+        this.hazardSpawnTimer = 0;
+    }
+
+    initLayers() {
+        const l1 = [];
+        for(let i=0; i<20; i++) l1.push(this.createShape(20));
+        this.layers.push(new BackgroundLayer(20, l1, '#3a3a3a'));
+
+        const l2 = [];
+        for(let i=0; i<10; i++) {
+             const s = this.createShape(40);
+             s.type = 'cloud';
+             l2.push(s);
+        }
+        this.layers.push(new BackgroundLayer(50, l2, '#444'));
+
+        const l3 = [];
+        for(let i=0; i<15; i++) l3.push(this.createShape(30));
+        this.layers.push(new BackgroundLayer(100, l3, '#555'));
+    }
+
+    createShape(maxSize) {
+        const types = ['square', 'triangle', 'circle'];
+        return {
+            x: Math.random() * (window.innerWidth || 800),
+            y: Math.random() * (window.innerHeight || 600),
+            size: 10 + Math.random() * maxSize,
+            angle: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 2,
+            type: types[Math.floor(Math.random() * types.length)]
+        };
+    }
+
+    update(dt, player, enemies, particles, ch, cw) {
+        this.layers.forEach(l => l.update(dt, ch, cw));
+
+        this.hazards.forEach(h => h.update(dt));
+
+        this.hazardSpawnTimer -= dt;
+        if (this.hazardSpawnTimer <= 0) {
+            this.hazardSpawnTimer = 5 + Math.random() * 5;
+            this.spawnHazard();
+        }
+
+        this.hazards.forEach(h => {
+             if (h.isActive()) {
+                 const dx = player.x - h.x;
+                 const dy = player.y - h.y;
+                 const dist = Math.sqrt(dx*dx + dy*dy);
+                 if (dist < h.radius + player.radius) {
+                     h.applyEffect(player);
+                     for(let i=0; i<5; i++) {
+                         particles.push(new Particle(player.x, player.y, h.color));
+                     }
+                 }
+
+                 enemies.forEach(e => {
+                     const edx = e.x - h.x;
+                     const edy = e.y - h.y;
+                     const edist = Math.sqrt(edx*edx + edy*edy);
+                     if (edist < h.radius + e.radius) {
+                         h.applyEffect(e);
+                     }
+                 });
+             }
+        });
+
+        this.hazards = this.hazards.filter(h => !h.isDead());
+    }
+
+    spawnHazard() {
+        const cx = (window.innerWidth || 800) / 2;
+        const cy = (window.innerHeight || 600) / 2;
+        const a = Math.random() * Math.PI * 2;
+        const r = 100 + Math.random() * 150;
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+
+        const type = Math.random() > 0.5 ? 'gravity_well' : 'repulsor';
+        this.hazards.push(new Hazard(x, y, type));
+    }
+
+    draw(ctx) {
+        this.layers.forEach(l => l.draw(ctx));
+        this.hazards.forEach(h => h.draw(ctx));
+    }
+}
+
+class Hazard {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type; // 'gravity_well' or 'repulsor'
+        this.radius = 50 + Math.random() * 30;
+        this.life = 10 + Math.random() * 5; // seconds
+        this.color = type === 'gravity_well' ? 'rgba(100, 0, 200, 0.3)' : 'rgba(200, 100, 0, 0.3)';
+        this.angle = 0;
+        this.scale = 0; // for spawn animation
+    }
+
+    update(dt) {
+        this.life -= dt;
+        this.angle += (this.type === 'gravity_well' ? 1 : -1) * dt;
+        if (this.scale < 1 && this.life > 1) {
+            this.scale += dt * 2;
+        }
+        if (this.life < 1) {
+            this.scale = Math.max(0, this.life);
+        }
+    }
+
+    isActive() {
+        return this.life > 0 && this.scale > 0.5;
+    }
+
+    isDead() {
+        return this.life <= 0;
+    }
+
+    applyEffect(entity) {
+        const dx = entity.x - this.x;
+        const dy = entity.y - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const force = (1 - dist / this.radius) * 100;
+
+        const dir = this.type === 'gravity_well' ? -1 : 1;
+
+        if (entity.vx !== undefined && entity.vy !== undefined) {
+             entity.vx += (dx / dist) * force * dir * 0.01;
+             entity.vy += (dy / dist) * force * dir * 0.01;
+        } else if (entity.orbitRadius !== undefined && entity.orbitAngle !== undefined) {
+             const pull = force * dir * 0.5;
+             entity.orbitRadius += pull;
+             entity.orbitRadius = Math.max(50, Math.min(300, entity.orbitRadius));
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.scale(this.scale, this.scale);
+        ctx.rotate(this.angle);
+
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+
+        const points = 8;
+        for(let i=0; i<points*2; i++) {
+            const a = (i/(points*2)) * Math.PI * 2;
+            const r = i % 2 === 0 ? this.radius : this.radius * 0.6;
+            if (i===0) ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r);
+            else ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.3, 0, Math.PI*2);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+}
+
 class GameEngine {
     constructor() {
         this.input = new InputManager();
@@ -528,6 +761,7 @@ class GameEngine {
         this.enemies = [];
         this.particles = [];
         this.analytics = new AnalyticsTracker();
+        this.world = new DioramaWorld();
 
         this.spawnTimer = 0;
         this.spawnRate = 2.0; // seconds
@@ -553,6 +787,7 @@ class GameEngine {
         this.enemies = [];
         this.particles = [];
         this.analytics = new AnalyticsTracker();
+        this.world = new DioramaWorld();
         this.score = 0;
         this.spawnTimer = 0;
         this.spawnRate = 2.0;
@@ -646,6 +881,9 @@ class GameEngine {
             }
 
             this.player.update(dt, this.input);
+            const cw = (window.innerWidth || 800);
+            const ch = window.innerHeight;
+            if(this.world) this.world.update(dt, this.player, this.enemies, this.particles, ch, cw);
             const playerPos = this.player.getPos(cx, cy);
             this.analytics.updateDistance(playerPos.x, playerPos.y);
 
@@ -739,6 +977,7 @@ class GameEngine {
     draw() {
         ctx.fillStyle = COLORS.BG;
         ctx.fillRect(0, 0, cw, ch);
+        if(this.world) this.world.draw(ctx);
 
         const cx = cw / 2;
         const cy = ch / 2;
