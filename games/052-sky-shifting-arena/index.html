@@ -13,6 +13,7 @@
     <script defer src="game.js"></script>
     <script defer src="bosses.js"></script>
     <script defer src="ui.js"></script>
+    <script defer src="tutorial.js"></script>
 </head>
 <body>
     <div id="game-container">
@@ -20,6 +21,12 @@
         <div id="fps-counter" class="hidden">FPS: 60</div>
 
         <div id="ui-layer">
+            <div id="tutorial-overlay" class="screen hidden">
+                <h2>How to Play</h2>
+                <p>Survive the shifting arena! Avoid the edges!</p>
+                <button class="btn" id="btn-close-tutorial">Got it!</button>
+            </div>
+
             <div id="title-screen" class="screen">
                 <h1>Sky Shifting Arena</h1>
                 <p>Survive the shrinking islands!</p>

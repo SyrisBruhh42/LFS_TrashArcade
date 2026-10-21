@@ -752,9 +752,35 @@ class GameEngine {
         const r = Math.max(this.arena.w, this.arena.h) * 0.8;
         const ex = this.arena.x + this.arena.w/2 + Math.cos(angle) * r;
         const ey = this.arena.y + this.arena.h/2 + Math.sin(angle) * r;
-        const types = [Swarmer, RangedSniper, ShieldedBruiser, Splitter, HazardSpawner];
-        const EnemyClass = types[Math.floor(Math.random() * types.length)];
-        this.enemies.push(new EnemyClass(ex, ey));
+
+        let EnemyClass = Swarmer;
+        const roll = Math.random();
+
+        // Wave-based weighting
+        if (this.wave < 3) {
+            // Mostly swarmers early
+            if (roll > 0.8) EnemyClass = RangedSniper;
+        } else if (this.wave < 6) {
+            if (roll < 0.4) EnemyClass = Swarmer;
+            else if (roll < 0.7) EnemyClass = RangedSniper;
+            else if (roll < 0.9) EnemyClass = HazardSpawner;
+            else EnemyClass = ShieldedBruiser;
+        } else {
+            // Late game
+            if (roll < 0.3) EnemyClass = Swarmer;
+            else if (roll < 0.5) EnemyClass = RangedSniper;
+            else if (roll < 0.7) EnemyClass = ShieldedBruiser;
+            else if (roll < 0.9) EnemyClass = Splitter;
+            else EnemyClass = HazardSpawner;
+        }
+
+        const enemy = new EnemyClass(ex, ey);
+        // Dynamic scaling based on wave
+        enemy.maxHealth = (enemy.maxHealth || enemy.health) * (1 + this.wave * 0.1);
+        enemy.health = enemy.maxHealth;
+        enemy.speed *= (1 + this.wave * 0.05);
+
+        this.enemies.push(enemy);
     }
 
     updateComboHUD() {
@@ -912,6 +938,11 @@ class GameEngine {
                     } else {
                         this.currentBoss = new PhantomBoss(cx, cy);
                     }
+
+                    // Boss scaling
+                    this.currentBoss.maxHealth *= (1 + this.wave * 0.2);
+                    this.currentBoss.health = this.currentBoss.maxHealth;
+
                     if (this.audio.playBossSpawn) this.audio.playBossSpawn();
                     this.enemies.push(this.currentBoss);
                 } else {

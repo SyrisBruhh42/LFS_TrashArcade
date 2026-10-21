@@ -2,14 +2,14 @@ class UpgradeManager {
     constructor(engine) {
         this.engine = engine;
         this.pool = [
-            { id: 'maxHealthUp', name: 'Titanium Hull', desc: 'Increases Max Health by 20.', apply: (p) => { p.maxHealth += 20; p.health += 20; } },
-            { id: 'speedUp', name: 'Thruster Overclock', desc: 'Increases Movement Speed.', apply: (p) => { p.speed += 30; } },
-            { id: 'fireRateUp', name: 'Auto-Loader', desc: 'Increases Fire Rate.', apply: (p) => { p.fireRate = Math.max(0.05, p.fireRate - 0.02); } },
-            { id: 'damageUp', name: 'High-Explosive Rounds', desc: 'Increases Bullet Damage.', apply: (p) => { p.bonusDamage = (p.bonusDamage || 0) + 5; } },
-            { id: 'dashCooldownDown', name: 'Quick Charge', desc: 'Reduces Dash Cooldown.', apply: (p) => { p.dashCooldownMax = Math.max(1.0, p.dashCooldownMax - 0.5); } },
-            { id: 'pierceUp', name: 'Armor Piercing', desc: 'Bullets pierce through enemies.', apply: (p) => { p.pierceCount = (p.pierceCount || 0) + 1; } },
+            { id: 'maxHealthUp', name: 'Titanium Hull', desc: 'Increases Max Health by 40.', apply: (p) => { p.maxHealth += 40; p.health += 40; } },
+            { id: 'speedUp', name: 'Thruster Overclock', desc: 'Increases Movement Speed.', apply: (p) => { p.speed += 50; } },
+            { id: 'fireRateUp', name: 'Auto-Loader', desc: 'Increases Fire Rate.', apply: (p) => { p.fireRate = Math.max(0.05, p.fireRate - 0.03); } },
+            { id: 'damageUp', name: 'High-Explosive Rounds', desc: 'Increases Bullet Damage.', apply: (p) => { p.bonusDamage = (p.bonusDamage || 0) + 10; } },
+            { id: 'dashCooldownDown', name: 'Quick Charge', desc: 'Reduces Dash Cooldown.', apply: (p) => { p.dashCooldownMax = Math.max(0.5, p.dashCooldownMax - 0.8); } },
+            { id: 'pierceUp', name: 'Armor Piercing', desc: 'Bullets pierce through enemies.', apply: (p) => { p.pierceCount = (p.pierceCount || 0) + 2; } },
             { id: 'multiShotUp', name: 'Split Barrel', desc: 'Fires extra projectiles.', apply: (p) => { p.multishot = (p.multishot || 0) + 1; } },
-            { id: 'bulletSizeUp', name: 'Heavy Caliber', desc: 'Increases Bullet Size.', apply: (p) => { p.bulletScale = (p.bulletScale || 0) + 2; } }
+            { id: 'bulletSizeUp', name: 'Heavy Caliber', desc: 'Increases Bullet Size.', apply: (p) => { p.bulletScale = (p.bulletScale || 0) + 3; } }
         ];
     }
 
