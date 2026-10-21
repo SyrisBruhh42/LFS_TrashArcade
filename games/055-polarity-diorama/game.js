@@ -253,6 +253,46 @@ class Particle {
     }
 }
 
+
+class Pickup {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 100;
+        this.vy = (Math.random() - 0.5) * 100;
+        this.type = type; // 1: score, 2: combo reset
+        this.life = 10;
+        this.markedForDeletion = false;
+        this.size = 8;
+    }
+
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.vx *= 0.95;
+        this.vy *= 0.95;
+        this.life -= dt;
+        if (this.life <= 0) {
+            this.markedForDeletion = true;
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.life * Math.PI); // Spin over time
+        ctx.fillStyle = this.type === 1 ? '#ffff00' : '#00ffff';
+        ctx.beginPath();
+        ctx.moveTo(0, -this.size);
+        ctx.lineTo(this.size, 0);
+        ctx.lineTo(0, this.size);
+        ctx.lineTo(-this.size, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
 class Player {
     constructor() {
         this.angle = 0;
@@ -1141,6 +1181,37 @@ class MagnetBoss extends BossBase {
     }
 }
 
+
+class ProgressionManager {
+    constructor() {
+        this.perks = [
+            { title: 'Orbit Speed +20%', apply: (engine) => { engine.player.angularVelocity *= 1.2; } },
+            { title: 'Dash Cooldown -20%', apply: (engine) => { engine.player.dashCooldown *= 0.8; } },
+            { title: 'Repel Power +30%', apply: (engine) => { engine.repelPower *= 1.3; } },
+            { title: 'Dash Duration +50%', apply: (engine) => { engine.player.dashDuration *= 1.5; } },
+            { title: 'Combo Decay Slower', apply: (engine) => { engine.comboDecayRate *= 0.7; } },
+            { title: 'Base Score Mult +1', apply: (engine) => { engine.scoreMult += 1; } },
+            { title: 'Sun Repel Distance +20%', apply: (engine) => { engine.sunRepelRadius *= 1.2; } },
+            { title: 'Max Combo +5', apply: (engine) => { engine.maxCombo += 5; } }
+        ];
+    }
+
+    generateChoices() {
+        let choices = [];
+        let pool = [...this.perks];
+        for (let i = 0; i < 3; i++) {
+            if (pool.length === 0) break;
+            const idx = Math.floor(Math.random() * pool.length);
+            choices.push(pool.splice(idx, 1)[0]);
+        }
+        return choices;
+    }
+
+    applyPerk(perk, engine) {
+        perk.apply(engine);
+    }
+}
+
 class GameEngine {
     constructor() {
         this.input = new InputManager();
@@ -1171,14 +1242,26 @@ class GameEngine {
         this.bossIndex = 0;
 
         // Custom binding for mouse/touch tap to switch polarity
-        this.input.bindings['switch'] = ['Space', 'Enter'];
+
+        this.pickups = [];
+        this.progression = new ProgressionManager();
+        this.comboMultiplier = 1;
+        this.comboTimer = 1;
+        this.comboDecayRate = 0.5;
+        this.maxCombo = 5;
+        this.scoreMult = 1;
+        this.repelPower = 1;
+        this.sunRepelRadius = 30;
+        this.draftChoices = [];
+        this.wave = 1;
+this.input.bindings['switch'] = ['Space', 'Enter'];
     }
 
 
     updateUI() {
         const ui = document.getElementById('uiLayer');
         if (ui) {
-            ui.style.display = (this.state === 'TITLE' || this.state === 'PAUSED' || this.state === 'GAME_OVER') ? 'block' : 'none';
+            ui.style.display = (this.state === 'TITLE' || this.state === 'PAUSED' || this.state === 'GAME_OVER' || this.state === 'UPGRADE_DRAFT') ? 'block' : 'none';
         }
     }
 
@@ -1199,7 +1282,12 @@ class GameEngine {
         this.nextBossScore = 150;
         this.bossWarningTimer = 0;
         this.bossIndex = 0;
-        this.state = 'PLAYING';
+
+        this.pickups = [];
+        this.comboMultiplier = 1;
+        this.comboTimer = 1;
+        this.wave = 1;
+this.state = 'PLAYING';
     }
 
     createParticles(x, y, color, count) {
@@ -1254,6 +1342,33 @@ class GameEngine {
             ctx.textBaseline = 'middle';
             ctx.fillText('PAUSED', cx, cy);
         }
+        if (this.state === 'UPGRADE_DRAFT') {
+            const cw = (window.innerWidth || 800);
+            const ch = window.innerHeight;
+            const cx = cw / 2;
+            const cy = ch / 2;
+            const boxW = 200;
+            const boxH = 100;
+            const startY = cy - (this.draftChoices.length * boxH + (this.draftChoices.length - 1) * 20) / 2;
+
+            const tapped = this.handleInput() || (this.input.mouse.down && !this.mouseWasDown) || (this.input.touch.down && !this.touchWasDown);
+            if (tapped) {
+                const px = this.input.touch.down ? this.input.touch.x : this.input.mouse.x;
+                const py = this.input.touch.down ? this.input.touch.y : this.input.mouse.y;
+                for (let i = 0; i < this.draftChoices.length; i++) {
+                    const bx = cx - boxW / 2;
+                    const by = startY + i * (boxH + 20);
+                    if (px >= bx && px <= bx + boxW && py >= by && py <= by + boxH) {
+                        this.progression.applyPerk(this.draftChoices[i], this);
+                        this.state = 'PLAYING';
+                        this.sound.playAbsorb();
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+
 
         if (this.state === 'GAME_OVER') {
             if (this.handleInput()) {
@@ -1267,7 +1382,7 @@ class GameEngine {
             const ch = window.innerHeight;
             const cx = cw / 2;
             const cy = ch / 2;
-            const sunRadius = 30;
+            const sunRadius = this.sunRepelRadius;
 
             // Update Player
             const switched = this.handleInput();
@@ -1295,6 +1410,13 @@ class GameEngine {
             const playerPos = this.player.getPos(cx, cy);
             this.analytics.updateDistance(playerPos.x, playerPos.y);
 
+
+            // Combo Logic
+            this.comboTimer -= dt * this.comboDecayRate;
+            if (this.comboTimer <= 0) {
+                this.comboMultiplier = Math.max(1, this.comboMultiplier - 0.5);
+                this.comboTimer = 1;
+            }
             // Boss Spawner Logic
             if (this.score >= this.nextBossScore && !this.boss && this.bossWarningTimer <= 0) {
                 this.bossWarningTimer = 3.0; // 3 seconds warning
@@ -1365,7 +1487,9 @@ class GameEngine {
                         if (this.player.isDashing) {
                             if (this.player.polarity !== e.polarity) {
                                 e.takeDamage(1);
-                                this.score += 50;
+                                this.comboMultiplier = Math.min(this.maxCombo, this.comboMultiplier + 0.5);
+                                this.comboTimer = 1;
+                                this.score += 50 * this.scoreMult * Math.floor(this.comboMultiplier);
                                 this.createParticles(e.x, e.y, '#ffffff', 25);
                                 this.sound.playAbsorb();
                                 // Bounce off
@@ -1392,7 +1516,9 @@ class GameEngine {
 
                     if (this.player.isDashing) {
                         e.markedForDeletion = true;
-                        this.score += 20;
+                        this.comboMultiplier = Math.min(this.maxCombo, this.comboMultiplier + 0.5);
+                        this.comboTimer = 1;
+                        this.score += 20 * this.scoreMult * Math.floor(this.comboMultiplier);
                         this.createParticles(e.x, e.y, '#ffffff', 15);
                         this.sound.playAbsorb(); // Or a custom hit sound
                         // Apply recoil to player
@@ -1401,17 +1527,19 @@ class GameEngine {
                         this.player.recoilOffset.y += Math.sin(angleP) * 10;
                     } else if (e.polarity !== this.player.polarity) {
                         // Absorb
-                        this.score += 10;
+                        this.comboMultiplier = Math.min(this.maxCombo, this.comboMultiplier + 0.5);
+                        this.comboTimer = 1;
+                        this.score += 10 * this.scoreMult * Math.floor(this.comboMultiplier);
                         this.sound.playAbsorb();
                         this.createParticles(e.x, e.y, COLORS.SUN, 10);
                         e.markedForDeletion = true;
                         this.analytics.recordAbsorb();
                     } else {
                         // If same polarity, shouldn't really touch due to repulsion, but if it does (high speed), repel harder
-                        e.vx *= -2;
-                        e.vy *= -2;
-                        e.knockbackX = e.vx * -3;
-                        e.knockbackY = e.vy * -3;
+                        e.vx *= -2 * this.repelPower;
+                        e.vy *= -2 * this.repelPower;
+                        e.knockbackX = e.vx * -3 * this.repelPower;
+                        e.knockbackY = e.vy * -3 * this.repelPower;
                         this.sound.playRepel();
                         // Add small recoil
                         const angleP = Math.atan2(dyP, dxP);
@@ -1423,8 +1551,9 @@ class GameEngine {
                 // Off-screen cleanup (repelled successfully)
                 if (e.x < -100 || e.x > cw + 100 || e.y < -100 || e.y > ch + 100) {
                     if (e.polarity === this.player.polarity) {
-                        // Reward for repelling same polarity off screen
-                        this.score += 5;
+                        this.comboMultiplier = Math.min(this.maxCombo, this.comboMultiplier + 0.5);
+                        this.comboTimer = 1;
+                        this.score += 5 * this.scoreMult * Math.floor(this.comboMultiplier);
                         this.analytics.recordRepel();
                     }
                     e.markedForDeletion = true;
@@ -1433,12 +1562,34 @@ class GameEngine {
 
             this.enemies = this.enemies.filter(e => !e.markedForDeletion);
             if (this.boss && this.boss.markedForDeletion) {
-                this.score += 500;
+                this.score += 500 * this.scoreMult * Math.floor(this.comboMultiplier);
+                this.pickups.push(new Pickup(this.boss.x, this.boss.y, 2));
                 this.boss = null;
-                // Clear out enemies on boss death
                 this.enemies.forEach(e => e.markedForDeletion = true);
+                this.state = 'UPGRADE_DRAFT';
+                this.draftChoices = this.progression.generateChoices();
+                this.wave++;
             }
 
+
+            // Pickups
+            for (let i = this.pickups.length - 1; i >= 0; i--) {
+                let p = this.pickups[i];
+                p.update(dt);
+                const dxP = playerPos.x - p.x;
+                const dyP = playerPos.y - p.y;
+                if (Math.sqrt(dxP*dxP + dyP*dyP) < this.player.size + 10) {
+                    p.markedForDeletion = true;
+                    this.sound.playAbsorb();
+                    if (p.type === 1) {
+                        this.score += 50 * this.scoreMult * Math.floor(this.comboMultiplier);
+                    } else if (p.type === 2) {
+                        this.comboMultiplier = this.maxCombo;
+                        this.comboTimer = 1;
+                    }
+                }
+            }
+            this.pickups = this.pickups.filter(p => !p.markedForDeletion);
             // Update Particles
             this.particles.forEach(p => p.update(dt));
             this.particles = this.particles.filter(p => p.life > 0);
@@ -1473,7 +1624,7 @@ class GameEngine {
 
         // Draw Sun (Papercraft)
         const sunPts = [];
-        const sunRadius = 30;
+        const sunRadius = this.sunRepelRadius;
         for (let i=0; i<8; i++) {
             const a = (i/8)*Math.PI*2;
             sunPts.push({
@@ -1526,6 +1677,24 @@ class GameEngine {
         this.player.draw(ctx, cx, cy);
         this.particles.forEach(p => p.draw(ctx));
 
+
+        this.pickups.forEach(p => p.draw(ctx));
+
+        // Combo HUD
+        ctx.fillStyle = '#fff';
+        ctx.font = '20px monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`Combo: x${Math.floor(this.comboMultiplier)}`, 20, 50);
+        ctx.fillText(`Wave: ${this.wave}`, 20, 80);
+
+        // Combo Bar
+        ctx.fillStyle = '#555';
+        ctx.fillRect(20, 110, 100, 10);
+        ctx.fillStyle = '#0ff';
+        ctx.fillRect(20, 110, 100 * Math.max(0, this.comboTimer), 10);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(20, 110, 100, 10);
         // HUD
         ctx.fillStyle = '#fff';
         ctx.font = '20px monospace';
@@ -1555,6 +1724,39 @@ class GameEngine {
             ctx.textBaseline = 'middle';
             ctx.fillText('PAUSED', cx, cy);
         }
+        if (this.state === 'UPGRADE_DRAFT') {
+            const cw = (window.innerWidth || 800);
+            const ch = window.innerHeight;
+            const cx = cw / 2;
+            const cy = ch / 2;
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            ctx.fillRect(0, 0, cw, ch);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 30px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`WAVE ${this.wave - 1} CLEARED!`, cx, cy - 250);
+            ctx.font = '20px monospace';
+            ctx.fillText('SELECT UPGRADE:', cx, cy - 200);
+
+            const boxW = 200;
+            const boxH = 100;
+            const startY = cy - (this.draftChoices.length * boxH + (this.draftChoices.length - 1) * 20) / 2;
+            for (let i = 0; i < this.draftChoices.length; i++) {
+                const bx = cx - boxW / 2;
+                const by = startY + i * (boxH + 20);
+
+                ctx.fillStyle = '#444';
+                ctx.fillRect(bx, by, boxW, boxH);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(bx, by, boxW, boxH);
+
+                ctx.fillStyle = '#fff';
+                ctx.font = '16px monospace';
+                ctx.fillText(this.draftChoices[i].title, cx, by + boxH / 2);
+            }
+        }
+
 
         if (this.state === 'GAME_OVER') {
             ctx.fillStyle = 'rgba(0,0,0,0.7)';
