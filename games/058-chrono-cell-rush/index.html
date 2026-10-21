@@ -108,9 +108,73 @@
       color: var(--accent);
       text-shadow: 1px 1px 2px #000;
     }
+
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      text-align: left;
+    }
+    .setting-row label {
+      margin-right: 20px;
+    }
+    .milestones-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 20px;
+    }
+    .milestone-badge {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #222;
+        border: 2px solid #444;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        opacity: 0.5;
+        position: relative;
+    }
+    .milestone-badge.unlocked {
+        border-color: #ffaa00;
+        background: #443300;
+        opacity: 1;
+        box-shadow: 0 0 10px #ffaa00;
+    }
+    .milestone-badge:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #000;
+        color: #fff;
+        padding: 5px;
+        border-radius: 4px;
+        white-space: nowrap;
+        z-index: 20;
+        font-size: 0.7rem;
+        pointer-events: none;
+    }
+    .fps-counter {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        color: #0f0;
+        font-family: monospace;
+        z-index: 100;
+        pointer-events: none;
+    }
+
   </style>
   <script defer src="./game.js"></script>
 </head>
+<body>
+<div id="fpsCounter" class="fps-counter hidden">60 FPS</div>
 <body>
   <div id="gameContainer">
     <canvas id="gameCanvas"></canvas>
@@ -133,7 +197,11 @@
         <h1>Chrono Cell Rush</h1>
         <p>Fight inside a cell. Stop moving to slow time.</p>
         <p>WASD to move, Mouse to aim/shoot.</p>
+
+        <div id="title-milestones" class="milestones-container"></div>
+
         <button id="btn-start">Start Game</button>
+        <button id="btn-settings">Settings</button>
         <br>
         <a href="../../index.html" class="arcade-link">Back to Arcade</a>
       </div>
@@ -145,6 +213,82 @@
         <p>Choose your upgrade:</p>
         <div id="upgrade-options" style="display: flex; gap: 10px; justify-content: center; margin: 20px 0; flex-wrap: wrap;">
            <!-- Upgrades injected here -->
+        </div>
+      </div>
+    </div>
+
+
+    <div id="screen-SETTINGS" class="ui-layer hidden">
+      <div class="ui-box" style="max-height: 80vh; overflow-y: auto;">
+        <h1>Settings</h1>
+
+        <div class="setting-row">
+            <label>Master Mute</label>
+            <input type="checkbox" id="opt-masterMute">
+        </div>
+
+        <div class="setting-row">
+            <label>SFX Volume</label>
+            <input type="range" id="opt-sfxVolume" min="0" max="1" step="0.1" value="1">
+        </div>
+
+        <div class="setting-row">
+            <label>Music Volume</label>
+            <input type="range" id="opt-musicVolume" min="0" max="1" step="0.1" value="1">
+        </div>
+
+        <div class="setting-row">
+            <label>Screen Shake</label>
+            <select id="opt-screenShake">
+                <option value="1">100%</option>
+                <option value="0.5">50%</option>
+                <option value="0">Off</option>
+            </select>
+        </div>
+
+        <div class="setting-row">
+            <label>Particles</label>
+            <select id="opt-particles">
+                <option value="High">High</option>
+                <option value="Low">Low</option>
+            </select>
+        </div>
+
+        <div class="setting-row">
+            <label>High Contrast</label>
+            <input type="checkbox" id="opt-highContrast">
+        </div>
+
+        <div class="setting-row">
+            <label>Show FPS</label>
+            <input type="checkbox" id="opt-showFPS">
+        </div>
+
+        <div class="setting-row">
+            <label>Touch Controls</label>
+            <select id="opt-touchControls">
+                <option value="Auto">Auto</option>
+                <option value="Always">Always</option>
+                <option value="Off">Off</option>
+            </select>
+        </div>
+
+        <div class="setting-row">
+            <label>Touch Handedness</label>
+            <select id="opt-touchHandedness">
+                <option value="Right">Right</option>
+                <option value="Left">Left</option>
+            </select>
+        </div>
+
+        <hr style="border-color: var(--accent); margin: 20px 0;">
+
+        <button id="btn-exportSave">Export Save</button>
+        <button id="btn-importSave">Import Save</button>
+        <button id="btn-resetSave" style="color: #ff4444; border-color: #ff4444;">Reset Data</button>
+
+        <div style="margin-top: 20px;">
+            <button id="btn-settings-close">Back</button>
         </div>
       </div>
     </div>
@@ -162,6 +306,9 @@
       <div class="ui-box">
         <h1>Defeated</h1>
         <p>Final Score: <span id="finalScore">0</span></p>
+
+        <div id="gameover-milestones" class="milestones-container"></div>
+
         <button id="btn-restart">Play Again</button>
         <br>
         <a href="../../index.html" class="arcade-link">Back to Arcade</a>

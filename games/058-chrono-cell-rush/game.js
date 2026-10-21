@@ -1,4 +1,15 @@
+
+const MILESTONES = [
+    { id: 'first_blood', name: 'First Blood', desc: 'Defeat 10 enemies', condition: (g) => g.saveManager.data.totalScoreAccumulated >= 100 },
+    { id: 'survivor', name: 'Survivor', desc: 'Reach Wave 5', condition: (g) => g.wave >= 5 },
+    { id: 'boss_slayer', name: 'Boss Slayer', desc: 'Defeat a Boss', condition: (g) => g.saveManager.data.bossesDefeated && g.saveManager.data.bossesDefeated >= 1 },
+    { id: 'combo_master', name: 'Combo Master', desc: 'Reach 5x Combo', condition: (g) => g.combo >= 5.0 },
+    { id: 'untouchable', name: 'Untouchable', desc: 'Reach Wave 3 without taking damage', condition: (g) => g.wave >= 3 && !g.player.hasTakenDamage },
+    { id: 'pacifist', name: 'Time Lord', desc: 'Dilate time for 60 seconds total', condition: (g) => g.saveManager.data.timeDilatedTotal >= 60 }
+];
+
 class SaveManager {
+
   constructor() {
     this.saveKey = 'arcade_game_058_058-chrono-cell-rush_v1';
     this.data = this.load() || this.getDefaults();
@@ -10,6 +21,8 @@ class SaveManager {
       bestWaveOrCombo: 0,
       totalGamesPlayed: 0,
       totalScoreAccumulated: 0,
+      bossesDefeated: 0,
+      timeDilatedTotal: 0,
       unlockedMilestones: [],
       options: {
         masterMute: false,
@@ -406,6 +419,7 @@ class GameEngine {
     this.setupResizeObserver();
     this.bindUI();
     this.bindAudioResume();
+    this.initSettings();
 
     this.requestID = null;
     this.timeDilation = 1.0;
@@ -418,6 +432,68 @@ class GameEngine {
     this.shakeIntensity = 0;
     this.shakeDirX = 0;
     this.shakeDirY = 0;
+  }
+
+
+  populateSettings() {
+    const opt = this.saveManager.data.options;
+    document.getElementById('opt-masterMute').checked = opt.masterMute;
+    document.getElementById('opt-sfxVolume').value = opt.sfxVolume;
+    document.getElementById('opt-musicVolume').value = opt.musicVolume;
+    document.getElementById('opt-screenShake').value = opt.screenShake;
+    document.getElementById('opt-particles').value = opt.particles;
+    document.getElementById('opt-highContrast').checked = opt.highContrast;
+    document.getElementById('opt-showFPS').checked = opt.showFPS;
+    document.getElementById('opt-touchControls').value = opt.touchControls;
+    document.getElementById('opt-touchHandedness').value = opt.touchHandedness || 'Right';
+  }
+
+  saveSettings() {
+    const opt = this.saveManager.data.options;
+    opt.masterMute = document.getElementById('opt-masterMute').checked;
+    opt.sfxVolume = parseFloat(document.getElementById('opt-sfxVolume').value);
+    opt.musicVolume = parseFloat(document.getElementById('opt-musicVolume').value);
+    opt.screenShake = parseFloat(document.getElementById('opt-screenShake').value);
+    opt.particles = document.getElementById('opt-particles').value;
+    opt.highContrast = document.getElementById('opt-highContrast').checked;
+    opt.showFPS = document.getElementById('opt-showFPS').checked;
+    opt.touchControls = document.getElementById('opt-touchControls').value;
+    opt.touchHandedness = document.getElementById('opt-touchHandedness').value;
+    this.saveManager.save();
+    this.applySettingsLive();
+  }
+
+  applySettingsLive() {
+    const opt = this.saveManager.data.options;
+
+    // Preview changes live
+    opt.masterMute = document.getElementById('opt-masterMute').checked;
+    opt.sfxVolume = parseFloat(document.getElementById('opt-sfxVolume').value);
+    opt.musicVolume = parseFloat(document.getElementById('opt-musicVolume').value);
+    opt.screenShake = parseFloat(document.getElementById('opt-screenShake').value);
+    opt.particles = document.getElementById('opt-particles').value;
+    opt.highContrast = document.getElementById('opt-highContrast').checked;
+    opt.showFPS = document.getElementById('opt-showFPS').checked;
+    opt.touchControls = document.getElementById('opt-touchControls').value;
+    opt.touchHandedness = document.getElementById('opt-touchHandedness').value;
+
+    if (this.audio.initialized) {
+        this.audio.applyOptions(opt);
+    }
+
+    if (opt.highContrast) {
+        document.documentElement.style.setProperty('--bg', '#000000');
+        document.documentElement.style.setProperty('--accent', '#ffff00');
+    } else {
+        document.documentElement.style.setProperty('--bg', '#11151c');
+        document.documentElement.style.setProperty('--accent', '#ecf7f4');
+    }
+
+    const fpsEl = document.getElementById('fpsCounter');
+    if (fpsEl) {
+        if (opt.showFPS) fpsEl.classList.remove('hidden');
+        else fpsEl.classList.add('hidden');
+    }
   }
 
   setupResizeObserver() {
@@ -438,6 +514,70 @@ class GameEngine {
     document.getElementById('btn-start').addEventListener('click', () => this.startGame());
     document.getElementById('btn-restart').addEventListener('click', () => this.startGame());
     document.getElementById('btn-resume').addEventListener('click', () => this.resumeGame());
+
+    document.getElementById('btn-settings').addEventListener('click', () => {
+        this.populateSettings();
+        this.setState('SETTINGS');
+    });
+
+    document.getElementById('btn-settings-close').addEventListener('click', () => {
+        this.saveSettings();
+        this.setState('TITLE');
+    });
+
+    const bindOpt = (id) => {
+        let el = document.getElementById(id);
+        if (el) el.addEventListener('change', () => this.applySettingsLive());
+    };
+    bindOpt('opt-masterMute');
+    bindOpt('opt-sfxVolume');
+    bindOpt('opt-musicVolume');
+    bindOpt('opt-screenShake');
+    bindOpt('opt-particles');
+    bindOpt('opt-highContrast');
+    bindOpt('opt-showFPS');
+    bindOpt('opt-touchControls');
+    bindOpt('opt-touchHandedness');
+
+    document.getElementById('btn-exportSave').addEventListener('click', () => {
+        const data = JSON.stringify(this.saveManager.data);
+        const b64 = btoa(data);
+        prompt("Copy this save data:", b64);
+    });
+
+    document.getElementById('btn-importSave').addEventListener('click', () => {
+        const b64 = prompt("Paste save data:");
+        if (b64) {
+            try {
+                const data = JSON.parse(atob(b64));
+                this.saveManager.data = data;
+                this.saveManager.save();
+                this.populateSettings();
+                this.applySettingsLive();
+                alert("Save imported successfully!");
+            } catch (e) {
+                alert("Invalid save data.");
+            }
+        }
+    });
+
+    let resetClicks = 0;
+    document.getElementById('btn-resetSave').addEventListener('click', (e) => {
+        resetClicks++;
+        if (resetClicks === 1) {
+            e.target.innerText = "Click again to confirm";
+            setTimeout(() => { resetClicks = 0; e.target.innerText = "Reset Data"; }, 3000);
+        } else if (resetClicks === 2) {
+            this.saveManager.data = this.saveManager.getDefaults();
+            this.saveManager.save();
+            this.populateSettings();
+            this.applySettingsLive();
+            e.target.innerText = "Reset Data";
+            resetClicks = 0;
+            alert("Data reset.");
+        }
+    });
+
 
     window.addEventListener('blur', () => {
       if (this.state === 'PLAYING') {
@@ -461,6 +601,22 @@ class GameEngine {
     window.addEventListener('keydown', resumeAudio, { once: true });
   }
 
+
+  renderMilestones(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    const unlocked = this.saveManager.data.unlockedMilestones || [];
+    MILESTONES.forEach(m => {
+        const isUnlocked = unlocked.includes(m.id);
+        const div = document.createElement('div');
+        div.className = `milestone-badge ${isUnlocked ? 'unlocked' : ''}`;
+        div.title = `${m.name}: ${m.desc}`;
+        div.innerText = m.name.charAt(0);
+        container.appendChild(div);
+    });
+  }
+
   setState(newState) {
     document.querySelectorAll('.ui-layer').forEach(el => el.classList.add('hidden'));
 
@@ -474,9 +630,13 @@ class GameEngine {
       hud.classList.add('hidden');
     }
 
+    if (newState === 'TITLE') {
+        this.renderMilestones('title-milestones');
+    }
     if (newState === 'GAME_OVER') {
       document.getElementById('finalScore').innerText = Math.floor(this.score);
       this.saveManager.updateHighScore(Math.floor(this.score));
+      this.renderMilestones('gameover-milestones');
     }
 
     this.state = newState;
@@ -495,6 +655,19 @@ class GameEngine {
     this.shakeDirY = dirY;
   }
 
+
+  initSettings() {
+      // Setup default contrast/fps at start
+      const opt = this.saveManager.data.options || {};
+      if (opt.highContrast) {
+          document.documentElement.style.setProperty('--bg', '#000000');
+          document.documentElement.style.setProperty('--accent', '#ffff00');
+      }
+      const fpsEl = document.getElementById('fpsCounter');
+      if (fpsEl && opt.showFPS) fpsEl.classList.remove('hidden');
+      if (this.audio.initialized) this.audio.applyOptions(opt);
+  }
+
   startGame() {
     this.score = 0;
     this.wave = 1;
@@ -504,7 +677,7 @@ class GameEngine {
     this.pickups = [];
     this.setState('PLAYING');
 
-    if (typeof EffectsManager !== 'undefined') this.effectsManager = new EffectsManager();
+    if (typeof EffectsManager !== 'undefined') this.effectsManager = new EffectsManager(this);
 
     if (typeof Player !== 'undefined') this.player = new Player(this.canvas.width/2, this.canvas.height/2);
     if (typeof EnemyManager !== 'undefined') this.enemyManager = new EnemyManager();
@@ -532,8 +705,37 @@ class GameEngine {
     this.requestID = requestAnimationFrame((t) => this.loop(t));
   }
 
+
+  checkMilestones() {
+    if (!this.saveManager.data.unlockedMilestones) {
+        this.saveManager.data.unlockedMilestones = [];
+    }
+    let newlyUnlocked = false;
+    MILESTONES.forEach(m => {
+        if (!this.saveManager.data.unlockedMilestones.includes(m.id)) {
+            if (m.condition(this)) {
+                this.saveManager.data.unlockedMilestones.push(m.id);
+                newlyUnlocked = true;
+                // Optional UI toast could go here
+            }
+        }
+    });
+    if (newlyUnlocked) this.saveManager.save();
+  }
+
   update(dt) {
     if (this.state !== 'PLAYING') return;
+
+    // FPS Tracking
+    if (this.saveManager.data.options && this.saveManager.data.options.showFPS) {
+        const fpsEl = document.getElementById('fpsCounter');
+        if (fpsEl && dt > 0) {
+            fpsEl.innerText = `${Math.round(1/dt)} FPS`;
+        }
+    }
+
+    this.checkMilestones();
+
 
     if (this.input.wasKeyPressed('Escape')) {
       this.setState('PAUSED');
@@ -1051,7 +1253,8 @@ class EnemyBullet {
 }
 
 class EffectsManager {
-  constructor() {
+  constructor(engine) {
+    this.engine = engine;
     this.particles = [];
     this.texts = [];
     this.flashes = [];
@@ -1059,7 +1262,14 @@ class EffectsManager {
   }
 
   addParticle(x, y, vx, vy, color, life, size=5) {
+
+    let optParticles = 'High';
+    if (this.engine && this.engine.saveManager && this.engine.saveManager.data.options) {
+        optParticles = this.engine.saveManager.data.options.particles;
+    }
+    if (optParticles === 'Low' && Math.random() > 0.3) return; // Skip 70% of particles on Low
     this.particles.push({ x, y, vx, vy, color, life, maxLife: life, size });
+
   }
 
   addDirectionalParticles(x, y, vx, vy, spread, color, count, speedMin, speedMax, lifeMin, lifeMax) {
