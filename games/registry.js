@@ -717,5 +717,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#dd867f",
     "phase": "4",
     "path": "./games/055-polarity-diorama/index.html"
+  },
+  {
+    "id": "056",
+    "slug": "056-scrap-chain",
+    "title": "Scrap Chain",
+    "genre": "Alchemy/Chain-Reaction Puzzle Action",
+    "coreMechanic": "Risk/Reward Tether or Tail Growth",
+    "setting": "Junkyard Robot Scrapheap",
+    "description": "Navigate a junkyard scrapheap, tethering scrap enemies into a tail to detonate them in massive chain-reactions.",
+    "controls": "WASD / Arrows to move. Space / Touch Button to detonate tether.",
+    "createdAt": "2024-10-21",
+    "accentColor": "#6c9b81",
+    "phase": "1",
+    "path": "./games/056-scrap-chain/index.html"
   }
 ];
