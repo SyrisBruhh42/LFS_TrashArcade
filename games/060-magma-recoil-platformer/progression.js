@@ -62,14 +62,14 @@ class UpgradeDraft {
     constructor() {
         this.options = [];
         this.allUpgrades = [
-            { id: 'damage', name: 'Damage Up', desc: 'Increase bullet damage by 1', apply: p => p.upgrades.damage += 1 },
+            { id: 'damage', name: 'Damage Up', desc: 'Increase bullet damage by 2', apply: p => p.upgrades.damage += 2 },
             { id: 'multishot', name: 'Multi-Shot', desc: 'Fire an additional bullet', apply: p => p.upgrades.multishot += 1 },
-            { id: 'pierce', name: 'Piercing', desc: 'Bullets pierce 1 more enemy', apply: p => p.upgrades.pierce += 1 },
-            { id: 'recoil', name: 'Recoil Boost', desc: 'Increase movement from recoil', apply: p => p.upgrades.recoil += 0.2 },
-            { id: 'fireRate', name: 'Fire Rate Up', desc: 'Shoot faster', apply: p => p.upgrades.fireRate *= 0.8 },
-            { id: 'magnet', name: 'Magnet', desc: 'Attract pickups further away', apply: p => p.upgrades.magnet += 1 },
-            { id: 'combo', name: 'Combo Plus', desc: 'Combo lasts longer', apply: p => p.upgrades.comboDuration += 0.5 },
-            { id: 'dash', name: 'Overdrive Dash', desc: 'Dash cooldown reduced', apply: p => p.upgrades.dashCooldown = Math.max(0.5, (p.upgrades.dashCooldown || 2) - 0.2) }
+            { id: 'pierce', name: 'Piercing', desc: 'Bullets pierce 2 more enemies', apply: p => p.upgrades.pierce += 2 },
+            { id: 'recoil', name: 'Recoil Boost', desc: 'Increase movement from recoil significantly', apply: p => p.upgrades.recoil += 0.35 },
+            { id: 'fireRate', name: 'Fire Rate Up', desc: 'Shoot much faster', apply: p => p.upgrades.fireRate *= 0.7 },
+            { id: 'magnet', name: 'Magnet', desc: 'Attract pickups from very far away', apply: p => p.upgrades.magnet += 2 },
+            { id: 'combo', name: 'Combo Plus', desc: 'Combo lasts significantly longer', apply: p => p.upgrades.comboDuration += 1.0 },
+            { id: 'dash', name: 'Overdrive Dash', desc: 'Dash cooldown greatly reduced', apply: p => p.upgrades.dashCooldown = Math.max(0.2, (p.upgrades.dashCooldown || 2) - 0.4) }
         ];
     }
     generateOptions() {
