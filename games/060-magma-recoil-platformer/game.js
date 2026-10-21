@@ -393,6 +393,8 @@ class Game {
     this.player = null;
     this.bullets = [];
     this.enemies = [];
+    this.bosses = [];
+    this.bossMilestone = 0;
     this.enemyBullets = [];
     this.particles = [];
     this.platforms = [];
@@ -429,6 +431,8 @@ class Game {
     this.player = new Player(width/2, height/2);
     this.bullets = [];
     this.enemies = [];
+    this.bosses = [];
+    this.bossMilestone = 0;
     this.enemyBullets = [];
     this.particles = [];
     this.platforms = [];
@@ -538,6 +542,15 @@ class Game {
        }
     }
 
+    if (Math.floor(this.score / 1500) > this.bossMilestone) {
+        this.bossMilestone++;
+        if (this.bossMilestone % 2 === 1) {
+            this.bosses.push(new MagmaWormBoss(width/2, this.cameraY - 200));
+        } else {
+            this.bosses.push(new CoreGuardianBoss(width/2, this.cameraY - 200));
+        }
+    }
+
     this.platforms = this.platforms.filter(p => p.y < this.cameraY + height + 200);
 
     for (let b of this.bullets) b.update(dt);
@@ -547,6 +560,7 @@ class Game {
     this.enemyBullets = this.enemyBullets.filter(b => b.life > 0);
 
     for (let e of this.enemies) e.update(dt, this.platforms, this);
+    for (let b of this.bosses) b.update(dt, this);
 
     for (let p of this.particles) p.update(dt);
     this.particles = this.particles.filter(p => p.life > 0);
@@ -585,10 +599,39 @@ class Game {
                 }
             }
         }
+        for (let boss of this.bosses) {
+            if (!boss.alive || boss.state !== 'ACTIVE') continue;
+            let dx = b.x - boss.x; let dy = b.y - boss.y;
+            if (Math.sqrt(dx*dx + dy*dy) < b.radius + boss.radius) {
+                boss.hp -= 50;
+                b.life = 0;
+                this.audio.playExplosion();
+                for(let i=0; i<5; i++) this.particles.push(new Particle(boss.x, boss.y, '#fff'));
+                if (boss.hp <= 0) {
+                    boss.alive = false;
+                    this.score += 1000;
+                    for(let i=0; i<30; i++) this.particles.push(new Particle(boss.x, boss.y, '#ff0'));
+                }
+            }
+        }
     }
     this.enemies = this.enemies.filter(e => e.alive && e.y < this.cameraY + height + 200);
+    this.bosses = this.bosses.filter(b => b.alive);
 
     // Player vs Enemy collision
+    for (let boss of this.bosses) {
+        if (!boss.alive || boss.state !== 'ACTIVE') continue;
+        let dx = this.player.x - boss.x;
+        let dy = this.player.y - boss.y;
+        if (Math.sqrt(dx*dx + dy*dy) < this.player.radius + boss.radius) {
+            if (this.player.invulnTime <= 0) {
+                this.state = 'GAME_OVER';
+                if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
+                this.save.data.totalGamesPlayed++; this.save.save();
+            }
+        }
+    }
+
     for (let e of this.enemies) {
         if (!e.alive) continue;
         let dx = this.player.x - e.x;
@@ -635,6 +678,7 @@ class Game {
 
     for (let p of this.platforms) p.draw(ctx);
     for (let e of this.enemies) e.draw(ctx);
+    for (let b of this.bosses) b.draw(ctx);
     for (let p of this.particles) p.draw(ctx);
     if (this.trailManager) this.trailManager.draw(ctx);
     for (let b of this.bullets) b.draw(ctx);
@@ -642,6 +686,10 @@ class Game {
     if (this.player) this.player.draw(ctx);
 
     ctx.restore();
+
+    for (let b of this.bosses) {
+        if (b.alive) b.drawHealthBar(ctx, width);
+    }
 
     let lavaY = Math.max(0, height - (this.cameraY));
     if (this.magmaRenderer) {
