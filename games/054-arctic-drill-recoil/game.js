@@ -106,6 +106,8 @@ class InputManager {
   }
 
   handleMouse(e, isDown) {
+    const pos = this.getPointerPos(e);
+    if (window.engine && window.engine.uiManager && isDown && window.engine.uiManager.handleClick(pos.x, pos.y)) return;
     if (e && e.button === 2) {
       this.mouseSecondaryDown = isDown;
     } else {
@@ -141,9 +143,11 @@ class InputManager {
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
       const pos = this.getPointerPos(touch);
+      if (window.engine && window.engine.uiManager && window.engine.uiManager.handleClick(pos.x, pos.y)) continue;
 
       // Simple split screen logic: left side move/aim, right side action
-      if (pos.x < this.canvas.width / 2 && this.joystick.touchId === null) {
+      const isLeft = (window.engine && window.engine.saveManager && window.engine.saveManager.data && window.engine.saveManager.data.options && window.engine.saveManager.data.options.leftHanded) ? pos.x >= this.canvas.width / 2 : pos.x < this.canvas.width / 2;
+      if (isLeft && this.joystick.touchId === null) {
         this.joystick.active = true;
         this.joystick.touchId = touch.identifier;
         this.joystick.originX = pos.x;
@@ -152,7 +156,7 @@ class InputManager {
         this.joystick.y = pos.y;
         this.joystick.dirX = 0;
         this.joystick.dirY = 0;
-      } else if (pos.x >= this.canvas.width / 2 && this.actionButton.touchId === null) {
+      } else if (!isLeft && this.actionButton.touchId === null) {
         this.actionButton.active = true;
         this.actionButton.touchId = touch.identifier;
       }
@@ -771,6 +775,7 @@ class GameEngine {
     this.nextBossScore = 500;
     this.vfxManager = new VFXManager(this);
 
+    this.uiManager = new UIManager(this);
     this.setupResizeObserver();
     window.engine = this;
 
@@ -870,6 +875,7 @@ class GameEngine {
   };
 
   GameEngine.prototype.spawnParticles = function(x, y, color, count) {
+    if (this.saveManager && this.saveManager.data && this.saveManager.data.options) count = Math.ceil(count * this.saveManager.data.options.particles);
     for(let i=0; i<count; i++) {
       this.particles.push(new Particle(
         x, y,
@@ -1063,6 +1069,7 @@ class GameEngine {
       return;
     }
 
+    if (this.uiManager && this.uiManager.update(dt)) return;
     if (this.vfxManager.update(dt)) return;
 
     this.player.update(dt, this.input);
@@ -1230,6 +1237,7 @@ class GameEngine {
       this.ctx.fillText('Score: ' + this.score, this.logicalWidth/2, this.logicalHeight/2 + 20);
       this.ctx.fillText('Click/Space/Touch to Restart', this.logicalWidth/2, this.logicalHeight/2 + 50);
     }
+    if (this.uiManager) this.uiManager.draw(this.ctx);
   };
 
   GameEngine.prototype.loop = function(timestamp) {

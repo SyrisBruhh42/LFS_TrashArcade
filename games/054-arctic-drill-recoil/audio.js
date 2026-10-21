@@ -28,6 +28,12 @@ class SoundEngine {
     this.intensity = 0; // 0.0 to 1.0, affects tempo and filter cutoff
   }
 
+  updateVolumes(options) {
+    if (!this.initialized) return;
+    this.sfxGain.gain.value = options.sfxVolume;
+    this.musicGain.gain.value = options.musicVolume;
+  }
+
   init() {
     if (this.initialized) return;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
