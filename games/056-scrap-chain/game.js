@@ -543,6 +543,8 @@ GameEngine.prototype.initGame = function() {
     this.comboMultiplier = 1;
     this.parallax = new ParallaxBackground(this.canvas.width, this.canvas.height);
     this.hazardManager = new HazardManager(this.canvas.width, this.canvas.height);
+    this.bossManager = new BossManager(this);
+    this.scoreThresholdForBoss = 2000;
 };
 
 GameEngine.prototype.spawnEnemy = function() {
@@ -611,8 +613,15 @@ GameEngine.prototype.detonateTether = function() {
             if (!other.isTethered && !other.markedForDeath) {
                 let dist = Math.hypot(node.x - other.x, node.y - other.y);
                 if (dist < explosionRadius + other.radius) {
-                    other.markedForDeath = true;
-                    this.updateScore(50 * this.comboMultiplier);
+                    if (other.isBoss) {
+                        other.takeDamage(50 * this.comboMultiplier);
+                        if (other.hp <= 0) {
+                            other.markedForDeath = true;
+                        }
+                    } else {
+                        other.markedForDeath = true;
+                        this.updateScore(50 * this.comboMultiplier);
+                    }
                 }
             }
         }
@@ -633,6 +642,14 @@ GameEngine.prototype.detonateTether = function() {
 };
 
 GameEngine.prototype.update = function(dt) {
+    if (this.bossManager) {
+        this.bossManager.update(dt);
+        if (!this.bossManager.activeBoss && this.score >= this.scoreThresholdForBoss) {
+            this.bossManager.spawnBoss();
+            this.scoreThresholdForBoss += 3000;
+        }
+    }
+
     if (this.inputManager.consumeDetonate()) {
         this.detonateTether();
     }
@@ -660,11 +677,20 @@ GameEngine.prototype.update = function(dt) {
         }
     }
 
-    this.enemySpawnTimer -= dt;
-    if (this.enemySpawnTimer <= 0) {
-        this.spawnEnemy();
-        this.enemySpawnTimer = this.enemySpawnInterval;
-        this.enemySpawnInterval = Math.max(0.2, this.enemySpawnInterval - 0.02);
+    if (this.bossManager && !this.bossManager.activeBoss) {
+        this.enemySpawnTimer -= dt;
+        if (this.enemySpawnTimer <= 0) {
+            this.spawnEnemy();
+            this.enemySpawnTimer = this.enemySpawnInterval;
+            this.enemySpawnInterval = Math.max(0.2, this.enemySpawnInterval - 0.02);
+        }
+    } else if (!this.bossManager) {
+        this.enemySpawnTimer -= dt;
+        if (this.enemySpawnTimer <= 0) {
+            this.spawnEnemy();
+            this.enemySpawnTimer = this.enemySpawnInterval;
+            this.enemySpawnInterval = Math.max(0.2, this.enemySpawnInterval - 0.02);
+        }
     }
 
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -691,7 +717,12 @@ GameEngine.prototype.update = function(dt) {
             let distToPlayer = Math.hypot(this.player.x - e.x, this.player.y - e.y);
             if (distToPlayer < this.player.radius + e.radius) {
                 if (this.player.invulnerableTimer > 0) {
-                    if (e.shield) {
+                    if (e.isBoss) {
+                        e.takeDamage(10);
+                        this.player.vx = -this.player.vx * 0.5;
+                        this.player.vy = -this.player.vy * 0.5;
+                        this.soundEngine.playSynth(300, 'square', 0.2);
+                    } else if (e.shield) {
                         e.shield = false;
                         this.player.vx = -this.player.vx * 0.5;
                         this.player.vy = -this.player.vy * 0.5;
@@ -709,29 +740,21 @@ GameEngine.prototype.update = function(dt) {
             }
 
             // Check tether collision
-            if (this.tetherManager.nodes.length > 0) {
-                let lastNode = this.tetherManager.nodes[this.tetherManager.nodes.length - 1];
-                let distToTail = Math.hypot(lastNode.x - e.x, lastNode.y - e.y);
-                if (distToTail < lastNode.radius + e.radius + 15) {
-                    this.tetherManager.addNode(e);
-                    this.soundEngine.playSynth(400, 'sine', 0.1);
-                    this.comboMultiplier = 1; // reset combo when adding new
-                }
-            } else {
-                // if no tail, can attach directly to player if they touch the back...
-                // for simplicity in this game, any enemy touching player is game over.
-                // they must be collected by tail.
-                // Wait, if no tail, how to get first tail?
-                // Add logic: if no tail and they hit the player, we already game over'd above.
-                // Actually, let's let them tether if they hit close to the player without tail?
-                // No, let's say they have a "Tether Range" behind the player.
-                // Let's just use the player as the lastNode if tail is empty!
-                let distToTail = Math.hypot(this.player.x - e.x, this.player.y - e.y);
-                // But wait, if they touch player, game over triggers first.
-                // Let's make tether range slightly larger than hit range.
-                if (distToTail < this.player.radius + e.radius + 20 && distToTail >= this.player.radius + e.radius) {
-                     this.tetherManager.addNode(e);
-                     this.soundEngine.playSynth(400, 'sine', 0.1);
+            if (!e.isBoss) {
+                if (this.tetherManager.nodes.length > 0) {
+                    let lastNode = this.tetherManager.nodes[this.tetherManager.nodes.length - 1];
+                    let distToTail = Math.hypot(lastNode.x - e.x, lastNode.y - e.y);
+                    if (distToTail < lastNode.radius + e.radius + 15) {
+                        this.tetherManager.addNode(e);
+                        this.soundEngine.playSynth(400, 'sine', 0.1);
+                        this.comboMultiplier = 1; // reset combo when adding new
+                    }
+                } else {
+                    let distToTail = Math.hypot(this.player.x - e.x, this.player.y - e.y);
+                    if (distToTail < this.player.radius + e.radius + 20 && distToTail >= this.player.radius + e.radius) {
+                         this.tetherManager.addNode(e);
+                         this.soundEngine.playSynth(400, 'sine', 0.1);
+                    }
                 }
             }
         }
@@ -784,6 +807,10 @@ GameEngine.prototype.draw = function() {
         this.ctx.fill();
     }
     this.ctx.globalAlpha = 1.0;
+
+    if (this.bossManager) {
+        this.bossManager.draw(this.ctx);
+    }
 };
 
 window.onload = () => {
