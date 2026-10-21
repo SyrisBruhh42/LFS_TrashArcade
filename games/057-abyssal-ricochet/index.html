@@ -109,6 +109,7 @@
       text-shadow: 1px 1px 2px #000;
     }
   </style>
+  <script defer src="./ui.js"></script>
   <script defer src="./vfx.js"></script>
   <script defer src="./world.js"></script>
   <script defer src="./game.js"></script>
@@ -142,6 +143,7 @@
         <p>Bounce off the shrinking trenches.</p>
         <p>Use Mouse/Touch to aim and launch.</p>
         <button id="btn-start">Start Game</button>
+        <button id="btn-options">Options / Milestones</button>
         <br>
         <a href="../../index.html" class="arcade-link">Back to Arcade</a>
       </div>
@@ -161,6 +163,7 @@
       <div class="ui-box">
         <h1>Paused</h1>
         <button id="btn-resume">Resume</button>
+        <button id="btn-options-pause">Options / Milestones</button>
         <br>
         <a href="../../index.html" class="arcade-link">Back to Arcade</a>
       </div>
@@ -176,5 +179,49 @@
       </div>
     </div>
   </div>
+
+    <div id="screen-OPTIONS" class="ui-layer hidden" style="z-index: 20;">
+      <div class="ui-box" style="max-height: 80vh; overflow-y: auto;">
+        <h1>Options & Milestones</h1>
+        <div style="text-align: left; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <label>Master Mute <input type="checkbox" id="opt-masterMute"></label>
+          <label>High Contrast <input type="checkbox" id="opt-highContrast"></label>
+          <label>Show FPS <input type="checkbox" id="opt-showFPS"></label>
+          <label>SFX Volume <input type="range" id="opt-sfxVolume" min="0" max="100"></label>
+          <label>Music Volume <input type="range" id="opt-musicVolume" min="0" max="100"></label>
+          <label>Screen Shake
+            <select id="opt-screenShake">
+              <option value="1.0">100%</option>
+              <option value="0.5">50%</option>
+              <option value="0.0">Off</option>
+            </select>
+          </label>
+          <label>Particles
+            <select id="opt-particles">
+              <option value="High">High</option>
+              <option value="Low">Low</option>
+            </select>
+          </label>
+          <label>Touch Controls
+            <select id="opt-touchControls">
+              <option value="Auto">Auto</option>
+              <option value="Always">Always</option>
+              <option value="Off">Off</option>
+              <option value="Left">Left Handed</option>
+              <option value="Right">Right Handed</option>
+            </select>
+          </label>
+        </div>
+        <div style="margin-top: 10px;">
+            <button id="btn-export-save">Export Save</button>
+            <button id="btn-import-save">Import Save</button>
+            <button id="btn-reset-save">Reset Save</button>
+        </div>
+        <h2>Milestones</h2>
+        <div id="milestone-list" style="text-align: left; font-size: 0.8rem; margin-bottom: 20px;"></div>
+        <button id="btn-close-options">Close</button>
+      </div>
+    </div>
 </body>
+
 </html>

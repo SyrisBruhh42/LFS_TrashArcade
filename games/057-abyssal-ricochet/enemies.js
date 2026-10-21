@@ -160,6 +160,7 @@ class Bruiser extends Enemy {
   }
 
   takeHit(dmg = 1) {
+    if (this.hp - dmg <= 0 && window.engine && window.engine.uiManager) window.engine.uiManager.checkMilestone('first_blood', 1);
       if (this.shieldActive) {
           this.shieldActive = false;
           return false; // Did not die
