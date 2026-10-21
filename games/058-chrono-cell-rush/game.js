@@ -309,6 +309,8 @@ class GameEngine {
     this.wave = 1;
     this.setState('PLAYING');
 
+    if (typeof EffectsManager !== 'undefined') this.effectsManager = new EffectsManager();
+
     if (typeof Player !== 'undefined') this.player = new Player(this.canvas.width/2, this.canvas.height/2);
     if (typeof EnemyManager !== 'undefined') this.enemyManager = new EnemyManager();
   }
@@ -343,12 +345,25 @@ class GameEngine {
 
     document.getElementById('scoreDisplay').innerText = `SCORE: ${Math.floor(this.score)}`;
     document.getElementById('waveDisplay').innerText = `WAVE: ${this.wave}`;
+    if (this.player) {
+      let dashDisplay = document.getElementById('dashDisplay');
+      if (dashDisplay) {
+        if (this.player.dashTimer > 0) {
+          dashDisplay.innerText = `DASH: ${this.player.dashTimer.toFixed(1)}s`;
+          dashDisplay.style.color = '#ff4444';
+        } else {
+          dashDisplay.innerText = `DASH: READY`;
+          dashDisplay.style.color = '#70e2f9';
+        }
+      }
+    }
 
     // Update player
     if (this.player) this.player.update(dt, this.input);
 
     // Update enemies using dilated time
     const dilatedDt = dt * this.timeDilation;
+    if (this.effectsManager) this.effectsManager.update(dilatedDt);
     if (this.enemyManager) this.enemyManager.update(dilatedDt, this.player);
   }
 
@@ -357,6 +372,7 @@ class GameEngine {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     if (this.state === 'PLAYING') {
+      if (this.effectsManager) this.effectsManager.draw(this.ctx);
       if (this.enemyManager) this.enemyManager.draw(this.ctx);
       if (this.player) this.player.draw(this.ctx);
     }
@@ -368,11 +384,30 @@ class Player {
     this.x = x;
     this.y = y;
     this.radius = 12;
+    this.baseSpeed = 200;
     this.speed = 200;
     this.color = '#70e2f9';
     this.shootTimer = 0;
     this.shootCooldown = 0.2;
     this.bullets = [];
+
+    // Dash ability
+    this.dashTimer = 0;
+    this.dashCooldown = 3.0;
+    this.dashDurationTimer = 0;
+    this.dashDuration = 0.2;
+    this.isDashing = false;
+    this.dashDirX = 0;
+    this.dashDirY = 0;
+
+    // Momentum / Recoil
+    this.vx = 0;
+    this.vy = 0;
+    this.recoilTimer = 0;
+
+    // Visuals
+    this.aimAngle = 0;
+    this.thrustParticles = [];
   }
 
   update(dt, input) {
@@ -384,14 +419,83 @@ class Player {
     if (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) dx -= 1;
     if (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) dx += 1;
 
+    let targetX = this.x;
+    let targetY = this.y;
+    if (input.usingTouch && input.touch.isDown) {
+       targetX = input.touch.x;
+       targetY = input.touch.y;
+    } else {
+       targetX = input.mouse.x;
+       targetY = input.mouse.y;
+    }
+    this.aimAngle = Math.atan2(targetY - this.y, targetX - this.x);
+
     let moving = false;
     if (dx !== 0 || dy !== 0) {
       const len = Math.sqrt(dx * dx + dy * dy);
       dx /= len;
       dy /= len;
-      this.x += dx * this.speed * dt;
-      this.y += dy * this.speed * dt;
       moving = true;
+    }
+
+    if (this.dashTimer > 0) this.dashTimer -= dt;
+
+    if (moving && this.dashTimer <= 0 && (input.wasKeyPressed('Space') || input.wasKeyPressed('ShiftLeft'))) {
+      this.isDashing = true;
+      this.dashTimer = this.dashCooldown;
+      this.dashDurationTimer = this.dashDuration;
+      this.dashDirX = dx;
+      this.dashDirY = dy;
+      // Spawn burst particles
+      for(let i = 0; i < 10; i++) {
+         this.thrustParticles.push({
+            x: this.x, y: this.y,
+            vx: -this.dashDirX * 100 + (Math.random() - 0.5) * 50,
+            vy: -this.dashDirY * 100 + (Math.random() - 0.5) * 50,
+            life: 0.3
+         });
+      }
+    }
+
+    if (this.isDashing) {
+      this.dashDurationTimer -= dt;
+      this.vx = this.dashDirX * this.baseSpeed * 4;
+      this.vy = this.dashDirY * this.baseSpeed * 4;
+      if (this.dashDurationTimer <= 0) {
+        this.isDashing = false;
+      }
+    } else {
+      // Momentum logic
+      const targetVx = dx * this.baseSpeed;
+      const targetVy = dy * this.baseSpeed;
+      // Decay recoil
+      if (this.recoilTimer > 0) {
+         this.recoilTimer -= dt;
+      } else {
+         this.vx += (targetVx - this.vx) * 10 * dt;
+         this.vy += (targetVy - this.vy) * 10 * dt;
+      }
+    }
+
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+
+    // Particle update
+    if (moving && !this.isDashing && Math.random() < 0.3) {
+       this.thrustParticles.push({
+          x: this.x - dx * this.radius, y: this.y - dy * this.radius,
+          vx: -dx * 20 + (Math.random() - 0.5) * 10,
+          vy: -dy * 20 + (Math.random() - 0.5) * 10,
+          life: 0.2
+       });
+    }
+
+    for (let i = this.thrustParticles.length - 1; i >= 0; i--) {
+       let p = this.thrustParticles[i];
+       p.x += p.vx * dt;
+       p.y += p.vy * dt;
+       p.life -= dt;
+       if (p.life <= 0) this.thrustParticles.splice(i, 1);
     }
 
     // Clamp to screen
@@ -406,20 +510,14 @@ class Player {
       this.shootTimer -= dt;
     }
 
-    if ((input.mouse.isDown || input.touch.isDown) && this.shootTimer <= 0) {
-      let targetX, targetY;
-      if (input.usingTouch && input.touch.isDown) {
-         targetX = input.touch.x;
-         targetY = input.touch.y;
-      } else {
-         targetX = input.mouse.x;
-         targetY = input.mouse.y;
-      }
-
-      const angle = Math.atan2(targetY - this.y, targetX - this.x);
-      this.bullets.push(new PlayerBullet(this.x, this.y, angle));
+    if ((input.mouse.isDown || input.touch.isDown) && this.shootTimer <= 0 && !this.isDashing) {
+      this.bullets.push(new PlayerBullet(this.x, this.y, this.aimAngle));
       window.engine.audio.playShoot();
       this.shootTimer = this.shootCooldown;
+      // Add recoil
+      this.vx -= Math.cos(this.aimAngle) * 50;
+      this.vy -= Math.sin(this.aimAngle) * 50;
+      this.recoilTimer = 0.1;
     }
 
     // Update bullets (player bullets move in real time)
@@ -437,12 +535,53 @@ class Player {
       b.draw(ctx);
     }
 
-    // Draw player
+    // Draw particles
+    for (const p of this.thrustParticles) {
+       ctx.beginPath();
+       ctx.arc(p.x, p.y, p.life * 10, 0, Math.PI * 2);
+       ctx.fillStyle = `rgba(255, 255, 255, ${p.life / 0.3})`;
+       ctx.fill();
+       ctx.closePath();
+    }
+
+    // Invulnerability Blink
+    if (this.isDashing && Math.floor(this.dashDurationTimer * 20) % 2 === 0) {
+       return; // Blink out
+    }
+
+    // Procedural Player drawing
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.aimAngle);
+
+    // Core body
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fillStyle = this.color;
     ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
     ctx.closePath();
+
+    // Aim Telegraph
+    ctx.beginPath();
+    ctx.moveTo(this.radius, 0);
+    ctx.lineTo(this.radius + 10, 0);
+    ctx.strokeStyle = '#ff0000';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.closePath();
+
+    // Side thrusters
+    ctx.beginPath();
+    ctx.arc(0, -this.radius, 4, 0, Math.PI * 2);
+    ctx.arc(0, this.radius, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffaa00';
+    ctx.fill();
+    ctx.closePath();
+
+    ctx.restore();
   }
 }
 
@@ -549,7 +688,73 @@ class EnemyBullet {
   }
 }
 
+class EffectsManager {
+  constructor() {
+    this.particles = [];
+    this.texts = [];
+    this.flashes = [];
+  }
+
+  addParticle(x, y, vx, vy, color, life) {
+    this.particles.push({ x, y, vx, vy, color, life, maxLife: life });
+  }
+
+  addFloatingText(x, y, text, color, life) {
+    this.texts.push({ x, y, text, color, life, maxLife: life });
+  }
+
+  addFlash(color, life) {
+    this.flashes.push({ color, life, maxLife: life });
+  }
+
+  update(dt) {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      let p = this.particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+    for (let i = this.texts.length - 1; i >= 0; i--) {
+      let t = this.texts[i];
+      t.y -= 20 * dt;
+      t.life -= dt;
+      if (t.life <= 0) this.texts.splice(i, 1);
+    }
+    for (let i = this.flashes.length - 1; i >= 0; i--) {
+      let f = this.flashes[i];
+      f.life -= dt;
+      if (f.life <= 0) this.flashes.splice(i, 1);
+    }
+  }
+
+  draw(ctx) {
+    for (let f of this.flashes) {
+      let alpha = f.life / f.maxLife;
+      ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.5})`;
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    }
+    for (let p of this.particles) {
+      ctx.fillStyle = p.color;
+      let r = 5 * (p.life / p.maxLife);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.closePath();
+    }
+    ctx.font = '20px monospace';
+    ctx.textAlign = 'center';
+    for (let t of this.texts) {
+      ctx.fillStyle = t.color;
+      ctx.globalAlpha = t.life / t.maxLife;
+      ctx.fillText(t.text, t.x, t.y);
+      ctx.globalAlpha = 1.0;
+    }
+  }
+}
+
 class EnemyManager {
+
   constructor() {
     this.boss = new EnemyBoss(window.innerWidth / 2, 100);
     this.bullets = [];
@@ -592,8 +797,10 @@ class EnemyManager {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist < b.radius + player.radius) {
-         window.engine.setState('GAME_OVER');
-         return; // Player died
+         if (!player.isDashing) {
+           window.engine.setState('GAME_OVER');
+           return; // Player died
+         }
       }
 
       if (b.isOffScreen()) {
