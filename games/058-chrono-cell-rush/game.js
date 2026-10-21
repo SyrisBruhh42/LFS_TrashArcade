@@ -244,6 +244,15 @@ class GameEngine {
 
     this.requestID = null;
     this.timeDilation = 1.0;
+
+    // Juice
+    this.hitStopTimer = 0;
+    this.shakeX = 0;
+    this.shakeY = 0;
+    this.shakeTimer = 0;
+    this.shakeIntensity = 0;
+    this.shakeDirX = 0;
+    this.shakeDirY = 0;
   }
 
   setupResizeObserver() {
@@ -306,6 +315,19 @@ class GameEngine {
     }
 
     this.state = newState;
+  }
+
+  triggerHitStop(duration) {
+    this.hitStopTimer = duration;
+  }
+
+  triggerScreenShake(intensity, duration, dirX = 0, dirY = 0) {
+    let optionMult = (this.saveManager.data.options && this.saveManager.data.options.screenShake !== undefined) ? this.saveManager.data.options.screenShake : 1.0;
+    if (optionMult <= 0) return;
+    this.shakeIntensity = intensity * optionMult;
+    this.shakeTimer = duration;
+    this.shakeDirX = dirX;
+    this.shakeDirY = dirY;
   }
 
   startGame() {
@@ -386,6 +408,31 @@ class GameEngine {
         }
     }
 
+    // Screen shake
+    if (this.shakeTimer > 0) {
+        this.shakeTimer -= dt;
+        let progress = this.shakeTimer / 0.2; // default 0.2
+        let currentIntensity = this.shakeIntensity * progress;
+        if (this.shakeDirX !== 0 || this.shakeDirY !== 0) {
+            this.shakeX = this.shakeDirX * currentIntensity * Math.sin(this.shakeTimer * 50);
+            this.shakeY = this.shakeDirY * currentIntensity * Math.cos(this.shakeTimer * 50);
+        } else {
+            this.shakeX = (Math.random() - 0.5) * 2 * currentIntensity;
+            this.shakeY = (Math.random() - 0.5) * 2 * currentIntensity;
+        }
+    } else {
+        this.shakeX = 0;
+        this.shakeY = 0;
+    }
+
+    // Hit-stop
+    if (this.hitStopTimer > 0) {
+        this.hitStopTimer -= dt;
+        // Only update effects during hit-stop
+        if (this.effectsManager) this.effectsManager.update(dt);
+        return;
+    }
+
     // Update player
     if (this.player) this.player.update(dt, this.input);
 
@@ -419,6 +466,10 @@ class GameEngine {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     if (this.state === 'PLAYING') {
+      this.ctx.save();
+      if (this.shakeX !== 0 || this.shakeY !== 0) {
+         this.ctx.translate(this.shakeX, this.shakeY);
+      }
       if (this.environmentManager) this.environmentManager.drawBackground(this.ctx);
       if (this.effectsManager) this.effectsManager.draw(this.ctx);
       if (this.environmentManager) this.environmentManager.drawHazards(this.ctx);
@@ -426,6 +477,7 @@ class GameEngine {
       for(let p of this.pickups) { p.draw(this.ctx); }
       if (this.player) this.player.draw(this.ctx);
       if (this.environmentManager) this.environmentManager.drawForeground(this.ctx);
+      this.ctx.restore();
     }
   }
 }
@@ -589,14 +641,8 @@ class Player {
       this.dashDirX = dx;
       this.dashDirY = dy;
       // Spawn burst particles
-      for(let i = 0; i < 10; i++) {
-         this.thrustParticles.push({
-            x: this.x, y: this.y,
-            vx: -this.dashDirX * 100 + (Math.random() - 0.5) * 50,
-            vy: -this.dashDirY * 100 + (Math.random() - 0.5) * 50,
-            life: 0.3
-         });
-      }
+      if (window.engine.effectsManager) window.engine.effectsManager.addDirectionalParticles(this.x, this.y, -this.dashDirX, -this.dashDirY, 0.8, '#ffffff', 10, 50, 150, 0.2, 0.4);
+      window.engine.triggerScreenShake(2, 0.1, -this.dashDirX, -this.dashDirY);
     }
 
     if (this.isDashing) {
@@ -624,20 +670,12 @@ class Player {
 
     // Particle update
     if (moving && !this.isDashing && Math.random() < 0.3) {
-       this.thrustParticles.push({
-          x: this.x - dx * this.radius, y: this.y - dy * this.radius,
-          vx: -dx * 20 + (Math.random() - 0.5) * 10,
-          vy: -dy * 20 + (Math.random() - 0.5) * 10,
-          life: 0.2
-       });
+       if (window.engine.effectsManager) window.engine.effectsManager.addDirectionalParticles(this.x - dx * this.radius, this.y - dy * this.radius, -dx, -dy, 0.5, '#70e2f9', 1, 10, 30, 0.1, 0.3);
     }
-
-    for (let i = this.thrustParticles.length - 1; i >= 0; i--) {
-       let p = this.thrustParticles[i];
-       p.x += p.vx * dt;
-       p.y += p.vy * dt;
-       p.life -= dt;
-       if (p.life <= 0) this.thrustParticles.splice(i, 1);
+    if (this.isDashing || moving) {
+       if (window.engine.effectsManager && Math.random() < (this.isDashing ? 0.8 : 0.2)) {
+           window.engine.effectsManager.addTrail(this.x, this.y, this.radius * 0.8, this.color, 0.2);
+       }
     }
 
     // Clamp to screen
@@ -845,18 +883,53 @@ class EffectsManager {
     this.particles = [];
     this.texts = [];
     this.flashes = [];
+    this.trails = [];
   }
 
-  addParticle(x, y, vx, vy, color, life) {
-    this.particles.push({ x, y, vx, vy, color, life, maxLife: life });
+  addParticle(x, y, vx, vy, color, life, size=5) {
+    this.particles.push({ x, y, vx, vy, color, life, maxLife: life, size });
   }
 
-  addFloatingText(x, y, text, color, life) {
-    this.texts.push({ x, y, text, color, life, maxLife: life });
+  addDirectionalParticles(x, y, vx, vy, spread, color, count, speedMin, speedMax, lifeMin, lifeMax) {
+    let baseAngle = Math.atan2(vy, vx);
+    for (let i = 0; i < count; i++) {
+       let angle = baseAngle + (Math.random() - 0.5) * spread;
+       let speed = speedMin + Math.random() * (speedMax - speedMin);
+       let life = lifeMin + Math.random() * (lifeMax - lifeMin);
+       this.addParticle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, Math.random() * 3 + 2);
+    }
+  }
+
+  addExplosion(x, y, color, count=20) {
+    for (let i = 0; i < count; i++) {
+      let angle = Math.random() * Math.PI * 2;
+      let speed = Math.random() * 150 + 50;
+      let life = Math.random() * 0.4 + 0.2;
+      this.addParticle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, Math.random() * 4 + 2);
+    }
+  }
+
+  addFloatingText(x, y, text, color, life, vy = -20) {
+    this.texts.push({ x, y, text, color, life, maxLife: life, vy: vy, type: 'normal' });
+  }
+
+  addDamageText(x, y, damage, isCrit = false) {
+    let color = isCrit ? '#ffcc00' : '#ffffff';
+    let life = isCrit ? 0.8 : 0.5;
+    let vy = isCrit ? -40 : -20;
+    this.texts.push({ x, y, text: Math.floor(damage), color, life, maxLife: life, vy, type: 'damage', isCrit });
+  }
+
+  addComboText(x, y, comboStr) {
+    this.texts.push({ x, y, text: comboStr, color: '#ff66ff', life: 1.0, maxLife: 1.0, vy: -30, type: 'combo' });
   }
 
   addFlash(color, life) {
     this.flashes.push({ color, life, maxLife: life });
+  }
+
+  addTrail(x, y, width, color, life) {
+    this.trails.push({ x, y, width, color, life, maxLife: life });
   }
 
   update(dt) {
@@ -864,12 +937,16 @@ class EffectsManager {
       let p = this.particles[i];
       p.x += p.vx * dt;
       p.y += p.vy * dt;
+      // apply drag
+      p.vx *= 1.0 - (2.0 * dt);
+      p.vy *= 1.0 - (2.0 * dt);
       p.life -= dt;
       if (p.life <= 0) this.particles.splice(i, 1);
     }
     for (let i = this.texts.length - 1; i >= 0; i--) {
       let t = this.texts[i];
-      t.y -= 20 * dt;
+      t.x += (Math.random() - 0.5) * 5 * dt; // slight jitter
+      t.y += t.vy * dt;
       t.life -= dt;
       if (t.life <= 0) this.texts.splice(i, 1);
     }
@@ -878,30 +955,66 @@ class EffectsManager {
       f.life -= dt;
       if (f.life <= 0) this.flashes.splice(i, 1);
     }
+    for (let i = this.trails.length - 1; i >= 0; i--) {
+      let t = this.trails[i];
+      t.life -= dt;
+      if (t.life <= 0) this.trails.splice(i, 1);
+    }
   }
 
   draw(ctx) {
+    // Draw Trails
+    for (let t of this.trails) {
+      let alpha = t.life / t.maxLife;
+      ctx.fillStyle = t.color;
+      ctx.globalAlpha = alpha * 0.5;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, t.width * alpha, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1.0;
+
     for (let f of this.flashes) {
       let alpha = f.life / f.maxLife;
-      ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.5})`;
+      ctx.fillStyle = f.color;
+      ctx.globalAlpha = alpha * 0.5;
       ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
     }
+    ctx.globalAlpha = 1.0;
+
     for (let p of this.particles) {
       ctx.fillStyle = p.color;
-      let r = 5 * (p.life / p.maxLife);
+      let r = p.size * (p.life / p.maxLife);
+      ctx.globalAlpha = p.life / p.maxLife;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.closePath();
     }
-    ctx.font = '20px monospace';
+    ctx.globalAlpha = 1.0;
+
     ctx.textAlign = 'center';
     for (let t of this.texts) {
       ctx.fillStyle = t.color;
       ctx.globalAlpha = t.life / t.maxLife;
-      ctx.fillText(t.text, t.x, t.y);
-      ctx.globalAlpha = 1.0;
+
+      let scale = 1;
+      if (t.type === 'damage') {
+         ctx.font = t.isCrit ? 'bold 24px monospace' : 'bold 16px monospace';
+         scale = t.isCrit ? 1.0 + (1.0 - t.life/t.maxLife) : 1.0;
+      } else if (t.type === 'combo') {
+         ctx.font = 'bold 28px monospace';
+         scale = 1.0 + (1.0 - t.life/t.maxLife)*0.5;
+      } else {
+         ctx.font = '20px monospace';
+      }
+
+      ctx.save();
+      ctx.translate(t.x, t.y);
+      ctx.scale(scale, scale);
+      ctx.fillText(t.text, 0, 0);
+      ctx.restore();
     }
+    ctx.globalAlpha = 1.0;
   }
 }
 
@@ -1268,10 +1381,15 @@ class EnemyManager {
       if (player && !player.isDashing) {
         const dx = player.x - h.x; const dy = player.y - h.y;
         if (Math.sqrt(dx*dx + dy*dy) < h.radius + player.radius) {
+           if (window.engine.effectsManager) window.engine.effectsManager.addExplosion(player.x, player.y, player.color, 20);
+           window.engine.triggerScreenShake(8, 0.3);
            if (player.shields > 0) {
                player.shields--;
                this.hazards.splice(i, 1);
+               if (window.engine.effectsManager) window.engine.effectsManager.addFlash('#0088ff', 0.2);
            } else {
+               if (window.engine.effectsManager) window.engine.effectsManager.addFlash('#ff0000', 0.5);
+               window.engine.triggerHitStop(0.5);
                window.engine.setState('GAME_OVER');
                return;
            }
@@ -1287,11 +1405,16 @@ class EnemyManager {
       if (player) {
         const dx = player.x - e.x; const dy = player.y - e.y;
         if (Math.sqrt(dx*dx + dy*dy) < e.radius + player.radius && !player.isDashing) {
+           if (window.engine.effectsManager) window.engine.effectsManager.addExplosion(player.x, player.y, player.color, 20);
+           window.engine.triggerScreenShake(8, 0.3);
            if (player.shields > 0) {
                player.shields--;
                e.hp -= 1000; // Kill enemy on shield break
                window.engine.combo = 1.0;
+               if (window.engine.effectsManager) window.engine.effectsManager.addFlash('#0088ff', 0.2);
            } else {
+               if (window.engine.effectsManager) window.engine.effectsManager.addFlash('#ff0000', 0.5);
+               window.engine.triggerHitStop(0.5);
                window.engine.setState('GAME_OVER');
                return;
            }
@@ -1305,16 +1428,29 @@ class EnemyManager {
                  b.hitEnemies.push(e);
                  b.pierce--;
 
+                 let isCrit = Math.random() < 0.1;
+                 let dmg = isCrit ? b.damage * 2 : b.damage;
                  if (e.shield !== undefined && e.shield > 0) {
-                     e.shield -= b.damage;
+                     e.shield -= dmg;
                      if (e.shield < 0) e.shield = 0;
                  } else {
-                     e.hp -= b.damage;
+                     e.hp -= dmg;
                  }
                  window.engine.audio.playHit();
                  window.engine.score += 10 * window.engine.combo;
                  window.engine.combo = Math.min(window.engine.combo + 0.1, 5.0);
                  window.engine.comboTimer = window.engine.comboMaxTimer;
+
+                 if (window.engine.effectsManager) {
+                     window.engine.effectsManager.addDirectionalParticles(b.x, b.y, b.vx, b.vy, 1.0, '#ffcc00', 3, 20, 50, 0.1, 0.3);
+                     window.engine.effectsManager.addDamageText(b.x, b.y, dmg, isCrit);
+                     window.engine.effectsManager.addComboText(b.x, b.y - 20, window.engine.combo.toFixed(1) + 'x');
+                 }
+
+                 if (isCrit) {
+                     window.engine.triggerScreenShake(3, 0.1);
+                     window.engine.triggerHitStop(0.05);
+                 }
 
                  if (b.pierce < 0) player.bullets.splice(j, 1);
              }
@@ -1324,6 +1460,8 @@ class EnemyManager {
       if (e.hp <= 0) {
         window.engine.score += 50 * window.engine.combo;
         if (Math.random() < 0.2) window.engine.pickups.push(new Pickup(e.x, e.y));
+        if (window.engine.effectsManager) window.engine.effectsManager.addExplosion(e.x, e.y, e.color || '#ff4444', 15);
+        window.engine.triggerScreenShake(4, 0.15);
         this.enemies.splice(i, 1);
       }
     }
@@ -1340,11 +1478,25 @@ class EnemyManager {
         if (dist < b.radius + this.boss.radius) {
           if (!b.hitEnemies.includes(this.boss)) {
               b.hitEnemies.push(this.boss);
-              this.boss.hp -= b.damage;
+              let isCrit = Math.random() < 0.15;
+              let dmg = isCrit ? b.damage * 2 : b.damage;
+              this.boss.hp -= dmg;
               window.engine.audio.playHit();
               window.engine.score += 50 * window.engine.combo;
               window.engine.combo = Math.min(window.engine.combo + 0.2, 5.0);
               window.engine.comboTimer = window.engine.comboMaxTimer;
+
+              if (window.engine.effectsManager) {
+                  window.engine.effectsManager.addDirectionalParticles(b.x, b.y, b.vx, b.vy, 1.5, '#ff8800', 5, 30, 80, 0.2, 0.4);
+                  window.engine.effectsManager.addDamageText(b.x, b.y, dmg, isCrit);
+                  window.engine.effectsManager.addComboText(b.x, b.y - 20, window.engine.combo.toFixed(1) + 'x');
+              }
+
+              if (isCrit) {
+                  window.engine.triggerScreenShake(5, 0.15);
+                  window.engine.triggerHitStop(0.1);
+              }
+
               b.pierce--;
               if (b.pierce < 0) player.bullets.splice(i, 1);
           }
@@ -1354,12 +1506,20 @@ class EnemyManager {
       if (this.boss.hp <= 0) {
         window.engine.score += 1000 * window.engine.combo;
         for(let k=0; k<10; k++) window.engine.pickups.push(new Pickup(this.boss.x + (Math.random()-0.5)*50, this.boss.y + (Math.random()-0.5)*50));
+
+        if (window.engine.effectsManager) {
+            window.engine.effectsManager.addExplosion(this.boss.x, this.boss.y, '#ffffff', 50);
+            window.engine.effectsManager.addFlash('#ffffff', 0.5);
+        }
+        window.engine.triggerScreenShake(15, 1.0);
+        window.engine.triggerHitStop(1.0);
+
         this.boss = null;
         window.engine.wave++;
         this.waveProgress = 0;
         this.bossSpawnedForWave = true;
         this.bullets = [];
-        window.engine.upgradeManager.showDraft();
+        setTimeout(() => window.engine.upgradeManager.showDraft(), 1500);
       }
     }
 
@@ -1374,12 +1534,17 @@ class EnemyManager {
 
       if (dist < b.radius + player.radius) {
          if (!player.isDashing) {
+           if (window.engine.effectsManager) window.engine.effectsManager.addExplosion(player.x, player.y, player.color, 20);
+           window.engine.triggerScreenShake(8, 0.3);
            if (player.shields > 0) {
                player.shields--;
                this.bullets.splice(i, 1);
                window.engine.combo = 1.0;
+               if (window.engine.effectsManager) window.engine.effectsManager.addFlash('#0088ff', 0.2);
                continue;
            } else {
+               if (window.engine.effectsManager) window.engine.effectsManager.addFlash('#ff0000', 0.5);
+               window.engine.triggerHitStop(0.5);
                window.engine.setState('GAME_OVER');
                return; // Player died
            }
