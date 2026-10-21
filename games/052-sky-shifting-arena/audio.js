@@ -49,8 +49,14 @@ class SoundEngine {
         } catch(e) { console.warn("AudioContext init failed", e); }
     }
 
-    updateVolumes(soundVol, musicVol) {
+        updateVolumes(soundVol, musicVol) {
         if (!this.initialized) return;
+        const engine = window.engine;
+        if (engine && engine.saveManager && engine.saveManager.data.options && engine.saveManager.data.options.masterMute) {
+            this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        } else {
+            this.masterGain.gain.setValueAtTime(1, this.ctx.currentTime);
+        }
         this.sfxGain.gain.setValueAtTime(Math.max(0, Math.min(1, soundVol)), this.ctx.currentTime);
         this.musicGain.gain.setValueAtTime(Math.max(0, Math.min(1, musicVol)), this.ctx.currentTime);
     }
