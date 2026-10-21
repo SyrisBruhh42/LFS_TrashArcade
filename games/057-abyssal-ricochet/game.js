@@ -321,6 +321,7 @@ class GameEngine {
     if (typeof EnemyManager !== 'undefined') this.enemyManager = new EnemyManager();
     if (typeof ParallaxBackground !== 'undefined') this.background = new ParallaxBackground(this.canvas.width, this.canvas.height);
     if (typeof EnvironmentHazardManager !== 'undefined') this.hazards = new EnvironmentHazardManager();
+    if (typeof BossManager !== 'undefined') this.bossManager = new BossManager();
     this.projectiles = [];
   }
 
@@ -355,6 +356,7 @@ class GameEngine {
     if (this.background) this.background.update(dt);
     if (this.arena) this.arena.update(dt);
     if (this.player) this.player.update(dt, this.input, this.arena, this.audio);
+    if (this.bossManager) this.bossManager.update(dt, this.player, this);
     if (this.enemyManager) this.enemyManager.update(dt, this.player, this);
     if (this.hazards) this.hazards.update(dt, this.arena, this.player, this.enemyManager ? this.enemyManager.enemies : []);
 
@@ -408,6 +410,7 @@ class GameEngine {
       if (this.arena) this.arena.draw(this.ctx);
       if (this.hazards) this.hazards.draw(this.ctx);
       if (this.enemyManager) this.enemyManager.draw(this.ctx);
+      if (this.bossManager) this.bossManager.draw(this.ctx);
       if (this.player) this.player.draw(this.ctx);
     if (this.projectiles) {
         for (const proj of this.projectiles) {
@@ -749,10 +752,12 @@ class EnemyManager {
   update(dt, player, engine) {
     if (!player.isLaunched) return; // Don't spawn/update until game starts
 
-    this.spawnTimer += dt;
-    if (this.spawnTimer >= this.spawnInterval) {
-      this.spawnTimer = 0;
-      this.spawnEnemy(engine.arena);
+    if (!engine.bossManager || (!engine.bossManager.activeBoss && engine.bossManager.warningTimer <= 0)) {
+        this.spawnTimer += dt;
+        if (this.spawnTimer >= this.spawnInterval) {
+          this.spawnTimer = 0;
+          this.spawnEnemy(engine.arena);
+        }
     }
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -840,6 +845,9 @@ class EnemyManager {
         engine.arena.width = Math.min(engine.arena.maxWidth, engine.arena.width + 100);
         engine.arena.height = Math.min(engine.arena.maxHeight, engine.arena.height + 100);
         engine.arena.shrinkRate += 2; // Make it harder
+        if (engine.wave % 5 === 0 && engine.bossManager && (!engine.bossManager.activeBoss && engine.bossManager.warningTimer <= 0)) {
+            engine.bossManager.triggerBoss(engine.wave, engine);
+        }
     }
   }
 
