@@ -107,8 +107,8 @@ class Boss {
 }
 
 class IceWormBoss extends Boss {
-  constructor(x, y) {
-    super(x, y, 500, "Glacial Annihilator");
+  constructor(x, y, wave = 1) {
+    super(x, y, 500 + (wave-1)*250, "Glacial Annihilator");
     this.r = 50;
     this.segments = [];
     for(let i=0; i<5; i++) {
@@ -221,8 +221,8 @@ class IceWormBoss extends Boss {
 }
 
 class FrostConstructBoss extends Boss {
-  constructor(x, y) {
-    super(x, y, 600, "Aegis Core");
+  constructor(x, y, wave = 1) {
+    super(x, y, 600 + (wave-1)*300, "Aegis Core");
     this.r = 60;
     this.rotation = 0;
   }

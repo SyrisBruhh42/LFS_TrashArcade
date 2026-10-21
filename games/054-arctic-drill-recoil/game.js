@@ -754,6 +754,7 @@ class GameEngine {
     this.particles = [];
     this.blocks = [];
     this.enemies = [];
+    this.analytics = new AnalyticsTracker();
     this.crystals = [];
     this.worldManager = new WorldManager(this.logicalWidth, this.logicalHeight);
     for (let i=0; i<30; i++) {
@@ -818,6 +819,7 @@ class GameEngine {
     this.particles = [];
     this.blocks = [];
     this.enemies = [];
+    this.analytics = new AnalyticsTracker();
     this.crystals = [];
     for (let i=0; i<30; i++) {
       this.crystals.push(new IceCrystal(this.logicalWidth, this.logicalHeight));
@@ -850,24 +852,25 @@ class GameEngine {
   };
 
   GameEngine.prototype.spawnEnemy = function() {
-    // Increase spawn rate slightly for variety
-    if (Math.random() < 0.025) {
+    if (Math.random() < 0.025 + (this.wave * 0.005)) {
       const sx = Math.random() > 0.5 ? 0 : this.logicalWidth;
       const sy = Math.random() * this.logicalHeight;
       const r = Math.random();
 
       if (r < 0.3) {
         this.enemies.push(new BasicEnemy(sx, sy));
-      } else if (r < 0.5) {
+      } else if (r < 0.5 && this.wave >= 2) {
         this.enemies.push(new DasherEnemy(sx, sy));
-      } else if (r < 0.65) {
+      } else if (r < 0.65 && this.wave >= 3) {
         this.enemies.push(new BruiserEnemy(sx, sy));
-      } else if (r < 0.8) {
+      } else if (r < 0.8 && this.wave >= 4) {
         this.enemies.push(new SpawnerEnemy(sx, sy));
-      } else if (r < 0.9) {
+      } else if (r < 0.9 && this.wave >= 5) {
         this.enemies.push(new SwarmerEnemy(sx, sy));
         this.enemies.push(new SwarmerEnemy(sx + 10, sy + 10));
         this.enemies.push(new SwarmerEnemy(sx - 10, sy - 10));
+      } else if (r < 0.9) {
+        this.enemies.push(new BasicEnemy(sx, sy));
       } else {
         this.enemies.push(new HazardEnemy(sx, sy));
       }
@@ -917,6 +920,7 @@ class GameEngine {
         const dy = drillY - e.y;
         if (dx*dx + dy*dy < e.r*e.r) {
           e.hp -= this.player.drillDamage;
+          this.analytics.recordDamage(this.player.drillDamage);
           this.vfxManager.spawnDamageText(e.x, e.y, this.player.drillDamage);
           this.vfxManager.triggerShake(5, 0.1);
           this.spawnParticles(drillX, drillY, '#e26b6b', 5);
@@ -924,6 +928,7 @@ class GameEngine {
           e.vx += this.player.aimDir.x * 200;
           e.vy += this.player.aimDir.y * 200;
           if (e.hp <= 0) {
+            this.analytics.recordKill();
             this.enemies.splice(i, 1);
             this.comboManager.addHit();
             this.score += 50 * this.comboManager.multiplier;
@@ -941,6 +946,7 @@ class GameEngine {
         if (dx*dx + dy*dy < this.boss.r*this.boss.r) {
           if (this.boss.iFrames <= 0) {
             this.boss.hp -= 10;
+            this.analytics.recordDamage(10);
             this.vfxManager.spawnDamageText(this.boss.x, this.boss.y, 10);
             this.vfxManager.triggerShake(8, 0.15);
             this.boss.iFrames = 0.2;
@@ -1074,6 +1080,8 @@ class GameEngine {
 
     this.player.update(dt, this.input);
     if (this.player.drilling) {
+       this.analytics.recordDrill();
+       this.tutorialDismissed = true;
        this.sound.playDrill();
        // visual smoke
        this.vfxManager.spawnDirectionalParticles(this.player.x - this.player.aimDir.x*10, this.player.y - this.player.aimDir.y*10, -this.player.aimDir.x, -this.player.aimDir.y, 'rgba(255,255,255,0.3)', 2);
@@ -1101,9 +1109,9 @@ class GameEngine {
       if (this.bossWarningTimer <= 0) {
         // Spawn boss
         if (this.bossesDefeated % 2 === 0) {
-          this.boss = new IceWormBoss(this.logicalWidth / 2, -50);
+          this.boss = new IceWormBoss(this.logicalWidth / 2, -50, this.wave);
         } else {
-          this.boss = new FrostConstructBoss(this.logicalWidth / 2, -50);
+          this.boss = new FrostConstructBoss(this.logicalWidth / 2, -50, this.wave);
         }
       }
     }
@@ -1115,6 +1123,11 @@ class GameEngine {
         this.saveManager.updateScore(this.score);
         this.boss = null;
         this.bossesDefeated++;
+        this.wave++;
+        if (this.wave > this.saveManager.data.bestWaveOrCombo) {
+          this.saveManager.data.bestWaveOrCombo = this.wave;
+          this.saveManager.save();
+        }
         this.vfxManager.triggerHitStop(0.5);
         this.vfxManager.triggerShake(20, 0.5);
         this.vfxManager.spawnExplosion(this.logicalWidth/2, 100, '#e26b6b', 100);
@@ -1205,6 +1218,12 @@ class GameEngine {
     this.comboManager.draw(this.ctx, this.logicalWidth, this.logicalHeight);
 
     // Overlays
+    if (this.wave === 1 && !this.tutorialDismissed) {
+      this.ctx.fillStyle = '#fff';
+      this.ctx.font = '24px monospace';
+      this.ctx.textAlign = 'center';
+      this.ctx.fillText("Aim and hold to Drill! Recoil pushes you backward.", this.logicalWidth/2, this.logicalHeight/2 + 100);
+    }
     if (this.state === 'TITLE') {
       this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
       this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
