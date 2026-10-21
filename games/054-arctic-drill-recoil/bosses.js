@@ -173,6 +173,7 @@ class IceWormBoss extends Boss {
         const spread = 0.5;
         for (let i = 0; i < count; i++) {
           const a = angle - spread/2 + (spread/(count-1)) * i;
+          if (typeof game !== 'undefined' && game.sound) game.sound.playShoot();
           this.projectiles.push(new BossProjectile(
             this.x, this.y,
             Math.cos(a) * 200, Math.sin(a) * 200,
@@ -252,6 +253,7 @@ class FrostConstructBoss extends Boss {
           const dx = playerX - this.x;
           const dy = playerY - this.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
+          if (typeof game !== 'undefined' && game.sound) game.sound.playShoot();
           this.projectiles.push(new BossProjectile(
             this.x, this.y,
             (dx/dist) * 100, (dy/dist) * 100,
@@ -269,6 +271,7 @@ class FrostConstructBoss extends Boss {
         const offset = this.rotation * 5;
         for (let i = 0; i < pCount; i++) {
           const a = (Math.PI * 2 / pCount) * i + offset;
+          if (typeof game !== 'undefined' && game.sound) game.sound.playShoot();
           this.projectiles.push(new BossProjectile(
             this.x, this.y,
             Math.cos(a) * 150, Math.sin(a) * 150,

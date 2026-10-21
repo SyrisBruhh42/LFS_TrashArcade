@@ -240,77 +240,6 @@ class InputManager {
   }
 }
 
-class SoundEngine {
-  constructor() {
-    this.ctx = null;
-    this.masterGain = null;
-    this.sfxGain = null;
-    this.musicGain = null;
-    this.initialized = false;
-  }
-
-  init() {
-    if (this.initialized) return;
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return;
-
-    this.ctx = new AudioContextClass();
-    this.masterGain = this.ctx.createGain();
-    this.sfxGain = this.ctx.createGain();
-    this.musicGain = this.ctx.createGain();
-
-    this.masterGain.connect(this.ctx.destination);
-    this.sfxGain.connect(this.masterGain);
-    this.musicGain.connect(this.masterGain);
-
-    this.initialized = true;
-  }
-
-  resume() {
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-  }
-
-  playDrill() {
-    if (!this.initialized) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(150, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.1);
-
-    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.1);
-  }
-
-  playHit() {
-    if (!this.initialized) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(300, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
-
-    gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.1);
-  }
-}
-
 class Particle {
   constructor(x, y, vx, vy, life, color, size) {
     this.x = x;
@@ -445,6 +374,7 @@ class DasherEnemy extends BasicEnemy {
       this.dashTimer = this.dashCooldown;
       this.isDashing = true;
       this.telegraphTimer = 0;
+      if (typeof engine !== 'undefined' && engine.sound) engine.sound.playDash();
       this.vx = (dx / dist) * 400;
       this.vy = (dy / dist) * 400;
     } else if (this.dashTimer > 2.5) {
@@ -718,6 +648,7 @@ class Player {
     if (input.isSecondaryPressed && input.isSecondaryPressed() && this.overdriveTimer <= 0) {
       this.isOverdrive = true;
       this.overdriveTimer = this.overdriveCooldown;
+      if (typeof window.engine !== 'undefined' && window.engine.sound) window.engine.sound.playOverdriveStart();
       this.invulnerableTimer = (0.5 + this.invulnBonus);
       this.vx += this.aimDir.x * 600;
       this.vy += this.aimDir.y * 600;
@@ -1027,6 +958,7 @@ class GameEngine {
               this.state = 'GAME_OVER';
               this.saveManager.updateScore(this.score);
               this.spawnParticles(this.player.x, this.player.y, '#d8b0e2', 30);
+              this.sound.playDamage();
             }
           }
         }
@@ -1050,6 +982,7 @@ class GameEngine {
           this.state = 'GAME_OVER';
           this.saveManager.updateScore(this.score);
           this.spawnParticles(this.player.x, this.player.y, '#d8b0e2', 30);
+              this.sound.playDamage();
         }
       }
     }
@@ -1077,12 +1010,27 @@ class GameEngine {
           this.state = 'GAME_OVER';
           this.saveManager.updateScore(this.score);
           this.spawnParticles(this.player.x, this.player.y, '#d8b0e2', 30);
+              this.sound.playDamage();
         }
       }
     }
   };
 
   GameEngine.prototype.update = function(dt) {
+    if (this.sound) {
+      let intensity = 0;
+      if (this.boss) {
+         intensity += 0.6; // Boss fight intensity
+      } else if (this.bossWarningTimer > 0 && this.bossWarningTimer < 3) {
+         intensity += 0.3; // Boss warning intensity
+      }
+
+      if (this.player && this.player.invulnerableTimer > 0) {
+         intensity += 0.4; // Low HP intensity
+      }
+      this.sound.setIntensity(intensity);
+    }
+
     if (this.state === 'UPGRADE_DRAFT') {
       this.upgradeManager.handleInput(this.input);
       this.upgradeManager.handleMouse(null, this.input, this.logicalWidth, this.logicalHeight);
@@ -1092,6 +1040,7 @@ class GameEngine {
       if (this.input.isActionPressed()) {
         this.sound.init();
         this.sound.resume();
+        this.sound.playUIButton();
         if (this.state === 'TITLE' || this.state === 'GAME_OVER') {
           this.resetGame();
           this.state = 'PLAYING';
@@ -1137,7 +1086,7 @@ class GameEngine {
     // Boss trigger logic
     if (!this.boss && this.bossWarningTimer <= 0 && this.score >= this.nextBossScore) {
       this.bossWarningTimer = 3; // 3 seconds warning
-      this.sound.playHit(); // warning sound
+      this.sound.playBossSpawn();
     }
 
     if (this.bossWarningTimer > 0) {
@@ -1162,6 +1111,7 @@ class GameEngine {
         this.vfxManager.triggerHitStop(0.5);
         this.vfxManager.triggerShake(20, 0.5);
         this.vfxManager.spawnExplosion(this.logicalWidth/2, 100, '#e26b6b', 100);
+        if (this.sound) this.sound.playExplosion();
         this.nextBossScore = this.score + 1000;
         this.upgradeManager.startDraft();
       }
