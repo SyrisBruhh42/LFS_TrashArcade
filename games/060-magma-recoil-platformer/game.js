@@ -158,11 +158,15 @@ class Player {
     this.grounded = false;
 
     for (let p of platforms) {
+      if (p.broken) continue;
       if (this.x + this.radius > p.x && this.x - this.radius < p.x + p.w) {
         if (this.y + this.radius > p.y && this.y - this.radius < p.y + p.h && this.vy > 0 && this.y - this.vy*dt < p.y) {
           this.y = p.y - this.radius;
           this.vy = 0;
           this.grounded = true;
+
+          if (p.touched !== undefined) p.touched = true;
+          if (p.speed !== undefined) this.x += p.speed * dt;
         }
       }
     }
@@ -395,6 +399,8 @@ class Game {
         this.ui = new UIOverlay();
     this.trailManager = new TrailManager();
     this.magmaRenderer = new MagmaRenderer();
+    this.bg = new ParallaxBackground();
+    this.hazardManager = new HazardManager();
 
     this.resizeOb = new ResizeObserver(() => this.resize());
     this.resizeOb.observe(document.body);
@@ -428,11 +434,20 @@ class Game {
         this.ui = new UIOverlay();
     this.trailManager = new TrailManager();
     this.magmaRenderer = new MagmaRenderer();
+    this.bg = new ParallaxBackground();
+    this.hazardManager = new HazardManager();
 
     this.platforms.push(new Platform(0, height - 100, width, 100));
     for(let i=0; i<5; i++) {
-        this.platforms.push(new Platform(Math.random()*(width-100), height - 250 - i*150, 100, 20));
-        if (Math.random() > 0.5) this.enemies.push(new Enemy(Math.random()*width, height - 300 - i*150));
+        let p;
+        let r = Math.random();
+        if (r < 0.2) p = new FragilePlatform(Math.random()*(width-100), height - 250 - i*150, 100, 20);
+        else if (r < 0.4) p = new ConveyorPlatform(Math.random()*(width-100), height - 250 - i*150, 100, 20);
+        else p = new Platform(Math.random()*(width-100), height - 250 - i*150, 100, 20);
+        this.platforms.push(p);
+
+        if (Math.random() > 0.7) this.hazardManager.addGeyser(p.x + p.w/2, p.y);
+        else if (Math.random() > 0.5) this.enemies.push(new Enemy(Math.random()*width, height - 300 - i*150));
     }
   }
   handlePointerDown(e) {
@@ -502,8 +517,15 @@ class Game {
 
     while (this.platforms.length > 0 && this.platforms[this.platforms.length-1].y > this.cameraY - height) {
        let lastY = this.platforms[this.platforms.length-1].y;
-       this.platforms.push(new Platform(Math.random()*(width-100), lastY - 150 - Math.random()*100, 100, 20));
-       if (Math.random() > 0.4) this.enemies.push(new Enemy(Math.random()*width, lastY - 200));
+       let p;
+       let r = Math.random();
+       if (r < 0.2) p = new FragilePlatform(Math.random()*(width-100), lastY - 150 - Math.random()*100, 100, 20);
+       else if (r < 0.4) p = new ConveyorPlatform(Math.random()*(width-100), lastY - 150 - Math.random()*100, 100, 20);
+       else p = new Platform(Math.random()*(width-100), lastY - 150 - Math.random()*100, 100, 20);
+       this.platforms.push(p);
+
+       if (Math.random() > 0.8) this.hazardManager.addGeyser(p.x + p.w/2, p.y);
+       else if (Math.random() > 0.4) this.enemies.push(new Enemy(Math.random()*width, lastY - 200));
     }
 
     this.platforms = this.platforms.filter(p => p.y < this.cameraY + height + 200);
@@ -523,6 +545,9 @@ class Game {
         this.trailManager.update(dt);
     }
     if (this.magmaRenderer) this.magmaRenderer.update(dt);
+    if (this.bg) this.bg.update(this.cameraY);
+    if (this.hazardManager) this.hazardManager.update(dt, this.player, this.enemies, this.cameraY, height);
+    for (let p of this.platforms) { if (p.update) p.update(dt); }
 
     for (let b of this.bullets) {
         for (let e of this.enemies) {
@@ -565,11 +590,15 @@ class Game {
     }
   }
   draw(ctx) {
-    ctx.fillStyle = '#201010';
-    ctx.fillRect(0, 0, width, height);
+    if (this.bg) this.bg.draw(ctx, width, height, this.cameraY);
+    else {
+        ctx.fillStyle = '#201010';
+        ctx.fillRect(0, 0, width, height);
+    }
 
     ctx.save();
     ctx.translate(0, -this.cameraY);
+    if (this.hazardManager) this.hazardManager.draw(ctx);
 
     for (let p of this.platforms) p.draw(ctx);
     for (let e of this.enemies) e.draw(ctx);
