@@ -1228,6 +1228,7 @@ class GameEngine {
         this.enemies = [];
         this.particles = [];
         this.analytics = new AnalyticsTracker();
+        this.vfx = new JuiceManager(this);
         this.world = new DioramaWorld();
 
         this.spawnTimer = 0;
@@ -1274,6 +1275,7 @@ this.input.bindings['switch'] = ['Space', 'Enter'];
         this.enemies = [];
         this.particles = [];
         this.analytics = new AnalyticsTracker();
+        this.vfx = new JuiceManager(this);
         this.world = new DioramaWorld();
         this.score = 0;
         this.spawnTimer = 0;
@@ -1288,6 +1290,7 @@ this.input.bindings['switch'] = ['Space', 'Enter'];
         this.comboTimer = 1;
         this.wave = 1;
 this.state = 'PLAYING';
+        if (typeof JuiceManager !== 'undefined') this.vfx = new JuiceManager(this);
     }
 
     createParticles(x, y, color, count) {
@@ -1383,6 +1386,7 @@ this.state = 'PLAYING';
             const cx = cw / 2;
             const cy = ch / 2;
             const sunRadius = this.sunRepelRadius;
+            if (this.vfx && this.vfx.hitStopTimer > 0) { this.vfx.update(dt); return; }
 
             // Update Player
             const switched = this.handleInput();
@@ -1408,6 +1412,7 @@ this.state = 'PLAYING';
             this.player.update(dt, this.input);
             if(this.world) this.world.update(dt, this.player, this.enemies, this.particles, ch, cw);
             const playerPos = this.player.getPos(cx, cy);
+            if (this.vfx && this.player.isDashing) { this.vfx.emitTrail(playerPos.x, playerPos.y, '#ffffff', 8); }
             this.analytics.updateDistance(playerPos.x, playerPos.y);
 
 
@@ -1468,6 +1473,7 @@ this.state = 'PLAYING';
                         // Skip game over if invulnerable
                     } else {
                         this.sound.playHitSun();
+                        if (this.vfx) { this.vfx.addHitStop(0.8); this.vfx.addShake(30, 0, 0); }
                         this.createParticles(e.x, e.y, e.polarity === POLARITY.POSITIVE ? COLORS.POSITIVE : COLORS.NEGATIVE, 20);
                         this.state = 'GAME_OVER';
                         if (this.score > this.highScore) {
@@ -1490,6 +1496,7 @@ this.state = 'PLAYING';
                                 this.comboMultiplier = Math.min(this.maxCombo, this.comboMultiplier + 0.5);
                                 this.comboTimer = 1;
                                 this.score += 50 * this.scoreMult * Math.floor(this.comboMultiplier);
+                                if (this.vfx) { this.vfx.addHitStop(0.1); this.vfx.addShake(5, dxP, dyP); this.vfx.addPopup('+' + (50 * this.scoreMult * Math.floor(this.comboMultiplier)), e.x, e.y, '#00ff00'); this.vfx.emitDirectionalParticles(e.x, e.y, dxP, dyP, '#ffffff', 20); }
                                 this.createParticles(e.x, e.y, '#ffffff', 25);
                                 this.sound.playAbsorb();
                                 // Bounce off
@@ -1519,6 +1526,7 @@ this.state = 'PLAYING';
                         this.comboMultiplier = Math.min(this.maxCombo, this.comboMultiplier + 0.5);
                         this.comboTimer = 1;
                         this.score += 20 * this.scoreMult * Math.floor(this.comboMultiplier);
+                        if (this.vfx) { this.vfx.addHitStop(0.05); this.vfx.addShake(3, dxP, dyP); this.vfx.addPopup('+' + (20 * this.scoreMult * Math.floor(this.comboMultiplier)), e.x, e.y, '#ffffff'); this.vfx.emitDirectionalParticles(e.x, e.y, dxP, dyP, '#ffffff', 10); }
                         this.createParticles(e.x, e.y, '#ffffff', 15);
                         this.sound.playAbsorb(); // Or a custom hit sound
                         // Apply recoil to player
@@ -1530,6 +1538,7 @@ this.state = 'PLAYING';
                         this.comboMultiplier = Math.min(this.maxCombo, this.comboMultiplier + 0.5);
                         this.comboTimer = 1;
                         this.score += 10 * this.scoreMult * Math.floor(this.comboMultiplier);
+                        if (this.vfx) { this.vfx.addShake(2, 0, 0); this.vfx.addPopup('+' + (10 * this.scoreMult * Math.floor(this.comboMultiplier)), e.x, e.y, '#ffffff'); }
                         this.sound.playAbsorb();
                         this.createParticles(e.x, e.y, COLORS.SUN, 10);
                         e.markedForDeletion = true;
@@ -1563,6 +1572,7 @@ this.state = 'PLAYING';
             this.enemies = this.enemies.filter(e => !e.markedForDeletion);
             if (this.boss && this.boss.markedForDeletion) {
                 this.score += 500 * this.scoreMult * Math.floor(this.comboMultiplier);
+                if (this.vfx) { this.vfx.addHitStop(0.5); this.vfx.addShake(20, 0, 0); this.vfx.addPopup('+500', this.boss.x, this.boss.y, '#ffff00'); }
                 this.pickups.push(new Pickup(this.boss.x, this.boss.y, 2));
                 this.boss = null;
                 this.enemies.forEach(e => e.markedForDeletion = true);
@@ -1593,6 +1603,8 @@ this.state = 'PLAYING';
             // Update Particles
             this.particles.forEach(p => p.update(dt));
             this.particles = this.particles.filter(p => p.life > 0);
+
+            if (this.vfx) this.vfx.update(dt);
         }
 
         this.input.clearJustPressed();
@@ -1625,6 +1637,7 @@ this.state = 'PLAYING';
         // Draw Sun (Papercraft)
         const sunPts = [];
         const sunRadius = this.sunRepelRadius;
+            if (this.vfx && this.vfx.hitStopTimer > 0) { this.vfx.update(dt); return; }
         for (let i=0; i<8; i++) {
             const a = (i/8)*Math.PI*2;
             sunPts.push({
@@ -1665,6 +1678,9 @@ this.state = 'PLAYING';
             ctx.fillText('BOSS HP', cx, by + 15);
         }
 
+        ctx.save();
+        if (this.vfx) this.vfx.applyShake(ctx);
+
         // Draw Orbit Path
         ctx.beginPath();
         ctx.arc(cx, cy, this.player.orbitRadius, 0, Math.PI*2);
@@ -1679,6 +1695,9 @@ this.state = 'PLAYING';
 
 
         this.pickups.forEach(p => p.draw(ctx));
+
+        if (this.vfx) this.vfx.draw(ctx);
+        ctx.restore();
 
         // Combo HUD
         ctx.fillStyle = '#fff';
