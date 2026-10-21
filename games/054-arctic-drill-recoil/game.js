@@ -701,6 +701,12 @@ class Player {
     this.overdriveCooldown = 3;
     this.isOverdrive = false;
     this.invulnerableTimer = 0;
+    this.drillDamage = 1;
+    this.recoilMultiplier = 1;
+    this.pickupRange = 100;
+    this.invulnBonus = 0;
+    this.gravityMod = 1;
+    this.drillRangeBonus = 0;
   }
   update(dt, input) {
     this.overdriveTimer -= dt;
@@ -712,7 +718,7 @@ class Player {
     if (input.isSecondaryPressed && input.isSecondaryPressed() && this.overdriveTimer <= 0) {
       this.isOverdrive = true;
       this.overdriveTimer = this.overdriveCooldown;
-      this.invulnerableTimer = 0.5;
+      this.invulnerableTimer = (0.5 + this.invulnBonus);
       this.vx += this.aimDir.x * 600;
       this.vy += this.aimDir.y * 600;
     }
@@ -731,7 +737,7 @@ class Player {
       this.drilling = true;
       this.drillTimer = this.drillCooldown;
       // Add recoil velocity opposite to aim
-      const recoilForce = 300;
+      const recoilForce = (300 * this.recoilMultiplier);
       this.vx += -this.aimDir.x * recoilForce;
       this.vy += -this.aimDir.y * recoilForce;
     }
@@ -739,7 +745,7 @@ class Player {
     // Apply friction and gravity
     this.vx *= 0.95;
     this.vy *= 0.95;
-    this.vy += 300 * dt; // gravity
+    this.vy += (300 * this.gravityMod) * dt; // gravity
 
     this.x += this.vx * dt;
     this.y += this.vy * dt;
@@ -823,6 +829,9 @@ class GameEngine {
     this.bossWarningTimer = 0;
     this.bossesDefeated = 0;
     this.nextBossScore = 500;
+    this.comboManager = new ComboManager(this);
+    this.pickupManager = new PickupManager(this);
+    this.upgradeManager = new UpgradeManager(this);
     this.bossWarningTimer = 0;
     this.bossesDefeated = 0;
     this.nextBossScore = 500;
@@ -878,6 +887,10 @@ class GameEngine {
     this.bossWarningTimer = 0;
     this.bossesDefeated = 0;
     this.nextBossScore = 500;
+    if (this.comboManager) this.comboManager.reset();
+    if (this.pickupManager) this.pickupManager.pickups = [];
+    if (this.upgradeManager) { this.upgradeManager.activePerks = []; this.upgradeManager.draftChoices = []; }
+
     this.generateBlocks();
   };
 
@@ -934,18 +947,20 @@ class GameEngine {
   GameEngine.prototype.checkCollisions = function() {
     // Drill vs Blocks/Enemies
     if (this.player.drilling) {
-      const drillX = this.player.x + this.player.aimDir.x * (this.player.r + 20);
-      const drillY = this.player.y + this.player.aimDir.y * (this.player.r + 20);
+      const drillX = this.player.x + this.player.aimDir.x * (this.player.r + (20 + (this.player.drillRangeBonus || 0)));
+      const drillY = this.player.y + this.player.aimDir.y * (this.player.r + (20 + (this.player.drillRangeBonus || 0)));
 
       // Blocks
       for (let i = this.blocks.length - 1; i >= 0; i--) {
         const b = this.blocks[i];
         if (drillX > b.x && drillX < b.x + b.w && drillY > b.y && drillY < b.y + b.h) {
-          b.hp--;
+          b.hp -= this.player.drillDamage;
           this.spawnParticles(drillX, drillY, '#fff', 5);
           if (b.hp <= 0) {
             this.blocks.splice(i, 1);
-            this.score += 10;
+            this.comboManager.addHit();
+            this.score += 10 * this.comboManager.multiplier;
+            if (Math.random() < 0.1) this.pickupManager.spawn(b.x + b.w/2, b.y + b.h/2);
             this.sound.playHit();
             this.spawnParticles(drillX, drillY, '#7ab8d6', 15);
           }
@@ -958,14 +973,16 @@ class GameEngine {
         const dx = drillX - e.x;
         const dy = drillY - e.y;
         if (dx*dx + dy*dy < e.r*e.r) {
-          e.hp--;
+          e.hp -= this.player.drillDamage;
           this.spawnParticles(drillX, drillY, '#e26b6b', 5);
           // Knockback
           e.vx += this.player.aimDir.x * 200;
           e.vy += this.player.aimDir.y * 200;
           if (e.hp <= 0) {
             this.enemies.splice(i, 1);
-            this.score += 50;
+            this.comboManager.addHit();
+            this.score += 50 * this.comboManager.multiplier;
+            this.pickupManager.spawn(e.x, e.y);
             this.sound.playHit();
             this.spawnParticles(e.x, e.y, '#e26b6b', 20);
           }
@@ -1038,7 +1055,9 @@ class GameEngine {
           if (e.hp <= 0) {
              const idx = this.enemies.indexOf(e);
              if (idx > -1) this.enemies.splice(idx, 1);
-             this.score += 50;
+             this.comboManager.addHit();
+             this.score += 50 * this.comboManager.multiplier;
+             this.pickupManager.spawn(e.x, e.y);
              this.sound.playHit();
              this.spawnParticles(e.x, e.y, '#e26b6b', 20);
           }
@@ -1052,6 +1071,11 @@ class GameEngine {
   };
 
   GameEngine.prototype.update = function(dt) {
+    if (this.state === 'UPGRADE_DRAFT') {
+      this.upgradeManager.handleInput(this.input);
+      this.upgradeManager.handleMouse(null, this.input, this.logicalWidth, this.logicalHeight);
+      return;
+    }
     if (this.state !== 'PLAYING') {
       if (this.input.isActionPressed()) {
         this.sound.init();
@@ -1059,7 +1083,9 @@ class GameEngine {
         if (this.state === 'TITLE' || this.state === 'GAME_OVER') {
           this.resetGame();
           this.state = 'PLAYING';
-        } else if (this.state === 'PAUSED') {
+        } else if (this.state === 'UPGRADE_DRAFT') {
+      this.upgradeManager.draw(this.ctx, this.logicalWidth, this.logicalHeight);
+    } else if (this.state === 'PAUSED') {
           this.state = 'PLAYING';
         }
         // Debounce
@@ -1119,12 +1145,16 @@ class GameEngine {
         this.boss = null;
         this.bossesDefeated++;
         this.nextBossScore = this.score + 1000;
+        this.upgradeManager.startDraft();
       }
     }
 
     if (!this.boss && this.bossWarningTimer <= 0) {
       this.spawnEnemy();
     }
+
+    this.comboManager.update(dt);
+    this.pickupManager.update(dt, this.player, this.comboManager);
 
     for (const c of this.crystals) c.update(dt);
 
@@ -1191,6 +1221,8 @@ class GameEngine {
     const ratio = Math.max(0, this.player.overdriveCooldown - this.player.overdriveTimer) / this.player.overdriveCooldown;
     this.ctx.fillRect(10, 70, 100 * ratio, 10);
 
+    this.comboManager.draw(this.ctx, this.logicalWidth, this.logicalHeight);
+
     // Overlays
     if (this.state === 'TITLE') {
       this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -1203,6 +1235,8 @@ class GameEngine {
       this.ctx.font = '20px monospace';
       this.ctx.fillText('Aim & Click/Space/Touch to Drill', this.logicalWidth/2, this.logicalHeight/2 + 10);
       this.ctx.fillText('Use Drill Recoil to Move!', this.logicalWidth/2, this.logicalHeight/2 + 40);
+    } else if (this.state === 'UPGRADE_DRAFT') {
+      this.upgradeManager.draw(this.ctx, this.logicalWidth, this.logicalHeight);
     } else if (this.state === 'PAUSED') {
       this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
       this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
