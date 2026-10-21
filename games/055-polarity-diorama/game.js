@@ -1015,6 +1015,132 @@ class Hazard {
     }
 }
 
+
+class BossBase extends Enemy {
+    constructor(cx, cy, cw, ch, maxHp) {
+        super(cx, cy, cw, ch);
+        this.maxHp = maxHp;
+        this.hp = maxHp;
+        this.phase2 = false;
+        this.isBoss = true;
+        this.size = 40;
+        this.shape = [];
+        const sides = 8;
+        for (let i = 0; i < sides; i++) {
+            const a = (i / sides) * Math.PI * 2;
+            const r = this.size * (0.8 + Math.random() * 0.4);
+            this.shape.push({ angle: a, r: r });
+        }
+    }
+
+    takeDamage(amount) {
+        this.hp -= amount;
+        if (this.hp <= this.maxHp / 2 && !this.phase2) {
+            this.phase2 = true;
+            this.onPhase2();
+        }
+        if (this.hp <= 0) {
+            this.markedForDeletion = true;
+        }
+    }
+
+    onPhase2() {
+        // Override in subclass
+    }
+}
+
+class TwinBoss extends BossBase {
+    constructor(cx, cy, cw, ch) {
+        super(cx, cy, cw, ch, 10);
+        this.fireTimer = 2.0;
+        this.orbitAngle = 0;
+        this.orbitRadius = 250;
+        this.orbitSpeed = 1.0;
+        this.polarity = POLARITY.POSITIVE;
+    }
+
+    update(dt, cx, cy, player, playerPos, enemies) {
+        this.orbitAngle += this.orbitSpeed * dt;
+        const targetX = cx + Math.cos(this.orbitAngle) * this.orbitRadius;
+        const targetY = cy + Math.sin(this.orbitAngle) * this.orbitRadius;
+
+        this.x += (targetX - this.x) * 5 * dt;
+        this.y += (targetY - this.y) * 5 * dt;
+
+        this.fireTimer -= dt;
+        if (this.fireTimer <= 0) {
+            this.fire(cx, cy, playerPos, enemies);
+            this.fireTimer = this.phase2 ? 1.0 : 2.0;
+        }
+    }
+
+    fire(cx, cy, playerPos, enemies) {
+        const proj = new Enemy(cx, cy, window.innerWidth, window.innerHeight);
+        proj.x = this.x;
+        proj.y = this.y;
+        proj.polarity = this.polarity === POLARITY.POSITIVE ? POLARITY.NEGATIVE : POLARITY.POSITIVE;
+        proj.size = 8;
+
+        const dx = playerPos.x - this.x;
+        const dy = playerPos.y - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        proj.vx = (dx/dist) * (this.phase2 ? 300 : 150);
+        proj.vy = (dy/dist) * (this.phase2 ? 300 : 150);
+
+        enemies.push(proj);
+    }
+
+    onPhase2() {
+        this.orbitSpeed = 2.0;
+        this.orbitRadius = 150;
+    }
+}
+
+class MagnetBoss extends BossBase {
+    constructor(cx, cy, cw, ch) {
+        super(cx, cy, cw, ch, 15);
+        this.chargeTimer = 3.0;
+        this.polarityTimer = 1.0;
+        this.polarity = POLARITY.NEGATIVE;
+    }
+
+    update(dt, cx, cy, player, playerPos, enemies) {
+        // Move towards center slowly
+        const dxSun = cx - this.x;
+        const dySun = cy - this.y;
+        this.x += dxSun * 0.5 * dt;
+        this.y += dySun * 0.5 * dt;
+
+        this.chargeTimer -= dt;
+        if (this.chargeTimer <= 0) {
+            this.polarity = this.polarity === POLARITY.POSITIVE ? POLARITY.NEGATIVE : POLARITY.POSITIVE;
+            this.chargeTimer = this.phase2 ? 1.5 : 3.0;
+        }
+
+        if (this.phase2) {
+            this.polarityTimer -= dt;
+            if (this.polarityTimer <= 0) {
+                this.polarity = this.polarity === POLARITY.POSITIVE ? POLARITY.NEGATIVE : POLARITY.POSITIVE;
+                this.polarityTimer = 0.5;
+            }
+        }
+
+        // Massive magnetic pull/push
+        const dxP = playerPos.x - this.x;
+        const dyP = playerPos.y - this.y;
+        const distPSq = dxP*dxP + dyP*dyP;
+        const distP = Math.sqrt(distPSq);
+
+        if (distP < 500) {
+            const magForce = (this.phase2 ? 200000 : 100000) / Math.max(distPSq, 100);
+            const forceDir = this.polarity === player.polarity ? 1 : -1; // Opposite pulls player in (-1), same repels player out (1)
+            // Apply force to player recoil (this is an approximation of pulling the player off orbit)
+            player.recoilOffset.x += (dxP / distP) * magForce * forceDir * dt;
+            player.recoilOffset.y += (dyP / distP) * magForce * forceDir * dt;
+        }
+    }
+}
+
 class GameEngine {
     constructor() {
         this.input = new InputManager();
@@ -1034,7 +1160,15 @@ class GameEngine {
         this.world = new DioramaWorld();
 
         this.spawnTimer = 0;
-        this.spawnRate = 2.0; // seconds
+        this.spawnRate = 2.0;
+        this.boss = null;
+        this.nextBossScore = 150;
+        this.bossWarningTimer = 0;
+        this.bossIndex = 0; // seconds
+        this.boss = null;
+        this.nextBossScore = 150;
+        this.bossWarningTimer = 0;
+        this.bossIndex = 0;
 
         // Custom binding for mouse/touch tap to switch polarity
         this.input.bindings['switch'] = ['Space', 'Enter'];
@@ -1061,6 +1195,10 @@ class GameEngine {
         this.score = 0;
         this.spawnTimer = 0;
         this.spawnRate = 2.0;
+        this.boss = null;
+        this.nextBossScore = 150;
+        this.bossWarningTimer = 0;
+        this.bossIndex = 0;
         this.state = 'PLAYING';
     }
 
@@ -1125,6 +1263,8 @@ class GameEngine {
         }
 
         if (this.state === 'PLAYING') {
+            const cw = (window.innerWidth || 800);
+            const ch = window.innerHeight;
             const cx = cw / 2;
             const cy = ch / 2;
             const sunRadius = 30;
@@ -1151,13 +1291,31 @@ class GameEngine {
             }
 
             this.player.update(dt, this.input);
-            const cw = (window.innerWidth || 800);
-            const ch = window.innerHeight;
             if(this.world) this.world.update(dt, this.player, this.enemies, this.particles, ch, cw);
             const playerPos = this.player.getPos(cx, cy);
             this.analytics.updateDistance(playerPos.x, playerPos.y);
 
-            // Spawner
+            // Boss Spawner Logic
+            if (this.score >= this.nextBossScore && !this.boss && this.bossWarningTimer <= 0) {
+                this.bossWarningTimer = 3.0; // 3 seconds warning
+                this.sound.playRepel(); // Re-use sound as warning siren
+            }
+
+            if (this.bossWarningTimer > 0) {
+                this.bossWarningTimer -= dt;
+                if (this.bossWarningTimer <= 0) {
+                    // Spawn boss
+                    const bossClass = this.bossIndex % 2 === 0 ? TwinBoss : MagnetBoss;
+                    this.boss = new bossClass(cx, cy, cw, ch);
+                    this.enemies.push(this.boss);
+                    this.bossIndex++;
+                    this.nextBossScore += 300;
+                }
+            }
+
+            // Normal Spawner (pause if boss warning or boss active)
+            if (!this.boss && this.bossWarningTimer <= 0) {
+
             this.spawnTimer -= dt;
             if (this.spawnTimer <= 0) {
 
@@ -1172,6 +1330,7 @@ class GameEngine {
 
                 this.spawnTimer = this.spawnRate;
                 this.spawnRate = Math.max(0.5, this.spawnRate - 0.05); // Increase difficulty
+            }
             }
 
             // Update Enemies
@@ -1202,6 +1361,35 @@ class GameEngine {
                 const dxP = playerPos.x - e.x;
                 const dyP = playerPos.y - e.y;
                 if (Math.sqrt(dxP*dxP + dyP*dyP) < this.player.size + e.size) {
+                    if (e.isBoss) {
+                        if (this.player.isDashing) {
+                            if (this.player.polarity !== e.polarity) {
+                                e.takeDamage(1);
+                                this.score += 50;
+                                this.createParticles(e.x, e.y, '#ffffff', 25);
+                                this.sound.playAbsorb();
+                                // Bounce off
+                                const angleP = Math.atan2(dyP, dxP);
+                                this.player.recoilOffset.x += Math.cos(angleP) * 30;
+                                this.player.recoilOffset.y += Math.sin(angleP) * 30;
+                                this.player.isDashing = false; // Stop dash
+                            } else {
+                                // Same polarity, repel
+                                this.sound.playRepel();
+                                const angleP = Math.atan2(dyP, dxP);
+                                this.player.recoilOffset.x += Math.cos(angleP) * 20;
+                                this.player.recoilOffset.y += Math.sin(angleP) * 20;
+                            }
+                        } else {
+                            // Non-dashing touch: player takes huge knockback or dies if no invuln
+                            this.sound.playRepel();
+                            const angleP = Math.atan2(dyP, dxP);
+                            this.player.recoilOffset.x += Math.cos(angleP) * 40;
+                            this.player.recoilOffset.y += Math.sin(angleP) * 40;
+                        }
+                        continue; // Skip normal enemy collision logic for boss
+                    }
+
                     if (this.player.isDashing) {
                         e.markedForDeletion = true;
                         this.score += 20;
@@ -1244,6 +1432,12 @@ class GameEngine {
             }
 
             this.enemies = this.enemies.filter(e => !e.markedForDeletion);
+            if (this.boss && this.boss.markedForDeletion) {
+                this.score += 500;
+                this.boss = null;
+                // Clear out enemies on boss death
+                this.enemies.forEach(e => e.markedForDeletion = true);
+            }
 
             // Update Particles
             this.particles.forEach(p => p.update(dt));
@@ -1288,6 +1482,37 @@ class GameEngine {
             });
         }
         drawPaperPoly(ctx, sunPts, COLORS.SUN);
+
+        // Draw Boss UI
+        if (this.bossWarningTimer > 0) {
+            ctx.fillStyle = (Math.floor(this.bossWarningTimer * 10) % 2 === 0) ? '#ff0000' : '#ffffff';
+            ctx.font = 'bold 30px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('WARNING: ANOMALY DETECTED', cx, cy - 100);
+        }
+
+        if (this.boss) {
+            // Boss Health Bar
+            const barWidth = 400;
+            const barHeight = 20;
+            const bx = cx - barWidth / 2;
+            const by = 50;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(bx, by, barWidth, barHeight);
+
+            const hpRatio = Math.max(0, this.boss.hp / this.boss.maxHp);
+            ctx.fillStyle = this.boss.polarity === POLARITY.POSITIVE ? COLORS.POSITIVE : COLORS.NEGATIVE;
+            ctx.fillRect(bx, by, barWidth * hpRatio, barHeight);
+
+            ctx.strokeStyle = '#fff';
+            ctx.strokeRect(bx, by, barWidth, barHeight);
+
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('BOSS HP', cx, by + 15);
+        }
 
         // Draw Orbit Path
         ctx.beginPath();
