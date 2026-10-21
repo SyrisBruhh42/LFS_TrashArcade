@@ -89,10 +89,10 @@ class UpgradeManager {
     if (pickup.type === 'health') {
         engine.arena.width = Math.min(engine.arena.maxWidth, engine.arena.width + 25);
         engine.arena.height = Math.min(engine.arena.maxHeight, engine.arena.height + 25);
-        engine.audio.playLaunch(); // Re-using launch sound for pickup
+        if (engine.audio) engine.audio.playPickupHealth();
     } else if (pickup.type === 'score') {
         engine.score += 50 * this.comboMultiplier;
-        engine.audio.playLaunch();
+        if (engine.audio) engine.audio.playPickupScore();
     }
   }
 
