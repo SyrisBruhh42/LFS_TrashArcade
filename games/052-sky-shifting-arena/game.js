@@ -208,16 +208,19 @@ class InputManager {
 // --- ENGINE BASE ---
 
 class Projectile {
-    constructor(x, y, dx, dy, isPlayer) {
+    constructor(x, y, dx, dy, isPlayer, damage = 10, pierce = 0, radiusBonus = 0) {
         this.x = x;
         this.y = y;
         this.dx = dx;
         this.dy = dy;
         this.speed = 400;
-        this.radius = 4;
+        this.radius = 4 + radiusBonus;
         this.isPlayer = isPlayer;
         this.color = isPlayer ? '#fff' : '#e94560';
         this.active = true;
+        this.damage = damage;
+        this.pierceCount = pierce;
+        this.hitEnemies = new Set();
     }
 
     update(dt, arena) {
@@ -645,7 +648,13 @@ class GameEngine {
         this.ctx = this.canvas.getContext('2d');
         this.input = new InputManager(this.canvas);
         this.audio = new SoundEngine();
+
         this.saveManager = new SaveManager();
+
+        this.comboManager = new ComboManager(this);
+        this.upgradeManager = new UpgradeManager(this);
+        this.pickupManager = new PickupManager(this);
+
 
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
         this.lastTime = performance.now();
@@ -714,13 +723,17 @@ class GameEngine {
 
     setState(newState) {
         document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+        const upg = document.getElementById('upgrade-screen');
+        if (upg) upg.classList.add('hidden');
 
         if (newState === 'TITLE') {
             document.getElementById('title-screen').classList.remove('hidden');
         } else if (newState === 'PLAYING') {
             document.getElementById('hud-screen').classList.remove('hidden');
-        } else if (newState === 'PAUSED') {
+                } else if (newState === 'PAUSED') {
             document.getElementById('pause-screen').classList.remove('hidden');
+        } else if (newState === 'UPGRADING') {
+            document.getElementById('upgrade-screen').classList.remove('hidden');
         } else if (newState === 'GAME_OVER') {
             document.getElementById('game-over-screen').classList.remove('hidden');
             document.getElementById('final-score').innerText = `Score: ${this.score}`;
@@ -747,6 +760,14 @@ class GameEngine {
         this.updateHUD();
     }
 
+
+    continueNextWave() {
+        this.wave++;
+        this.arena.shiftInterval = Math.max(2, 5 - this.wave * 0.2);
+        this.updateHUD();
+        this.setState('PLAYING');
+    }
+
     spawnEnemy() {
         // Spawn outside arena bounds
         const angle = Math.random() * Math.PI * 2;
@@ -758,9 +779,21 @@ class GameEngine {
         this.enemies.push(new EnemyClass(ex, ey));
     }
 
+    updateComboHUD() {
+        const comboFill = document.getElementById('combo-bar-fill');
+        const comboMult = document.getElementById('combo-multiplier');
+        if (comboFill && comboMult && this.comboManager) {
+            comboMult.innerText = `${this.comboManager.multiplier.toFixed(1)}x`;
+            const comboPercent = (this.comboManager.timer / this.comboManager.maxTime) * 100;
+            comboFill.style.width = `${Math.max(0, comboPercent)}%`;
+        }
+    }
+
     updateHUD() {
         document.getElementById('hud-score').innerText = `Score: ${this.score}`;
         document.getElementById('hud-wave').innerText = `Wave: ${this.wave}`;
+
+        this.updateComboHUD();
 
         const healthBar = document.getElementById('health-bar');
         const hpPercent = Math.max(0, this.player.health / this.player.maxHealth) * 100;
@@ -776,6 +809,7 @@ class GameEngine {
     }
 
     update(dt) {
+        if (this.state === 'UPGRADING') return;
         if (this.state !== 'PLAYING') return;
 
         // Ensure dt is capped
@@ -788,6 +822,9 @@ class GameEngine {
         this.arena.update(dt);
         this.worldBg.update(dt);
         this.hazards.update(dt, this.arena, this.player, this.enemies, this.projectiles, this.audio);
+        if (this.comboManager) this.comboManager.update(dt);
+        if (this.pickupManager) this.pickupManager.update(dt, this.player);
+        this.updateComboHUD();
         if (this.enemyHazards) {
             for (let i = this.enemyHazards.length - 1; i >= 0; i--) {
                 this.enemyHazards[i].update(dt, this.player.x, this.player.y, this);
@@ -799,7 +836,25 @@ class GameEngine {
 
 
         if (aimVec.firing && this.player.fireCooldown <= 0) {
-            this.projectiles.push(new Projectile(this.player.x, this.player.y, aimVec.x, aimVec.y, true));
+            const baseDmg = 10 + this.player.bonusDamage;
+            const pPierce = this.player.pierceCount;
+            const pRad = this.player.bulletScale;
+
+            // Base projectile
+            this.projectiles.push(new Projectile(this.player.x, this.player.y, aimVec.x, aimVec.y, true, baseDmg, pPierce, pRad));
+
+            // Multishot
+            if (this.player.multishot > 0) {
+                const spread = 0.15;
+                let angle = Math.atan2(aimVec.y, aimVec.x);
+                for (let i = 1; i <= this.player.multishot; i++) {
+                    const offset = spread * Math.ceil(i/2) * (i % 2 === 0 ? -1 : 1);
+                    const nx = Math.cos(angle + offset);
+                    const ny = Math.sin(angle + offset);
+                    this.projectiles.push(new Projectile(this.player.x, this.player.y, nx, ny, true, baseDmg, pPierce, pRad));
+                }
+            }
+
             this.player.fireCooldown = this.player.fireRate;
             this.player.recoilOffset = 5;
             this.audio.playShoot();
@@ -827,9 +882,7 @@ class GameEngine {
                 // Boss defeated
                 this.isBossWave = false;
                 this.waveTimer = 0;
-                this.wave++;
-                this.arena.shiftInterval = Math.max(2, 5 - this.wave * 0.2);
-                this.updateHUD();
+                this.upgradeManager.showUpgrades();
 
                 // Clear enemies/projectiles on boss kill
                 this.enemies = [];
@@ -862,10 +915,8 @@ class GameEngine {
                     }
                     this.enemies.push(this.currentBoss);
                 } else {
-                    this.wave++;
-                    this.arena.shiftInterval = Math.max(2, 5 - this.wave * 0.2);
+                    this.upgradeManager.showUpgrades();
                 }
-                this.updateHUD();
             }
         }
 
@@ -891,12 +942,20 @@ class GameEngine {
                 let p = this.projectiles[j];
                 if (p.isPlayer) {
                     const pd = Math.hypot(p.x - e.x, p.y - e.y);
-                    if (pd < p.radius + e.radius) {
-                        e.health -= 10;
-                        p.active = false;
+                    if (pd < p.radius + e.radius && p.active && !p.hitEnemies.has(e)) {
+                        e.health -= p.damage || 10;
+                        p.hitEnemies.add(e);
+
+                        if (p.pierceCount > 0) {
+                            p.pierceCount--;
+                        } else {
+                            p.active = false;
+                        }
+
                         if (e.health <= 0) {
                             if (e.onDeath) e.onDeath(this);
-                            this.score += 10 * this.wave;
+                            this.comboManager.addScore(10 * this.wave);
+                            this.pickupManager.spawn(e.x, e.y);
                             this.audio.playExplosion();
                             this.updateHUD();
                         }
@@ -954,6 +1013,10 @@ class GameEngine {
         }
         if (this.enemyHazards) {
             this.enemyHazards.forEach(h => h.draw(this.ctx));
+        }
+
+        if (this.pickupManager) {
+            this.pickupManager.draw(this.ctx, 0.016);
         }
 
         this.projectiles.forEach(p => p.draw(this.ctx));
