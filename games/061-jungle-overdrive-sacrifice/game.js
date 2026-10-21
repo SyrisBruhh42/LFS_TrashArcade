@@ -205,6 +205,8 @@ class Enemy {
     this.maxHealth = 3;
     this.radius = 20;
     this.animTimer = 0;
+    this.type = 'Base';
+    this.color = '#2d5a27'; // Mossy green
   }
   update(dt) {
     this.x -= this.speed * dt;
@@ -214,7 +216,7 @@ class Enemy {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(Math.sin(this.animTimer * 10) * 0.1);
-    ctx.fillStyle = '#2d5a27'; // Mossy green
+    ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -225,6 +227,212 @@ class Enemy {
     ctx.fillRect(-this.radius, -this.radius - 10, this.radius * 2, 5);
     ctx.fillStyle = '#0f0';
     ctx.fillRect(-this.radius, -this.radius - 10, (this.health/this.maxHealth)*this.radius*2, 5);
+    ctx.restore();
+  }
+}
+
+class SwarmerEnemy extends Enemy {
+  constructor(x, y) {
+    super(x, y);
+    this.speed = 250;
+    this.health = 1;
+    this.maxHealth = 1;
+    this.radius = 12;
+    this.type = 'Swarmer';
+    this.color = '#d2b561';
+    this.startY = y;
+    this.offsetTimer = Math.random() * 10;
+  }
+  update(dt) {
+    this.x -= this.speed * dt;
+    this.animTimer += dt;
+    this.offsetTimer += dt;
+    this.y = this.startY + Math.sin(this.offsetTimer * 5) * 50;
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.animTimer * 5);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -this.radius);
+    ctx.lineTo(this.radius, this.radius);
+    ctx.lineTo(-this.radius, this.radius);
+    ctx.fill();
+
+    // HP bar
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(-this.radius, -this.radius - 10, this.radius * 2, 3);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(-this.radius, -this.radius - 10, (this.health/this.maxHealth)*this.radius*2, 3);
+    ctx.restore();
+  }
+}
+
+class BruiserEnemy extends Enemy {
+  constructor(x, y) {
+    super(x, y);
+    this.speed = 40;
+    this.health = 15;
+    this.maxHealth = 15;
+    this.radius = 35;
+    this.type = 'Bruiser';
+    this.color = '#7a2828';
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // Shield pulse
+    ctx.globalAlpha = 0.3 + 0.2 * Math.sin(this.animTimer * 3);
+    ctx.fillStyle = '#ff5555';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius + 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = this.color;
+    ctx.fillRect(-this.radius, -this.radius, this.radius * 2, this.radius * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-10, -10, 20, 20);
+
+    // HP bar
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(-this.radius, -this.radius - 15, this.radius * 2, 8);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(-this.radius, -this.radius - 15, (this.health/this.maxHealth)*this.radius*2, 8);
+    ctx.restore();
+  }
+}
+
+class SniperEnemy extends Enemy {
+  constructor(x, y) {
+    super(x, y);
+    this.speed = 30;
+    this.health = 5;
+    this.maxHealth = 5;
+    this.radius = 18;
+    this.type = 'Sniper';
+    this.color = '#5b2c6f';
+    this.telegraphTimer = 0;
+  }
+  update(dt) {
+    // Stops moving and prepares to attack when in screen
+    if (this.x < window.innerWidth - 100 && this.telegraphTimer < 2) {
+       this.telegraphTimer += dt;
+       this.x -= this.speed * dt * 0.1;
+    } else {
+       this.x -= this.speed * dt;
+    }
+    this.animTimer += dt;
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // Laser telegraph
+    if (this.telegraphTimer > 0) {
+      ctx.globalAlpha = this.telegraphTimer / 2.0;
+      ctx.strokeStyle = '#f00';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-window.innerWidth, 0);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(this.radius, 0);
+    ctx.lineTo(-this.radius, -this.radius);
+    ctx.lineTo(-this.radius, this.radius);
+    ctx.fill();
+
+    // HP bar
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(-this.radius, -this.radius - 10, this.radius * 2, 5);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(-this.radius, -this.radius - 10, (this.health/this.maxHealth)*this.radius*2, 5);
+    ctx.restore();
+  }
+}
+
+class SplitterEnemy extends Enemy {
+  constructor(x, y) {
+    super(x, y);
+    this.speed = 70;
+    this.health = 6;
+    this.maxHealth = 6;
+    this.radius = 25;
+    this.type = 'Splitter';
+    this.color = '#17a589';
+    this.spawnTimer = 0;
+  }
+  update(dt) {
+    this.x -= this.speed * dt;
+    this.animTimer += dt;
+    this.spawnTimer += dt;
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(-this.animTimer * 2);
+    ctx.fillStyle = this.color;
+
+    // Draw cross shape
+    ctx.fillRect(-this.radius, -this.radius/3, this.radius*2, this.radius*(2/3));
+    ctx.fillRect(-this.radius/3, -this.radius, this.radius*(2/3), this.radius*2);
+
+    // HP bar
+    ctx.rotate(this.animTimer * 2); // Unrotate for HP
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(-this.radius, -this.radius - 10, this.radius * 2, 5);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(-this.radius, -this.radius - 10, (this.health/this.maxHealth)*this.radius*2, 5);
+    ctx.restore();
+  }
+}
+
+class SpawnerEnemy extends Enemy {
+  constructor(x, y) {
+    super(x, y);
+    this.speed = 20;
+    this.health = 10;
+    this.maxHealth = 10;
+    this.radius = 30;
+    this.type = 'Spawner';
+    this.color = '#884ea0';
+    this.animTimer = 0;
+  }
+  update(dt) {
+    this.x -= this.speed * dt;
+    this.animTimer += dt;
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.scale(1 + 0.1 * Math.sin(this.animTimer * 4), 1 + 0.1 * Math.sin(this.animTimer * 4));
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      let angle = (i / 6) * Math.PI * 2;
+      ctx.lineTo(Math.cos(angle) * this.radius, Math.sin(angle) * this.radius);
+    }
+    ctx.fill();
+
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.scale(1 / (1 + 0.1 * Math.sin(this.animTimer * 4)), 1 / (1 + 0.1 * Math.sin(this.animTimer * 4))); // Reset scale for HP
+
+    // HP bar
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(-this.radius, -this.radius - 15, this.radius * 2, 6);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(-this.radius, -this.radius - 15, (this.health/this.maxHealth)*this.radius*2, 6);
     ctx.restore();
   }
 }
@@ -616,6 +824,16 @@ class Game {
                 e.y + e.radius > h.y && e.y - e.radius < h.y + h.h) {
               e.health -= 1;
               if (e.health <= 0) {
+                 if (e.type === 'Splitter') {
+                   let spawn1 = new SwarmerEnemy(e.x, e.y - 30);
+                   let spawn2 = new SwarmerEnemy(e.x, e.y + 30);
+                   this.enemies.push(spawn1, spawn2);
+                 } else if (e.type === 'Spawner') {
+                   for (let j = 0; j < 3; j++) {
+                     let s = new SwarmerEnemy(e.x, e.y + (j-1)*40);
+                     this.enemies.push(s);
+                   }
+                 }
                  this.enemies.splice(i, 1);
                  this.texts.push(new FloatingText(e.x, e.y - 20, "Impaled", 1, '#ffaa00'));
               }
@@ -628,8 +846,24 @@ class Game {
 
       this.enemySpawnTimer -= dt;
       if (this.enemySpawnTimer <= 0) {
-        this.enemies.push(new Enemy(width + 50, height / 2));
-        this.enemySpawnTimer = 2; // Fixed interval for phase 1
+        let spawnType = Math.random();
+        let spawnY = Math.random() * (height - 200) + 100; // Keep within playable area
+        let newEnemy;
+        if (spawnType < 0.2) {
+            newEnemy = new Enemy(width + 50, spawnY);
+        } else if (spawnType < 0.4) {
+            newEnemy = new SwarmerEnemy(width + 50, spawnY);
+        } else if (spawnType < 0.6) {
+            newEnemy = new BruiserEnemy(width + 50, spawnY);
+        } else if (spawnType < 0.8) {
+            newEnemy = new SniperEnemy(width + 50, spawnY);
+        } else if (spawnType < 0.9) {
+            newEnemy = new SplitterEnemy(width + 50, spawnY);
+        } else {
+            newEnemy = new SpawnerEnemy(width + 50, spawnY);
+        }
+        this.enemies.push(newEnemy);
+        this.enemySpawnTimer = 1.5 + Math.random(); // Varied interval
       }
 
       for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -695,6 +929,19 @@ class Game {
 
           if (closest.health <= 0) {
             this.score += 100 * (this.player.overdriveActive ? 2 : 1);
+
+            // Special on-death behavior
+            if (closest.type === 'Splitter') {
+              let spawn1 = new SwarmerEnemy(closest.x, closest.y - 30);
+              let spawn2 = new SwarmerEnemy(closest.x, closest.y + 30);
+              this.enemies.push(spawn1, spawn2);
+            } else if (closest.type === 'Spawner') {
+              for (let i = 0; i < 3; i++) {
+                 let s = new SwarmerEnemy(closest.x, closest.y + (i-1)*40);
+                 this.enemies.push(s);
+              }
+            }
+
             this.enemies = this.enemies.filter(e => e !== closest);
             this.texts.push(new FloatingText(closest.x, closest.y - 20, acc > 0.8 ? "PERFECT!" : "Good", 1, '#0f0'));
           }
