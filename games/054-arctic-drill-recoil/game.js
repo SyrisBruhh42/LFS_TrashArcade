@@ -389,7 +389,7 @@ class Block {
   }
 }
 
-class Enemy {
+class BasicEnemy {
   constructor(x, y) {
     this.x = x;
     this.y = y;
@@ -398,18 +398,14 @@ class Enemy {
     this.vy = (Math.random() - 0.5) * 100;
     this.hp = 2;
   }
-  update(dt, playerX, playerY) {
-    // Move towards player slowly
+  update(dt, playerX, playerY, engine) {
     const dx = playerX - this.x;
     const dy = playerY - this.y;
     const dist = Math.sqrt(dx*dx + dy*dy) || 1;
     this.vx += (dx / dist) * 50 * dt;
     this.vy += (dy / dist) * 50 * dt;
-
-    // Friction
     this.vx *= 0.99;
     this.vy *= 0.99;
-
     this.x += this.vx * dt;
     this.y += this.vy * dt;
   }
@@ -418,8 +414,6 @@ class Enemy {
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
     ctx.fill();
-
-    // Core
     ctx.fillStyle = '#fff';
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.r/2, 0, Math.PI * 2);
@@ -427,7 +421,7 @@ class Enemy {
   }
 }
 
-class DasherEnemy extends Enemy {
+class DasherEnemy extends BasicEnemy {
   constructor(x, y) {
     super(x, y);
     this.hp = 4;
@@ -435,27 +429,33 @@ class DasherEnemy extends Enemy {
     this.dashTimer = 2;
     this.dashCooldown = 3;
     this.isDashing = false;
+    this.telegraphTimer = 0;
   }
-  update(dt, playerX, playerY) {
+  update(dt, playerX, playerY, engine) {
     this.dashTimer -= dt;
     const dx = playerX - this.x;
     const dy = playerY - this.y;
     const dist = Math.sqrt(dx*dx + dy*dy) || 1;
 
-    if (this.dashTimer <= 0) {
+    if (this.dashTimer > 0 && this.dashTimer < 0.5) {
+      this.telegraphTimer += dt;
+      this.vx *= 0.90;
+      this.vy *= 0.90;
+    } else if (this.dashTimer <= 0) {
       this.dashTimer = this.dashCooldown;
       this.isDashing = true;
+      this.telegraphTimer = 0;
       this.vx = (dx / dist) * 400;
       this.vy = (dy / dist) * 400;
     } else if (this.dashTimer > 2.5) {
-       // still dashing
        this.vx *= 0.95;
        this.vy *= 0.95;
-       if (Math.random() < 0.2) {
-         // emit trailing particles
+       if (Math.random() < 0.2 && engine) {
+         engine.spawnParticles(this.x, this.y, '#f2a65a', 1);
        }
     } else {
        this.isDashing = false;
+       this.telegraphTimer = 0;
        this.vx += (dx / dist) * 20 * dt;
        this.vy += (dy / dist) * 20 * dt;
     }
@@ -465,11 +465,223 @@ class DasherEnemy extends Enemy {
     this.y += this.vy * dt;
   }
   draw(ctx) {
-    ctx.fillStyle = this.isDashing ? '#f2a65a' : '#c94242';
+    if (this.telegraphTimer > 0) {
+      ctx.fillStyle = Math.floor(this.telegraphTimer * 10) % 2 === 0 ? '#fff' : '#f2a65a';
+    } else {
+      ctx.fillStyle = this.isDashing ? '#f2a65a' : '#c94242';
+    }
     ctx.beginPath();
     ctx.moveTo(this.x + this.r, this.y);
     ctx.lineTo(this.x - this.r, this.y + this.r);
     ctx.lineTo(this.x - this.r, this.y - this.r);
+    ctx.fill();
+  }
+}
+
+class BruiserEnemy extends BasicEnemy {
+  constructor(x, y) {
+    super(x, y);
+    this.hp = 15;
+    this.r = 25;
+    this.shieldAngle = 0;
+  }
+  update(dt, playerX, playerY, engine) {
+    const dx = playerX - this.x;
+    const dy = playerY - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+    this.shieldAngle += dt;
+
+    // Slow relentless pursuit
+    this.vx += (dx / dist) * 20 * dt;
+    this.vy += (dy / dist) * 20 * dt;
+
+    this.vx *= 0.98;
+    this.vy *= 0.98;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#6b8ce2';
+    ctx.fillRect(this.x - this.r, this.y - this.r, this.r*2, this.r*2);
+
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r + 5, this.shieldAngle, this.shieldAngle + Math.PI);
+    ctx.stroke();
+  }
+}
+
+class SwarmerEnemy extends BasicEnemy {
+  constructor(x, y) {
+    super(x, y);
+    this.hp = 1;
+    this.r = 8;
+    this.angle = Math.random() * Math.PI * 2;
+  }
+  update(dt, playerX, playerY, engine) {
+    const dx = playerX - this.x;
+    const dy = playerY - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+
+    // Orbit behavior mixed with pursuit
+    this.angle += dt * 2;
+    const orbitX = Math.cos(this.angle) * 50;
+    const orbitY = Math.sin(this.angle) * 50;
+
+    const targetX = playerX + orbitX;
+    const targetY = playerY + orbitY;
+
+    const tdx = targetX - this.x;
+    const tdy = targetY - this.y;
+    const tdist = Math.sqrt(tdx*tdx + tdy*tdy) || 1;
+
+    this.vx += (tdx / tdist) * 100 * dt;
+    this.vy += (tdy / tdist) * 100 * dt;
+
+    this.vx *= 0.95;
+    this.vy *= 0.95;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#e2c66b';
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y - this.r);
+    ctx.lineTo(this.x + this.r, this.y + this.r/2);
+    ctx.lineTo(this.x - this.r, this.y + this.r/2);
+    ctx.fill();
+  }
+}
+
+class SpawnerEnemy extends BasicEnemy {
+  constructor(x, y) {
+    super(x, y);
+    this.hp = 8;
+    this.r = 20;
+    this.spawnTimer = 3;
+    this.spawnCooldown = 5;
+    this.telegraphTimer = 0;
+  }
+  update(dt, playerX, playerY, engine) {
+    this.spawnTimer -= dt;
+
+    const dx = playerX - this.x;
+    const dy = playerY - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+
+    // Tries to stay at a distance
+    if (dist < 200) {
+      this.vx -= (dx / dist) * 30 * dt;
+      this.vy -= (dy / dist) * 30 * dt;
+    } else {
+      this.vx += (dx / dist) * 10 * dt;
+      this.vy += (dy / dist) * 10 * dt;
+    }
+
+    if (this.spawnTimer > 0 && this.spawnTimer < 1.0) {
+      this.telegraphTimer += dt;
+    }
+
+    if (this.spawnTimer <= 0) {
+      this.spawnTimer = this.spawnCooldown;
+      this.telegraphTimer = 0;
+      if (engine) {
+        engine.enemies.push(new SwarmerEnemy(this.x + (Math.random()-0.5)*20, this.y + (Math.random()-0.5)*20));
+        engine.enemies.push(new SwarmerEnemy(this.x + (Math.random()-0.5)*20, this.y + (Math.random()-0.5)*20));
+        engine.spawnParticles(this.x, this.y, '#e2c66b', 10);
+      }
+    }
+
+    this.vx *= 0.95;
+    this.vy *= 0.95;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#b66be2';
+    if (this.telegraphTimer > 0) {
+       ctx.fillStyle = Math.floor(this.telegraphTimer * 10) % 2 === 0 ? '#fff' : '#b66be2';
+    }
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Inner pulse
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * (1 - (this.spawnTimer / this.spawnCooldown)), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+class HazardEnemy extends BasicEnemy {
+  constructor(x, y) {
+    super(x, y);
+    this.hp = 6;
+    this.r = 18;
+    this.pulseTimer = 0;
+    this.pulseCooldown = 2;
+    this.hazardRadius = 80;
+    this.activeDuration = 0.5;
+    this.isActive = false;
+  }
+  update(dt, playerX, playerY, engine) {
+    this.pulseTimer += dt;
+
+    // Very slow drift
+    this.x += this.vx * 0.1 * dt;
+    this.y += this.vy * 0.1 * dt;
+
+    if (this.pulseTimer > this.pulseCooldown) {
+      this.isActive = true;
+      if (this.pulseTimer > this.pulseCooldown + this.activeDuration) {
+         this.pulseTimer = 0;
+         this.isActive = false;
+      }
+    }
+
+    if (this.isActive && engine) {
+      // Area damage
+      const dx = playerX - this.x;
+      const dy = playerY - this.y;
+      if (dx*dx + dy*dy < this.hazardRadius * this.hazardRadius) {
+         if (!engine.player.isOverdrive && engine.player.invulnerableTimer <= 0) {
+            engine.state = 'GAME_OVER';
+            engine.saveManager.updateScore(engine.score);
+            engine.spawnParticles(engine.player.x, engine.player.y, '#d8b0e2', 30);
+         }
+      }
+      if (Math.random() < 0.2) {
+         engine.spawnParticles(this.x + (Math.random()-0.5)*this.hazardRadius*2, this.y + (Math.random()-0.5)*this.hazardRadius*2, '#6be291', 1);
+      }
+    }
+  }
+  draw(ctx) {
+    // Telegraph area
+    if (this.pulseTimer > this.pulseCooldown - 1 && !this.isActive) {
+      ctx.fillStyle = 'rgba(107, 226, 145, 0.2)';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.hazardRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (this.isActive) {
+      ctx.fillStyle = 'rgba(107, 226, 145, 0.6)';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.hazardRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = '#6be291';
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y - this.r);
+    ctx.lineTo(this.x + this.r, this.y);
+    ctx.lineTo(this.x, this.y + this.r);
+    ctx.lineTo(this.x - this.r, this.y);
     ctx.fill();
   }
 }
@@ -671,17 +883,26 @@ class GameEngine {
   };
 
   GameEngine.prototype.spawnEnemy = function() {
-    if (Math.random() < 0.02) {
-      if (Math.random() < 0.3) {
-        this.enemies.push(new DasherEnemy(
-          Math.random() > 0.5 ? 0 : this.logicalWidth,
-          Math.random() * this.logicalHeight
-        ));
+    // Increase spawn rate slightly for variety
+    if (Math.random() < 0.025) {
+      const sx = Math.random() > 0.5 ? 0 : this.logicalWidth;
+      const sy = Math.random() * this.logicalHeight;
+      const r = Math.random();
+
+      if (r < 0.3) {
+        this.enemies.push(new BasicEnemy(sx, sy));
+      } else if (r < 0.5) {
+        this.enemies.push(new DasherEnemy(sx, sy));
+      } else if (r < 0.65) {
+        this.enemies.push(new BruiserEnemy(sx, sy));
+      } else if (r < 0.8) {
+        this.enemies.push(new SpawnerEnemy(sx, sy));
+      } else if (r < 0.9) {
+        this.enemies.push(new SwarmerEnemy(sx, sy));
+        this.enemies.push(new SwarmerEnemy(sx + 10, sy + 10));
+        this.enemies.push(new SwarmerEnemy(sx - 10, sy - 10));
       } else {
-        this.enemies.push(new Enemy(
-          Math.random() > 0.5 ? 0 : this.logicalWidth,
-          Math.random() * this.logicalHeight
-        ));
+        this.enemies.push(new HazardEnemy(sx, sy));
       }
     }
   };
@@ -811,7 +1032,7 @@ class GameEngine {
     this.spawnEnemy();
     for (const c of this.crystals) c.update(dt);
 
-    for (const e of this.enemies) e.update(dt, this.player.x, this.player.y);
+    for (const e of this.enemies) e.update(dt, this.player.x, this.player.y, this);
     for (let i = this.particles.length - 1; i >= 0; i--) {
       this.particles[i].update(dt);
       if (this.particles[i].life <= 0) this.particles.splice(i, 1);
