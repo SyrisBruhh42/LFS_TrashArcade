@@ -355,6 +355,17 @@ class GameEngine {
 
     document.getElementById('scoreDisplay').innerText = `SCORE: ${Math.floor(this.score)}`;
     document.getElementById('waveDisplay').innerText = `WAVE: ${this.wave}`;
+
+    if (this.player) {
+      const abilityDisplay = document.getElementById('abilityDisplay');
+      if (this.player.dashCooldown <= 0) {
+        abilityDisplay.innerText = 'DASH: READY';
+        abilityDisplay.style.color = '#ffeb3b';
+      } else {
+        abilityDisplay.innerText = `DASH: ${this.player.dashCooldown.toFixed(1)}s`;
+        abilityDisplay.style.color = '#70e2f9';
+      }
+    }
   }
 
   draw() {
@@ -429,28 +440,69 @@ class Player {
     this.radius = 12;
     this.vx = 0;
     this.vy = 0;
-    this.speed = 300;
+    this.speed = 350;
     this.isLaunched = false;
     this.aimAngle = -Math.PI / 2;
+    this.dashCooldown = 0;
+    this.maxDashCooldown = 2;
+    this.isDashing = false;
+    this.dashTimer = 0;
+    this.invulnerableTimer = 0;
+    this.recoil = 0;
+    this.recoilAngle = 0;
+    this.thrustAnim = 0;
+    this.trail = [];
   }
 
   update(dt, input, arena, audio) {
+    this.dashCooldown = Math.max(0, this.dashCooldown - dt);
+    this.dashTimer = Math.max(0, this.dashTimer - dt);
+    this.invulnerableTimer = Math.max(0, this.invulnerableTimer - dt);
+    this.recoil = Math.max(0, this.recoil - dt * 5);
+    this.thrustAnim += dt * 10;
+
+    if (this.dashTimer <= 0) {
+      this.isDashing = false;
+    }
+
     if (!this.isLaunched) {
       this.handleAiming(input, arena);
       return;
     }
 
+    // Track trail
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 10) this.trail.shift();
+
+    // Dash input check
+    const touchDoubleTap = input.usingTouch && input.wasTouchPressed();
+    if ((input.wasKeyPressed('ShiftLeft') || touchDoubleTap) && this.dashCooldown <= 0) {
+      this.isDashing = true;
+      this.dashTimer = 0.3;
+      this.dashCooldown = this.maxDashCooldown;
+      this.invulnerableTimer = 0.5;
+
+      const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+      if (speed > 0) {
+        this.vx += (this.vx / speed) * 600;
+        this.vy += (this.vy / speed) * 600;
+      }
+      if (window.engine) window.engine.audio.playLaunch();
+    }
+
     // Apply friction/damping
-    const friction = Math.pow(0.99, dt * 60);
+    const frictionBase = this.isDashing ? 0.995 : 0.985;
+    const friction = Math.pow(frictionBase, dt * 60);
     this.vx *= friction;
     this.vy *= friction;
 
     // Check if stopped
     const currentSpeedSq = this.vx * this.vx + this.vy * this.vy;
-    if (currentSpeedSq < 25) { // Threshold for stopping
+    if (currentSpeedSq < 40) { // Threshold for stopping
       this.isLaunched = false;
       this.vx = 0;
       this.vy = 0;
+      this.trail = [];
       return;
     }
 
@@ -465,12 +517,16 @@ class Player {
     if (this.x - this.radius < arena.x) {
       this.x = arena.x + this.radius;
       this.vx = -this.vx;
+      this.recoil = 1;
+      this.recoilAngle = 0;
       bounced = true;
     }
     // Right boundary
     else if (this.x + this.radius > arena.x + arena.width) {
       this.x = arena.x + arena.width - this.radius;
       this.vx = -this.vx;
+      this.recoil = 1;
+      this.recoilAngle = Math.PI;
       bounced = true;
     }
 
@@ -478,12 +534,16 @@ class Player {
     if (this.y - this.radius < arena.y) {
       this.y = arena.y + this.radius;
       this.vy = -this.vy;
+      this.recoil = 1;
+      this.recoilAngle = Math.PI / 2;
       bounced = true;
     }
     // Bottom boundary
     else if (this.y + this.radius > arena.y + arena.height) {
       this.y = arena.y + arena.height - this.radius;
       this.vy = -this.vy;
+      this.recoil = 1;
+      this.recoilAngle = -Math.PI / 2;
       bounced = true;
     }
 
@@ -531,10 +591,63 @@ class Player {
   }
 
   draw(ctx) {
-    ctx.fillStyle = '#ffffff';
+    if (this.invulnerableTimer > 0 && Math.floor(this.invulnerableTimer * 20) % 2 === 0) return;
+
+    // Draw fading trails
+    for (let i = 0; i < this.trail.length; i++) {
+      const alpha = (i + 1) / this.trail.length * 0.4;
+      ctx.fillStyle = `rgba(112, 226, 249, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(this.trail[i].x, this.trail[i].y, this.radius * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.recoilAngle);
+    ctx.scale(1 - this.recoil * 0.4, 1 + this.recoil * 0.4);
+    ctx.rotate(-this.recoilAngle);
+
+    // Outer pulsing ring
+    const pulseRadius = this.radius * (1 + 0.2 * Math.sin(this.thrustAnim));
+    ctx.strokeStyle = this.isDashing ? '#ffeb3b' : 'rgba(112, 226, 249, 0.5)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.arc(0, 0, pulseRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Core circle
+    ctx.fillStyle = this.isDashing ? '#ffeb3b' : '#ffffff';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius * 0.8, 0, Math.PI * 2);
     ctx.fill();
+
+    if (this.isLaunched) {
+      const moveAngle = Math.atan2(this.vy, this.vx);
+      ctx.rotate(moveAngle);
+
+      // Engine thrust
+      ctx.fillStyle = '#ff4444';
+      ctx.beginPath();
+      ctx.moveTo(-this.radius, -this.radius * 0.5);
+      ctx.lineTo(-this.radius * (1.5 + Math.random() * 0.5), 0);
+      ctx.lineTo(-this.radius, this.radius * 0.5);
+      ctx.closePath();
+      ctx.fill();
+
+      // Nose polygon
+      ctx.fillStyle = '#70e2f9';
+      ctx.beginPath();
+      ctx.moveTo(this.radius * 0.5, -this.radius * 0.5);
+      ctx.lineTo(this.radius * 1.5, 0);
+      ctx.lineTo(this.radius * 0.5, this.radius * 0.5);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.rotate(-moveAngle);
+    }
+
+    ctx.restore();
 
     if (!this.isLaunched) {
       // Draw aiming line
@@ -614,15 +727,39 @@ class EnemyManager {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist < player.radius + enemy.radius) {
-        // Hit
-        enemy.active = false;
-        engine.score += 100;
-        engine.audio.playHit();
-
-        // Bounce player slightly off enemy
+        const speed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
         const angle = Math.atan2(dy, dx);
-        player.vx = Math.cos(angle) * player.speed;
-        player.vy = Math.sin(angle) * player.speed;
+
+        if (speed < 100 && !player.isDashing) {
+          // Penalize player if moving too slow and not dashing
+          if (player.invulnerableTimer <= 0) {
+            engine.arena.width = Math.max(engine.arena.minSize, engine.arena.width - 50);
+            engine.arena.height = Math.max(engine.arena.minSize, engine.arena.height - 50);
+            player.invulnerableTimer = 1.0;
+            player.recoil = 1;
+            player.recoilAngle = angle + Math.PI;
+
+            // Bounce enemy away
+            enemy.vx = Math.cos(angle + Math.PI) * 200;
+            enemy.vy = Math.sin(angle + Math.PI) * 200;
+
+            engine.audio.playHit();
+          }
+        } else {
+          // Hit
+          enemy.active = false;
+          engine.score += 100;
+          engine.audio.playHit();
+
+          if (!player.isDashing) {
+            // Bounce player slightly off enemy
+            player.vx = Math.cos(angle) * speed * 0.85; // Retain 85% speed
+            player.vy = Math.sin(angle) * speed * 0.85;
+          } else {
+            // Dash bonus
+            engine.score += 50;
+          }
+        }
       }
 
       if (!enemy.active) {
@@ -652,5 +789,48 @@ class EnemyManager {
     for (const enemy of this.enemies) {
       enemy.draw(ctx);
     }
+  }
+}
+
+class AnalyticsTracker {
+  constructor() {
+    this.events = [];
+    this.sessionStart = performance.now();
+    this.dashCount = 0;
+    this.wallBounces = 0;
+    this.enemiesDefeated = 0;
+  }
+
+  logEvent(name, data) {
+    this.events.push({
+      time: performance.now() - this.sessionStart,
+      name: name,
+      data: data
+    });
+  }
+
+  logDash() {
+    this.dashCount++;
+    this.logEvent("dash_used", { total: this.dashCount });
+  }
+
+  logBounce() {
+    this.wallBounces++;
+    this.logEvent("wall_bounce", { total: this.wallBounces });
+  }
+
+  logEnemyDefeated(bonus) {
+    this.enemiesDefeated++;
+    this.logEvent("enemy_defeated", { total: this.enemiesDefeated, bonus: bonus });
+  }
+
+  getSummary() {
+    return {
+      playTime: (performance.now() - this.sessionStart) / 1000,
+      dashes: this.dashCount,
+      bounces: this.wallBounces,
+      kills: this.enemiesDefeated,
+      eventCount: this.events.length
+    };
   }
 }
