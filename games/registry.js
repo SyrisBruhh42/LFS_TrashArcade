@@ -757,7 +757,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD to move. Stop moving to slow time. Mouse to aim/shoot.",
     "createdAt": "2023-10-24",
     "accentColor": "#ecf7f4",
-    "phase": "6",
+    "phase": "7",
     "path": "./games/058-chrono-cell-rush/index.html"
   }
 ];
