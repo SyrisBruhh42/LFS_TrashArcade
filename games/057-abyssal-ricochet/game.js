@@ -321,6 +321,7 @@ class GameEngine {
     if (typeof EnemyManager !== 'undefined') this.enemyManager = new EnemyManager();
     if (typeof ParallaxBackground !== 'undefined') this.background = new ParallaxBackground(this.canvas.width, this.canvas.height);
     if (typeof EnvironmentHazardManager !== 'undefined') this.hazards = new EnvironmentHazardManager();
+    this.projectiles = [];
   }
 
   resumeGame() {
@@ -357,6 +358,32 @@ class GameEngine {
     if (this.enemyManager) this.enemyManager.update(dt, this.player, this);
     if (this.hazards) this.hazards.update(dt, this.arena, this.player, this.enemyManager ? this.enemyManager.enemies : []);
 
+    if (this.projectiles) {
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            this.projectiles[i].update(dt, this.arena);
+            if (this.player && this.projectiles[i].active) {
+                const dx = this.player.x - this.projectiles[i].x;
+                const dy = this.player.y - this.projectiles[i].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < this.player.radius + this.projectiles[i].radius) {
+                    if (this.player.invulnerableTimer <= 0) {
+                        this.arena.width = Math.max(this.arena.minSize, this.arena.width - 50);
+                        this.arena.height = Math.max(this.arena.minSize, this.arena.height - 50);
+                        this.player.invulnerableTimer = 1.0;
+                        const angle = Math.atan2(dy, dx);
+                        this.player.recoil = 1;
+                        this.player.recoilAngle = angle;
+                        this.audio.playHit();
+                    }
+                    this.projectiles[i].active = false;
+                }
+            }
+            if (!this.projectiles[i].active) {
+                this.projectiles.splice(i, 1);
+            }
+        }
+    }
+
     document.getElementById('scoreDisplay').innerText = `SCORE: ${Math.floor(this.score)}`;
     document.getElementById('waveDisplay').innerText = `WAVE: ${this.wave}`;
 
@@ -382,6 +409,11 @@ class GameEngine {
       if (this.hazards) this.hazards.draw(this.ctx);
       if (this.enemyManager) this.enemyManager.draw(this.ctx);
       if (this.player) this.player.draw(this.ctx);
+    if (this.projectiles) {
+        for (const proj of this.projectiles) {
+            proj.draw(this.ctx);
+        }
+    }
     }
   }
 }
@@ -725,14 +757,23 @@ class EnemyManager {
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       let enemy = this.enemies[i];
-      enemy.update(dt, engine.arena);
+      enemy.update(dt, engine.arena, player, engine);
 
       // Collision detection with player
       const dx = player.x - enemy.x;
       const dy = player.y - enemy.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist < player.radius + enemy.radius) {
+      let hitPlayer = false;
+      if (typeof Hazard !== 'undefined' && enemy instanceof Hazard) {
+          if (!enemy.warningPhase && dist < player.radius + enemy.radius) {
+              hitPlayer = true;
+          }
+      } else if (dist < player.radius + enemy.radius) {
+          hitPlayer = true;
+      }
+
+      if (hitPlayer) {
         const speed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
         const angle = Math.atan2(dy, dx);
 
@@ -753,8 +794,26 @@ class EnemyManager {
           }
         } else {
           // Hit
-          enemy.active = false;
-          engine.score += 100;
+          let died = true;
+          if (typeof enemy.takeHit === 'function') {
+              died = enemy.takeHit();
+          } else {
+              enemy.active = false;
+          }
+
+          if (died) {
+              enemy.active = false;
+              engine.score += 100;
+              if (typeof Spawner !== 'undefined' && enemy instanceof Spawner) {
+                  for (let j = 0; j < 3; j++) {
+                      let swarmer = new Swarmer(enemy.x, enemy.y);
+                      swarmer.vx = (Math.random() - 0.5) * 200;
+                      swarmer.vy = (Math.random() - 0.5) * 200;
+                      this.enemies.push(swarmer);
+                  }
+              }
+          }
+
           engine.audio.playHit();
 
           if (!player.isDashing) {
@@ -788,7 +847,19 @@ class EnemyManager {
     if (arena.width <= 0 || arena.height <= 0) return;
     const x = arena.x + Math.random() * arena.width;
     const y = arena.y + Math.random() * arena.height;
-    this.enemies.push(new Enemy(x, y));
+
+    let r = Math.random();
+    if (r < 0.2) {
+        this.enemies.push(new Swarmer(x, y));
+    } else if (r < 0.4) {
+        this.enemies.push(new Sniper(x, y));
+    } else if (r < 0.6) {
+        this.enemies.push(new Bruiser(x, y));
+    } else if (r < 0.8) {
+        this.enemies.push(new Spawner(x, y));
+    } else {
+        this.enemies.push(new Hazard(x, y));
+    }
   }
 
   draw(ctx) {
