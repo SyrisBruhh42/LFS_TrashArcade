@@ -1,6 +1,6 @@
 
 class Projectile {
-    constructor(x, y, vx, vy, radius = 4, life = 3, color = '#ff0000', isHazard = false) {
+    constructor(x, y, vx, vy, radius = 4, life = 3, color = (window.game && window.game.colors ? window.game.colors.proj : '#ff0000'), isHazard = false) {
         this.x = x;
         this.y = y;
         this.vx = vx;
@@ -44,7 +44,7 @@ class BaseEnemy {
         this.tetherIndex = -1;
         this.markedForDeath = false;
         this.hp = 1;
-        this.color = '#a34a4a';
+        this.color = window.game && window.game.colors ? window.game.colors.enemy : '#a34a4a';
     }
 
     update(dt, playerX, playerY, tetherManager, game) {

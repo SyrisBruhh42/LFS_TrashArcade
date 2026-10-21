@@ -170,17 +170,49 @@
     <div id="btnDetonate" class="touch-btn">DETONATE</div>
   </div>
 
+    <div id="fpsCounter" style="position:absolute; top:5px; right:5px; color:#0f0; z-index:100; font-family:monospace; display:none; pointer-events:none;">FPS: 60</div>
+
+  <div id="screenSettings" class="ui-layer" style="overflow-y:auto; background: rgba(0,0,0,0.95);">
+    <h2>SETTINGS</h2>
+    <div style="display:flex; flex-direction:column; gap:10px; text-align:left; max-width:400px; width:100%; padding:20px; box-sizing:border-box; background:#222; border-radius:10px;">
+        <label style="display:flex; justify-content:space-between;">Master Mute: <input type="checkbox" id="setMute"></label>
+        <label style="display:flex; justify-content:space-between;">Music Vol: <input type="range" id="setMusicVol" min="0" max="1" step="0.1"></label>
+        <label style="display:flex; justify-content:space-between;">SFX Vol: <input type="range" id="setSfxVol" min="0" max="1" step="0.1"></label>
+        <label style="display:flex; justify-content:space-between;">Screen Shake: <select id="setShake"><option value="1">100%</option><option value="0.5">50%</option><option value="0">Off</option></select></label>
+        <label style="display:flex; justify-content:space-between;">Particle Density: <select id="setParticles"><option value="1">High</option><option value="0.5">Low</option></select></label>
+        <label style="display:flex; justify-content:space-between;">High Contrast: <input type="checkbox" id="setContrast"></label>
+        <label style="display:flex; justify-content:space-between;">Show FPS: <input type="checkbox" id="setFps"></label>
+        <label style="display:flex; justify-content:space-between;">Touch Controls: <select id="setTouch"><option value="auto">Auto</option><option value="always">Always</option><option value="off">Off</option></select></label>
+        <label style="display:flex; justify-content:space-between;">Handedness: <select id="setHand"><option value="right">Right</option><option value="left">Left</option></select></label>
+
+        <div style="margin-top:15px; display:flex; gap:10px; justify-content:center;">
+            <button id="btnExportSave" style="font-size:1rem; padding:0.5rem; margin-top:0;">Export Save</button>
+            <button id="btnImportSave" style="font-size:1rem; padding:0.5rem; margin-top:0;">Import Save</button>
+        </div>
+        <textarea id="saveTextarea" style="width:100%; height:60px; margin-top:10px; display:none; background:#111; color:#eee; border:1px solid #6c9b81;"></textarea>
+
+        <div style="display:flex; gap:10px; margin-top:10px; justify-content:center;">
+            <button id="btnResetSave1" style="font-size:1rem; padding:0.5rem; margin-top:0; background:#a44;">Reset Save</button>
+            <button id="btnResetSave2" style="font-size:1rem; padding:0.5rem; margin-top:0; background:#d33; display:none;">Confirm Reset</button>
+        </div>
+    </div>
+    <button id="btnCloseSettings" style="margin-top:20px;">CLOSE</button>
+  </div>
+
   <div id="screenTitle" class="ui-layer active">
     <h1>Scrap Chain</h1>
     <p>Alchemy/Chain-Reaction Puzzle Action</p>
     <p>WASD/Arrows to move, Space to detonate.</p>
     <button id="btnStart">PLAY</button>
+    <div id="milestonesTitle" style="display:flex; gap:10px; margin-top:20px; flex-wrap:wrap; justify-content:center;"></div>
+    <button id="btnSettingsTitle" style="margin-top:10px; padding:0.5rem 1rem; font-size:1rem;">Settings</button>
     <a href="../../index.html">Back to Arcade</a>
   </div>
 
   <div id="screenPaused" class="ui-layer">
     <h2>PAUSED</h2>
     <button id="btnResume">RESUME</button>
+    <button id="btnSettingsPaused" style="margin-top:10px; padding:0.5rem 1rem; font-size:1rem;">Settings</button>
     <a href="../../index.html">Back to Arcade</a>
   </div>
 
@@ -192,11 +224,13 @@
   <div id="screenGameOver" class="ui-layer">
     <h2>GAME OVER</h2>
     <p id="finalScore">Score: 0</p>
+    <div id="milestonesGameOver" style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; justify-content:center;"></div>
     <button id="btnRestart">RESTART</button>
     <a href="../../index.html">Back to Arcade</a>
   </div>
 </div>
 
+<script defer src="ui.js"></script>
 <script defer src="world.js"></script>
 <script defer src="enemies.js"></script>
 <script defer src="bosses.js"></script>

@@ -29,6 +29,7 @@ class SoundEngine {
                 this.musicGain.connect(this.masterGain);
                 this.sfxGain.connect(this.masterGain);
                 this.masterGain.connect(this.ctx.destination);
+                this.updateVolumes();
             }
             if(this.ctx.state === 'suspended') this.ctx.resume();
 
@@ -37,6 +38,24 @@ class SoundEngine {
         };
         window.addEventListener('pointerdown', initAudio);
         window.addEventListener('keydown', initAudio);
+    }
+
+
+    updateVolumes() {
+        if(!this.ctx || !this.masterGain || !this.musicGain || !this.sfxGain) return;
+        let d = window.game && window.game.saveManager ? window.game.saveManager.data : {};
+        let opts = d.options || {};
+        let mute = opts.mute || false;
+        let mVol = opts.musicVol !== undefined ? opts.musicVol : 1.0;
+        let sVol = opts.sfxVol !== undefined ? opts.sfxVol : 1.0;
+
+        if(mute) {
+            this.masterGain.gain.value = 0;
+        } else {
+            this.masterGain.gain.value = 0.5;
+            this.musicGain.gain.value = 0.4 * mVol;
+            this.sfxGain.gain.value = 0.8 * sVol;
+        }
     }
 
     update(dt, playerHpPercent, isBossWave) {

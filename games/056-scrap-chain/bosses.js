@@ -36,6 +36,14 @@ class BossManager {
             if (this.activeBoss.markedForDeath) {
                 this.activeBoss = null;
                 this.game.updateScore(1000); // Boss kill bonus
+                let sd = this.game.saveManager.data;
+                if(!sd.unlockedMilestones) sd.unlockedMilestones = [];
+                if(!sd.unlockedMilestones.includes('m_boss_kill')) {
+                    sd.unlockedMilestones.push('m_boss_kill');
+                    if(this.game.vfxManager) this.game.vfxManager.addFloatingText('Milestone: Boss Slayer', this.game.player.x, this.game.player.y - 40, '#f0f', 2);
+                    this.game.saveManager.save();
+                    if(this.game.uiManager) this.game.uiManager.renderMilestones();
+                }
             }
         }
     }
@@ -88,7 +96,7 @@ class BaseBoss extends BaseEnemy {
         this.bossName = "UNKNOWN BOSS";
         this.maxHp = 100;
         this.hp = this.maxHp;
-        this.color = '#ff0000';
+        this.color = window.game && window.game.colors ? window.game.colors.boss : '#ff0000';
         this.radius = 30;
     }
 
