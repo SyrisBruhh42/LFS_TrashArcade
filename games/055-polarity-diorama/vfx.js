@@ -52,15 +52,16 @@ class JuiceManager {
     }
 
     applyShake(ctx) {
-        // Fallback for options.mute if it exists, assume no shake if true
-        if (this.engine.saveManager && this.engine.saveManager.data && this.engine.saveManager.data.options && this.engine.saveManager.data.options.mute === true) {
-            // we'll still allow shake, maybe reduce it, or if there's a specific screen shake option we would use it.
-            // Currently options only has 'mute' according to trace. We will just use the intensity directly.
+        let mult = 1.0;
+        if (this.engine.saveManager && this.engine.saveManager.data && this.engine.saveManager.data.options) {
+            const shakeOpt = this.engine.saveManager.data.options.screenShake;
+            if (shakeOpt === 0) mult = 0;
+            else if (shakeOpt === 50) mult = 0.5;
         }
 
-        let sx = this.shakeX;
-        let sy = this.shakeY;
-        const maxShake = 20;
+        let sx = this.shakeX * mult;
+        let sy = this.shakeY * mult;
+        const maxShake = 20 * mult;
         if (sx > maxShake) sx = maxShake;
         if (sx < -maxShake) sx = -maxShake;
         if (sy > maxShake) sy = maxShake;
@@ -123,6 +124,11 @@ class JuiceManager {
     }
 
     emitDirectionalParticles(x, y, dx, dy, color, count) {
+        if (this.engine.saveManager && this.engine.saveManager.data && this.engine.saveManager.data.options) {
+            if (this.engine.saveManager.data.options.particleDensity === 'low') {
+                count = Math.max(1, Math.floor(count / 3));
+            }
+        }
         const baseAngle = Math.atan2(dy, dx);
         for (let i = 0; i < count; i++) {
             const angle = baseAngle + (Math.random() - 0.5) * 1.5; // Spread cone
