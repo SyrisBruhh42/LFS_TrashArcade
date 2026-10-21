@@ -308,7 +308,7 @@ class WorldManager {
   }
 
   drawBackground(ctx) {
-    ctx.fillStyle = '#02050a'; // Deep abyss color
+    ctx.fillStyle = (window.engine && window.engine.saveManager && window.engine.saveManager.data.options.highContrast) ? '#000' : '#02050a';
     ctx.fillRect(0, 0, this.width, this.height);
 
     for (const layer of this.layers) {
