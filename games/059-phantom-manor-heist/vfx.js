@@ -70,7 +70,9 @@ class VFXManager {
         this.hitStopTimer = 0;
     }
     emit(x, y, count, color, speed, spreadAngle, dirAngle) {
-        for (let i = 0; i < count; i++) {
+        let density = (window.game && window.game.save) ? window.game.save.data.particleDensity : 1;
+        let finalCount = Math.ceil(count * density);
+        for (let i = 0; i < finalCount; i++) {
             let angle = dirAngle !== undefined ? dirAngle + (Math.random() - 0.5) * spreadAngle : Math.random() * Math.PI * 2;
             let spd = Math.random() * speed + speed * 0.5;
             this.particles.push(new Particle(x, y, Math.cos(angle) * spd, Math.sin(angle) * spd, color, 0.3 + Math.random() * 0.3, 2 + Math.random() * 3));
@@ -83,7 +85,8 @@ class VFXManager {
         this.trails.push(new Trail(x, y, radius, color, 0.2));
     }
     addShake(mag, time, dirX = Math.random() - 0.5, dirY = Math.random() - 0.5) {
-        this.shakeMag = mag;
+        let sm = (window.game && window.game.save) ? window.game.save.data.screenShake : 1;
+        this.shakeMag = mag * sm;
         this.shakeTimer = time;
         let len = Math.hypot(dirX, dirY);
         if (len === 0) { dirX = 1; dirY = 0; len = 1; }
