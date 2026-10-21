@@ -689,5 +689,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#c6f8c8",
     "phase": "1",
     "path": "./games/053-sandstorm-echo-coop/index.html"
+  },
+  {
+    "id": "054",
+    "slug": "054-arctic-drill-recoil",
+    "title": "Arctic Drill Recoil",
+    "genre": "Subterranean Drilling/Mining Roguelite",
+    "coreMechanic": "Recoil-as-Movement",
+    "setting": "Frozen Arctic Research Base",
+    "description": "Mine the frozen depths using your drill's recoil for mobility.",
+    "controls": "WASD/Arrows/Mouse/Touch to aim and drill/move.",
+    "createdAt": "2024-10-21",
+    "accentColor": "#d8b0e2",
+    "phase": "1",
+    "path": "./games/054-arctic-drill-recoil/index.html"
   }
 ];
