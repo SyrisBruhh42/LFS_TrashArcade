@@ -19,8 +19,12 @@ class SaveManager {
     load() {
         try {
             const stored = localStorage.getItem(SAVE_KEY);
-            if (stored) {
-                this.data = { ...this.data, ...JSON.parse(stored) };
+                        if (stored) {
+                const parsed = JSON.parse(stored);
+                this.data = { ...this.data, ...parsed };
+                if (parsed.options) {
+                    this.data.options = { ...this.data.options, ...parsed.options };
+                }
             }
         } catch(e) { console.warn("Save load failed", e); }
     }
@@ -49,23 +53,23 @@ class InputManager {
         window.addEventListener('contextmenu', e => e.preventDefault());
         window.addEventListener('mouseup', () => this.mouse.down = false);
 
-        // Touch events on specific zones
+                                // Touch events on specific zones
         const leftZone = document.getElementById('touch-left-zone');
         const rightZone = document.getElementById('touch-right-zone');
+        const dashBtn = document.getElementById('touch-dash-btn');
 
         if (leftZone && rightZone) {
             leftZone.addEventListener('touchstart', e => this.handleTouchStart(e, 'left'), {passive: false});
             leftZone.addEventListener('touchmove', e => this.handleTouchMove(e, 'left'), {passive: false});
-            leftZone.addEventListener('touchend', e => this.handleTouchEnd(e, 'left'));
-            leftZone.addEventListener('touchcancel', e => this.handleTouchEnd(e, 'left'));
+            leftZone.addEventListener('touchend', e => this.handleTouchEnd(e, 'left'), {passive: false});
+            leftZone.addEventListener('touchcancel', e => this.handleTouchEnd(e, 'left'), {passive: false});
 
             rightZone.addEventListener('touchstart', e => this.handleTouchStart(e, 'right'), {passive: false});
             rightZone.addEventListener('touchmove', e => this.handleTouchMove(e, 'right'), {passive: false});
-            rightZone.addEventListener('touchend', e => this.handleTouchEnd(e, 'right'));
-            rightZone.addEventListener('touchcancel', e => this.handleTouchEnd(e, 'right'));
+            rightZone.addEventListener('touchend', e => this.handleTouchEnd(e, 'right'), {passive: false});
+            rightZone.addEventListener('touchcancel', e => this.handleTouchEnd(e, 'right'), {passive: false});
 
-            const dashBtn = document.getElementById('touch-dash-btn');
-            if (dashBtn) {
+            if(dashBtn) {
                 dashBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.dashPressed = true; }, {passive: false});
             }
 
@@ -644,42 +648,13 @@ class GameEngine {
         this.resetGame();
     }
 
-    setupUI() {
-
-        const optScreen = document.getElementById('options-screen');
-        const optSound = document.getElementById('opt-sound');
-        const optMusic = document.getElementById('opt-music');
-        const optShake = document.getElementById('opt-shake');
-
-        const openOptions = () => {
-            optScreen.classList.remove('hidden');
-            if(this.saveManager.data.options) {
-                optSound.value = this.saveManager.data.options.soundVol !== undefined ? this.saveManager.data.options.soundVol : 1;
-                optMusic.value = this.saveManager.data.options.musicVol !== undefined ? this.saveManager.data.options.musicVol : 1;
-                optShake.value = this.saveManager.data.options.screenShake !== undefined ? this.saveManager.data.options.screenShake : 1;
-            }
-        };
-
-        const closeOptions = () => {
-            optScreen.classList.add('hidden');
-            this.saveManager.data.options = {
-                soundVol: parseFloat(optSound.value),
-                musicVol: parseFloat(optMusic.value),
-                screenShake: parseFloat(optShake.value)
-            };
-            this.saveManager.save();
-            if (this.audio.updateVolumes) this.audio.updateVolumes(parseFloat(optSound.value), parseFloat(optMusic.value));
-        };
-
+        setupUI() {
+        // UI event bindings are mostly handled by ui.js now
         // Bind hover and click to .btn
         document.querySelectorAll('.btn').forEach(btn => {
             btn.addEventListener('mouseenter', () => { if (this.audio.playUIHover) this.audio.playUIHover(); });
             btn.addEventListener('click', () => { if (this.audio.playUIClick) this.audio.playUIClick(); });
         });
-
-        document.getElementById('btn-options-title').addEventListener('click', openOptions);
-        document.getElementById('btn-options-pause').addEventListener('click', openOptions);
-        document.getElementById('btn-options-close').addEventListener('click', closeOptions);
 
         document.getElementById('btn-start').addEventListener('click', () => {
             this.audio.init();
@@ -1105,7 +1080,7 @@ class GameEngine {
         this.update(dt);
         this.draw();
 
-        requestAnimationFrame((t) => this.loop(t));
+        this._rafId = requestAnimationFrame((t) => this.loop(t));
     }
 
     start() {

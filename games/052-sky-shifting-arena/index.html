@@ -12,15 +12,18 @@
     <script defer src="audio.js"></script>
     <script defer src="game.js"></script>
     <script defer src="bosses.js"></script>
+    <script defer src="ui.js"></script>
 </head>
 <body>
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
+        <div id="fps-counter" class="hidden">FPS: 60</div>
 
         <div id="ui-layer">
             <div id="title-screen" class="screen">
                 <h1>Sky Shifting Arena</h1>
                 <p>Survive the shrinking islands!</p>
+                <div id="title-milestones" class="milestones-container"></div>
                 <div class="controls-info">Desktop: WASD + Mouse<br>Touch: Virtual Joysticks</div>
                 <button id="btn-start" class="btn">Start Game</button>
                 <button id="btn-options-title" class="btn">Options</button>
@@ -64,26 +67,75 @@
                 <h2>GAME OVER</h2>
                 <p id="final-score">Score: 0</p>
                 <p id="best-score">Best: 0</p>
+                <div id="game-over-milestones" class="milestones-container"></div>
                 <button id="btn-restart" class="btn">Try Again</button>
                 <a href="../../index.html" class="arcade-link">Back to Arcade</a>
             </div>
 
 
-            <div id="options-screen" class="screen hidden">
+            <div id="options-screen" class="screen hidden" style="overflow-y: auto; max-height: 90vh;">
                 <h2>OPTIONS</h2>
-                <div class="options-container" style="display:flex; flex-direction:column; gap:10px; max-width: 300px; margin: 0 auto; margin-bottom: 20px;">
+                <div class="options-container" style="display:flex; flex-direction:column; gap:10px; max-width: 320px; margin: 0 auto; margin-bottom: 20px; text-align: left;">
+                    <label style="display:flex; justify-content:space-between; align-items:center;">
+                        Master Mute:
+                        <input type="checkbox" id="opt-master-mute">
+                    </label>
                     <label style="display:flex; justify-content:space-between; align-items:center;">
                         Sound Volume:
-                        <input type="range" id="opt-sound" min="0" max="1" step="0.1" value="1">
+                        <input type="range" id="opt-sound" min="0" max="1" step="0.1" value="1" style="width: 120px;">
                     </label>
                     <label style="display:flex; justify-content:space-between; align-items:center;">
                         Music Volume:
-                        <input type="range" id="opt-music" min="0" max="1" step="0.1" value="1">
+                        <input type="range" id="opt-music" min="0" max="1" step="0.1" value="1" style="width: 120px;">
                     </label>
                     <label style="display:flex; justify-content:space-between; align-items:center;">
                         Screen Shake:
-                        <input type="range" id="opt-shake" min="0" max="2" step="0.1" value="1">
+                        <select id="opt-shake" style="width: 120px;">
+                            <option value="1">100%</option>
+                            <option value="0.5">50%</option>
+                            <option value="0">Off</option>
+                        </select>
                     </label>
+                    <label style="display:flex; justify-content:space-between; align-items:center;">
+                        Particles:
+                        <select id="opt-particles" style="width: 120px;">
+                            <option value="high">High</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </label>
+                    <label style="display:flex; justify-content:space-between; align-items:center;">
+                        Palette:
+                        <select id="opt-palette" style="width: 120px;">
+                            <option value="normal">Normal</option>
+                            <option value="high-contrast">High Contrast</option>
+                        </select>
+                    </label>
+                    <label style="display:flex; justify-content:space-between; align-items:center;">
+                        Show FPS:
+                        <input type="checkbox" id="opt-fps">
+                    </label>
+                    <label style="display:flex; justify-content:space-between; align-items:center;">
+                        Touch Controls:
+                        <select id="opt-touch-mode" style="width: 120px;">
+                            <option value="auto">Auto</option>
+                            <option value="always">Always On</option>
+                            <option value="off">Off</option>
+                        </select>
+                    </label>
+                    <label style="display:flex; justify-content:space-between; align-items:center;">
+                        Handedness:
+                        <select id="opt-touch-swap" style="width: 120px;">
+                            <option value="right">Right (Move L)</option>
+                            <option value="left">Left (Move R)</option>
+                        </select>
+                    </label>
+                    <hr style="border:1px solid #444; margin: 5px 0;">
+                    <div style="display: flex; justify-content: space-between; gap: 10px;">
+                        <button id="btn-export-save" class="btn" style="flex:1; font-size: 14px; padding: 5px;">Export Save</button>
+                        <button id="btn-import-save" class="btn" style="flex:1; font-size: 14px; padding: 5px;">Import Save</button>
+                        <input type="file" id="file-import" accept=".txt" style="display:none;">
+                    </div>
+                    <button id="btn-reset-save" class="btn" style="font-size: 14px; padding: 5px; background: #e94560; margin-top: 5px;">Reset Data</button>
                 </div>
                 <button id="btn-options-close" class="btn">Close</button>
             </div>

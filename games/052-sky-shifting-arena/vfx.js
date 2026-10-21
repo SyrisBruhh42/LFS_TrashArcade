@@ -115,8 +115,13 @@ class VFXManager {
         }
     }
 
-    emitParticles(x, y, count, baseColor, speed, dirX = 0, dirY = 0, spread = Math.PI * 2) {
-        for (let i = 0; i < count; i++) {
+        emitParticles(x, y, count, baseColor, speed, dirX = 0, dirY = 0, spread = Math.PI * 2) {
+        let actualCount = count;
+        if (this.engine.saveManager && this.engine.saveManager.data.options && this.engine.saveManager.data.options.particles === 'low') {
+            actualCount = Math.max(1, Math.floor(count * 0.3));
+        }
+
+        for (let i = 0; i < actualCount; i++) {
             let angle = 0;
             if (spread >= Math.PI * 2) {
                 angle = Math.random() * Math.PI * 2;
