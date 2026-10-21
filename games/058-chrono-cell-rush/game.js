@@ -511,7 +511,22 @@ class GameEngine {
   }
 
   bindUI() {
-    document.getElementById('btn-start').addEventListener('click', () => this.startGame());
+    document.getElementById('btn-start').addEventListener('click', () => {
+        if (!this.saveManager.data.tutorialSeen) {
+            this.setState('TUTORIAL');
+        } else {
+            this.startGame();
+        }
+    });
+
+    let tutBtn = document.getElementById('btn-tutorial-ok');
+    if (tutBtn) {
+        tutBtn.addEventListener('click', () => {
+            this.saveManager.data.tutorialSeen = true;
+            this.saveManager.save();
+            this.startGame();
+        });
+    }
     document.getElementById('btn-restart').addEventListener('click', () => this.startGame());
     document.getElementById('btn-resume').addEventListener('click', () => this.resumeGame());
 
@@ -897,7 +912,11 @@ class UpgradeManager {
             { id: 'shield', name: 'Deflector', desc: '+1 Max Shield', apply: (p) => { p.maxShields++; p.shields++; } },
             { id: 'magnet', name: 'Magnetic Field', desc: 'Increased Pickup Range', apply: (p) => p.magnetRadius += 100 },
             { id: 'speed', name: 'Agility', desc: '+15% Move Speed', apply: (p) => p.baseSpeed *= 1.15 },
-            { id: 'dash', name: 'Quick Step', desc: '-20% Dash Cooldown', apply: (p) => p.dashCooldown *= 0.8 }
+            { id: 'dash', name: 'Quick Step', desc: '-20% Dash Cooldown', apply: (p) => p.dashCooldown *= 0.8 },
+            { id: 'crit_chance', name: 'Weakpoint targeting', desc: '+10% Crit Chance', apply: (p) => p.critChance = (p.critChance || 0) + 0.1 },
+            { id: 'crit_dmg', name: 'Heavy Munitions', desc: '+50% Crit Damage', apply: (p) => p.critMultiplier = (p.critMultiplier || 2.0) + 0.5 },
+            { id: 'heal_matter', name: 'Biomatter Synthesizer', desc: 'More matter from drops', apply: (p) => p.matterMultiplier = (p.matterMultiplier || 1.0) + 0.5 },
+            { id: 'time_efficiency', name: 'Temporal Capacitor', desc: 'Time dilation lasts slightly longer on move', apply: (p) => p.timeDilationDecay = (p.timeDilationDecay || 1.0) * 0.8 }
         ];
     }
     showDraft() {
@@ -1219,7 +1238,7 @@ class EnemyBoss {
     ctx.fillStyle = 'red';
     ctx.fillRect(this.x - 30, this.y - 45, 60, 5);
     ctx.fillStyle = '#ecf7f4';
-    ctx.fillRect(this.x - 30, this.y - 45, 60 * (this.hp / 100), 5);
+    ctx.fillRect(this.x - 30, this.y - 45, 60 * (this.hp / this.maxHp), 5);
   }
 }
 
@@ -1425,8 +1444,10 @@ class HazardPuddle {
 class BossViralOverlord extends EnemyBoss {
   constructor(cx, cy) {
     super(cx, cy);
-    this.maxHp = 1500;
-    this.hp = 1500;
+    // Base 1500, +250 per wave
+    let waveScale = (window.engine && window.engine.wave) ? window.engine.wave : 1;
+    this.maxHp = 1500 + waveScale * 300;
+    this.hp = this.maxHp;
     this.radius = 40;
     this.color = '#aa22aa';
     this.phase2 = false;
@@ -1491,8 +1512,9 @@ class BossViralOverlord extends EnemyBoss {
 class BossMito extends EnemyBoss {
   constructor(cx, cy) {
     super(cx, cy);
-    this.maxHp = 2500;
-    this.hp = 2500;
+    let waveScale = (window.engine && window.engine.wave) ? window.engine.wave : 1;
+    this.maxHp = 2500 + waveScale * 400;
+    this.hp = this.maxHp;
     this.radius = 50;
     this.color = '#ff8800';
     this.phase2 = false;
@@ -1743,11 +1765,28 @@ class EnemyManager {
 
     if (!this.boss) {
       this.spawnTimer += dt;
-      const spawnRate = Math.max(0.5, 3 - window.engine.wave * 0.1);
+      // Rebalanced spawn rate: early waves are gentler, scales faster mid-game
+      const spawnRate = Math.max(0.25, 4.0 - window.engine.wave * 0.25);
       if(this.spawnTimer > spawnRate) {
         this.spawnTimer = 0;
-        const type = Math.floor(Math.random() * 5);
-        let nx = Math.random() > 0.5 ? 0 : window.innerWidth;
+
+        let type = 0;
+        let r = Math.random();
+        // Weights change based on wave
+        let wave = window.engine.wave;
+        if (wave <= 2) {
+            type = r < 0.8 ? 0 : 1;
+        } else if (wave <= 4) {
+            type = r < 0.5 ? 0 : (r < 0.8 ? 1 : 2);
+        } else {
+            if (r < 0.4) type = 0;
+            else if (r < 0.6) type = 1;
+            else if (r < 0.8) type = 2;
+            else if (r < 0.9) type = 3;
+            else type = 4;
+        }
+
+        let nx = Math.random() > 0.5 ? -30 : window.innerWidth + 30;
       let ny = Math.random() * window.innerHeight;
       if (type === 0) this.enemies.push(new EnemySwarmer(nx, ny));
       else if (type === 1) this.enemies.push(new EnemySniper(nx, ny));
@@ -2139,3 +2178,92 @@ class EnvironmentManager {
 
 window.engine = new GameEngine();
 window.engine.startLoop();
+
+
+class GameAnalytics {
+    constructor() {
+        this.sessionStartTime = Date.now();
+        this.events = [];
+        this.damageDealt = 0;
+        this.damageTaken = 0;
+        this.bossesDefeated = 0;
+        this.upgradesTaken = [];
+        this.enemiesKilledByType = {};
+        this.totalPickups = 0;
+        this.maxComboReached = 1;
+        this.timeDilatedTotal = 0;
+
+        console.log("Analytics initialized.");
+    }
+
+    logEvent(eventName, data = {}) {
+        const ev = {
+            time: Date.now() - this.sessionStartTime,
+            event: eventName,
+            ...data
+        };
+        this.events.push(ev);
+        if (this.events.length > 500) {
+            this.events.shift(); // Keep memory usage bounded
+        }
+    }
+
+    recordDamageDealt(amount) {
+        this.damageDealt += amount;
+    }
+
+    recordDamageTaken(amount) {
+        this.damageTaken += amount;
+    }
+
+    recordBossDefeat(bossName, timeToKill) {
+        this.bossesDefeated++;
+        this.logEvent("boss_defeated", { name: bossName, duration: timeToKill });
+    }
+
+    recordUpgrade(upgradeId) {
+        this.upgradesTaken.push(upgradeId);
+        this.logEvent("upgrade_taken", { id: upgradeId });
+    }
+
+    recordEnemyKill(type) {
+        if (!this.enemiesKilledByType[type]) {
+            this.enemiesKilledByType[type] = 0;
+        }
+        this.enemiesKilledByType[type]++;
+    }
+
+    recordPickup() {
+        this.totalPickups++;
+    }
+
+    updateCombo(combo) {
+        if (combo > this.maxComboReached) {
+            this.maxComboReached = combo;
+        }
+    }
+
+    recordTimeDilation(dt, factor) {
+        if (factor < 1.0) {
+            this.timeDilatedTotal += dt * (1.0 - factor);
+        }
+    }
+
+    getSummary() {
+        return {
+            duration: Date.now() - this.sessionStartTime,
+            damageDealt: this.damageDealt,
+            damageTaken: this.damageTaken,
+            bossesDefeated: this.bossesDefeated,
+            totalPickups: this.totalPickups,
+            maxCombo: this.maxComboReached,
+            timeDilated: this.timeDilatedTotal,
+            topUpgrades: this.upgradesTaken.slice(-5)
+        };
+    }
+
+    dumpToConsole() {
+        console.table(this.getSummary());
+        console.log("Kill breakdown:", this.enemiesKilledByType);
+    }
+}
