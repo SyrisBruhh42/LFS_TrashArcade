@@ -95,6 +95,13 @@ resizeObserver.observe(canvas);
 // Paper craft drawing utilities
 function drawPaperPoly(ctx, points, fillColor, strokeColor = '#333', shadowColor = 'rgba(0,0,0,0.3)') {
     ctx.save();
+    if (window.gameEngine && window.gameEngine.saveManager && window.gameEngine.saveManager.data.options.highContrast) {
+        if (fillColor === '#e74c3c') fillColor = '#ff0000';
+        else if (fillColor === '#3498db') fillColor = '#0000ff';
+        else fillColor = '#ffffff';
+        strokeColor = '#000000';
+        shadowColor = 'transparent';
+    }
     ctx.shadowColor = shadowColor;
     ctx.shadowBlur = 8;
     ctx.shadowOffsetX = 4;
@@ -129,7 +136,17 @@ class SaveManager {
             totalGamesPlayed: 0,
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
-            options: { mute: false }
+            options: {
+                mute: false,
+                sfxVol: 100,
+                musicVol: 100,
+                screenShake: 100,
+                particleDensity: 'high',
+                highContrast: false,
+                showFps: false,
+                touchControls: 'auto',
+                touchHandedness: 'right'
+            }
         };
     }
 
@@ -189,6 +206,13 @@ class SoundEngine {
 
     update(dt, state, isBoss, isLowHp) {
         if (!this.enabled || this.ctx.state !== 'running') return;
+        if (window.gameEngine && window.gameEngine.saveManager) {
+            const opts = window.gameEngine.saveManager.data.options;
+            this.masterGain.gain.value = opts.mute ? 0 : 0.5;
+            this.bgmGain.gain.value = (opts.musicVol / 100) * 0.2;
+            // Note: actual SFX volume would be applied in play methods, assuming we have a generic play
+            this.sfxVol = opts.sfxVol / 100;
+        }
 
         this.isPlaying = (state === 'PLAYING' || state === 'UPGRADE_DRAFT');
         if (!this.isPlaying) return;
@@ -355,7 +379,16 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+
+        if (this.sfxVol !== undefined) {
+            const sfxGain = this.ctx.createGain();
+            sfxGain.gain.value = this.sfxVol;
+            gain.connect(sfxGain);
+            sfxGain.connect(this.masterGain);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
         osc.start();
         osc.stop(this.ctx.currentTime + 0.1);
     }
@@ -370,7 +403,16 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+
+        if (this.sfxVol !== undefined) {
+            const sfxGain = this.ctx.createGain();
+            sfxGain.gain.value = this.sfxVol;
+            gain.connect(sfxGain);
+            sfxGain.connect(this.masterGain);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
         osc.start();
         osc.stop(this.ctx.currentTime + 0.2);
     }
@@ -385,7 +427,16 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+
+        if (this.sfxVol !== undefined) {
+            const sfxGain = this.ctx.createGain();
+            sfxGain.gain.value = this.sfxVol;
+            gain.connect(sfxGain);
+            sfxGain.connect(this.masterGain);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
         osc.start();
         osc.stop(this.ctx.currentTime + 0.2);
     }
@@ -400,7 +451,16 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+
+        if (this.sfxVol !== undefined) {
+            const sfxGain = this.ctx.createGain();
+            sfxGain.gain.value = this.sfxVol;
+            gain.connect(sfxGain);
+            sfxGain.connect(this.masterGain);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
         osc.start();
         osc.stop(this.ctx.currentTime + 0.5);
 
@@ -434,7 +494,16 @@ class SoundEngine {
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
         osc.connect(filter);
         filter.connect(gain);
-        gain.connect(this.masterGain);
+
+        if (this.sfxVol !== undefined) {
+            const sfxGain = this.ctx.createGain();
+            sfxGain.gain.value = this.sfxVol;
+            gain.connect(sfxGain);
+            sfxGain.connect(this.masterGain);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
         osc.start();
         osc.stop(this.ctx.currentTime + 0.3);
     }
@@ -450,7 +519,16 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+
+        if (this.sfxVol !== undefined) {
+            const sfxGain = this.ctx.createGain();
+            sfxGain.gain.value = this.sfxVol;
+            gain.connect(sfxGain);
+            sfxGain.connect(this.masterGain);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
         osc.start();
         osc.stop(this.ctx.currentTime + 0.3);
     }
@@ -466,7 +544,16 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 1.0);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+
+        if (this.sfxVol !== undefined) {
+            const sfxGain = this.ctx.createGain();
+            sfxGain.gain.value = this.sfxVol;
+            gain.connect(sfxGain);
+            sfxGain.connect(this.masterGain);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
         osc.start();
         osc.stop(this.ctx.currentTime + 1.0);
     }
@@ -481,7 +568,16 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+
+        if (this.sfxVol !== undefined) {
+            const sfxGain = this.ctx.createGain();
+            sfxGain.gain.value = this.sfxVol;
+            gain.connect(sfxGain);
+            sfxGain.connect(this.masterGain);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
         osc.start();
         osc.stop(this.ctx.currentTime + 0.1);
     }
@@ -495,7 +591,16 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+
+        if (this.sfxVol !== undefined) {
+            const sfxGain = this.ctx.createGain();
+            sfxGain.gain.value = this.sfxVol;
+            gain.connect(sfxGain);
+            sfxGain.connect(this.masterGain);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
         osc.start();
         osc.stop(this.ctx.currentTime + 0.05);
     }
@@ -512,7 +617,16 @@ class SoundEngine {
                 gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 1.0);
                 osc.connect(gain);
-                gain.connect(this.masterGain);
+
+        if (this.sfxVol !== undefined) {
+            const sfxGain = this.ctx.createGain();
+            sfxGain.gain.value = this.sfxVol;
+            gain.connect(sfxGain);
+            sfxGain.connect(this.masterGain);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
                 osc.start();
                 osc.stop(this.ctx.currentTime + 1.0);
 
@@ -1528,6 +1642,155 @@ class ProgressionManager {
     }
 }
 
+class OptionsMenu {
+    constructor(engine) {
+        this.engine = engine;
+        this.isOpen = false;
+        this.selectedIdx = 0;
+        this.opts = [
+            { id: 'mute', name: 'Master Mute', type: 'bool' },
+            { id: 'sfxVol', name: 'SFX Vol', type: 'slider', min: 0, max: 100, step: 10 },
+            { id: 'musicVol', name: 'Music Vol', type: 'slider', min: 0, max: 100, step: 10 },
+            { id: 'screenShake', name: 'Screen Shake', type: 'select', options: [100, 50, 0] },
+            { id: 'particleDensity', name: 'Particles', type: 'select', options: ['high', 'low'] },
+            { id: 'highContrast', name: 'High Contrast', type: 'bool' },
+            { id: 'showFps', name: 'Show FPS', type: 'bool' },
+            { id: 'touchControls', name: 'Touch Controls', type: 'select', options: ['auto', 'always', 'off'] },
+            { id: 'touchHandedness', name: 'Handedness', type: 'select', options: ['right', 'left'] },
+            { id: 'export', name: 'Export Save', type: 'action' },
+            { id: 'import', name: 'Import Save', type: 'action' },
+            { id: 'reset', name: 'Reset Data', type: 'action' }
+        ];
+        this.resetStep = 0;
+        this.exportText = "";
+    }
+
+    toggle() {
+        this.isOpen = !this.isOpen;
+        this.resetStep = 0;
+        this.exportText = "";
+    }
+
+    update(dt) {
+        if (!this.isOpen) return;
+        const input = this.engine.input;
+        if (input.isJustPressed('up')) {
+            this.selectedIdx = (this.selectedIdx - 1 + this.opts.length) % this.opts.length;
+            this.resetStep = 0;
+        }
+        if (input.isJustPressed('down')) {
+            this.selectedIdx = (this.selectedIdx + 1) % this.opts.length;
+            this.resetStep = 0;
+        }
+
+        const opt = this.opts[this.selectedIdx];
+        const data = this.engine.saveManager.data.options;
+
+        if (input.isJustPressed('left')) {
+            if (opt.type === 'slider') {
+                data[opt.id] = Math.max(opt.min, data[opt.id] - opt.step);
+                this.engine.saveManager.save();
+            } else if (opt.type === 'select') {
+                let idx = opt.options.indexOf(data[opt.id]);
+                idx = (idx - 1 + opt.options.length) % opt.options.length;
+                data[opt.id] = opt.options[idx];
+                this.engine.saveManager.save();
+            }
+        }
+        if (input.isJustPressed('right')) {
+            if (opt.type === 'slider') {
+                data[opt.id] = Math.min(opt.max, data[opt.id] + opt.step);
+                this.engine.saveManager.save();
+            } else if (opt.type === 'select') {
+                let idx = opt.options.indexOf(data[opt.id]);
+                idx = (idx + 1) % opt.options.length;
+                data[opt.id] = opt.options[idx];
+                this.engine.saveManager.save();
+            }
+        }
+
+        if (input.isJustPressed('action') || input.isJustPressed('switch')) {
+            if (opt.type === 'bool') {
+                data[opt.id] = !data[opt.id];
+                this.engine.saveManager.save();
+            } else if (opt.id === 'reset') {
+                if (this.resetStep === 0) {
+                    this.resetStep = 1;
+                } else {
+                    this.engine.saveManager.data = this.engine.saveManager.getDefaultData();
+                    this.engine.saveManager.save();
+                    this.resetStep = 0;
+                    this.engine.highScore = 0;
+                }
+            } else if (opt.id === 'export') {
+                this.exportText = btoa(JSON.stringify(this.engine.saveManager.data));
+                navigator.clipboard.writeText(this.exportText).catch(()=>{});
+            } else if (opt.id === 'import') {
+                const val = prompt("Paste Base64 save data:");
+                if (val) {
+                    try {
+                        const parsed = JSON.parse(atob(val));
+                        if (parsed && parsed.options) {
+                            this.engine.saveManager.data = parsed;
+                            this.engine.saveManager.save();
+                            this.engine.highScore = parsed.highScore || 0;
+                        }
+                    } catch(e) {}
+                }
+            }
+        }
+    }
+
+    draw(ctx, cx, cy) {
+        if (!this.isOpen) return;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        const w = 500;
+        const h = 450;
+        ctx.fillRect(cx - w/2, cy - h/2, w, h);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '24px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('OPTIONS', cx, cy - h/2 + 30);
+
+        ctx.font = '16px monospace';
+        const startY = cy - h/2 + 70;
+        const lh = 28;
+
+        const data = this.engine.saveManager.data.options;
+
+        for (let i = 0; i < this.opts.length; i++) {
+            const opt = this.opts[i];
+            let valStr = "";
+            if (opt.type === 'bool') valStr = data[opt.id] ? 'ON' : 'OFF';
+            else if (opt.type === 'slider') valStr = data[opt.id].toString();
+            else if (opt.type === 'select') valStr = data[opt.id].toString();
+            else if (opt.id === 'reset') {
+                valStr = this.resetStep === 0 ? 'Press Action to Reset' : 'Press Again to Confirm!';
+            } else if (opt.id === 'export') {
+                valStr = this.exportText ? 'Copied!' : 'Press Action';
+            } else if (opt.id === 'import') {
+                valStr = 'Press Action';
+            }
+
+            ctx.textAlign = 'left';
+            ctx.fillStyle = i === this.selectedIdx ? '#0f0' : '#fff';
+            ctx.fillText((i === this.selectedIdx ? '> ' : '  ') + opt.name, cx - 200, startY + i * lh);
+            ctx.textAlign = 'right';
+            ctx.fillText(valStr, cx + 200, startY + i * lh);
+        }
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#aaa';
+        ctx.fillText('Press ESC/P to close', cx, cy + h/2 - 20);
+    }
+}
+
+
 class GameEngine {
     constructor() {
         this.input = new InputManager();
@@ -1572,6 +1835,7 @@ class GameEngine {
         this.draftChoices = [];
         this.wave = 1;
 this.input.bindings['switch'] = ['Space', 'Enter'];
+        this.optionsMenu = new OptionsMenu(this);
     }
 
 
@@ -1583,6 +1847,7 @@ this.input.bindings['switch'] = ['Space', 'Enter'];
     }
 
     start() {
+        window.gameEngine = this;
         requestAnimationFrame(t => this.loop(t));
     }
 
@@ -1617,9 +1882,25 @@ this.state = 'PLAYING';
 
     handleInput() {
         // Touch/Mouse tap to switch polarity logic
-        const tapped = this.input.isJustPressed('switch') ||
-                      (this.input.mouse.down && !this.mouseWasDown) ||
-                      (this.input.touch.down && !this.touchWasDown);
+        let tapped = this.input.isJustPressed('switch');
+        const tc = this.saveManager.data.options.touchControls;
+        const isTouchDev = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        if (tc !== 'off') {
+            const usingTouchUi = tc === 'always' || (tc === 'auto' && isTouchDev);
+            if (usingTouchUi && this.state === 'PLAYING') {
+                if ((this.input.mouse.down && !this.mouseWasDown) || (this.input.touch.down && !this.touchWasDown)) {
+                    const px = this.input.touch.down ? this.input.touch.x : this.input.mouse.x;
+                    const hand = this.saveManager.data.options.touchHandedness;
+                    const cw = window.innerWidth;
+                    const actX = hand === 'right' ? cw - 80 : 80;
+                    if (Math.abs(px - actX) < 100) {
+                        tapped = true;
+                    }
+                }
+            } else {
+                tapped = tapped || (this.input.mouse.down && !this.mouseWasDown) || (this.input.touch.down && !this.touchWasDown);
+            }
+        }
 
         this.mouseWasDown = this.input.mouse.down;
         this.touchWasDown = this.input.touch.down;
@@ -1642,6 +1923,18 @@ this.state = 'PLAYING';
             } else if (this.state === 'PAUSED') {
                 this.state = 'PLAYING';
             }
+        }
+
+        if (this.input.isJustPressed('pause')) {
+            if (this.state === 'TITLE' || this.state === 'PAUSED') {
+                this.optionsMenu.toggle();
+            }
+        }
+
+        if (this.optionsMenu.isOpen) {
+            this.optionsMenu.update(dt);
+            this.input.clearJustPressed();
+            return;
         }
 
         if (this.state === 'PAUSED') {
@@ -1804,8 +2097,20 @@ this.state = 'PLAYING';
                         if (this.score > this.highScore) {
                             this.highScore = this.score;
                             this.saveManager.data.highScore = this.highScore;
-                            this.saveManager.save();
                         }
+                        this.saveManager.data.totalGamesPlayed++;
+                        this.saveManager.data.totalScoreAccumulated += this.score;
+
+                        // Milestones check
+                        const m = this.saveManager.data.unlockedMilestones;
+                        if (this.score >= 500 && !m.includes('Score 500')) m.push('Score 500');
+                        if (this.score >= 1000 && !m.includes('Score 1000')) m.push('Score 1000');
+                        if (this.comboMultiplier >= 5 && !m.includes('Max Combo 5')) m.push('Max Combo 5');
+                        if (this.bossIndex >= 1 && !m.includes('Defeat First Boss')) m.push('Defeat First Boss');
+                        if (this.wave >= 5 && !m.includes('Reach Wave 5')) m.push('Reach Wave 5');
+                        if (this.saveManager.data.totalScoreAccumulated >= 5000 && !m.includes('Total 5000 Score')) m.push('Total 5000 Score');
+
+                        this.saveManager.save();
                         break;
                     }
                 }
@@ -2114,6 +2419,73 @@ this.state = 'PLAYING';
             ctx.font = '20px monospace';
             ctx.fillText(`Final Score: ${this.score}`, cx, cy + 20);
             ctx.fillText('Click / Tap to Restart', cx, cy + 60);
+
+            // Draw milestones
+            ctx.font = '16px monospace';
+            ctx.fillStyle = '#ff0';
+            const m = this.saveManager.data.unlockedMilestones;
+            if (m && m.length > 0) {
+                ctx.fillText(`Milestones: ${m.length}/6`, cx, cy + 100);
+            }
+        }
+
+        if (this.state === 'TITLE') {
+            ctx.font = '16px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#ff0';
+            const m = this.saveManager.data.unlockedMilestones || [];
+            ctx.fillText(`Milestones: ${m.length}/6`, 10, 50);
+        }
+
+        if (this.optionsMenu && this.optionsMenu.isOpen) {
+            this.optionsMenu.draw(ctx, cx, cy);
+            return;
+        } else if (this.state === 'TITLE' || this.state === 'PAUSED') {
+            ctx.fillStyle = '#aaa';
+            ctx.font = '16px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText('Press ESC/P for Options', cw - 20, 30);
+        }
+
+        if (this.saveManager.data.options.showFps) {
+            ctx.fillStyle = '#0f0';
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText('FPS: ' + Math.round(1 / dt), 10, 70);
+        }
+
+        // Touch Controls Rendering
+        const tc = this.saveManager.data.options.touchControls;
+        const isTouchDev = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        if (tc === 'always' || (tc === 'auto' && isTouchDev)) {
+            if (this.state === 'PLAYING') {
+                const hand = this.saveManager.data.options.touchHandedness;
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 2;
+
+                // Draw joystick base
+                const joyX = hand === 'right' ? 80 : cw - 80;
+                const joyY = ch - 80;
+                ctx.beginPath();
+                ctx.arc(joyX, joyY, 50, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Draw action button
+                const actX = hand === 'right' ? cw - 80 : 80;
+                const actY = ch - 80;
+                ctx.beginPath();
+                ctx.arc(actX, actY, 40, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#fff';
+                ctx.font = '16px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('SWAP', actX, actY);
+            }
         }
     }
 
