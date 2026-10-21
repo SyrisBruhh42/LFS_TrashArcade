@@ -745,5 +745,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#70e2f9",
     "phase": "2",
     "path": "./games/057-abyssal-ricochet/index.html"
+  },
+  {
+    "id": "058",
+    "slug": "058-chrono-cell-rush",
+    "title": "Chrono Cell Rush",
+    "genre": "Bullet-Hell Boss Rush",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Microscopic Cell Interior",
+    "description": "Fight inside a cell using time manipulation.",
+    "controls": "WASD to move. Stop moving to slow time. Mouse to aim/shoot.",
+    "createdAt": "2023-10-24",
+    "accentColor": "#ecf7f4",
+    "phase": "1",
+    "path": "./games/058-chrono-cell-rush/index.html"
   }
 ];
