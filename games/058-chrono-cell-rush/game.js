@@ -313,6 +313,7 @@ class GameEngine {
 
     if (typeof Player !== 'undefined') this.player = new Player(this.canvas.width/2, this.canvas.height/2);
     if (typeof EnemyManager !== 'undefined') this.enemyManager = new EnemyManager();
+    if (typeof EnvironmentManager !== 'undefined') this.environmentManager = new EnvironmentManager(this.canvas.width, this.canvas.height);
   }
 
   resumeGame() {
@@ -363,6 +364,7 @@ class GameEngine {
 
     // Update enemies using dilated time
     const dilatedDt = dt * this.timeDilation;
+    if (this.environmentManager) this.environmentManager.update(dilatedDt, this.player, this.enemyManager);
     if (this.effectsManager) this.effectsManager.update(dilatedDt);
     if (this.enemyManager) this.enemyManager.update(dilatedDt, this.player);
   }
@@ -372,9 +374,12 @@ class GameEngine {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     if (this.state === 'PLAYING') {
+      if (this.environmentManager) this.environmentManager.drawBackground(this.ctx);
       if (this.effectsManager) this.effectsManager.draw(this.ctx);
+      if (this.environmentManager) this.environmentManager.drawHazards(this.ctx);
       if (this.enemyManager) this.enemyManager.draw(this.ctx);
       if (this.player) this.player.draw(this.ctx);
+      if (this.environmentManager) this.environmentManager.drawForeground(this.ctx);
     }
   }
 }
@@ -399,6 +404,7 @@ class Player {
     this.isDashing = false;
     this.dashDirX = 0;
     this.dashDirY = 0;
+    this.speedMultiplier = 1.0;
 
     // Momentum / Recoil
     this.vx = 0;
@@ -466,8 +472,8 @@ class Player {
       }
     } else {
       // Momentum logic
-      const targetVx = dx * this.baseSpeed;
-      const targetVy = dy * this.baseSpeed;
+      const targetVx = dx * this.baseSpeed * this.speedMultiplier;
+      const targetVy = dy * this.baseSpeed * this.speedMultiplier;
       // Decay recoil
       if (this.recoilTimer > 0) {
          this.recoilTimer -= dt;
@@ -814,6 +820,158 @@ class EnemyManager {
     for (const b of this.bullets) {
       b.draw(ctx);
     }
+  }
+}
+
+class EnvironmentManager {
+  constructor(width, height) {
+    this.width = width;
+    this.height = height;
+    this.membrane = Array.from({length: 30}, () => ({x: Math.random()*width, y: Math.random()*height, r: 4, s: 20}));
+    this.plasma = Array.from({length: 20}, () => ({x: Math.random()*width, y: Math.random()*height, r: 15, s: 40}));
+    this.structures = Array.from({length: 10}, () => ({x: Math.random()*width, y: Math.random()*height, r: 60, s: 80}));
+    this.hazards = [];
+    this.hazardTimer = 0;
+    this.gridOffsetX = 0;
+    this.gridOffsetY = 0;
+    this.proteinClusters = [];
+    this.proteinTimer = 0;
+    this.bgPulse = 0;
+    this.bgPulseDir = 1;
+    this.ambientParticles = Array.from({length: 40}, () => ({x: Math.random()*width, y: Math.random()*height, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, r: 2}));
+  }
+
+  update(dt, player, enemyManager) {
+    [this.membrane, this.plasma, this.structures].forEach(arr => {
+      arr.forEach(p => {
+        p.y += p.s * dt;
+        if (p.y > this.height + p.r) { p.y = -p.r; p.x = Math.random() * this.width; }
+      });
+    });
+
+    this.gridOffsetY += 20 * dt;
+    if (this.gridOffsetY > 50) this.gridOffsetY -= 50;
+
+    this.bgPulse += this.bgPulseDir * 0.5 * dt;
+    if (this.bgPulse > 1) { this.bgPulse = 1; this.bgPulseDir = -1; }
+    if (this.bgPulse < 0) { this.bgPulse = 0; this.bgPulseDir = 1; }
+
+    this.ambientParticles.forEach(p => {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.x < 0) p.x = this.width;
+      if (p.x > this.width) p.x = 0;
+      if (p.y < 0) p.y = this.height;
+      if (p.y > this.height) p.y = 0;
+    });
+
+    this.proteinTimer -= dt;
+    if (this.proteinTimer <= 0) {
+      this.proteinTimer = 8;
+      this.proteinClusters.push({x: Math.random() * this.width, y: -80, r: 40, hp: 50, s: 30});
+    }
+
+    for (let i = this.proteinClusters.length - 1; i >= 0; i--) {
+      let pc = this.proteinClusters[i];
+      pc.y += pc.s * dt;
+      if (player) {
+        let dx = pc.x - player.x, dy = pc.y - player.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < pc.r + player.radius) {
+          player.x += (dx/dist) * -200 * dt;
+          player.y += (dy/dist) * -200 * dt;
+        }
+        for (let j = player.bullets.length - 1; j >= 0; j--) {
+          let b = player.bullets[j];
+          let bx = pc.x - b.x, by = pc.y - b.y;
+          if (Math.sqrt(bx*bx + by*by) < pc.r + b.radius) {
+            pc.hp -= 10;
+            player.bullets.splice(j, 1);
+            if (typeof window.engine !== 'undefined' && window.engine.audio) window.engine.audio.playHit();
+          }
+        }
+      }
+      if (pc.hp <= 0 || pc.y > this.height + pc.r) {
+        this.proteinClusters.splice(i, 1);
+      }
+    }
+
+    this.hazardTimer -= dt;
+    if (this.hazardTimer <= 0) {
+      this.hazardTimer = 5;
+      this.hazards.push({x: Math.random() * this.width, y: -60, r: 60, s: 60, type: 'enzyme'});
+    }
+
+    let inPool = false;
+    for (let i = this.hazards.length - 1; i >= 0; i--) {
+      let h = this.hazards[i];
+      h.y += h.s * dt;
+      if (player) {
+        let dx = h.x - player.x, dy = h.y - player.y;
+        if (Math.sqrt(dx*dx + dy*dy) < h.r + player.radius) inPool = true;
+      }
+      if (enemyManager && enemyManager.boss) {
+        let dx = h.x - enemyManager.boss.x, dy = h.y - enemyManager.boss.y;
+        if (Math.sqrt(dx*dx + dy*dy) < h.r + enemyManager.boss.radius) {
+          enemyManager.boss.hp -= 10 * dt;
+          if (enemyManager.boss.hp < 0) enemyManager.boss.hp = 0;
+        }
+      }
+      if (h.y > this.height + h.r) this.hazards.splice(i, 1);
+    }
+    if (player) player.speedMultiplier = inPool ? 0.3 : 1.0;
+  }
+
+  drawBackground(ctx) {
+    let pulseHex = Math.floor(this.bgPulse * 20 + 20).toString(16).padStart(2, '0');
+    ctx.strokeStyle = `#11${pulseHex}22`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x < this.width; x += 50) {
+      ctx.moveTo(x, 0); ctx.lineTo(x, this.height);
+    }
+    for (let y = this.gridOffsetY - 50; y < this.height; y += 50) {
+      ctx.moveTo(0, y); ctx.lineTo(this.width, y);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(200, 255, 200, 0.2)';
+    this.ambientParticles.forEach(p => {
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+    });
+
+    ctx.fillStyle = '#224444';
+    this.membrane.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill(); });
+    ctx.fillStyle = 'rgba(0,255,100,0.1)';
+    this.plasma.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill(); });
+  }
+
+  drawHazards(ctx) {
+    ctx.fillStyle = 'rgba(150,0,255,0.4)';
+    this.hazards.forEach(h => { ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI*2); ctx.fill(); });
+  }
+
+  drawForeground(ctx) {
+    ctx.fillStyle = 'rgba(0,100,200,0.05)';
+    this.structures.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill(); });
+
+    this.proteinClusters.forEach(pc => {
+      ctx.beginPath();
+      ctx.arc(pc.x, pc.y, pc.r, 0, Math.PI*2);
+      ctx.fillStyle = '#aa4422';
+      ctx.fill();
+      ctx.strokeStyle = '#ff8844';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = '#ff8844';
+      for(let i=0; i<5; i++) {
+        let ax = pc.x + Math.cos(i*Math.PI*2/5) * (pc.r * 0.5);
+        let ay = pc.y + Math.sin(i*Math.PI*2/5) * (pc.r * 0.5);
+        ctx.beginPath(); ctx.arc(ax, ay, pc.r*0.2, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.fillStyle = '#ff4444';
+      ctx.fillRect(pc.x - 20, pc.y - pc.r - 10, 40 * (pc.hp/50), 4);
+    });
   }
 }
 
