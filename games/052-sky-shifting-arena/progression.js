@@ -35,7 +35,7 @@ class UpgradeManager {
             `;
             card.addEventListener('click', () => {
                 choice.apply(this.engine.player);
-                this.engine.audio.playHit(); // Using playHit as generic positive sound
+                if (this.engine.audio.playUpgrade) { this.engine.audio.playUpgrade(); } else { this.engine.audio.playHit(); }
                 this.engine.continueNextWave();
             });
             container.appendChild(card);
@@ -152,7 +152,7 @@ class PickupManager {
                 if (dist < player.radius + p.radius) {
                     // Collected
                     p.active = false;
-                    this.engine.audio.playShoot(); // Reuse shoot sound for pickup
+                    if (this.engine.audio.playPickup) { this.engine.audio.playPickup(); } else { this.engine.audio.playShoot(); }
                     if (p.type === 'health') {
                         player.health = Math.min(player.maxHealth, player.health + 20);
                         this.engine.updateHUD();

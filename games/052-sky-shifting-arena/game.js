@@ -31,42 +31,6 @@ class SaveManager {
     }
 }
 
-class SoundEngine {
-    constructor() {
-        this.ctx = null;
-        this.masterGain = null;
-        this.sfxGain = null;
-        this.initialized = false;
-    }
-    init() {
-        if (this.initialized) return;
-        try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.ctx = new AudioContext();
-            this.masterGain = this.ctx.createGain();
-            this.sfxGain = this.ctx.createGain();
-            this.sfxGain.connect(this.masterGain);
-            this.masterGain.connect(this.ctx.destination);
-            this.initialized = true;
-        } catch(e) { console.warn("AudioContext init failed", e); }
-    }
-    playTone(freq, type, duration, vol = 0.1) {
-        if (!this.initialized || !this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(this.sfxGain);
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
-    }
-    playShoot() { this.playTone(400, 'square', 0.1, 0.05); }
-    playHit() { this.playTone(150, 'sawtooth', 0.2, 0.1); }
-    playExplosion() { this.playTone(80, 'square', 0.3, 0.2); }
-}
 
 class InputManager {
     constructor(canvas) {
@@ -704,7 +668,14 @@ class GameEngine {
                 screenShake: parseFloat(optShake.value)
             };
             this.saveManager.save();
+            if (this.audio.updateVolumes) this.audio.updateVolumes(parseFloat(optSound.value), parseFloat(optMusic.value));
         };
+
+        // Bind hover and click to .btn
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.addEventListener('mouseenter', () => { if (this.audio.playUIHover) this.audio.playUIHover(); });
+            btn.addEventListener('click', () => { if (this.audio.playUIClick) this.audio.playUIClick(); });
+        });
 
         document.getElementById('btn-options-title').addEventListener('click', openOptions);
         document.getElementById('btn-options-pause').addEventListener('click', openOptions);
@@ -799,6 +770,8 @@ class GameEngine {
     }
 
     spawnEnemy() {
+        if (this.audio.playEnemySpawn) this.audio.playEnemySpawn();
+
         // Spawn outside arena bounds
         const angle = Math.random() * Math.PI * 2;
         const r = Math.max(this.arena.w, this.arena.h) * 0.8;
@@ -848,10 +821,19 @@ class GameEngine {
         // Ensure dt is capped
         if (dt > 0.1) dt = 0.1;
 
+        if (this.audio.setMusicState) {
+            this.audio.setMusicState(this.isBossWave, this.player.health <= this.player.maxHealth * 0.3);
+        }
+
         const moveVec = this.input.getMovementVector();
         const aimVec = this.input.getAimVector(this.logicalWidth/2, this.logicalHeight/2);
 
+        let wasDashing = this.player.isDashing;
+
         this.player.update(dt, moveVec, aimVec, this.arena);
+        if (!wasDashing && this.player.isDashing) {
+            if (this.audio.playDash) this.audio.playDash();
+        }
         if (this.player.isDashing) {
             this.vfx.spawnTrail(this.player.x, this.player.y, this.player.radius * 2, this.player.radius * 2, this.player.color, 0.2, 'circle');
         }
@@ -955,6 +937,7 @@ class GameEngine {
                     } else {
                         this.currentBoss = new PhantomBoss(cx, cy);
                     }
+                    if (this.audio.playBossSpawn) this.audio.playBossSpawn();
                     this.enemies.push(this.currentBoss);
                 } else {
                     this.upgradeManager.showUpgrades();
@@ -989,6 +972,9 @@ class GameEngine {
                     const pd = Math.hypot(p.x - e.x, p.y - e.y);
                     if (pd < p.radius + e.radius && p.active && !p.hitEnemies.has(e)) {
                         e.health -= p.damage || 10;
+                        if (e.isBoss) {
+                            if (this.audio.playBossHit) this.audio.playBossHit();
+                        }
                         p.hitEnemies.add(e);
                         const dmg = p.damage || 10;
                         this.vfx.emitParticles(e.x, e.y, 8, e.color || '#ff8800', 100, p.vx, p.vy, Math.PI / 4);
@@ -1026,6 +1012,10 @@ class GameEngine {
         }
 
         if (this.player.health <= 0) {
+            if (this.state !== 'GAME_OVER' && this.audio.playPlayerDeath) {
+                this.audio.playPlayerDeath();
+            }
+
             if (this.score > this.saveManager.data.highScore) {
                 this.saveManager.data.highScore = this.score;
             }

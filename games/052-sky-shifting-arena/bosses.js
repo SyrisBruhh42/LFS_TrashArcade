@@ -47,6 +47,7 @@ class TitanBoss extends Boss {
     }
 
     attack(playerX, playerY, engine) {
+        if (engine.audio.playBossShoot) engine.audio.playBossShoot();
         if (this.phase === 1) {
             // Sweep attack (multiple projectiles in a cone)
             const angleToPlayer = Math.atan2(playerY - this.y, playerX - this.x);
@@ -127,6 +128,7 @@ class PhantomBoss extends Boss {
     }
 
     attack(playerX, playerY, engine) {
+        if (engine.audio.playBossShoot) engine.audio.playBossShoot();
         // Fast targeted shots
         const angleToPlayer = Math.atan2(playerY - this.y, playerX - this.x);
         const px = Math.cos(angleToPlayer);
