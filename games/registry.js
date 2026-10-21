@@ -787,5 +787,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#e09ff1",
     "phase": "4",
     "path": "./games/060-magma-recoil-platformer/index.html"
+  },
+  {
+    "id": "061",
+    "slug": "061-jungle-overdrive-sacrifice",
+    "title": "Jungle Overdrive Sacrifice",
+    "genre": "Rhythm/Beat-Synced Reflex",
+    "coreMechanic": "Sacrifice Health for Overdrive Power",
+    "setting": "Overgrown Jungle Ruins",
+    "description": "Sync attacks to the jungle rhythm and sacrifice health to trigger devastating overdrive abilities.",
+    "controls": "Tap or press space on the beat to strike, press Shift or two fingers to activate Overdrive.",
+    "createdAt": "2023-11-20",
+    "accentColor": "#61d2b5",
+    "phase": "1",
+    "path": "./games/061-jungle-overdrive-sacrifice/index.html"
   }
 ];
