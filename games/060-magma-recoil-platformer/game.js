@@ -27,43 +27,230 @@ class SoundEngine {
   constructor() {
     this.ctx = null;
     this.master = null;
+    this.musicGain = null;
+    this.sfxGain = null;
+    this.bgmOscs = [];
+    this.percOsc = null;
+    this.isPlayingMusic = false;
+    this.nextNoteTime = 0;
+    this.beatIndex = 0;
+    this.tempo = 120;
+    this.filterIntensity = 1000;
+    this.isBossPhase = false;
+    this.isLowHp = false;
+    this.baseScale = [130.81, 146.83, 155.56, 174.61, 196.00, 207.65, 233.08]; // C minor
   }
+
   init() {
-    if (this.ctx) return;
+    if (this.ctx) {
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        return;
+    }
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+
     this.master = this.ctx.createGain();
+    this.musicGain = this.ctx.createGain();
+    this.sfxGain = this.ctx.createGain();
+
     this.master.gain.value = 0.5;
+    this.musicGain.gain.value = 0.4;
+    this.sfxGain.gain.value = 0.6;
+
+    this.musicGain.connect(this.master);
+    this.sfxGain.connect(this.master);
     this.master.connect(this.ctx.destination);
+
+    this.startMusic();
   }
-  playShoot() {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(400, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-    osc.connect(gain);
-    gain.connect(this.master);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.1);
+
+  updateMusicState(isBossPhase, isLowHp) {
+    this.isBossPhase = isBossPhase;
+    this.isLowHp = isLowHp;
+    this.tempo = isBossPhase ? 160 : (isLowHp ? 100 : 120);
+    this.filterIntensity = isBossPhase ? 2000 : (isLowHp ? 500 : 1000);
   }
-  playExplosion() {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(100, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.2);
-    gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
-    osc.connect(gain);
-    gain.connect(this.master);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.2);
+
+  startMusic() {
+    if (this.isPlayingMusic || !this.ctx) return;
+    this.isPlayingMusic = true;
+    this.nextNoteTime = this.ctx.currentTime + 0.1;
+    this.scheduleMusic();
   }
+
+  scheduleMusic() {
+    if (!this.isPlayingMusic || !this.ctx) return;
+    const secondsPerBeat = 60.0 / this.tempo;
+    while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+      this.playArpNote(this.nextNoteTime);
+      this.playPercussion(this.nextNoteTime);
+      this.nextNoteTime += secondsPerBeat / 4; // 16th notes
+      this.beatIndex++;
+    }
+    this.musicTimer = setTimeout(() => this.scheduleMusic(), 25);
+  }
+
+  playArpNote(time) {
+      if (this.beatIndex % 2 !== 0) return; // 8th notes
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+
+      osc.type = this.isBossPhase ? 'sawtooth' : 'square';
+      const noteIndex = (this.beatIndex / 2) % 8;
+      const pattern = this.isBossPhase ? [0, 4, 7, 4, 0, 4, 7, 4] : [0, 2, 4, 2, 0, 2, 4, 2];
+      let freq = this.baseScale[pattern[noteIndex] % this.baseScale.length];
+      if (this.isBossPhase && noteIndex % 2 === 0) freq *= 2; // Octave jumps
+
+      osc.frequency.setValueAtTime(freq, time);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(this.filterIntensity, time);
+      filter.frequency.exponentialRampToValueAtTime(100, time + 0.2);
+
+      gain.gain.setValueAtTime(0.2, time);
+      gain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.musicGain);
+
+      osc.start(time);
+      osc.stop(time + 0.2);
+  }
+
+  playPercussion(time) {
+      if (this.beatIndex % 4 === 0) { // Kick
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(150, time);
+          osc.frequency.exponentialRampToValueAtTime(40, time + 0.1);
+          gain.gain.setValueAtTime(0.5, time);
+          gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+          osc.connect(gain);
+          gain.connect(this.musicGain);
+          osc.start(time);
+          osc.stop(time + 0.1);
+      } else if (this.beatIndex % 4 === 2) { // Snare/Hat
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(this.isBossPhase ? 800 : 400, time);
+          gain.gain.setValueAtTime(0.1, time);
+          gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+          osc.connect(gain);
+          gain.connect(this.musicGain);
+          osc.start(time);
+          osc.stop(time + 0.05);
+      }
+  }
+
+  playSFX(type, pitch = 1) {
+      if (!this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+
+      const t = this.ctx.currentTime;
+      let duration = 0.1;
+
+      switch(type) {
+          case 'shoot':
+              osc.type = 'square';
+              osc.frequency.setValueAtTime(400 * pitch, t);
+              osc.frequency.exponentialRampToValueAtTime(100 * pitch, t + 0.1);
+              gain.gain.setValueAtTime(0.3, t);
+              gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+              break;
+          case 'dash':
+              osc.type = 'sawtooth';
+              osc.frequency.setValueAtTime(200 * pitch, t);
+              osc.frequency.exponentialRampToValueAtTime(600 * pitch, t + 0.15);
+              gain.gain.setValueAtTime(0.4, t);
+              gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+              duration = 0.15;
+              break;
+          case 'explosion':
+              osc.type = 'sawtooth';
+              osc.frequency.setValueAtTime(100 * pitch, t);
+              osc.frequency.exponentialRampToValueAtTime(40 * pitch, t + 0.2);
+              gain.gain.setValueAtTime(0.5, t);
+              gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+              duration = 0.2;
+              break;
+          case 'hit':
+              osc.type = 'square';
+              osc.frequency.setValueAtTime(800 * pitch, t);
+              osc.frequency.exponentialRampToValueAtTime(200 * pitch, t + 0.05);
+              gain.gain.setValueAtTime(0.4, t);
+              gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+              duration = 0.05;
+              break;
+          case 'pickup':
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(600 * pitch, t);
+              osc.frequency.setValueAtTime(800 * pitch, t + 0.05);
+              osc.frequency.setValueAtTime(1200 * pitch, t + 0.1);
+              gain.gain.setValueAtTime(0.3, t);
+              gain.gain.linearRampToValueAtTime(0.01, t + 0.2);
+              duration = 0.2;
+              break;
+          case 'upgrade':
+              osc.type = 'triangle';
+              osc.frequency.setValueAtTime(400 * pitch, t);
+              osc.frequency.linearRampToValueAtTime(800 * pitch, t + 0.3);
+              gain.gain.setValueAtTime(0.4, t);
+              gain.gain.linearRampToValueAtTime(0.01, t + 0.4);
+              duration = 0.4;
+              break;
+          case 'bossSpawn':
+              osc.type = 'sawtooth';
+              osc.frequency.setValueAtTime(100 * pitch, t);
+              osc.frequency.linearRampToValueAtTime(50 * pitch, t + 1.0);
+              gain.gain.setValueAtTime(0.6, t);
+              gain.gain.linearRampToValueAtTime(0.01, t + 1.0);
+              duration = 1.0;
+              break;
+          case 'uiHover':
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(600 * pitch, t);
+              gain.gain.setValueAtTime(0.1, t);
+              gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+              duration = 0.05;
+              break;
+          case 'uiSelect':
+              osc.type = 'square';
+              osc.frequency.setValueAtTime(800 * pitch, t);
+              osc.frequency.setValueAtTime(1200 * pitch, t + 0.05);
+              gain.gain.setValueAtTime(0.2, t);
+              gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+              duration = 0.1;
+              break;
+          case 'jump':
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(300 * pitch, t);
+              osc.frequency.exponentialRampToValueAtTime(500 * pitch, t + 0.1);
+              gain.gain.setValueAtTime(0.3, t);
+              gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+              duration = 0.1;
+              break;
+          default:
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(440, t);
+              gain.gain.setValueAtTime(0.1, t);
+              gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+      }
+
+      osc.start(t);
+      osc.stop(t + duration);
+  }
+
+  playShoot() { this.playSFX('shoot'); }
+  playExplosion() { this.playSFX('explosion'); }
 }
+
 
 class InputManager {
   constructor() {
@@ -149,7 +336,7 @@ class Player {
             this.dashActive = this.dashDuration;
             this.dashCooldown = this.upgrades.dashCooldown;
             this.invulnTime = 0.3; // Invulnerable during and slightly after dash
-            if (window.game) window.game.audio.playShoot(); // Reuse shoot sound for dash
+            if (window.game) window.game.audio.playSFX('dash');
         }
 
         this.x += this.vx * dt;
@@ -531,6 +718,11 @@ class Game {
     if (this.state === 'UPGRADE_DRAFT') return;
     if (this.state !== 'PLAYING') return;
     this.comboManager.update(dt);
+    if (this.audio) {
+        let isBossPhase = this.bosses.length > 0;
+        let isLowHp = this.player.y - this.cameraY > height * 0.7;
+        this.audio.updateMusicState(isBossPhase, isLowHp);
+    }
     this.pickupManager.update(dt, this.player, this);
 
     this.player.update(dt, this.input, this.platforms);
@@ -541,6 +733,7 @@ class Game {
 
     if (this.player.y - this.cameraY > height) {
        this.state = 'GAME_OVER';
+                if (this.audio) this.audio.playSFX('explosion', 0.5);
        if (this.score > this.save.data.highScore) {
            this.save.data.highScore = this.score;
            this.save.save();
@@ -570,8 +763,10 @@ class Game {
         this.bossMilestone++;
         if (this.bossMilestone % 2 === 1) {
             this.bosses.push(new MagmaWormBoss(width/2, this.cameraY - 200));
+            this.audio.playSFX('bossSpawn');
         } else {
             this.bosses.push(new CoreGuardianBoss(width/2, this.cameraY - 200));
+            this.audio.playSFX('bossSpawn');
         }
     }
 
@@ -611,8 +806,9 @@ class Game {
             if (Math.sqrt(dx*dx + dy*dy) < b.radius + e.radius) {
                 if (e.shield > 0) {
                     e.shield -= b.damage;
+                    this.audio.playSFX('hit', 1.5);
                     if (b.pierce > 0) b.pierce--; else b.life = 0;
-                    this.audio.playExplosion();
+                    this.audio.playSFX('explosion', 1.0 + Math.random() * 0.5);
                     for(let i=0; i<5; i++) this.particles.push(new Particle(e.x, e.y, '#fff'));
                 } else {
                     e.alive = false;
@@ -620,7 +816,7 @@ class Game {
                     this.comboManager.addCombo(this.player.upgrades.comboDuration);
                     this.score += 100 * this.comboManager.getMultiplier();
                     this.pickupManager.spawn(e.x, e.y);
-                    this.audio.playExplosion();
+                    this.audio.playSFX('explosion', 1.0 + Math.random() * 0.5);
                     for(let i=0; i<10; i++) this.particles.push(new Particle(e.x, e.y, '#f00'));
                     if (e instanceof SplitterEnemy) {
                         this.enemies.push(new SwarmerEnemy(e.x - 10, e.y));
@@ -634,8 +830,10 @@ class Game {
             let dx = b.x - boss.x; let dy = b.y - boss.y;
             if (Math.sqrt(dx*dx + dy*dy) < b.radius + boss.radius) {
                 boss.hp -= 50 * b.damage;
+                this.audio.playSFX('hit', 0.5);
+                this.audio.playSFX('hit', 0.5);
                 if (b.pierce > 0) b.pierce--; else b.life = 0;
-                this.audio.playExplosion();
+                this.audio.playSFX('explosion', 1.0 + Math.random() * 0.5);
                 for(let i=0; i<5; i++) this.particles.push(new Particle(boss.x, boss.y, '#fff'));
                 if (boss.hp <= 0) {
                     boss.alive = false;
@@ -663,6 +861,7 @@ class Game {
         if (Math.sqrt(dx*dx + dy*dy) < this.player.radius + boss.radius) {
             if (this.player.invulnTime <= 0) {
                 this.state = 'GAME_OVER';
+                if (this.audio) this.audio.playSFX('explosion', 0.5);
                 if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
                 this.save.data.totalGamesPlayed++; this.save.save();
             }
@@ -678,11 +877,12 @@ class Game {
                 // Dash kills enemy
                 e.alive = false;
                 this.score += 200;
-                this.audio.playExplosion();
+                this.audio.playSFX('explosion', 1.0 + Math.random() * 0.5);
                 for(let i=0; i<15; i++) this.particles.push(new Particle(e.x, e.y, '#0ff'));
             } else if (this.player.invulnTime <= 0) {
                 // Enemy kills player
                 this.state = 'GAME_OVER';
+                if (this.audio) this.audio.playSFX('explosion', 0.5);
                 if (this.score > this.save.data.highScore) {
                     this.save.data.highScore = this.score;
                     this.save.save();
@@ -697,6 +897,7 @@ class Game {
         let dx = this.player.x - b.x; let dy = this.player.y - b.y;
         if (Math.sqrt(dx*dx + dy*dy) < this.player.radius + b.radius && this.player.invulnTime <= 0) {
             this.state = 'GAME_OVER';
+                if (this.audio) this.audio.playSFX('explosion', 0.5);
             if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
             this.save.data.totalGamesPlayed++; this.save.save();
         }
