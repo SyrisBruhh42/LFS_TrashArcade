@@ -96,17 +96,65 @@ class Player {
     this.recoilForce = 500;
     this.grounded = false;
     this.cooldown = 0;
+
+    // Phase 2: Overdrive Dash
+    this.dashCooldown = 0;
+    this.dashActive = 0;
+    this.invulnTime = 0;
+    this.dashDuration = 0.2;
+    this.dashSpeed = 1500;
   }
   update(dt, input, platforms) {
     this.cooldown -= dt;
-    this.vy += this.gravity * dt;
+    this.dashCooldown -= dt;
+    this.invulnTime -= dt;
 
-    if (input.keys['KeyA'] || input.keys['ArrowLeft']) this.vx -= this.speed * dt * 5;
-    if (input.keys['KeyD'] || input.keys['ArrowRight']) this.vx += this.speed * dt * 5;
-    this.vx *= Math.pow(0.01, dt);
+    if (this.dashActive > 0) {
+        this.dashActive -= dt;
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        if (this.dashActive <= 0) {
+            this.vx *= 0.2;
+            this.vy *= 0.2;
+        }
+    } else {
+        this.vy += this.gravity * dt;
 
-    this.x += this.vx * dt;
-    this.y += this.vy * dt;
+        let moveForce = 5;
+        if (!this.grounded) moveForce = 2; // Air control
+
+        if (input.keys['KeyA'] || input.keys['ArrowLeft']) this.vx -= this.speed * dt * moveForce;
+        if (input.keys['KeyD'] || input.keys['ArrowRight']) this.vx += this.speed * dt * moveForce;
+
+        let damping = this.grounded ? 0.005 : 0.05;
+        this.vx *= Math.pow(damping, dt);
+        this.vy *= Math.pow(0.95, dt); // Terminal velocity constraint
+
+        // Dash input
+        if ((input.keys['ShiftLeft'] || input.keys['ShiftRight']) && this.dashCooldown <= 0) {
+            let dx = 0, dy = 0;
+            if (window.game && window.game.input.pointer.active) {
+                dx = window.game.input.pointer.x - this.x;
+                dy = (window.game.input.pointer.y + window.game.cameraY) - this.y;
+            } else {
+                dx = this.vx;
+                dy = this.vy;
+            }
+            let len = Math.sqrt(dx*dx + dy*dy);
+            if (len > 0) { dx /= len; dy /= len; } else { dx = 1; dy = 0; }
+
+            this.vx = dx * this.dashSpeed;
+            this.vy = dy * this.dashSpeed;
+            this.dashActive = this.dashDuration;
+            this.dashCooldown = 3.0;
+            this.invulnTime = 0.3; // Invulnerable during and slightly after dash
+            if (window.game) window.game.audio.playShoot(); // Reuse shoot sound for dash
+        }
+
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+    }
+
     this.grounded = false;
 
     for (let p of platforms) {
@@ -123,23 +171,129 @@ class Player {
     if (this.x > width - this.radius) { this.x = width - this.radius; this.vx = 0; }
   }
   draw(ctx) {
-    ctx.fillStyle = this.color;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
+    if (this.invulnTime > 0 && Math.floor(Date.now() / 50) % 2 === 0) return; // Blink
 
-    if (window.game && window.game.input.pointer.active) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // Procedural rendering
+    let recoilScale = this.cooldown > 0 ? 0.8 : 1.0;
+
+    if (this.dashActive > 0) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        // Outer ring
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius + 4, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Inner core
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * recoilScale, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.restore();
+
+    if (window.game && window.game.input.pointer.active && this.dashActive <= 0) {
        let dx = window.game.input.pointer.x - this.x;
        let dy = window.game.input.pointer.y - this.y;
        let angle = Math.atan2(dy, dx);
-       ctx.strokeStyle = '#fff';
+
+       ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+       ctx.lineWidth = 2;
+       ctx.setLineDash([5, 5]);
        ctx.beginPath();
-       ctx.moveTo(this.x, this.y);
-       ctx.lineTo(this.x + Math.cos(angle)*30, this.y + Math.sin(angle)*30);
+       ctx.moveTo(this.x + Math.cos(angle)*this.radius, this.y + Math.sin(angle)*this.radius);
+       ctx.lineTo(this.x + Math.cos(angle)*60, this.y + Math.sin(angle)*60);
        ctx.stroke();
+       ctx.setLineDash([]);
     }
   }
 }
+
+class TrailManager {
+    constructor() {
+        this.trails = [];
+    }
+    add(x, y, radius, color, life) {
+        this.trails.push({x, y, radius, color, life, maxLife: life});
+    }
+    update(dt) {
+        for (let t of this.trails) t.life -= dt;
+        this.trails = this.trails.filter(t => t.life > 0);
+    }
+    draw(ctx) {
+        for (let t of this.trails) {
+            ctx.fillStyle = t.color;
+            ctx.globalAlpha = Math.max(0, t.life / t.maxLife) * 0.5;
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+}
+
+class MagmaRenderer {
+    constructor() {
+        this.time = 0;
+        this.bubbles = [];
+    }
+    update(dt) {
+        this.time += dt;
+        if (Math.random() < 0.1) {
+            this.bubbles.push({
+                x: Math.random() * 2000, // Assuming a wide enough area
+                yOffset: Math.random() * 20 + 10,
+                life: 1.0,
+                maxLife: 1.0,
+                radius: Math.random() * 5 + 2
+            });
+        }
+        for (let b of this.bubbles) {
+            b.life -= dt;
+            b.yOffset += dt * 50;
+        }
+        this.bubbles = this.bubbles.filter(b => b.life > 0);
+    }
+    draw(ctx, width, lavaY, cameraY) {
+        if (lavaY >= height) return;
+
+        ctx.fillStyle = '#ff3300';
+        ctx.beginPath();
+        ctx.moveTo(0, lavaY);
+
+        for (let x = 0; x <= width; x += 20) {
+            let waveOffset = Math.sin(x * 0.05 + this.time * 2) * 10 + Math.cos(x * 0.02 + this.time * 3) * 5;
+            ctx.lineTo(x, lavaY + waveOffset);
+        }
+        ctx.lineTo(width, height);
+        ctx.lineTo(0, height);
+        ctx.fill();
+
+        ctx.fillStyle = '#ff9900';
+        for (let b of this.bubbles) {
+            let bx = b.x % width; // Wrap horizontally
+            let by = lavaY - b.yOffset + Math.sin(bx * 0.05 + this.time * 2) * 10;
+            ctx.globalAlpha = Math.max(0, b.life / b.maxLife);
+            ctx.beginPath();
+            ctx.arc(bx, by, b.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        ctx.fillStyle = 'rgba(255, 50, 0, 0.4)';
+        ctx.fillRect(0, lavaY, width, height - lavaY);
+    }
+}
+
 
 class Bullet {
   constructor(x, y, dx, dy) {
@@ -239,6 +393,8 @@ class Game {
     this.platforms = [];
     this.cameraY = 0;
         this.ui = new UIOverlay();
+    this.trailManager = new TrailManager();
+    this.magmaRenderer = new MagmaRenderer();
 
     this.resizeOb = new ResizeObserver(() => this.resize());
     this.resizeOb.observe(document.body);
@@ -270,6 +426,8 @@ class Game {
     this.platforms = [];
     this.cameraY = 0;
         this.ui = new UIOverlay();
+    this.trailManager = new TrailManager();
+    this.magmaRenderer = new MagmaRenderer();
 
     this.platforms.push(new Platform(0, height - 100, width, 100));
     for(let i=0; i<5; i++) {
@@ -358,6 +516,14 @@ class Game {
     for (let p of this.particles) p.update(dt);
     this.particles = this.particles.filter(p => p.life > 0);
 
+    if (this.trailManager) {
+        if (this.player && this.player.dashActive > 0) {
+            this.trailManager.add(this.player.x, this.player.y, this.player.radius, '#fff', 0.3);
+        }
+        this.trailManager.update(dt);
+    }
+    if (this.magmaRenderer) this.magmaRenderer.update(dt);
+
     for (let b of this.bullets) {
         for (let e of this.enemies) {
             if (!e.alive) continue;
@@ -372,6 +538,31 @@ class Game {
         }
     }
     this.enemies = this.enemies.filter(e => e.alive && e.y < this.cameraY + height + 200);
+
+    // Player vs Enemy collision
+    for (let e of this.enemies) {
+        if (!e.alive) continue;
+        let dx = this.player.x - e.x;
+        let dy = this.player.y - e.y;
+        if (Math.sqrt(dx*dx + dy*dy) < this.player.radius + e.radius) {
+            if (this.player.dashActive > 0) {
+                // Dash kills enemy
+                e.alive = false;
+                this.score += 200;
+                this.audio.playExplosion();
+                for(let i=0; i<15; i++) this.particles.push(new Particle(e.x, e.y, '#0ff'));
+            } else if (this.player.invulnTime <= 0) {
+                // Enemy kills player
+                this.state = 'GAME_OVER';
+                if (this.score > this.save.data.highScore) {
+                    this.save.data.highScore = this.score;
+                    this.save.save();
+                }
+                this.save.data.totalGamesPlayed++;
+                this.save.save();
+            }
+        }
+    }
   }
   draw(ctx) {
     ctx.fillStyle = '#201010';
@@ -383,15 +574,20 @@ class Game {
     for (let p of this.platforms) p.draw(ctx);
     for (let e of this.enemies) e.draw(ctx);
     for (let p of this.particles) p.draw(ctx);
+    if (this.trailManager) this.trailManager.draw(ctx);
     for (let b of this.bullets) b.draw(ctx);
     if (this.player) this.player.draw(ctx);
 
     ctx.restore();
 
-    ctx.fillStyle = 'rgba(255, 50, 0, 0.4)';
     let lavaY = Math.max(0, height - (this.cameraY));
-    if (lavaY < height) {
-        ctx.fillRect(0, lavaY, width, height - lavaY);
+    if (this.magmaRenderer) {
+        this.magmaRenderer.draw(ctx, width, lavaY, this.cameraY);
+    } else {
+        ctx.fillStyle = 'rgba(255, 50, 0, 0.4)';
+        if (lavaY < height) {
+            ctx.fillRect(0, lavaY, width, height - lavaY);
+        }
     }
 
     ctx.fillStyle = '#fff';
@@ -474,6 +670,11 @@ class UIOverlay {
     ctx.fillText('Height: ' + Math.floor(-game.player.y), width - this.padding, 30);
     ctx.fillText('Cooldown: ' + Math.max(0, Math.ceil(game.player.cooldown * 100)) + '%', width - this.padding, 50);
     ctx.fillText('Grounded: ' + (game.player.grounded ? 'Yes' : 'No'), width - this.padding, 70);
+
+    let dashCdStr = game.player.dashCooldown > 0 ? game.player.dashCooldown.toFixed(1) : 'READY';
+    ctx.fillStyle = game.player.dashCooldown <= 0 ? '#0ff' : '#aaa';
+    ctx.fillText('Dash [Shift]: ' + dashCdStr, width - this.padding, 90);
+    ctx.fillStyle = this.color;
 
     let y = height - this.padding;
     ctx.textAlign = 'center';
