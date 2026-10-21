@@ -396,7 +396,7 @@ class Enemy {
         }
     }
 
-    update(dt, cx, cy, player, playerPos) {
+    update(dt, cx, cy, player, playerPos, enemies) {
         // Sun gravity
         const dxSun = cx - this.x;
         const dySun = cy - this.y;
@@ -440,6 +440,276 @@ class Enemy {
         drawPaperPoly(ctx, pts, color);
     }
 }
+
+class Swarmer extends Enemy {
+    constructor(cx, cy, cw, ch) {
+        super(cx, cy, cw, ch);
+        this.size = 8;
+        this.shape = [];
+        const sides = 3;
+        for (let i = 0; i < sides; i++) {
+            const a = (i / sides) * Math.PI * 2;
+            const r = this.size * (0.8 + Math.random() * 0.4);
+            this.shape.push({ angle: a, r: r });
+        }
+        this.aiState = 'chase';
+    }
+    update(dt, cx, cy, player, playerPos, enemies) {
+        // Player magnetism
+        const dxP = playerPos.x - this.x;
+        const dyP = playerPos.y - this.y;
+        const distPSq = dxP*dxP + dyP*dyP;
+        const distP = Math.sqrt(distPSq);
+
+        if (distP > 0) {
+            const magForce = 150000 / Math.max(distPSq, 100);
+            const forceDir = this.polarity === player.polarity ? -1 : 1;
+            this.vx += (dxP / distP) * magForce * forceDir * dt;
+            this.vy += (dyP / distP) * magForce * forceDir * dt;
+
+            // Base chase speed
+            this.vx += (dxP / distP) * 150 * dt;
+            this.vy += (dyP / distP) * 150 * dt;
+        }
+
+        // Apply friction
+        this.vx *= 0.99;
+        this.vy *= 0.99;
+
+        this.x += this.vx * dt + this.knockbackX * dt;
+        this.y += this.vy * dt + this.knockbackY * dt;
+        this.knockbackX *= 0.9;
+        this.knockbackY *= 0.9;
+    }
+}
+
+class Sniper extends Enemy {
+    constructor(cx, cy, cw, ch) {
+        super(cx, cy, cw, ch);
+        this.size = 14;
+        this.shape = [];
+        const sides = 4;
+        for (let i = 0; i < sides; i++) {
+            const a = (i / sides) * Math.PI * 2;
+            const r = (i % 2 === 0 ? 1.5 : 0.5) * this.size;
+            this.shape.push({ angle: a, r: r });
+        }
+        this.aiState = 'orbit';
+        this.stateTimer = Math.random() * 2 + 2;
+        this.targetDist = 200 + Math.random() * 100;
+        this.lungeVx = 0;
+        this.lungeVy = 0;
+    }
+    update(dt, cx, cy, player, playerPos, enemies) {
+        this.stateTimer -= dt;
+
+        const dxP = playerPos.x - this.x;
+        const dyP = playerPos.y - this.y;
+        const distPSq = dxP*dxP + dyP*dyP;
+        const distP = Math.sqrt(distPSq);
+
+        if (this.aiState === 'orbit') {
+            if (this.stateTimer <= 0) {
+                this.aiState = 'telegraph';
+                this.stateTimer = 1.0;
+            } else {
+                if (distP > 0) {
+                    const error = distP - this.targetDist;
+                    this.vx += (dxP / distP) * error * 2 * dt;
+                    this.vy += (dyP / distP) * error * 2 * dt;
+
+                    // Orbit tangent
+                    this.vx += (-dyP / distP) * 150 * dt;
+                    this.vy += (dxP / distP) * 150 * dt;
+                }
+
+                const dxSun = cx - this.x;
+                const dySun = cy - this.y;
+                const distSunSq = dxSun*dxSun + dySun*dySun;
+                const distSun = Math.sqrt(distSunSq);
+                const gravity = 10000 / Math.max(distSunSq, 100);
+                this.vx += (dxSun / distSun) * gravity * dt;
+                this.vy += (dySun / distSun) * gravity * dt;
+            }
+        } else if (this.aiState === 'telegraph') {
+            this.vx *= 0.8;
+            this.vy *= 0.8;
+            if (this.stateTimer <= 0) {
+                this.aiState = 'shoot';
+                this.stateTimer = 1.5;
+                if (distP > 0) {
+                    this.lungeVx = (dxP / distP) * 600;
+                    this.lungeVy = (dyP / distP) * 600;
+                }
+            }
+        } else if (this.aiState === 'shoot') {
+            this.vx = this.lungeVx;
+            this.vy = this.lungeVy;
+            if (this.stateTimer <= 0) {
+                this.aiState = 'orbit';
+                this.stateTimer = Math.random() * 2 + 2;
+            }
+        }
+
+        // Apply friction
+        if (this.aiState !== 'shoot') {
+            this.vx *= 0.99;
+            this.vy *= 0.99;
+        }
+
+        this.x += this.vx * dt + this.knockbackX * dt;
+        this.y += this.vy * dt + this.knockbackY * dt;
+        this.knockbackX *= 0.9;
+        this.knockbackY *= 0.9;
+    }
+
+    draw(ctx) {
+        const pts = this.shape.map(p => ({
+            x: this.x + Math.cos(p.angle) * p.r,
+            y: this.y + Math.sin(p.angle) * p.r
+        }));
+
+        let color = this.polarity === POLARITY.POSITIVE ? COLORS.POSITIVE : COLORS.NEGATIVE;
+        if (this.aiState === 'telegraph') {
+             // flash white
+             if (Math.floor(this.stateTimer * 10) % 2 === 0) {
+                 color = '#ffffff';
+             }
+        }
+        drawPaperPoly(ctx, pts, color);
+    }
+}
+
+class Bruiser extends Enemy {
+    constructor(cx, cy, cw, ch) {
+        super(cx, cy, cw, ch);
+        this.size = 20;
+        this.shape = [];
+        const sides = 6;
+        for (let i = 0; i < sides; i++) {
+            const a = (i / sides) * Math.PI * 2;
+            const r = this.size;
+            this.shape.push({ angle: a, r: r });
+        }
+        this.aiState = 'chase';
+        this.shieldTimer = Math.random() * 2;
+    }
+    update(dt, cx, cy, player, playerPos, enemies) {
+        this.shieldTimer -= dt;
+        if (this.shieldTimer <= 0) {
+            this.aiState = this.aiState === 'chase' ? 'shielded' : 'chase';
+            this.shieldTimer = this.aiState === 'chase' ? 4 : 2;
+        }
+
+        if (this.aiState === 'shielded') {
+            this.knockbackX = 0;
+            this.knockbackY = 0;
+        }
+
+        super.update(dt, cx, cy, player, playerPos, enemies);
+    }
+
+    draw(ctx) {
+        const pts = this.shape.map(p => ({
+            x: this.x + Math.cos(p.angle) * p.r,
+            y: this.y + Math.sin(p.angle) * p.r
+        }));
+
+        const color = this.polarity === POLARITY.POSITIVE ? COLORS.POSITIVE : COLORS.NEGATIVE;
+        drawPaperPoly(ctx, pts, color, this.aiState === 'shielded' ? '#ffffff' : '#333');
+    }
+}
+
+class Splitter extends Enemy {
+    constructor(cx, cy, cw, ch) {
+        super(cx, cy, cw, ch);
+        this.size = 18;
+        this.shape = [];
+        const sides = 10;
+        for (let i = 0; i < sides; i++) {
+            const a = (i / sides) * Math.PI * 2;
+            const r = (i % 2 === 0 ? 1.0 : 0.5) * this.size;
+            this.shape.push({ angle: a, r: r });
+        }
+        this.hasSplit = false;
+        this.cw = cw;
+        this.ch = ch;
+    }
+    update(dt, cx, cy, player, playerPos, enemies) {
+        if (!this.hasSplit && (Math.abs(this.knockbackX) > 500 || Math.abs(this.knockbackY) > 500)) {
+            this.hasSplit = true;
+            this.markedForDeletion = true;
+            if (enemies) {
+                for (let i = 0; i < 2; i++) {
+                    const s = new Swarmer(cx, cy, this.cw, this.ch);
+                    s.x = this.x + (Math.random() - 0.5) * 20;
+                    s.y = this.y + (Math.random() - 0.5) * 20;
+                    s.polarity = this.polarity;
+                    enemies.push(s);
+                }
+            }
+        }
+        super.update(dt, cx, cy, player, playerPos, enemies);
+    }
+}
+
+class HazardEnemy extends Enemy {
+    constructor(cx, cy, cw, ch) {
+        super(cx, cy, cw, ch);
+        this.size = 15;
+        this.baseSize = 15;
+        this.shape = [];
+        const sides = 16;
+        for (let i = 0; i < sides; i++) {
+            const a = (i / sides) * Math.PI * 2;
+            const r = (i % 2 === 0 ? 1.2 : 0.8) * this.size;
+            this.shape.push({ angle: a, r: r });
+        }
+        this.aiState = 'idle';
+        this.stateTimer = 3.0;
+        this.rotAngle = 0;
+    }
+    update(dt, cx, cy, player, playerPos, enemies) {
+        this.stateTimer -= dt;
+        this.rotAngle += dt * 0.5;
+
+        if (this.aiState === 'idle') {
+            if (this.stateTimer <= 0) {
+                this.aiState = 'expand';
+                this.stateTimer = 0.5;
+            }
+            this.size = this.baseSize;
+        } else if (this.aiState === 'expand') {
+            if (this.stateTimer <= 0) {
+                this.aiState = 'idle';
+                this.stateTimer = 3.0;
+                this.size = this.baseSize;
+            } else {
+                // Triple size over 0.5s, peak in middle
+                const p = 1.0 - Math.abs(0.25 - this.stateTimer) / 0.25;
+                this.size = this.baseSize + this.baseSize * 2 * p;
+            }
+        }
+
+        // update shape
+        this.shape = [];
+        const sides = 16;
+        for (let i = 0; i < sides; i++) {
+            const a = (i / sides) * Math.PI * 2;
+            const r = (i % 2 === 0 ? 1.2 : 0.8) * this.size;
+            this.shape.push({ angle: a + this.rotAngle, r: r });
+        }
+
+        // slow movement
+        this.vx *= 0.95;
+        this.vy *= 0.95;
+        this.x += this.vx * dt + this.knockbackX * dt;
+        this.y += this.vy * dt + this.knockbackY * dt;
+        this.knockbackX *= 0.9;
+        this.knockbackY *= 0.9;
+    }
+}
+
 
 
 // Helpful Analytics Tracking for Dash Usage
@@ -890,7 +1160,16 @@ class GameEngine {
             // Spawner
             this.spawnTimer -= dt;
             if (this.spawnTimer <= 0) {
-                this.enemies.push(new Enemy(cx, cy, cw, ch));
+
+                const r = Math.random();
+                let newEnemy;
+                if (r < 0.2) newEnemy = new Swarmer(cx, cy, cw, ch);
+                else if (r < 0.4) newEnemy = new Sniper(cx, cy, cw, ch);
+                else if (r < 0.6) newEnemy = new Bruiser(cx, cy, cw, ch);
+                else if (r < 0.8) newEnemy = new Splitter(cx, cy, cw, ch);
+                else newEnemy = new HazardEnemy(cx, cy, cw, ch);
+                this.enemies.push(newEnemy);
+
                 this.spawnTimer = this.spawnRate;
                 this.spawnRate = Math.max(0.5, this.spawnRate - 0.05); // Increase difficulty
             }
@@ -898,7 +1177,7 @@ class GameEngine {
             // Update Enemies
             for (let i = this.enemies.length - 1; i >= 0; i--) {
                 const e = this.enemies[i];
-                e.update(dt, cx, cy, this.player, playerPos);
+                e.update(dt, cx, cy, this.player, playerPos, this.enemies);
 
                 // Collision with Sun
                 const dxSun = cx - e.x;
