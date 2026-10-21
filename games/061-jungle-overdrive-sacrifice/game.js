@@ -437,6 +437,174 @@ class SpawnerEnemy extends Enemy {
   }
 }
 
+
+class Boss {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.health = 200;
+    this.maxHealth = 200;
+    this.radius = 60;
+    this.animTimer = 0;
+    this.phase = 1;
+    this.color = '#aa3333';
+  }
+  update(dt, game) {
+    this.animTimer += dt;
+    if (this.health < this.maxHealth / 2 && this.phase === 1) {
+      this.phase = 2;
+      game.texts.push(new FloatingText(this.x, this.y - 80, "PHASE 2!", 2, '#ff0000'));
+    }
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Boss Health Bar
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(-this.radius, -this.radius - 20, this.radius * 2, 8);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(-this.radius, -this.radius - 20, (this.health/this.maxHealth)*this.radius*2, 8);
+    ctx.restore();
+  }
+}
+
+class JungleBehemoth extends Boss {
+  constructor(x, y) {
+    super(x, y);
+    this.color = '#884400';
+    this.attackTimer = 0;
+    this.targetX = width - 150;
+    this.isDashing = false;
+  }
+  update(dt, game) {
+    super.update(dt, game);
+    if (this.isDashing) {
+        this.x -= 800 * dt;
+        if (this.x < 100) this.isDashing = false;
+    } else {
+        if (this.x < this.targetX) {
+            this.x += 200 * dt;
+        } else if (this.x > this.targetX) {
+            this.x -= 100 * dt; // Enter screen
+        }
+    }
+
+    this.y += Math.sin(this.animTimer * 2) * 50 * dt; // Hover
+
+    this.attackTimer -= dt;
+    if (this.attackTimer <= 0) {
+      if (this.phase === 1) {
+        // Shoot projectiles
+        game.enemies.push(new SniperEnemy(this.x, this.y));
+        this.attackTimer = 2.0;
+      } else {
+        // Dash forward
+        this.isDashing = true;
+        game.enemies.push(new SwarmerEnemy(this.x, this.y - 50));
+        game.enemies.push(new SwarmerEnemy(this.x, this.y + 50));
+        this.attackTimer = 3.0;
+      }
+    }
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.scale(1 + 0.1 * Math.sin(this.animTimer * 5), 1 + 0.1 * Math.sin(this.animTimer * 5));
+    ctx.fillStyle = this.color;
+    ctx.fillRect(-this.radius, -this.radius, this.radius*2, this.radius*2);
+
+    // Phase 2 glow
+    if (this.phase === 2) {
+      ctx.strokeStyle = '#ff0000';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(-this.radius-5, -this.radius-5, this.radius*2+10, this.radius*2+10);
+    }
+
+    // Boss Health Bar
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(-this.radius, -this.radius - 20, this.radius * 2, 8);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(-this.radius, -this.radius - 20, (this.health/this.maxHealth)*this.radius*2, 8);
+    ctx.restore();
+  }
+}
+
+class OverdriveIdol extends Boss {
+  constructor(x, y) {
+    super(x, y);
+    this.color = '#aa00ff';
+    this.attackTimer = 0;
+    this.health = 250;
+    this.maxHealth = 250;
+    this.moveTimer = 0;
+    this.targetY = y;
+  }
+  update(dt, game) {
+    super.update(dt, game);
+
+    // Move closer over time to be reachable or jump around
+    if (this.x > width / 2 + 100) {
+      this.x -= 50 * dt;
+    }
+
+    this.moveTimer -= dt;
+    if (this.moveTimer <= 0) {
+        this.targetY = Math.random() * (height - 200) + 100;
+        this.moveTimer = 2.0;
+    }
+
+    this.y += (this.targetY - this.y) * 5 * dt;
+
+    this.attackTimer -= dt;
+    if (this.attackTimer <= 0) {
+      if (this.phase === 1) {
+        for(let i=0; i<3; i++) {
+          game.enemies.push(new SwarmerEnemy(this.x, this.y + (i-1)*60));
+        }
+        this.attackTimer = 2.5;
+      } else {
+        game.enemies.push(new SplitterEnemy(this.x, this.y - 40));
+        game.enemies.push(new SplitterEnemy(this.x, this.y + 40));
+        this.attackTimer = 2.0;
+      }
+    }
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(Math.sin(this.animTimer) * 0.2);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -this.radius);
+    ctx.lineTo(this.radius, this.radius);
+    ctx.lineTo(-this.radius, this.radius);
+    ctx.closePath();
+    ctx.fill();
+
+    if (this.phase === 2) {
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(0, -this.radius-10);
+      ctx.lineTo(this.radius+10, this.radius+10);
+      ctx.lineTo(-this.radius-10, this.radius+10);
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    // Boss Health Bar
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(-this.radius, -this.radius - 20, this.radius * 2, 8);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(-this.radius, -this.radius - 20, (this.health/this.maxHealth)*this.radius*2, 8);
+    ctx.restore();
+  }
+}
+
 class Player {
   constructor(x, y) {
     this.x = x; this.y = y;
@@ -744,6 +912,10 @@ class Game {
     this.texts = [];
     this.enemySpawnTimer = 0;
     this.bgOffset = 0;
+    this.boss = null;
+    this.bossWarningTimer = 0;
+    this.bossIndex = 0;
+    this.nextBossScore = 1000;
 
     this.beatTracker.onBeat = () => {
       if (this.state === 'PLAYING') {
@@ -774,6 +946,10 @@ class Game {
     this.particles = [];
     this.texts = [];
     this.enemySpawnTimer = 0;
+    this.boss = null;
+    this.bossWarningTimer = 0;
+    this.bossIndex = 0;
+    this.nextBossScore = 1000;
     this.envManager = new EnvironmentManager();
     this.hazardManager = new HazardManager();
     this.soundEngine.init();
@@ -844,9 +1020,37 @@ class Game {
 
       this.bgOffset = (this.bgOffset + 50 * dt) % 100;
 
-      this.enemySpawnTimer -= dt;
-      if (this.enemySpawnTimer <= 0) {
-        let spawnType = Math.random();
+      if (!this.boss && this.score >= this.nextBossScore && this.bossWarningTimer <= 0) {
+          this.bossWarningTimer = 3.0; // 3 seconds warning
+          this.enemies = []; // clear enemies
+      }
+
+      if (this.bossWarningTimer > 0) {
+          this.bossWarningTimer -= dt;
+          if (this.bossWarningTimer <= 0) {
+              if (this.bossIndex % 2 === 0) {
+                  this.boss = new JungleBehemoth(width + 100, height / 2);
+              } else {
+                  this.boss = new OverdriveIdol(width + 100, height / 2);
+              }
+          }
+      }
+
+      if (this.boss) {
+          this.boss.update(dt, this);
+          let dist = MathUtils.dist(this.boss.x, this.boss.y, this.player.x, this.player.y);
+          if (dist < this.player.radius + this.boss.radius) {
+              if (this.player.invulnTimer <= 0) {
+                  this.player.health -= 20;
+                  this.player.invulnTimer = 0.5;
+                  this.texts.push(new FloatingText(this.player.x, this.player.y - 40, "BOSS HIT!", 1, '#f00'));
+                  if (this.player.health <= 0) this.gameOver();
+              }
+          }
+      } else if (this.bossWarningTimer <= 0) {
+        this.enemySpawnTimer -= dt;
+        if (this.enemySpawnTimer <= 0) {
+          let spawnType = Math.random();
         let spawnY = Math.random() * (height - 200) + 100; // Keep within playable area
         let newEnemy;
         if (spawnType < 0.2) {
@@ -864,6 +1068,7 @@ class Game {
         }
         this.enemies.push(newEnemy);
         this.enemySpawnTimer = 1.5 + Math.random(); // Varied interval
+        }
       }
 
       for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -910,6 +1115,13 @@ class Game {
         // Find closest enemy
         let closest = null;
         let minDist = Infinity;
+        if (this.boss) {
+            let d = this.boss.x - this.player.x;
+            if (d > 0 && d < minDist) {
+                minDist = d;
+                closest = this.boss;
+            }
+        }
         for (let e of this.enemies) {
           let d = e.x - this.player.x;
           if (d > 0 && d < minDist) {
@@ -918,7 +1130,7 @@ class Game {
           }
         }
 
-        if (closest && minDist < 300) {
+        if (closest && (minDist < 300 || closest === this.boss)) {
           this.player.recoilOffset = 20;
           closest.health -= dmg;
           this.soundEngine.playHit();
@@ -928,10 +1140,18 @@ class Game {
           }
 
           if (closest.health <= 0) {
-            this.score += 100 * (this.player.overdriveActive ? 2 : 1);
+            if (closest === this.boss) {
+                this.score += 5000;
+                this.boss = null;
+                this.bossIndex++;
+                this.nextBossScore = this.score + 1000;
+                this.texts.push(new FloatingText(closest.x, closest.y, "BOSS DEFEATED!", 2, '#0f0'));
+                this.texts.push(new FloatingText(closest.x, closest.y - 20, acc > 0.8 ? "PERFECT!" : "Good", 1, '#0f0'));
+            } else {
+                this.score += 100 * (this.player.overdriveActive ? 2 : 1);
 
-            // Special on-death behavior
-            if (closest.type === 'Splitter') {
+                // Special on-death behavior
+                if (closest.type === 'Splitter') {
               let spawn1 = new SwarmerEnemy(closest.x, closest.y - 30);
               let spawn2 = new SwarmerEnemy(closest.x, closest.y + 30);
               this.enemies.push(spawn1, spawn2);
@@ -942,8 +1162,9 @@ class Game {
               }
             }
 
-            this.enemies = this.enemies.filter(e => e !== closest);
-            this.texts.push(new FloatingText(closest.x, closest.y - 20, acc > 0.8 ? "PERFECT!" : "Good", 1, '#0f0'));
+                this.enemies = this.enemies.filter(e => e !== closest);
+                this.texts.push(new FloatingText(closest.x, closest.y - 20, acc > 0.8 ? "PERFECT!" : "Good", 1, '#0f0'));
+            }
           }
         } else {
            this.texts.push(new FloatingText(this.player.x, this.player.y - 20, "Miss!", 0.5, '#aaa'));
@@ -990,6 +1211,14 @@ class Game {
       for (let t of this.texts) t.draw(ctx);
 
       // UI
+      if (this.boss) this.boss.draw(ctx);
+      if (this.bossWarningTimer > 0) {
+          ctx.fillStyle = Math.floor(this.bossWarningTimer * 10) % 2 === 0 ? '#ff0000' : '#ffffff';
+          ctx.font = '40px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('WARNING: BOSS APPROACHING', width/2, height/4);
+      }
+
       ctx.fillStyle = '#fff';
       ctx.font = '20px Arial';
       ctx.textAlign = 'left';
