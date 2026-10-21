@@ -665,7 +665,7 @@ class Player {
       if (inputManager.dashInput && this.dashCooldown <= 0) {
          this.isDashing = true;
          this.dashTimer = 0.2;
-         this.dashCooldown = 2.0;
+         this.dashCooldown = 2.0 * (window.game ? window.game.playerStats.dashCdMult : 1);
          this.invulnTimer = 0.3; // i-frames
          let angle = MathUtils.angleTo(this.x, this.y, inputManager.pointerX, inputManager.pointerY);
          this.dashDirX = Math.cos(angle);
@@ -895,6 +895,31 @@ class HazardManager {
   }
 }
 
+
+class Pickup {
+  constructor(x, y, type) {
+    this.x = x; this.y = y; this.type = type;
+    this.life = 10;
+    this.radius = 15;
+    this.bob = 0;
+  }
+  update(dt) {
+    this.life -= dt;
+    this.bob += dt * 5;
+  }
+  draw(ctx) {
+    if (this.life < 2 && Math.floor(this.life * 10) % 2 === 0) return; // blink
+    ctx.fillStyle = this.type === 'HEALTH' ? '#0f0' : '#ffaa00';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y + Math.sin(this.bob) * 5, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(this.type === 'HEALTH' ? '+' : '$', this.x, this.y + Math.sin(this.bob) * 5 + 5);
+  }
+}
+
 class Game {
   constructor() {
     this.state = 'TITLE';
@@ -910,12 +935,41 @@ class Game {
     this.enemies = [];
     this.particles = [];
     this.texts = [];
+    this.pickups = [];
     this.enemySpawnTimer = 0;
     this.bgOffset = 0;
     this.boss = null;
     this.bossWarningTimer = 0;
     this.bossIndex = 0;
     this.nextBossScore = 1000;
+
+    // Wave & Combo system
+    this.currentWave = 1;
+    this.enemiesToSpawn = 10;
+    this.enemiesRemainingInWave = 10;
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.maxComboTimer = 3.0;
+
+    this.upgradePool = [
+        { id: 'hp', name: 'Max HP +50', desc: 'Increases max health' },
+        { id: 'heal', name: 'Full Heal', desc: 'Restores all health' },
+        { id: 'dmg', name: 'Base Damage UP', desc: 'Attacks deal more damage' },
+        { id: 'od_dmg', name: 'Overdrive UP', desc: 'Overdrive deals more damage' },
+        { id: 'combo_time', name: 'Combo Time UP', desc: 'Combo decays slower' },
+        { id: 'dash_cd', name: 'Quick Dash', desc: 'Dash cooldown reduced' },
+        { id: 'range', name: 'Attack Range UP', desc: 'Hit from further away' },
+        { id: 'od_cost', name: 'Overdrive Cost Down', desc: 'Overdrive uses less HP' }
+    ];
+    this.upgradeChoices = [];
+    this.playerStats = {
+        baseDmg: 1,
+        odDmgMult: 5,
+        comboTimeMult: 1,
+        dashCdMult: 1,
+        rangeMult: 1,
+        odCost: 30
+    };
 
     this.beatTracker.onBeat = () => {
       if (this.state === 'PLAYING') {
@@ -945,6 +999,12 @@ class Game {
     this.enemies = [];
     this.particles = [];
     this.texts = [];
+    this.pickups = [];
+    this.playerStats = { baseDmg: 1, odDmgMult: 5, comboTimeMult: 1, dashCdMult: 1, rangeMult: 1, odCost: 30 };
+    this.currentWave = 1;
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.startNextWave(true);
     this.enemySpawnTimer = 0;
     this.boss = null;
     this.bossWarningTimer = 0;
@@ -955,6 +1015,45 @@ class Game {
     this.soundEngine.init();
     this.saveManager.data.totalGamesPlayed++;
     this.saveManager.save();
+  }
+
+  startNextWave(initial = false) {
+    if (!initial) this.currentWave++;
+    this.enemiesToSpawn = 5 + this.currentWave * 2;
+    this.enemiesRemainingInWave = this.enemiesToSpawn;
+    this.state = 'PLAYING';
+    this.boss = null;
+
+    if (this.currentWave % 5 === 0) {
+        this.bossWarningTimer = 3.0;
+        this.enemiesToSpawn = 0;
+        this.enemiesRemainingInWave = 1; // Boss counts as 1
+    }
+  }
+
+  generateUpgrades() {
+    this.state = 'UPGRADE';
+    this.upgradeChoices = [];
+    let pool = [...this.upgradePool];
+    for (let i = 0; i < 3; i++) {
+        if (pool.length === 0) break;
+        let idx = Math.floor(Math.random() * pool.length);
+        this.upgradeChoices.push(pool[idx]);
+        pool.splice(idx, 1);
+    }
+  }
+
+  applyUpgrade(choice) {
+    switch (choice.id) {
+        case 'hp': this.player.maxHealth += 50; this.player.health += 50; break;
+        case 'heal': this.player.health = this.player.maxHealth; break;
+        case 'dmg': this.playerStats.baseDmg += 1; break;
+        case 'od_dmg': this.playerStats.odDmgMult += 2; break;
+        case 'combo_time': this.playerStats.comboTimeMult += 0.5; break;
+        case 'dash_cd': this.playerStats.dashCdMult *= 0.8; break;
+        case 'range': this.playerStats.rangeMult += 0.3; break;
+        case 'od_cost': this.playerStats.odCost = Math.max(10, this.playerStats.odCost - 5); break;
+    }
   }
 
   gameOver() {
@@ -976,6 +1075,20 @@ class Game {
       }
     } else if (this.state === 'PAUSED') {
       if (this.inputManager.tapped) this.state = 'PLAYING';
+    } else if (this.state === 'UPGRADE') {
+      if (this.inputManager.tapped) {
+        // Selection logic based on pointerY
+        let index = -1;
+        if (this.inputManager.pointerY > height/2 - 80 && this.inputManager.pointerY < height/2 - 20) index = 0;
+        else if (this.inputManager.pointerY > height/2 && this.inputManager.pointerY < height/2 + 60) index = 1;
+        else if (this.inputManager.pointerY > height/2 + 80 && this.inputManager.pointerY < height/2 + 140) index = 2;
+
+        if (index !== -1 && index < this.upgradeChoices.length) {
+            let choice = this.upgradeChoices[index];
+            this.applyUpgrade(choice);
+            this.startNextWave();
+        }
+      }
     } else if (this.state === 'PLAYING') {
       this.beatTracker.update(dt);
       this.player.update(dt, this.inputManager, height);
@@ -1020,9 +1133,40 @@ class Game {
 
       this.bgOffset = (this.bgOffset + 50 * dt) % 100;
 
-      if (!this.boss && this.score >= this.nextBossScore && this.bossWarningTimer <= 0) {
-          this.bossWarningTimer = 3.0; // 3 seconds warning
-          this.enemies = []; // clear enemies
+      // Update Pickups
+      for (let i = this.pickups.length - 1; i >= 0; i--) {
+        let p = this.pickups[i];
+        p.update(dt);
+        // Collision with player
+        let dist = MathUtils.dist(p.x, p.y, this.player.x, this.player.y);
+        if (dist < p.radius + this.player.radius) {
+            if (p.type === 'HEALTH') {
+                this.player.health = Math.min(this.player.maxHealth, this.player.health + 20);
+                this.texts.push(new FloatingText(p.x, p.y - 20, "+20 HP", 1, '#0f0'));
+            } else if (p.type === 'SCORE') {
+                let s = 100 * (1 + this.combo * 0.1);
+                this.score += s;
+                this.texts.push(new FloatingText(p.x, p.y - 20, "+" + s, 1, '#ffaa00'));
+            }
+            this.soundEngine.playHit(); // Optional
+            this.pickups.splice(i, 1);
+        } else if (p.life <= 0) {
+            this.pickups.splice(i, 1);
+        }
+      }
+
+      // Combo decay
+      if (this.comboTimer > 0) {
+          this.comboTimer -= dt;
+          if (this.comboTimer <= 0) {
+              this.combo = 0;
+          }
+      }
+
+      // Check wave clear
+      if (this.enemiesToSpawn <= 0 && this.enemies.length === 0 && !this.boss && this.bossWarningTimer <= 0) {
+          this.generateUpgrades();
+          return; // Skip rest of update
       }
 
       if (this.bossWarningTimer > 0) {
@@ -1049,7 +1193,8 @@ class Game {
           }
       } else if (this.bossWarningTimer <= 0) {
         this.enemySpawnTimer -= dt;
-        if (this.enemySpawnTimer <= 0) {
+        if (this.enemySpawnTimer <= 0 && this.enemiesToSpawn > 0) {
+          this.enemiesToSpawn--;
           let spawnType = Math.random();
         let spawnY = Math.random() * (height - 200) + 100; // Keep within playable area
         let newEnemy;
@@ -1098,8 +1243,8 @@ class Game {
       }
 
       // Overdrive Logic
-      if (this.inputManager.overdriveInput && !this.player.overdriveActive && this.player.health > 30) {
-        this.player.health -= 30;
+      if (this.inputManager.overdriveInput && !this.player.overdriveActive && this.player.health > this.playerStats.odCost) {
+        this.player.health -= this.playerStats.odCost;
         this.player.overdriveActive = true;
         this.player.overdriveDuration = 5;
         this.soundEngine.playOverdrive();
@@ -1109,7 +1254,8 @@ class Game {
       // Attack Logic
       if (this.inputManager.tapped) {
         let acc = this.beatTracker.getHitAccuracy();
-        let dmg = this.player.overdriveActive ? 5 : 1;
+        let dmg = this.playerStats.baseDmg;
+        if (this.player.overdriveActive) dmg *= this.playerStats.odDmgMult;
         if (acc > 0.5) dmg *= 2; // Bonus for hitting on beat
 
         // Find closest enemy
@@ -1130,25 +1276,33 @@ class Game {
           }
         }
 
-        if (closest && (minDist < 300 || closest === this.boss)) {
+        let baseRange = 300 * this.playerStats.rangeMult;
+        if (closest && (minDist < baseRange || closest === this.boss)) {
           this.player.recoilOffset = 20;
           closest.health -= dmg;
           this.soundEngine.playHit();
+
+          // Increase combo on hit
+          this.combo++;
+          this.comboTimer = this.maxComboTimer * this.playerStats.comboTimeMult;
 
           for (let i = 0; i < 5; i++) {
              this.particles.push(new Particle(closest.x, closest.y, Math.random()*200-100, Math.random()*200-100, 0.5, '#fff'));
           }
 
           if (closest.health <= 0) {
+            if (Math.random() < 0.2) this.pickups.push(new Pickup(closest.x, closest.y, Math.random() < 0.3 ? 'HEALTH' : 'SCORE'));
+
             if (closest === this.boss) {
-                this.score += 5000;
+                let baseScore = 5000;
+                this.score += Math.floor(baseScore * (1 + this.combo * 0.1));
                 this.boss = null;
                 this.bossIndex++;
-                this.nextBossScore = this.score + 1000;
                 this.texts.push(new FloatingText(closest.x, closest.y, "BOSS DEFEATED!", 2, '#0f0'));
                 this.texts.push(new FloatingText(closest.x, closest.y - 20, acc > 0.8 ? "PERFECT!" : "Good", 1, '#0f0'));
             } else {
-                this.score += 100 * (this.player.overdriveActive ? 2 : 1);
+                let baseScore = 100 * (this.player.overdriveActive ? 2 : 1);
+                this.score += Math.floor(baseScore * (1 + this.combo * 0.1));
 
                 // Special on-death behavior
                 if (closest.type === 'Splitter') {
@@ -1206,6 +1360,7 @@ class Game {
     } else if (this.state === 'PLAYING') {
       this.player.draw(ctx, this.inputManager.pointerX, this.inputManager.pointerY);
       if (this.hazardManager) this.hazardManager.draw(ctx);
+      for (let p of this.pickups) p.draw(ctx);
       for (let e of this.enemies) e.draw(ctx);
       for (let p of this.particles) p.draw(ctx);
       for (let t of this.texts) t.draw(ctx);
@@ -1223,26 +1378,34 @@ class Game {
       ctx.font = '20px Arial';
       ctx.textAlign = 'left';
       ctx.fillText('Score: ' + this.score, 20, 30);
+      ctx.fillText('Wave: ' + this.currentWave, 20, 50);
+
+      // Combo Bar UI
+      if (this.combo > 0) {
+          ctx.fillStyle = '#ffaa00';
+          ctx.fillText('Combo: ' + this.combo + 'x', width - 150, 30);
+          ctx.fillRect(width - 150, 40, 130 * (this.comboTimer / (this.maxComboTimer * this.playerStats.comboTimeMult)), 10);
+      }
 
       // Health Bar
       ctx.fillStyle = '#f00';
-      ctx.fillRect(20, 50, 200, 20);
+      ctx.fillRect(20, 60, 200, 20);
       ctx.fillStyle = '#0f0';
-      ctx.fillRect(20, 50, 200 * (this.player.health / this.player.maxHealth), 20);
+      ctx.fillRect(20, 60, 200 * (this.player.health / this.player.maxHealth), 20);
       ctx.strokeStyle = '#fff';
-      ctx.strokeRect(20, 50, 200, 20);
+      ctx.strokeRect(20, 60, 200, 20);
 
       // Dash Cooldown HUD
       ctx.fillStyle = '#0055aa';
-      ctx.fillRect(20, 75, 200, 10);
+      ctx.fillRect(20, 85, 200, 10);
       ctx.fillStyle = this.player.dashCooldown <= 0 ? '#00ffff' : '#888';
-      let cdProgress = this.player.dashCooldown > 0 ? 1 - (this.player.dashCooldown / 2.0) : 1;
-      ctx.fillRect(20, 75, 200 * cdProgress, 10);
+      let cdProgress = this.player.dashCooldown > 0 ? 1 - (this.player.dashCooldown / (2.0 * this.playerStats.dashCdMult)) : 1;
+      ctx.fillRect(20, 85, 200 * cdProgress, 10);
       ctx.strokeStyle = '#fff';
-      ctx.strokeRect(20, 75, 200, 10);
+      ctx.strokeRect(20, 85, 200, 10);
       ctx.fillStyle = '#fff';
       ctx.font = '12px Arial';
-      ctx.fillText('DASH', 25, 84);
+      ctx.fillText('DASH', 25, 94);
 
       // Beat Indicator HUD
       let beatWidth = 300;
@@ -1255,6 +1418,30 @@ class Game {
       // Center mark
       ctx.fillStyle = '#ffaa00';
       ctx.fillRect(beatX + beatWidth/2 - 2, 25, 4, 20);
+    } else if (this.state === 'UPGRADE') {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = '#fff';
+      ctx.font = '40px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('WAVE ' + this.currentWave + ' CLEARED!', width/2, height/2 - 150);
+      ctx.font = '20px Arial';
+      ctx.fillText('Choose an Upgrade', width/2, height/2 - 120);
+
+      for (let i = 0; i < this.upgradeChoices.length; i++) {
+         let y = height/2 - 80 + i * 80;
+         ctx.fillStyle = '#222';
+         ctx.fillRect(width/2 - 150, y, 300, 60);
+         ctx.strokeStyle = '#0f0';
+         ctx.strokeRect(width/2 - 150, y, 300, 60);
+
+         ctx.fillStyle = '#fff';
+         ctx.font = '16px Arial';
+         ctx.fillText(this.upgradeChoices[i].name, width/2, y + 25);
+         ctx.fillStyle = '#aaa';
+         ctx.font = '12px Arial';
+         ctx.fillText(this.upgradeChoices[i].desc, width/2, y + 45);
+      }
     } else if (this.state === 'GAME_OVER') {
       ctx.fillStyle = '#fff';
       ctx.font = '40px Arial';
