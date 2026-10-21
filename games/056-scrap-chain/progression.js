@@ -38,11 +38,33 @@ class WaveDirector {
 
             this.currentWave++;
             this.enemiesKilledThisWave = 0;
-            this.targetKills = Math.floor(this.targetKills * 1.5) + 5;
+            this.targetKills = Math.floor(this.targetKills * 1.3) + 3;
 
-            // Slightly reduce spawn interval baseline
-            this.game.enemySpawnInterval = Math.max(0.1, 1.0 - (this.currentWave * 0.05));
+            // Exponentially decay spawn interval for thrilling late waves
+            this.game.enemySpawnInterval = Math.max(0.15, 1.0 * Math.pow(0.85, this.currentWave - 1));
         }
+    }
+    getSpawnType() {
+        let r = Math.random();
+        // Wave 1-2: mostly swarmers/bruisers
+        if (this.currentWave <= 2) {
+            if (r < 0.6) return 0; // Swarmer
+            if (r < 0.9) return 1; // Bruiser
+            return 4; // Hazard
+        }
+        // Wave 3-4: introduce snipers
+        if (this.currentWave <= 4) {
+            if (r < 0.4) return 0;
+            if (r < 0.7) return 1;
+            if (r < 0.9) return 2; // Sniper
+            return 4;
+        }
+        // Wave 5+: introduce splitters and balance
+        if (r < 0.3) return 0;
+        if (r < 0.5) return 1;
+        if (r < 0.7) return 2;
+        if (r < 0.9) return 3; // Splitter
+        return 4;
     }
 }
 
@@ -211,6 +233,32 @@ class PickupManager {
     draw(ctx) {
         for(let p of this.pickups) {
             p.draw(ctx);
+        }
+    }
+}
+
+class AnalyticsTracker {
+    constructor(game) {
+        this.game = game;
+        this.kills = 0;
+        this.detonations = 0;
+        this.maxTetherLength = 0;
+        this.bossDefeats = 0;
+    }
+    recordKill() { this.kills++; }
+    recordDetonation(length) {
+        this.detonations++;
+        if(length > this.maxTetherLength) this.maxTetherLength = length;
+    }
+    recordBossDefeat() { this.bossDefeats++; }
+    draw(ctx) {
+        if(this.game.state === 'GAME_OVER') {
+            ctx.save();
+            ctx.fillStyle = '#6c9b81';
+            ctx.font = '16px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Kills: ${this.kills} | Detonations: ${this.detonations} | Max Tail: ${this.maxTetherLength} | Bosses: ${this.bossDefeats}`, this.game.canvas.width / 2, this.game.canvas.height / 2 + 100);
+            ctx.restore();
         }
     }
 }
