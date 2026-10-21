@@ -470,6 +470,9 @@ class Game {
     }
     reset() {
         this.score = 0;
+        this.wave = 1;
+        this.activeBoss = null;
+        this.hazards = [];
         this.player = new Player(100, 100);
         this.world = new World();
         this.ambientDust = new AmbientDust();
@@ -532,6 +535,38 @@ class Game {
             this.player.update(dt, this.input, this.walls);
             if (this.player.echo) this.player.echo.update(dt, this.input, this.walls);
 
+            for (let i = this.hazards.length - 1; i >= 0; i--) {
+                this.hazards[i].life -= dt;
+                if (this.hazards[i].life <= 0) {
+                    this.hazards.splice(i, 1);
+                    continue;
+                }
+                const h = this.hazards[i];
+                if (h.type === 'blast') {
+                    h.radius += 100 * dt;
+                    if (Math.hypot(this.player.x - h.x, this.player.y - h.y) < h.radius + this.player.radius && this.player.invulnTimer <= 0) {
+                        this.state = 'GAME_OVER';
+                        if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
+                    }
+                    if (this.player.echo && Math.hypot(this.player.echo.x - h.x, this.player.echo.y - h.y) < h.radius + this.player.echo.radius) {
+                        this.player.echo = null;
+                    }
+                } else if (h.type === 'zone') {
+                    if (Math.hypot(this.player.x - h.x, this.player.y - h.y) < h.radius + this.player.radius && this.player.invulnTimer <= 0) {
+                        this.state = 'GAME_OVER';
+                        if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
+                    }
+                }
+            }
+
+            if (this.activeBoss) {
+                const res = this.activeBoss.update(dt, this.player, this.walls, this.hazards);
+                if (res === 'caught') {
+                    this.state = 'GAME_OVER';
+                    if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
+                }
+            }
+
             this.cx += (this.player.x - window.innerWidth/2 - this.cx) * 5 * dt;
             this.cy += (this.player.y - window.innerHeight/2 - this.cy) * 5 * dt;
 
@@ -562,30 +597,61 @@ class Game {
                         l.active = false;
                         this.score += 100;
                         this.sound.playLoot();
+                        if (this.activeBoss && !this.activeBoss.isSpawning && !this.activeBoss.isTransitioning) {
+                            this.activeBoss.hp -= 1;
+                            if (this.activeBoss.hp > 0) {
+                                l.x = 50 + Math.random() * (window.innerWidth - 100);
+                                l.y = 50 + Math.random() * (window.innerHeight - 100);
+                                l.active = true;
+                            } else {
+                                this.score += 5000;
+                                this.activeBoss = null;
+                            }
+                        }
                     }
                     if (this.player.echo && Math.hypot(this.player.echo.x - l.x, this.player.echo.y - l.y) < this.player.echo.radius + l.radius) {
                         l.active = false;
                         this.score += 100;
                         this.sound.playLoot();
+                        if (this.activeBoss && !this.activeBoss.isSpawning && !this.activeBoss.isTransitioning) {
+                            this.activeBoss.hp -= 1;
+                            if (this.activeBoss.hp > 0) {
+                                l.x = 50 + Math.random() * (window.innerWidth - 100);
+                                l.y = 50 + Math.random() * (window.innerHeight - 100);
+                                l.active = true;
+                            } else {
+                                this.score += 5000;
+                                this.activeBoss = null;
+                            }
+                        }
                     }
                 }
             }
 
-            // Simple wave respawn
             if (this.loot.every(l => !l.active)) {
-                this.score += 500;
-                this.loot.forEach(l => {
-                    l.x = 50 + Math.random() * (window.innerWidth - 100);
-                    l.y = 50 + Math.random() * (window.innerHeight - 100);
-                    l.active = true;
-                });
-                const types = [Swarmer, Sniper, Bruiser, Spawner, HazardEnemy];
-                const Type = types[Math.floor(Math.random()*types.length)];
-                this.guards.push(new Type(
-                    window.innerWidth/2, window.innerHeight/2,
-                    [{x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight},
-                     {x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight}]
-                ));
+                this.wave++;
+                if (this.wave % 5 === 0) {
+                    this.guards = [];
+                    this.loot = [new Loot(window.innerWidth/2, window.innerHeight/2)];
+                    this.activeBoss = this.wave % 10 === 0 ? new MirrorWraith(window.innerWidth/2, 100) : new SpectralWarden(window.innerWidth/2, 100);
+                } else {
+                    this.score += 500;
+                    if (this.loot.length === 1) {
+                        this.loot = [new Loot(150, 400), new Loot(500, 150), new Loot(700, 300)];
+                    }
+                    this.loot.forEach(l => {
+                        l.x = 50 + Math.random() * (window.innerWidth - 100);
+                        l.y = 50 + Math.random() * (window.innerHeight - 100);
+                        l.active = true;
+                    });
+                    const types = [Swarmer, Sniper, Bruiser, Spawner, HazardEnemy];
+                    const Type = types[Math.floor(Math.random()*types.length)];
+                    this.guards.push(new Type(
+                        window.innerWidth/2, window.innerHeight/2,
+                        [{x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight},
+                         {x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight}]
+                    ));
+                }
             }
 
         } else if (this.state === 'PAUSED') {
@@ -627,8 +693,36 @@ class Game {
                 this.ctx.fillRect(w.x, w.y, w.w, w.h);
             }
 
-            for (let l of this.loot) l.draw(this.ctx);
+            for (let l of this.loot) {
+                l.draw(this.ctx);
+                if (l.active && this.activeBoss) {
+                    this.ctx.fillStyle = '#ff0';
+                    this.ctx.font = '12px monospace';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('BOSS ORB', l.x, l.y - 15);
+                }
+            }
+
+            for (let h of this.hazards) {
+                if (h.type === 'blast') {
+                    this.ctx.strokeStyle = `rgba(255, 50, 50, ${h.life / 0.5})`;
+                    this.ctx.lineWidth = 4;
+                    this.ctx.beginPath();
+                    this.ctx.arc(h.x, h.y, h.radius, 0, Math.PI*2);
+                    this.ctx.stroke();
+                } else if (h.type === 'zone') {
+                    this.ctx.fillStyle = `rgba(150, 0, 255, 0.4)`;
+                    this.ctx.beginPath();
+                    this.ctx.arc(h.x, h.y, h.radius, 0, Math.PI*2);
+                    this.ctx.fill();
+                }
+            }
+
             for (let g of this.guards) g.draw(this.ctx);
+
+            if (this.activeBoss) {
+                this.activeBoss.draw(this.ctx);
+            }
 
             if (this.player.echo) this.player.echo.draw(this.ctx);
             this.player.draw(this.ctx);
@@ -637,10 +731,15 @@ class Game {
 
             this.ctx.restore();
 
+            if (this.activeBoss) {
+                this.activeBoss.drawUI(this.ctx, window.innerWidth, window.innerHeight);
+            }
+
             this.ctx.fillStyle = '#fff';
             this.ctx.font = '20px monospace';
             this.ctx.textAlign = 'left';
             this.ctx.fillText(`Score: ${this.score}`, 20, 40);
+            this.ctx.fillText(`Wave: ${this.wave}`, 20, 90);
 
             let dashStatus = this.player.dashCooldown <= 0 ? 'READY' : this.player.dashCooldown.toFixed(1) + 's';
             this.ctx.fillStyle = this.player.dashCooldown <= 0 ? '#0ff' : '#888';
