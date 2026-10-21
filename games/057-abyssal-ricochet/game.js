@@ -240,6 +240,7 @@ class GameEngine {
     this.lastTime = 0;
     this.score = 0;
     this.wave = 1;
+    this.vfxManager = new VFXManager();
 
     this.setupResizeObserver();
     this.bindUI();
@@ -348,6 +349,8 @@ class GameEngine {
 
   update(dt) {
     if (this.state !== 'PLAYING') return;
+    this.vfxManager.update(dt);
+    if (this.vfxManager.hitStop > 0) return;
 
     if (this.input.wasKeyPressed('Escape')) {
       this.setState('PAUSED');
@@ -417,6 +420,9 @@ class GameEngine {
     this.ctx.fillStyle = '#0a0e17';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
+    this.ctx.save();
+    this.vfxManager.applyShake(this.ctx);
+
     if (this.state !== 'TITLE') {
       if (this.background) this.background.draw(this.ctx);
       if (this.arena) this.arena.draw(this.ctx);
@@ -430,7 +436,9 @@ class GameEngine {
             proj.draw(this.ctx);
         }
     }
+    this.vfxManager.draw(this.ctx);
     }
+    this.ctx.restore();
   }
 }
 
@@ -542,6 +550,14 @@ class Player {
         this.vy += (this.vy / speed) * 600;
       }
       if (window.engine) window.engine.audio.playLaunch();
+    }
+
+    if (window.engine && window.engine.vfxManager && this.isLaunched) {
+        const speed = Math.sqrt(this.vx*this.vx + this.vy*this.vy);
+        if (speed > 50) {
+            const angle = Math.atan2(this.vy, this.vx);
+            window.engine.vfxManager.emitThruster(this.x - Math.cos(angle)*this.radius, this.y - Math.sin(angle)*this.radius, angle + Math.PI);
+        }
     }
 
     // Apply friction/damping
@@ -809,6 +825,8 @@ class EnemyManager {
             player.recoil = 1;
             player.recoilAngle = angle + Math.PI;
 
+            if (engine.vfxManager) engine.vfxManager.triggerScreenShake(15);
+
             // Bounce enemy away
             enemy.vx = Math.cos(angle + Math.PI) * 200;
             enemy.vy = Math.sin(angle + Math.PI) * 200;
@@ -834,11 +852,19 @@ class EnemyManager {
               if (enemy.hp <= 0) died = true;
               else died = false;
           }
+          if (engine.vfxManager) {
+              engine.vfxManager.emitHitSparks(enemy.x, enemy.y, angle, 5);
+              engine.vfxManager.spawnFloatingText(enemy.x, enemy.y - 10, Math.round(playerDmg * 10), '#ffffff');
+          }
 
 
 
           if (died) {
               enemy.active = false;
+              if (engine.vfxManager) {
+                  engine.vfxManager.emitExplosion(enemy.x, enemy.y, '#ff4444', 15);
+                  engine.vfxManager.triggerScreenShake(5);
+              }
               let dmgMultiplier = 1;
               if (engine.upgradeManager) {
                   dmgMultiplier = engine.upgradeManager.comboMultiplier;
