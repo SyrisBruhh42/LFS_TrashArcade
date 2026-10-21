@@ -131,6 +131,7 @@ class PickupManager {
       const dy = player.y - p.y;
       if (dx*dx + dy*dy < (player.r + p.r) * (player.r + p.r)) {
         this.collect(p, comboManager);
+        if (this.engine && this.engine.sound) this.engine.sound.playPickup();
         this.pickups.splice(i, 1);
         continue;
       }
@@ -200,6 +201,7 @@ class UpgradeManager {
       this.engine.state = 'PLAYING';
       // Restart boss timer / next wave logic handled in game.js
       this.engine.bossWarningTimer = 15;
+      if (this.engine && this.engine.sound) this.engine.sound.playUpgrade();
       this.engine.nextBossScore = this.engine.score + 1000;
     }
   }
