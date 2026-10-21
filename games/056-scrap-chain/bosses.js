@@ -9,7 +9,7 @@ class BossManager {
     spawnBoss() {
         if (this.activeBoss) return;
         this.warningTimer = 3.0; // 3 seconds warning
-        this.game.soundEngine.playSynth(200, 'sawtooth', 1.0); // Warning sound
+        this.game.soundEngine.playBossSpawnSFX();
     }
 
     doSpawn() {
@@ -147,7 +147,7 @@ class AmalgamBoss extends BaseBoss {
                 game.projectiles.push(new Projectile(this.x, this.y, vx, vy, 6, 4, '#ff9900', false));
                 this.projectilesToFire--;
                 this.fireDelayTimer = 0.1;
-                game.soundEngine.playSynth(400, 'square', 0.1);
+                game.soundEngine.playHitSFX();
             }
         }
 

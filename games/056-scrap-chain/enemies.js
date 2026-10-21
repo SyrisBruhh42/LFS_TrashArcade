@@ -157,7 +157,7 @@ class SniperEnemy extends BaseEnemy {
             if (this.timer <= 0) {
                 if (dist > 0) {
                     game.projectiles.push(new Projectile(this.x, this.y, (dx/dist)*300, (dy/dist)*300, 4, 3, '#ff0000'));
-                    game.soundEngine.playSynth(600, 'sawtooth', 0.1);
+                    game.soundEngine.playShootSFX();
                 }
                 this.state = 'cooldown';
                 this.timer = 2.0;
@@ -235,7 +235,7 @@ class HazardEnemy extends BaseEnemy {
         this.timer -= dt;
         if (this.timer <= 0) {
             game.projectiles.push(new Projectile(this.x, this.y, 0, 0, 80, 1.0, '#000000', true));
-            game.soundEngine.playSynth(300, 'square', 0.1);
+            game.soundEngine.playHitSFX();
             this.timer = 3.0;
         }
     }

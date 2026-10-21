@@ -178,7 +178,7 @@ class HazardManager {
                     cover.hp -= 1;
                     game.player.vx *= -0.5;
                     game.player.vy *= -0.5;
-                    game.soundEngine.playSynth(100, 'square', 0.2);
+                    game.soundEngine.playHitSFX();
                     game.createExplosion(cover.x, cover.y, 20, '#555');
                 }
             }
