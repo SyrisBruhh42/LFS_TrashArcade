@@ -819,8 +819,16 @@ class GameEngine {
       this.crystals.push(new IceCrystal(this.logicalWidth, this.logicalHeight));
     }
     this.score = 0;
+    this.boss = null;
+    this.bossWarningTimer = 0;
+    this.bossesDefeated = 0;
+    this.nextBossScore = 500;
+    this.bossWarningTimer = 0;
+    this.bossesDefeated = 0;
+    this.nextBossScore = 500;
 
     this.setupResizeObserver();
+    window.engine = this;
 
     // Auto-pause
     document.addEventListener('visibilitychange', () => {
@@ -866,6 +874,10 @@ class GameEngine {
       this.crystals.push(new IceCrystal(this.logicalWidth, this.logicalHeight));
     }
     this.score = 0;
+    this.boss = null;
+    this.bossWarningTimer = 0;
+    this.bossesDefeated = 0;
+    this.nextBossScore = 500;
     this.generateBlocks();
   };
 
@@ -959,6 +971,58 @@ class GameEngine {
           }
         }
       }
+
+      // Boss
+      if (this.boss && !this.boss.dead) {
+        const dx = drillX - this.boss.x;
+        const dy = drillY - this.boss.y;
+        if (dx*dx + dy*dy < this.boss.r*this.boss.r) {
+          if (this.boss.iFrames <= 0) {
+            this.boss.hp -= 10;
+            this.boss.iFrames = 0.2;
+          }
+          this.spawnParticles(drillX, drillY, '#e26b6b', 5);
+          // Knockback/recoil player a bit maybe, or boss
+          this.boss.vx += this.player.aimDir.x * 50;
+          this.boss.vy += this.player.aimDir.y * 50;
+        }
+      }
+    }
+
+    // Player vs Boss Projectiles
+    if (this.boss && !this.boss.dead) {
+      for (const p of this.boss.projectiles) {
+        if (!p.dead) {
+          const dx = this.player.x - p.x;
+          const dy = this.player.y - p.y;
+          if (dx*dx + dy*dy < (this.player.r + p.r)*(this.player.r + p.r)) {
+            if (this.player.invulnerableTimer <= 0) {
+              this.state = 'GAME_OVER';
+              this.saveManager.updateScore(this.score);
+              this.spawnParticles(this.player.x, this.player.y, '#d8b0e2', 30);
+            }
+          }
+        }
+      }
+
+      // Player vs Boss Body
+      const dx = this.player.x - this.boss.x;
+      const dy = this.player.y - this.boss.y;
+      if (dx*dx + dy*dy < (this.player.r + this.boss.r)*(this.player.r + this.boss.r)) {
+        if (this.player.isOverdrive) {
+          if (this.boss.iFrames <= 0) {
+            this.boss.hp -= 30;
+            this.boss.iFrames = 0.2;
+          }
+          this.boss.vx += this.player.aimDir.x * 200;
+          this.boss.vy += this.player.aimDir.y * 200;
+          this.spawnParticles(this.boss.x, this.boss.y, '#f2a65a', 10);
+        } else if (this.player.invulnerableTimer <= 0) {
+          this.state = 'GAME_OVER';
+          this.saveManager.updateScore(this.score);
+          this.spawnParticles(this.player.x, this.player.y, '#d8b0e2', 30);
+        }
+      }
     }
 
     // Player vs Enemies (Damage)
@@ -1029,7 +1093,39 @@ class GameEngine {
        }
     }
 
-    this.spawnEnemy();
+    // Boss trigger logic
+    if (!this.boss && this.bossWarningTimer <= 0 && this.score >= this.nextBossScore) {
+      this.bossWarningTimer = 3; // 3 seconds warning
+      this.sound.playHit(); // warning sound
+    }
+
+    if (this.bossWarningTimer > 0) {
+      this.bossWarningTimer -= dt;
+      if (this.bossWarningTimer <= 0) {
+        // Spawn boss
+        if (this.bossesDefeated % 2 === 0) {
+          this.boss = new IceWormBoss(this.logicalWidth / 2, -50);
+        } else {
+          this.boss = new FrostConstructBoss(this.logicalWidth / 2, -50);
+        }
+      }
+    }
+
+    if (this.boss) {
+      this.boss.update(dt, this.player.x, this.player.y, this);
+      if (this.boss.dead) {
+        this.score += 1000;
+        this.saveManager.updateScore(this.score);
+        this.boss = null;
+        this.bossesDefeated++;
+        this.nextBossScore = this.score + 1000;
+      }
+    }
+
+    if (!this.boss && this.bossWarningTimer <= 0) {
+      this.spawnEnemy();
+    }
+
     for (const c of this.crystals) c.update(dt);
 
     for (const e of this.enemies) e.update(dt, this.player.x, this.player.y, this);
@@ -1066,6 +1162,17 @@ class GameEngine {
 
     // Draw particles
     for (const p of this.particles) p.draw(this.ctx);
+
+    // Boss
+    if (this.boss) {
+      this.boss.draw(this.ctx);
+    }
+    if (this.bossWarningTimer > 0) {
+      this.ctx.fillStyle = (Math.floor(Date.now() / 200) % 2 === 0) ? '#ff0000' : '#ffffff';
+      this.ctx.font = '40px monospace';
+      this.ctx.textAlign = 'center';
+      this.ctx.fillText('WARNING: BOSS APPROACHING', this.logicalWidth / 2, this.logicalHeight / 2);
+    }
 
     // Foreground layers / Hazards
     this.worldManager.drawForeground(this.ctx);
