@@ -12,7 +12,7 @@ class SaveManager {
             totalGamesPlayed: 0,
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
-            options: { soundVol: 1, musicVol: 1 }
+            options: { soundVol: 1, musicVol: 1, screenShake: 1 }
         };
         this.load();
     }
@@ -654,6 +654,7 @@ class GameEngine {
         this.comboManager = new ComboManager(this);
         this.upgradeManager = new UpgradeManager(this);
         this.pickupManager = new PickupManager(this);
+        this.vfx = new VFXManager(this);
 
 
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
@@ -680,6 +681,35 @@ class GameEngine {
     }
 
     setupUI() {
+
+        const optScreen = document.getElementById('options-screen');
+        const optSound = document.getElementById('opt-sound');
+        const optMusic = document.getElementById('opt-music');
+        const optShake = document.getElementById('opt-shake');
+
+        const openOptions = () => {
+            optScreen.classList.remove('hidden');
+            if(this.saveManager.data.options) {
+                optSound.value = this.saveManager.data.options.soundVol !== undefined ? this.saveManager.data.options.soundVol : 1;
+                optMusic.value = this.saveManager.data.options.musicVol !== undefined ? this.saveManager.data.options.musicVol : 1;
+                optShake.value = this.saveManager.data.options.screenShake !== undefined ? this.saveManager.data.options.screenShake : 1;
+            }
+        };
+
+        const closeOptions = () => {
+            optScreen.classList.add('hidden');
+            this.saveManager.data.options = {
+                soundVol: parseFloat(optSound.value),
+                musicVol: parseFloat(optMusic.value),
+                screenShake: parseFloat(optShake.value)
+            };
+            this.saveManager.save();
+        };
+
+        document.getElementById('btn-options-title').addEventListener('click', openOptions);
+        document.getElementById('btn-options-pause').addEventListener('click', openOptions);
+        document.getElementById('btn-options-close').addEventListener('click', closeOptions);
+
         document.getElementById('btn-start').addEventListener('click', () => {
             this.audio.init();
             this.setState('PLAYING');
@@ -812,6 +842,9 @@ class GameEngine {
         if (this.state === 'UPGRADING') return;
         if (this.state !== 'PLAYING') return;
 
+        this.vfx.update(dt);
+        if (this.vfx.hitStopTimer > 0) return;
+
         // Ensure dt is capped
         if (dt > 0.1) dt = 0.1;
 
@@ -819,6 +852,9 @@ class GameEngine {
         const aimVec = this.input.getAimVector(this.logicalWidth/2, this.logicalHeight/2);
 
         this.player.update(dt, moveVec, aimVec, this.arena);
+        if (this.player.isDashing) {
+            this.vfx.spawnTrail(this.player.x, this.player.y, this.player.radius * 2, this.player.radius * 2, this.player.color, 0.2, 'circle');
+        }
         this.arena.update(dt);
         this.worldBg.update(dt);
         this.hazards.update(dt, this.arena, this.player, this.enemies, this.projectiles, this.audio);
@@ -870,6 +906,9 @@ class GameEngine {
                     this.player.health -= 10;
                     p.active = false;
                     this.audio.playHit();
+                    this.vfx.emitParticles(this.player.x, this.player.y, 15, '#ff0000', 150, p.vx, p.vy);
+                    this.vfx.triggerScreenShake(0.2, 8);
+                    this.vfx.triggerHitStop(0.05);
                     this.updateHUD();
                 }
             }
@@ -879,6 +918,9 @@ class GameEngine {
         // Enemies & Collisions
         if (this.isBossWave) {
             if (!this.currentBoss || !this.currentBoss.active) {
+                this.vfx.triggerHitStop(0.5);
+                this.vfx.triggerScreenShake(1.0, 20);
+                this.vfx.emitParticles(this.currentBoss.x || this.logicalWidth/2, this.currentBoss.y || this.logicalHeight/2, 100, '#ffffff', 300);
                 // Boss defeated
                 this.isBossWave = false;
                 this.waveTimer = 0;
@@ -934,6 +976,9 @@ class GameEngine {
                 this.player.health -= 10;
                 e.active = false;
                 this.audio.playHit();
+                this.vfx.emitParticles(this.player.x, this.player.y, 20, '#ff0000', 120);
+                this.vfx.triggerScreenShake(0.25, 10);
+                this.vfx.triggerHitStop(0.08);
                 this.updateHUD();
             }
 
@@ -945,6 +990,10 @@ class GameEngine {
                     if (pd < p.radius + e.radius && p.active && !p.hitEnemies.has(e)) {
                         e.health -= p.damage || 10;
                         p.hitEnemies.add(e);
+                        const dmg = p.damage || 10;
+                        this.vfx.emitParticles(e.x, e.y, 8, e.color || '#ff8800', 100, p.vx, p.vy, Math.PI / 4);
+                        this.vfx.spawnFloatingText(e.x, e.y - 20, Math.floor(dmg), '#ffdd00');
+                        this.vfx.triggerScreenShake(0.05, 2, p.vx, p.vy);
 
                         if (p.pierceCount > 0) {
                             p.pierceCount--;
@@ -1005,6 +1054,7 @@ class GameEngine {
         const camX = this.logicalWidth/2 - this.player.x;
         const camY = this.logicalHeight/2 - this.player.y;
         this.ctx.translate(camX, camY);
+        this.vfx.applyShake(this.ctx);
 
         this.arena.draw(this.ctx);
 
@@ -1023,6 +1073,7 @@ class GameEngine {
         this.enemies.forEach(e => e.draw(this.ctx));
         this.player.draw(this.ctx);
 
+        this.vfx.draw(this.ctx);
         this.ctx.restore();
 
         // Draw Boss UI on top of everything (untransformed)
