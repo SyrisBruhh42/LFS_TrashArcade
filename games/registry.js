@@ -785,7 +785,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to aim, Space/Click to fire and recoil, Touch to aim and release to fire.",
     "createdAt": "2024-05-24",
     "accentColor": "#e09ff1",
-    "phase": "3",
+    "phase": "4",
     "path": "./games/060-magma-recoil-platformer/index.html"
   }
 ];
