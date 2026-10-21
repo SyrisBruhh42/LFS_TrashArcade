@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Arctic Drill Recoil</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #111;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      touch-action: none;
+      font-family: monospace;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      display: block;
+      background-color: #0b1a2a;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    }
+    #back-link {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #fff;
+      text-decoration: none;
+      font-size: 14px;
+      z-index: 100;
+      background: rgba(0,0,0,0.5);
+      padding: 5px 10px;
+      border-radius: 4px;
+      pointer-events: auto;
+    }
+    #back-link:hover {
+      background: rgba(255,255,255,0.2);
+    }
+  </style>
+  <script defer src="game.js"></script>
+</head>
+<body>
+  <div id="game-container">
+    <a id="back-link" href="../../index.html">Back to Arcade</a>
+    <canvas id="gameCanvas"></canvas>
+  </div>
+</body>
+</html>
