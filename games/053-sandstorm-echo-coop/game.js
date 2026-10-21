@@ -1113,11 +1113,29 @@ class InputManager {
             this.pointer.down = false;
             this.updatePointer(e);
         });
+
         canvas.addEventListener('touchstart', e => {
-            this.touchActive = true;
-            if (e.touches.length > 1) this.dashPressed = true; // Two-finger tap to dash
+            if (!this.forceTouchOff) this.touchActive = true;
+            if (e.touches.length > 1) this.dashPressed = true; // Two-finger tap fallback
+
+            const handedness = (game && game.save && game.save.data && game.save.data.options) ? game.save.data.options.handedness : 'right';
+            const dashX = handedness === 'right' ? canvas.width * 0.85 : canvas.width * 0.15;
+            const dashY = canvas.height * 0.75;
+
+            const rect = canvas.getBoundingClientRect();
+            for(let i=0; i<e.touches.length; i++) {
+                const tx = (e.touches[i].clientX - rect.left) * (canvas.width / rect.width);
+                const ty = (e.touches[i].clientY - rect.top) * (canvas.height / rect.height);
+                const dx = tx - dashX;
+                const dy = ty - dashY;
+                if (Math.sqrt(dx*dx + dy*dy) < 80) {
+                    this.dashPressed = true;
+                }
+            }
+
             if (game && game.sound) game.sound.init();
         }, {passive: false});
+
         canvas.addEventListener('touchmove', e => {
         }, {passive: false});
     }
@@ -1134,18 +1152,23 @@ class InputManager {
         if (this.keys['KeyA'] || this.keys['ArrowLeft']) x -= 1;
         if (this.keys['KeyD'] || this.keys['ArrowRight']) x += 1;
 
-        if (this.touchActive && this.pointer.down) {
+
+        if (this.forceTouchOff) {
+            x = 0; y = 0;
+        } else if (this.touchActive && this.pointer.down) {
             const canvas = document.getElementById('gameCanvas');
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
+            const handedness = (game && game.save && game.save.data && game.save.data.options) ? game.save.data.options.handedness : 'right';
+            const centerX = handedness === 'right' ? canvas.width * 0.15 : canvas.width * 0.85;
+            const centerY = canvas.height * 0.75;
             const dx = this.pointer.x - centerX;
             const dy = this.pointer.y - centerY;
             const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist > 20) {
+            if (dist > 20 && dist < 150) { // Limit joystick zone
                 x = dx / dist;
                 y = dy / dist;
             }
         }
+
 
         const len = Math.sqrt(x*x + y*y);
         if (len > 0) {
@@ -1354,6 +1377,9 @@ class GameEngine {
 
         this.save = new SaveManager();
         this.sound = new MultiVoiceAudioEngine();
+        this.options = new OptionsManager(this.save, this);
+        this.milestones = new MilestoneManager(this.save);
+
         this.input = new InputManager();
         this.vfx = new VisualFXManager();
 
@@ -1520,7 +1546,7 @@ class GameEngine {
                 }
             }
             if (this.player.history.length > 0) {
-                this.ghosts.push(new Ghost(this.player.history, 5.0));
+                this.ghosts.push(new Ghost(this.player.history, 5.0)); if(this.ghosts.length >= 5) this.milestones.unlock('m_ghost_army');
                 this.sound.playGhostSpawn();
             }
             this.player.history = [];
@@ -1571,7 +1597,7 @@ class GameEngine {
         }
 
         if (this.wave > 1 && this.player.history.length > 0) {
-            this.ghosts.push(new Ghost(this.player.history, 5.0));
+            this.ghosts.push(new Ghost(this.player.history, 5.0)); if(this.ghosts.length >= 5) this.milestones.unlock('m_ghost_army');
             this.sound.playGhostSpawn();
         }
 
@@ -1698,7 +1724,7 @@ class GameEngine {
                 this.vfx.spawnFloatingText(this.currentBoss.x, this.currentBoss.y - 50, 'BOSS DEFEATED', '#ffffff', 32, 2.0);
                 this.currentBoss = null;
                 // Move to next wave
-                this.wave++;
+                this.wave++; if(this.wave >= 5) this.milestones.unlock('m_wave_5'); if(this.wave == 2 && this.enemiesKilled == 0) this.milestones.unlock('m_pacifist');
                 this.beatInterval = Math.max(0.3, this.beatInterval - 0.05);
                 this.generateLevel();
                 return; // Early return to avoid issues
@@ -1863,7 +1889,7 @@ class GameEngine {
         }
 
         if (!this.currentBoss && this.collectibles.length === 0) {
-            this.wave++;
+            this.wave++; if(this.wave >= 5) this.milestones.unlock('m_wave_5'); if(this.wave == 2 && this.enemiesKilled == 0) this.milestones.unlock('m_pacifist');
             this.beatInterval = Math.max(0.3, this.beatInterval - 0.05);
             this.generateLevel();
         }
@@ -1906,9 +1932,35 @@ class GameEngine {
             for (const col of this.collectibles) col.draw(this.ctx);
             for (const ghost of this.ghosts) ghost.draw(this.ctx);
 
-        for (const p of this.projectiles) p.draw(this.ctx);
 
-        for (const enemy of this.enemies) enemy.draw(this.ctx);
+        const hc_proj = this.save.data.options && this.save.data.options.highContrast;
+        if (hc_proj) {
+            for (const p of this.projectiles) {
+                const old = p.color;
+                p.color = p.isPlayer ? '#ffff00' : '#ff0000';
+                p.draw(this.ctx);
+                p.color = old;
+            }
+        } else {
+            for (const p of this.projectiles) p.draw(this.ctx);
+        }
+
+
+
+        const hc = this.save.data.options && this.save.data.options.highContrast;
+
+        if (hc) {
+            // Apply high contrast overrides dynamically
+            for (const enemy of this.enemies) {
+                const old = enemy.color;
+                enemy.color = '#ff00ff';
+                enemy.draw(this.ctx);
+                enemy.color = old;
+            }
+        } else {
+            for (const enemy of this.enemies) enemy.draw(this.ctx);
+        }
+
             if (this.currentBoss) this.currentBoss.draw(this.ctx);
             if (this.player) this.player.draw(this.ctx);
 
@@ -1925,6 +1977,43 @@ class GameEngine {
 
             this.ctx.textAlign = 'right';
             this.ctx.fillText(`High Score: ${this.save.data.highScore}`, this.width - 20, 40);
+
+
+            if (this.input.touchActive && (!this.input.forceTouchOff)) {
+                const handedness = (this.save.data.options && this.save.data.options.handedness) || 'right';
+                const joyX = handedness === 'right' ? this.width * 0.15 : this.width * 0.85;
+                const dashX = handedness === 'right' ? this.width * 0.85 : this.width * 0.15;
+                const touchY = this.height * 0.75;
+
+                this.ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                this.ctx.beginPath();
+                this.ctx.arc(joyX, touchY, 60, 0, Math.PI*2);
+                this.ctx.stroke();
+
+                if (this.input.pointer.down) {
+                    const dx = this.input.pointer.x - joyX;
+                    const dy = this.input.pointer.y - touchY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    let rx = dx; let ry = dy;
+                    if (dist > 60) {
+                        rx = (dx/dist)*60;
+                        ry = (dy/dist)*60;
+                    }
+                    this.ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                    this.ctx.beginPath();
+                    this.ctx.arc(joyX + rx, touchY + ry, 30, 0, Math.PI*2);
+                    this.ctx.fill();
+                }
+
+                this.ctx.fillStyle = (this.player && this.player.dashCooldown <= 0) ? 'rgba(198,248,200,0.5)' : 'rgba(255,255,255,0.2)';
+                this.ctx.beginPath();
+                this.ctx.arc(dashX, touchY, 40, 0, Math.PI*2);
+                this.ctx.fill();
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '16px monospace';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('DASH', dashX, touchY + 5);
+            }
 
             const beatTime = (this.time / this.beatInterval) % 1;
             const radius = 10 + Math.sin(beatTime * Math.PI) * 10;
@@ -1952,12 +2041,140 @@ class GameEngine {
                 this.ctx.textAlign = 'center';
                 this.ctx.fillText(dashReady ? "DASH READY (Space)" : "RECHARGING...", 120, this.height - 25);
             }
+
+            if (this.save.data.options && this.save.data.options.showFps) {
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '12px monospace';
+                this.ctx.textAlign = 'right';
+                this.ctx.fillText(`FPS: ${Math.round(1/dt)}`, this.width - 20, 70);
+            }
         }
 
         this.ctx.restore();
+
     }
 }
 let game = null;
 window.addEventListener('DOMContentLoaded', () => {
     game = new GameEngine();
 });
+
+
+class AdvancedAudioController {
+    constructor(engine) {
+        this.engine = engine;
+        this.compressor = null;
+        this.reverbNode = null;
+        this.delayNode = null;
+        this.enabled = false;
+        this.initialized = false;
+    }
+
+    init() {
+        if (!this.engine.sound || !this.engine.sound.ctx) return;
+        this.initialized = true;
+
+        try {
+            const ctx = this.engine.sound.ctx;
+            this.compressor = ctx.createDynamicsCompressor();
+            this.compressor.threshold.setValueAtTime(-24, ctx.currentTime);
+            this.compressor.knee.setValueAtTime(30, ctx.currentTime);
+            this.compressor.ratio.setValueAtTime(12, ctx.currentTime);
+            this.compressor.attack.setValueAtTime(0.003, ctx.currentTime);
+            this.compressor.release.setValueAtTime(0.25, ctx.currentTime);
+
+            this.delayNode = ctx.createDelay();
+            this.delayNode.delayTime.value = 0.15;
+
+            this.reverbNode = ctx.createConvolver();
+            // Stub impulse response
+            const length = ctx.sampleRate * 2.0;
+            const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+            const left = impulse.getChannelData(0);
+            const right = impulse.getChannelData(1);
+            for (let i = 0; i < length; i++) {
+                left[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
+                right[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
+            }
+            this.reverbNode.buffer = impulse;
+
+            this.enabled = true;
+        } catch(e) {
+            console.warn("Advanced audio failed to init", e);
+        }
+    }
+
+    routeAudio() {
+        if (!this.initialized || !this.enabled) return;
+        const sfx = this.engine.sound.sfxGain;
+        const master = this.engine.sound.masterGain;
+
+        try {
+            sfx.disconnect(master);
+            sfx.connect(this.compressor);
+            this.compressor.connect(master);
+
+            sfx.connect(this.delayNode);
+            this.delayNode.connect(this.reverbNode);
+            this.reverbNode.connect(master);
+        } catch(e) {
+            console.warn("Audio routing error", e);
+        }
+    }
+
+    setIntensity(val) {
+        if (!this.initialized || !this.enabled) return;
+        if (this.delayNode) {
+            this.delayNode.delayTime.value = 0.15 * val;
+        }
+    }
+
+    toggleReverb(on) {
+        if (!this.initialized || !this.enabled) return;
+        if (on) {
+            this.routeAudio();
+        } else {
+            // Unroute
+        }
+    }
+}
+
+class VisualSettingsController {
+    constructor(engine) {
+        this.engine = engine;
+        this.bloomPass = null;
+        this.chromaticAbberation = 0;
+        this.vignetteStrength = 0.5;
+        this.distortion = false;
+        this.scanlines = false;
+    }
+
+    applySettings(opts) {
+        if (opts.particleDensity === 'low') {
+            this.bloomPass = false;
+        } else {
+            this.bloomPass = true;
+        }
+    }
+
+    renderPostProcess(ctx, width, height) {
+        if (this.vignetteStrength > 0) {
+            const grad = ctx.createRadialGradient(width/2, height/2, height*0.3, width/2, height/2, height*0.8);
+            grad.addColorStop(0, 'rgba(0,0,0,0)');
+            grad.addColorStop(1, `rgba(0,0,0,${this.vignetteStrength})`);
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        if (this.scanlines) {
+            ctx.fillStyle = 'rgba(255,255,255,0.03)';
+            for(let y = 0; y < height; y += 4) {
+                ctx.fillRect(0, y, width, 1);
+            }
+        }
+    }
+
+    setGlitchIntensity(val) {
+        this.chromaticAbberation = val * 5;
+    }
+}

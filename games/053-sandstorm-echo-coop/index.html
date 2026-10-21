@@ -59,15 +59,117 @@
         }
         button:hover { background: #fff; }
         a { color: #c6f8c8; display: block; margin-top: 15px; }
-    </style>
+
+        .settings-btn { position: absolute; top: 10px; right: 10px; z-index: 100; pointer-events: auto; }
+        .slider-row { display: flex; justify-content: space-between; align-items: center; margin: 5px 0; font-size: 14px; }
+        .slider-row input[type="range"] { width: 100px; }
+        .slider-row select { background: #111; color: #c6f8c8; border: 1px solid #c6f8c8; padding: 2px; }
+        .milestone-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-top: 10px; max-width: 300px; }
+        .badge { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #555; background: #222; display: flex; align-items: center; justify-content: center; font-size: 12px; opacity: 0.5; position: relative;}
+        .badge.unlocked { border-color: #c6f8c8; background: #c6f8c8; color: #111; opacity: 1; }
+        .badge:hover::after {
+            content: attr(data-desc);
+            position: absolute; bottom: 35px; left: 50%; transform: translateX(-50%);
+            background: #111; color: #c6f8c8; border: 1px solid #c6f8c8;
+            padding: 5px; font-size: 10px; white-space: nowrap; z-index: 1000;
+        }
+        .options-modal { width: 320px; max-height: 80vh; overflow-y: auto; text-align: left; }
+        .danger-btn { background: #ff5555; color: white; margin-top: 5px; font-size: 12px; padding: 5px; }
+        .small-btn { font-size: 12px; padding: 5px 10px; margin: 5px; }
+        #exportData { width: 100%; height: 40px; margin-top: 5px; background: #111; color: #c6f8c8; border: 1px solid #c6f8c8; }
+</style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
     <div id="uiLayer">
+
+        <button id="btnSettings" class="settings-btn">SETTINGS</button>
+        <div id="optionsScreen" class="screen options-modal">
+            <h2 style="margin-top:0; text-align:center;">OPTIONS</h2>
+
+            <div class="slider-row" style="justify-content: center; margin-bottom: 10px;">
+                <label>Master Mute: </label>
+                <input type="checkbox" id="chkMute" style="margin-left:10px;">
+            </div>
+
+            <div class="slider-row">
+                <label>Master Vol</label>
+                <input type="range" id="volMaster" min="0" max="1" step="0.05" value="1">
+            </div>
+            <div class="slider-row">
+                <label>Music</label>
+                <input type="range" id="volMusic" min="0" max="1" step="0.05" value="0.5">
+            </div>
+            <div class="slider-row">
+                <label>SFX</label>
+                <input type="range" id="volSfx" min="0" max="1" step="0.05" value="1">
+            </div>
+
+            <hr style="border-color:#555;">
+
+            <div class="slider-row">
+                <label>Screen Shake</label>
+                <select id="selShake">
+                    <option value="1">100%</option>
+                    <option value="0.5">50%</option>
+                    <option value="0">Off</option>
+                </select>
+            </div>
+            <div class="slider-row">
+                <label>Particles</label>
+                <select id="selParticles">
+                    <option value="high">High</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+            <div class="slider-row">
+                <label>High Contrast</label>
+                <input type="checkbox" id="chkContrast">
+            </div>
+            <div class="slider-row">
+                <label>Show FPS</label>
+                <input type="checkbox" id="chkFps">
+            </div>
+
+            <hr style="border-color:#555;">
+
+            <div class="slider-row">
+                <label>Touch Mode</label>
+                <select id="selTouch">
+                    <option value="auto">Auto</option>
+                    <option value="always">Always On</option>
+                    <option value="off">Off</option>
+                </select>
+            </div>
+            <div class="slider-row">
+                <label>Handedness</label>
+                <select id="selHand">
+                    <option value="right">Right</option>
+                    <option value="left">Left</option>
+                </select>
+            </div>
+
+            <hr style="border-color:#555;">
+
+            <div style="text-align:center;">
+                <p style="margin:5px 0; font-size:12px;">Save Data (Base64)</p>
+                <textarea id="exportData" placeholder="Paste data to import..."></textarea>
+                <button id="btnExport" class="small-btn">Export</button>
+                <button id="btnImport" class="small-btn">Import</button>
+                <br>
+                <button id="btnReset" class="danger-btn">RESET SAVE DATA</button>
+            </div>
+
+            <div style="text-align:center; margin-top:15px;">
+                <button id="btnCloseOptions">CLOSE</button>
+            </div>
+        </div>
+
         <div id="titleScreen" class="screen active">
             <h1>Sandstorm Echo Coop</h1>
             <p>Cooperate with your past self.</p>
             <p>WASD/Arrows to move.</p>
+            <div id="titleMilestones" class="milestone-container"></div>
             <button id="btnPlay">PLAY</button>
             <a href="../../index.html">Back to Arcade</a>
         </div>
@@ -79,11 +181,13 @@
         <div id="gameOverScreen" class="screen">
             <h1>GAME OVER</h1>
             <p>Score: <span id="finalScore"></span></p>
+            <div id="gameOverMilestones" class="milestone-container"></div>
             <button id="btnRestart">RESTART</button>
             <a href="../../index.html">Back to Arcade</a>
         </div>
     </div>
     <script src="game.js"></script>
     <script src="bosses.js"></script>
+    <script src="ui.js" defer></script>
 </body>
 </html>
