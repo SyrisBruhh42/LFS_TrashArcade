@@ -160,6 +160,7 @@
   <div id="hud">
     <div id="scoreDisplay" class="hud-stat">Score: 0</div>
     <div id="dashCooldownDisplay" class="hud-stat" style="top: 40px; left: 10px; color: #aaa; font-size: 1rem;">DASH: READY</div>
+    <div id="comboDecayBar" class="hud-stat" style="top: 70px; left: 10px; color: #f5ca53; font-size: 1rem;">COMBO: 1.0x (100%)</div>
     <div id="highScoreDisplay" class="hud-stat">Best: 0</div>
   </div>
 
@@ -183,6 +184,11 @@
     <a href="../../index.html">Back to Arcade</a>
   </div>
 
+  <div id="screenUpgrade" class="ui-layer">
+    <h2>UPGRADE DRAFT</h2>
+    <div id="upgradeChoices" style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;"></div>
+  </div>
+
   <div id="screenGameOver" class="ui-layer">
     <h2>GAME OVER</h2>
     <p id="finalScore">Score: 0</p>
@@ -194,6 +200,7 @@
 <script defer src="world.js"></script>
 <script defer src="enemies.js"></script>
 <script defer src="bosses.js"></script>
+<script defer src="progression.js"></script>
 <script defer src="game.js"></script>
 </body>
 </html>
