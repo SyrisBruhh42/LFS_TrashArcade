@@ -1,163 +1,3 @@
-// Sandstorm Echo Coop
-// Rhythm/Beat-Synced Reflex, Echo/Ghost Self-Cooperation, Desert Sandstorm Bazaar
-const SAVE_KEY = 'arcade_game_053_053-sandstorm-echo-coop_v1';
-
-class SaveManager {
-    constructor() {
-        this.data = {
-            highScore: 0,
-            bestWaveOrCombo: 0,
-            totalGamesPlayed: 0,
-            totalScoreAccumulated: 0,
-            unlockedMilestones: [],
-            options: {}
-        };
-        this.load();
-    }
-    load() {
-        try {
-            const saved = localStorage.getItem(SAVE_KEY);
-            if (saved) {
-                this.data = { ...this.data, ...JSON.parse(saved) };
-            }
-        } catch (e) { console.warn('Save load failed', e); }
-    }
-    save() {
-        try {
-            localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
-        } catch (e) { console.warn('Save failed', e); }
-    }
-}
-
-class SoundEngine {
-    constructor() {
-        this.ctx = null;
-        this.masterGain = null;
-        this.sfxGain = null;
-        this.musicGain = null;
-        this.initialized = false;
-
-        // Ensure AudioContext is explicitly written to pass validation
-        this.AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    }
-    init() {
-        if (this.initialized) return;
-        try {
-            this.ctx = new this.AudioContextClass();
-            this.masterGain = this.ctx.createGain();
-            this.sfxGain = this.ctx.createGain();
-            this.musicGain = this.ctx.createGain();
-
-            this.sfxGain.connect(this.masterGain);
-            this.musicGain.connect(this.masterGain);
-            this.masterGain.connect(this.ctx.destination);
-
-            this.masterGain.gain.value = 1.0;
-            this.sfxGain.gain.value = 1.0;
-            this.musicGain.gain.value = 0.5;
-
-            this.initialized = true;
-        } catch(e) { console.warn('AudioContext init failed', e); }
-    }
-    playTone(freq, type, duration, vol) {
-        if (!this.initialized || !this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-
-        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-
-        osc.connect(gain);
-        gain.connect(this.sfxGain);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
-    }
-    playJump() { this.playTone(300, 'square', 0.1, 0.5); }
-    playHit() { this.playTone(100, 'sawtooth', 0.2, 0.7); }
-    playScore() { this.playTone(600, 'sine', 0.1, 0.4); }
-    playBeat() { this.playTone(150, 'triangle', 0.1, 0.6); }
-    playGhostSpawn() { this.playTone(400, 'sine', 0.3, 0.4); }
-    playEcho() { this.playTone(800, 'sine', 0.05, 0.2); }
-}
-
-class InputManager {
-    constructor() {
-        this.keys = {};
-        this.pointer = { x: 0, y: 0, down: false };
-        this.touchActive = false;
-        this.dashPressed = false;
-
-        window.addEventListener('keydown', e => {
-            this.keys[e.code] = true;
-            if (e.code === 'Space' || e.code === 'ShiftLeft') this.dashPressed = true;
-            if (game && game.sound) game.sound.init();
-        });
-        window.addEventListener('keyup', e => {
-            this.keys[e.code] = false;
-        });
-
-        const canvas = document.getElementById('gameCanvas');
-        canvas.addEventListener('pointerdown', e => {
-            this.pointer.down = true;
-            this.updatePointer(e);
-            if (game && game.sound) game.sound.init();
-        });
-        canvas.addEventListener('pointermove', e => {
-            this.updatePointer(e);
-        });
-        canvas.addEventListener('pointerup', e => {
-            this.pointer.down = false;
-            this.updatePointer(e);
-        });
-        canvas.addEventListener('touchstart', e => {
-            this.touchActive = true;
-            if (e.touches.length > 1) this.dashPressed = true; // Two-finger tap to dash
-            if (game && game.sound) game.sound.init();
-        }, {passive: false});
-        canvas.addEventListener('touchmove', e => {
-        }, {passive: false});
-    }
-    updatePointer(e) {
-        const canvas = document.getElementById('gameCanvas');
-        const rect = canvas.getBoundingClientRect();
-        this.pointer.x = (e.clientX - rect.left) * (canvas.width / rect.width);
-        this.pointer.y = (e.clientY - rect.top) * (canvas.height / rect.height);
-    }
-    getAxis() {
-        let x = 0; let y = 0;
-        if (this.keys['KeyW'] || this.keys['ArrowUp']) y -= 1;
-        if (this.keys['KeyS'] || this.keys['ArrowDown']) y += 1;
-        if (this.keys['KeyA'] || this.keys['ArrowLeft']) x -= 1;
-        if (this.keys['KeyD'] || this.keys['ArrowRight']) x += 1;
-
-        if (this.touchActive && this.pointer.down) {
-            const canvas = document.getElementById('gameCanvas');
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-            const dx = this.pointer.x - centerX;
-            const dy = this.pointer.y - centerY;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist > 20) {
-                x = dx / dist;
-                y = dy / dist;
-            }
-        }
-
-        const len = Math.sqrt(x*x + y*y);
-        if (len > 0) {
-            x /= len;
-            y /= len;
-        }
-
-        const dash = this.dashPressed;
-        this.dashPressed = false;
-
-        return { x, y, dash };
-    }
-}
 class Entity {
     constructor(x, y, radius) {
         this.x = x;
@@ -605,6 +445,341 @@ class VisualFXManager {
 }
 
 
+
+class Projectile extends Entity {
+    constructor(x, y, vx, vy, radius, color) {
+        super(x, y, radius);
+        this.vx = vx;
+        this.vy = vy;
+        this.color = color;
+        this.life = 5.0; // seconds
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+class Swarmer extends Enemy {
+    constructor(x, y, speed, target) {
+        super(x, y, speed * 1.5, target);
+        this.radius = 8;
+        this.color = '#ff9999';
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y);
+        ctx.fill();
+    }
+}
+
+class RangedSniper extends Enemy {
+    constructor(x, y, speed, target) {
+        super(x, y, speed * 0.5, target);
+        this.radius = 14;
+        this.color = '#ff00ff';
+        this.fireCooldown = 3.0;
+        this.fireTimer = 2.0;
+        this.telegraphing = false;
+        this.telegraphTimer = 0;
+    }
+    update(dt) {
+        if (!this.target) return super.update(dt);
+
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+
+        if (dist > 300) {
+            this.vx = (dx / dist) * this.speed;
+            this.vy = (dy / dist) * this.speed;
+        } else if (dist < 150) {
+            this.vx = -(dx / dist) * this.speed;
+            this.vy = -(dy / dist) * this.speed;
+        } else {
+            this.vx = 0;
+            this.vy = 0;
+        }
+
+        // Entity update handles x += vx * dt
+        super.update(dt);
+
+        if (!this.telegraphing) {
+            this.fireTimer -= dt;
+            if (this.fireTimer <= 0) {
+                this.telegraphing = true;
+                this.telegraphTimer = 1.0;
+            }
+        } else {
+            this.telegraphTimer -= dt;
+            if (this.telegraphTimer <= 0 && game) {
+                this.telegraphing = false;
+                this.fireTimer = this.fireCooldown;
+                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                const pSpeed = 200;
+                game.projectiles.push(new Projectile(this.x, this.y, Math.cos(angle)*pSpeed, Math.sin(angle)*pSpeed, 6, '#ff00ff'));
+            }
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+
+        if (this.telegraphing && this.target) {
+            ctx.strokeStyle = `rgba(255, 0, 255, ${1.0 - this.telegraphTimer})`;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.target.x, this.target.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    }
+}
+
+class Bruiser extends Enemy {
+    constructor(x, y, speed, target) {
+        super(x, y, speed * 0.4, target);
+        this.radius = 20;
+        this.color = '#aa0000';
+        this.hp = 2;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            const px = this.x + Math.cos(angle) * this.radius;
+            const py = this.y + Math.sin(angle) * this.radius;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        if (this.hp === 2) {
+            ctx.fillStyle = '#ffaaaa';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+}
+
+class Splitter extends Enemy {
+    constructor(x, y, speed, target) {
+        super(x, y, speed * 0.7, target);
+        this.radius = 16;
+        this.color = '#ffff00';
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+    }
+}
+
+class HazardSpawner extends Enemy {
+    constructor(x, y, speed, target) {
+        super(x, y, speed * 0.6, target);
+        this.radius = 14;
+        this.color = '#ff8800';
+        this.spawnTimer = 5.0;
+    }
+    update(dt) {
+        super.update(dt);
+        this.spawnTimer -= dt;
+        if (this.spawnTimer <= 0 && game) {
+            this.spawnTimer = 5.0;
+            game.hazards.push(new Quicksand(this.x, this.y, 40));
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+// Sandstorm Echo Coop
+// Rhythm/Beat-Synced Reflex, Echo/Ghost Self-Cooperation, Desert Sandstorm Bazaar
+const SAVE_KEY = 'arcade_game_053_053-sandstorm-echo-coop_v1';
+
+class SaveManager {
+    constructor() {
+        this.data = {
+            highScore: 0,
+            bestWaveOrCombo: 0,
+            totalGamesPlayed: 0,
+            totalScoreAccumulated: 0,
+            unlockedMilestones: [],
+            options: {}
+        };
+        this.load();
+    }
+    load() {
+        try {
+            const saved = localStorage.getItem(SAVE_KEY);
+            if (saved) {
+                this.data = { ...this.data, ...JSON.parse(saved) };
+            }
+        } catch (e) { console.warn('Save load failed', e); }
+    }
+    save() {
+        try {
+            localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+        } catch (e) { console.warn('Save failed', e); }
+    }
+}
+
+class SoundEngine {
+    constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.sfxGain = null;
+        this.musicGain = null;
+        this.initialized = false;
+
+        // Ensure AudioContext is explicitly written to pass validation
+        this.AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    }
+    init() {
+        if (this.initialized) return;
+        try {
+            this.ctx = new this.AudioContextClass();
+            this.masterGain = this.ctx.createGain();
+            this.sfxGain = this.ctx.createGain();
+            this.musicGain = this.ctx.createGain();
+
+            this.sfxGain.connect(this.masterGain);
+            this.musicGain.connect(this.masterGain);
+            this.masterGain.connect(this.ctx.destination);
+
+            this.masterGain.gain.value = 1.0;
+            this.sfxGain.gain.value = 1.0;
+            this.musicGain.gain.value = 0.5;
+
+            this.initialized = true;
+        } catch(e) { console.warn('AudioContext init failed', e); }
+    }
+    playTone(freq, type, duration, vol) {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+    playJump() { this.playTone(300, 'square', 0.1, 0.5); }
+    playHit() { this.playTone(100, 'sawtooth', 0.2, 0.7); }
+    playScore() { this.playTone(600, 'sine', 0.1, 0.4); }
+    playBeat() { this.playTone(150, 'triangle', 0.1, 0.6); }
+    playGhostSpawn() { this.playTone(400, 'sine', 0.3, 0.4); }
+    playEcho() { this.playTone(800, 'sine', 0.05, 0.2); }
+}
+
+class InputManager {
+    constructor() {
+        this.keys = {};
+        this.pointer = { x: 0, y: 0, down: false };
+        this.touchActive = false;
+        this.dashPressed = false;
+
+        window.addEventListener('keydown', e => {
+            this.keys[e.code] = true;
+            if (e.code === 'Space' || e.code === 'ShiftLeft') this.dashPressed = true;
+            if (game && game.sound) game.sound.init();
+        });
+        window.addEventListener('keyup', e => {
+            this.keys[e.code] = false;
+        });
+
+        const canvas = document.getElementById('gameCanvas');
+        canvas.addEventListener('pointerdown', e => {
+            this.pointer.down = true;
+            this.updatePointer(e);
+            if (game && game.sound) game.sound.init();
+        });
+        canvas.addEventListener('pointermove', e => {
+            this.updatePointer(e);
+        });
+        canvas.addEventListener('pointerup', e => {
+            this.pointer.down = false;
+            this.updatePointer(e);
+        });
+        canvas.addEventListener('touchstart', e => {
+            this.touchActive = true;
+            if (e.touches.length > 1) this.dashPressed = true; // Two-finger tap to dash
+            if (game && game.sound) game.sound.init();
+        }, {passive: false});
+        canvas.addEventListener('touchmove', e => {
+        }, {passive: false});
+    }
+    updatePointer(e) {
+        const canvas = document.getElementById('gameCanvas');
+        const rect = canvas.getBoundingClientRect();
+        this.pointer.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        this.pointer.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+    }
+    getAxis() {
+        let x = 0; let y = 0;
+        if (this.keys['KeyW'] || this.keys['ArrowUp']) y -= 1;
+        if (this.keys['KeyS'] || this.keys['ArrowDown']) y += 1;
+        if (this.keys['KeyA'] || this.keys['ArrowLeft']) x -= 1;
+        if (this.keys['KeyD'] || this.keys['ArrowRight']) x += 1;
+
+        if (this.touchActive && this.pointer.down) {
+            const canvas = document.getElementById('gameCanvas');
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const dx = this.pointer.x - centerX;
+            const dy = this.pointer.y - centerY;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > 20) {
+                x = dx / dist;
+                y = dy / dist;
+            }
+        }
+
+        const len = Math.sqrt(x*x + y*y);
+        if (len > 0) {
+            x /= len;
+            y /= len;
+        }
+
+        const dash = this.dashPressed;
+        this.dashPressed = false;
+
+        return { x, y, dash };
+    }
+}
 class ParallaxBackground {
     constructor(width, height) {
         this.width = width;
@@ -811,6 +986,7 @@ class GameEngine {
         this.player = null;
         this.ghosts = [];
         this.enemies = [];
+        this.projectiles = [];
         this.obstacles = [];
         this.collectibles = [];
         this.hazards = [];
@@ -890,6 +1066,7 @@ class GameEngine {
         this.player = new Player(this.width/2, this.height/2);
         this.ghosts = [];
         this.enemies = [];
+        this.projectiles = [];
         this.obstacles = [];
         this.collectibles = [];
         this.hazards = [];
@@ -932,6 +1109,7 @@ class GameEngine {
     generateLevel() {
         this.obstacles = [];
         this.enemies = [];
+        this.projectiles = [];
         this.collectibles = [];
         this.hazards = [];
         this.crates = [];
@@ -1001,7 +1179,18 @@ class GameEngine {
         else if (side === 2) { x = Math.random() * this.width; y = this.height + 20; }
         else { x = -20; y = Math.random() * this.height; }
 
-        this.enemies.push(new Enemy(x, y, 100 + this.wave * 10, this.player));
+        const speed = 100 + this.wave * 10;
+        const r = Math.random();
+
+        let enemyType;
+        if (r < 0.2) enemyType = new Swarmer(x, y, speed, this.player);
+        else if (r < 0.4) enemyType = new RangedSniper(x, y, speed, this.player);
+        else if (r < 0.6) enemyType = new Bruiser(x, y, speed, this.player);
+        else if (r < 0.8) enemyType = new Splitter(x, y, speed, this.player);
+        else if (r < 0.95) enemyType = new HazardSpawner(x, y, speed, this.player);
+        else enemyType = new Enemy(x, y, speed, this.player);
+
+        this.enemies.push(enemyType);
     }
 
     loop(timestamp) {
@@ -1045,6 +1234,21 @@ class GameEngine {
             for (const ghost of this.ghosts) hazard.applyEffect(ghost, dt);
         }
 
+
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const p = this.projectiles[i];
+            p.update(dt);
+            if (p.life <= 0 || p.x < 0 || p.x > this.width || p.y < 0 || p.y > this.height) {
+                this.projectiles.splice(i, 1);
+                continue;
+            }
+            if (p.collidesEntity(this.player) && !this.player.isDashing) {
+                this.vfx.spawnPlayerHit(this.player.x, this.player.y);
+                this.gameOver();
+                return;
+            }
+        }
+
         const oldX = this.player.x;
         const oldY = this.player.y;
         this.player.update(dt, axis);
@@ -1086,7 +1290,19 @@ class GameEngine {
 
             if (enemy.collides(this.player)) {
                 if (this.player.isDashing) {
+
+                    if (enemy instanceof Bruiser && enemy.hp > 1) {
+                        enemy.hp--;
+                        this.sound.playHit();
+                        this.player.triggerRecoil();
+                        continue;
+                    }
+                    if (enemy instanceof Splitter) {
+                        this.enemies.push(new Swarmer(enemy.x - 10, enemy.y, enemy.speed, this.player));
+                        this.enemies.push(new Swarmer(enemy.x + 10, enemy.y, enemy.speed, this.player));
+                    }
                     this.enemies.splice(i, 1);
+
                     this.sound.playHit();
                     this.player.triggerRecoil();
                     this.score += 25;
@@ -1116,7 +1332,19 @@ class GameEngine {
                 }
             }
 
-            if (destroyed) this.enemies.splice(i, 1);
+            if (destroyed) {
+                    if (enemy instanceof Bruiser && enemy.hp > 1) {
+                        enemy.hp--;
+                        this.sound.playHit();
+                        this.player.triggerRecoil();
+                        continue;
+                    }
+                    if (enemy instanceof Splitter) {
+                        this.enemies.push(new Swarmer(enemy.x - 10, enemy.y, enemy.speed, this.player));
+                        this.enemies.push(new Swarmer(enemy.x + 10, enemy.y, enemy.speed, this.player));
+                    }
+                    this.enemies.splice(i, 1);
+            }
         }
 
         for (let i = this.collectibles.length - 1; i >= 0; i--) {
@@ -1186,7 +1414,10 @@ class GameEngine {
             for (const crate of this.crates) crate.draw(this.ctx);
             for (const col of this.collectibles) col.draw(this.ctx);
             for (const ghost of this.ghosts) ghost.draw(this.ctx);
-            for (const enemy of this.enemies) enemy.draw(this.ctx);
+
+        for (const p of this.projectiles) p.draw(this.ctx);
+
+        for (const enemy of this.enemies) enemy.draw(this.ctx);
             if (this.player) this.player.draw(this.ctx);
 
             if (this.vfx) this.vfx.draw(this.ctx);
