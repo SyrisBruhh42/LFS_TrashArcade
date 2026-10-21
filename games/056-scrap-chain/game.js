@@ -323,6 +323,13 @@ class GameEngine {
         this.lastTime = time;
 
         if (this.state === 'PLAYING') {
+            if(this.vfxManager && this.vfxManager.hitStopTimer > 0) {
+                this.vfxManager.hitStopTimer -= dt;
+                // Draw during hitstop but don't update core logic (dt=0)
+                this.draw();
+                return;
+            }
+            if(this.vfxManager) this.vfxManager.update(dt);
             this.update(dt);
             this.draw();
         }
@@ -405,6 +412,12 @@ class Player {
 
         if (this.dashTimer > 0) this.dashTimer -= dt;
         if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
+
+        if (window.game && window.game.vfxManager) {
+            if (this.isDashing || Math.hypot(this.vx, this.vy) > 200) {
+                if (Math.random() < 0.5) window.game.vfxManager.addAfterimage(this.x, this.y, this.radius, this.isDashing ? 'rgba(200, 100, 100, 0.4)' : 'rgba(108, 155, 129, 0.4)', this.isDashing);
+            }
+        }
 
         if (this.isDashing) {
             this.dashTimeActive -= dt;
@@ -498,6 +511,10 @@ class Player {
             ctx.strokeStyle = '#f5ca53';
             ctx.lineWidth = 3;
             ctx.stroke();
+            if(window.game && window.game.vfxManager && Math.random() < 0.3) {
+                 let tAngle = angle + Math.PI;
+                 window.game.vfxManager.addDirectionalParticles(this.x, this.y, Math.cos(tAngle), Math.sin(tAngle), 1, '#f5ca53', 200);
+            }
         }
 
         // Telegraph vector ring (cooldown indicator)
@@ -565,6 +582,7 @@ GameEngine.prototype.initGame = function() {
     this.tetherManager = new TetherManager();
     this.enemies = [];
     this.particles = [];
+    this.vfxManager = new VFXManager(this);
     this.projectiles = [];
     this.enemySpawnTimer = 0;
     this.enemySpawnInterval = 1.0;
@@ -639,6 +657,14 @@ GameEngine.prototype.detonateTether = function() {
     for (let i = 0; i < this.tetherManager.nodes.length; i++) {
         let node = this.tetherManager.nodes[i];
         this.createExplosion(node.x, node.y, explosionRadius, '#f5ca53');
+        if(this.vfxManager) {
+            let pAngle = Math.random() * Math.PI * 2;
+            this.vfxManager.addDirectionalParticles(node.x, node.y, Math.cos(pAngle), Math.sin(pAngle), 10, '#f5ca53', 300);
+        }
+        if(this.vfxManager) {
+            this.vfxManager.addScreenShake(3 + this.comboMultiplier * 0.5, 0.2);
+            this.vfxManager.addFloatingText(node.x, node.y, `${100 * this.comboMultiplier}`, '#f5ca53', 20 + this.comboMultiplier * 2);
+        }
 
         let pts = 100 * this.comboMultiplier;
         this.updateScore(pts);
@@ -653,6 +679,17 @@ GameEngine.prototype.detonateTether = function() {
                 if (dist < explosionRadius + other.radius) {
                     if (other.isBoss) {
                         other.takeDamage(50 * this.comboMultiplier);
+                        if(this.vfxManager) {
+                            let dmgAngle = Math.atan2(other.y - node.y, other.x - node.x);
+                            this.vfxManager.addDirectionalParticles(other.x, other.y, Math.cos(dmgAngle), Math.sin(dmgAngle), 5, '#ff4444', 200);
+                            this.vfxManager.addFloatingText(other.x, other.y, `${50 * this.comboMultiplier}`, '#ff4444', 30);
+                            this.vfxManager.addScreenShake(10, 0.4);
+                            if (other.hp <= 0) {
+                                this.vfxManager.triggerHitStop(0.5); // massive hitstop on boss kill
+                            } else {
+                                this.vfxManager.triggerHitStop(0.1);
+                            }
+                        }
                         if (other.hp <= 0) {
                             other.markedForDeath = true;
                             if(this.pickupManager) this.pickupManager.dropPickup(other.x, other.y);
@@ -796,6 +833,11 @@ GameEngine.prototype.update = function(dt) {
                     } else {
                         // Destroy enemy if player dashes into them
                         e.markedForDeath = true;
+                        if(this.vfxManager) {
+                            this.vfxManager.addFloatingText(e.x, e.y, 'DASH!', '#fff', 15);
+                            this.vfxManager.triggerHitStop(0.05);
+                            this.vfxManager.addScreenShake(2, 0.1);
+                        }
                         this.updateScore(10);
                         this.soundEngine.playSynth(200, 'square', 0.1);
                         if(this.pickupManager) this.pickupManager.dropPickup(e.x, e.y);
@@ -854,6 +896,8 @@ GameEngine.prototype.draw = function() {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.parallax.draw(this.ctx, this.canvas.width, this.canvas.height);
+    this.ctx.save();
+    if(this.vfxManager) this.vfxManager.applyScreenShake(this.ctx);
 
     this.hazardManager.draw(this.ctx);
     this.tetherManager.draw(this.ctx, this.player);
@@ -871,16 +915,36 @@ GameEngine.prototype.draw = function() {
 
     for (let p of this.particles) {
         this.ctx.globalAlpha = p.life / p.maxLife;
-        this.ctx.fillStyle = p.color;
-        this.ctx.beginPath();
-        this.ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-        this.ctx.fill();
+        if(p.isAfterimage) {
+            this.ctx.fillStyle = p.color;
+            this.ctx.beginPath();
+
+            // Draw a simplified afterimage chassis
+            this.ctx.save();
+            this.ctx.translate(p.x, p.y);
+            this.ctx.beginPath();
+            this.ctx.moveTo(15, 0);
+            this.ctx.lineTo(-10, 10);
+            this.ctx.lineTo(-5, 0);
+            this.ctx.lineTo(-10, -10);
+            this.ctx.closePath();
+            this.ctx.fill();
+            this.ctx.restore();
+        } else {
+            this.ctx.fillStyle = p.color;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, p.radius || 3, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
     }
     this.ctx.globalAlpha = 1.0;
 
     if (this.bossManager) {
         this.bossManager.draw(this.ctx);
     }
+
+    this.ctx.restore();
+    if(this.vfxManager) this.vfxManager.drawFloatingTexts(this.ctx);
 };
 
 window.onload = () => {
