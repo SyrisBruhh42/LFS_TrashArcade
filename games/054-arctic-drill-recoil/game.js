@@ -828,13 +828,17 @@ class GameEngine {
     this.boss = null;
     this.bossWarningTimer = 0;
     this.bossesDefeated = 0;
+    this.vfxManager = new VFXManager(this);
     this.nextBossScore = 500;
+    this.vfxManager = new VFXManager(this);
     this.comboManager = new ComboManager(this);
     this.pickupManager = new PickupManager(this);
     this.upgradeManager = new UpgradeManager(this);
     this.bossWarningTimer = 0;
     this.bossesDefeated = 0;
+    this.vfxManager = new VFXManager(this);
     this.nextBossScore = 500;
+    this.vfxManager = new VFXManager(this);
 
     this.setupResizeObserver();
     window.engine = this;
@@ -886,7 +890,9 @@ class GameEngine {
     this.boss = null;
     this.bossWarningTimer = 0;
     this.bossesDefeated = 0;
+    this.vfxManager = new VFXManager(this);
     this.nextBossScore = 500;
+    this.vfxManager = new VFXManager(this);
     if (this.comboManager) this.comboManager.reset();
     if (this.pickupManager) this.pickupManager.pickups = [];
     if (this.upgradeManager) { this.upgradeManager.activePerks = []; this.upgradeManager.draftChoices = []; }
@@ -974,6 +980,8 @@ class GameEngine {
         const dy = drillY - e.y;
         if (dx*dx + dy*dy < e.r*e.r) {
           e.hp -= this.player.drillDamage;
+          this.vfxManager.spawnDamageText(e.x, e.y, this.player.drillDamage);
+          this.vfxManager.triggerShake(5, 0.1);
           this.spawnParticles(drillX, drillY, '#e26b6b', 5);
           // Knockback
           e.vx += this.player.aimDir.x * 200;
@@ -996,6 +1004,8 @@ class GameEngine {
         if (dx*dx + dy*dy < this.boss.r*this.boss.r) {
           if (this.boss.iFrames <= 0) {
             this.boss.hp -= 10;
+            this.vfxManager.spawnDamageText(this.boss.x, this.boss.y, 10);
+            this.vfxManager.triggerShake(8, 0.15);
             this.boss.iFrames = 0.2;
           }
           this.spawnParticles(drillX, drillY, '#e26b6b', 5);
@@ -1029,6 +1039,8 @@ class GameEngine {
         if (this.player.isOverdrive) {
           if (this.boss.iFrames <= 0) {
             this.boss.hp -= 30;
+            this.vfxManager.spawnDamageText(this.boss.x, this.boss.y, 30);
+            this.vfxManager.triggerShake(10, 0.2);
             this.boss.iFrames = 0.2;
           }
           this.boss.vx += this.player.aimDir.x * 200;
@@ -1102,14 +1114,17 @@ class GameEngine {
       return;
     }
 
+    if (this.vfxManager.update(dt)) return;
+
     this.player.update(dt, this.input);
     if (this.player.drilling) {
        this.sound.playDrill();
        // visual smoke
-       this.spawnParticles(this.player.x - this.player.aimDir.x*10, this.player.y - this.player.aimDir.y*10, 'rgba(255,255,255,0.3)', 1);
+       this.vfxManager.spawnDirectionalParticles(this.player.x - this.player.aimDir.x*10, this.player.y - this.player.aimDir.y*10, -this.player.aimDir.x, -this.player.aimDir.y, 'rgba(255,255,255,0.3)', 2);
     }
     if (this.player.isOverdrive) {
-       this.spawnParticles(this.player.x - this.player.aimDir.x*15, this.player.y - this.player.aimDir.y*15, '#fff', 2);
+       this.vfxManager.spawnDirectionalParticles(this.player.x, this.player.y, -this.player.aimDir.x, -this.player.aimDir.y, '#fff', 2);
+       this.vfxManager.spawnTrail(this.player.x, this.player.y, '#f2a65a', 3);
        // extra visual flair for overdrive
        if (Math.random() < 0.3) {
          this.spawnParticles(this.player.x - this.player.aimDir.x*20 + (Math.random()-0.5)*10, this.player.y - this.player.aimDir.y*20 + (Math.random()-0.5)*10, '#f2a65a', 1);
@@ -1144,6 +1159,9 @@ class GameEngine {
         this.saveManager.updateScore(this.score);
         this.boss = null;
         this.bossesDefeated++;
+        this.vfxManager.triggerHitStop(0.5);
+        this.vfxManager.triggerShake(20, 0.5);
+        this.vfxManager.spawnExplosion(this.logicalWidth/2, 100, '#e26b6b', 100);
         this.nextBossScore = this.score + 1000;
         this.upgradeManager.startDraft();
       }
@@ -1179,6 +1197,9 @@ class GameEngine {
       }
     }
 
+    this.ctx.save();
+    this.vfxManager.applyShake(this.ctx);
+
     // Draw blocks
     for (const b of this.blocks) b.draw(this.ctx);
 
@@ -1206,6 +1227,9 @@ class GameEngine {
 
     // Foreground layers / Hazards
     this.worldManager.drawForeground(this.ctx);
+
+    this.ctx.restore();
+    this.vfxManager.draw(this.ctx);
 
     // UI
     this.ctx.fillStyle = '#fff';
