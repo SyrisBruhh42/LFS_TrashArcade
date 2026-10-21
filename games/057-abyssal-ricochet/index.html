@@ -113,6 +113,7 @@
   <script defer src="./game.js"></script>
   <script defer src="./enemies.js"></script>
   <script defer src="./bosses.js"></script>
+  <script defer src="./progression.js"></script>
 </head>
 <body>
   <div id="gameContainer">
@@ -122,6 +123,7 @@
       <div id="scoreDisplay" class="hud-text">SCORE: 0</div>
       <div id="abilityDisplay" class="hud-text" style="color: #ffeb3b;">DASH: READY</div>
       <div id="waveDisplay" class="hud-text">WAVE: 1</div>
+      <div id="comboDisplay" class="hud-text" style="color: #ff9800; text-align: center; width: 100%; position: absolute; top: 60px;">COMBO x1.0</div>
     </div>
 
     <div id="bossUI" class="hidden" style="position: absolute; top: 80px; left: 50%; transform: translateX(-50%); width: 80%; max-width: 600px; text-align: center; z-index: 6; pointer-events: none;">
@@ -141,6 +143,16 @@
         <button id="btn-start">Start Game</button>
         <br>
         <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+
+
+    <div id="screen-UPGRADE_DRAFT" class="ui-layer hidden">
+      <div class="ui-box">
+        <h1>WAVE CLEARED</h1>
+        <p>Select an Upgrade:</p>
+        <div id="draftChoices" style="display: flex; flex-direction: column; gap: 10px;">
+        </div>
       </div>
     </div>
 

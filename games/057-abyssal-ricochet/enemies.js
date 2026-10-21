@@ -158,14 +158,16 @@ class Bruiser extends Enemy {
     }
     super.update(dt, arena);
   }
-  takeHit() {
+
+  takeHit(dmg = 1) {
       if (this.shieldActive) {
           this.shieldActive = false;
           return false; // Did not die
       }
-      this.hp--;
+      this.hp -= dmg;
       return this.hp <= 0;
   }
+
   draw(ctx) {
     ctx.fillStyle = this.color;
     ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);

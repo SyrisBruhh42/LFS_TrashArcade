@@ -323,6 +323,7 @@ class GameEngine {
     if (typeof EnvironmentHazardManager !== 'undefined') this.hazards = new EnvironmentHazardManager();
     if (typeof BossManager !== 'undefined') this.bossManager = new BossManager();
     this.projectiles = [];
+    if (typeof UpgradeManager !== 'undefined') this.upgradeManager = new UpgradeManager();
   }
 
   resumeGame() {
@@ -359,6 +360,7 @@ class GameEngine {
     if (this.bossManager) this.bossManager.update(dt, this.player, this);
     if (this.enemyManager) this.enemyManager.update(dt, this.player, this);
     if (this.hazards) this.hazards.update(dt, this.arena, this.player, this.enemyManager ? this.enemyManager.enemies : []);
+    if (this.upgradeManager) this.upgradeManager.update(dt, this.player, this.arena, this);
 
     if (this.projectiles) {
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -387,6 +389,16 @@ class GameEngine {
     }
 
     document.getElementById('scoreDisplay').innerText = `SCORE: ${Math.floor(this.score)}`;
+    if (this.upgradeManager) {
+        const comboDisp = document.getElementById('comboDisplay');
+        if (this.upgradeManager.comboCount > 0) {
+            comboDisp.innerText = `COMBO x${this.upgradeManager.comboMultiplier.toFixed(1)}`;
+            comboDisp.style.opacity = Math.max(0, this.upgradeManager.comboTimer / this.upgradeManager.maxComboTimer);
+            comboDisp.style.display = 'block';
+        } else {
+            comboDisp.style.display = 'none';
+        }
+    }
     document.getElementById('waveDisplay').innerText = `WAVE: ${this.wave}`;
 
     if (this.player) {
@@ -411,6 +423,7 @@ class GameEngine {
       if (this.hazards) this.hazards.draw(this.ctx);
       if (this.enemyManager) this.enemyManager.draw(this.ctx);
       if (this.bossManager) this.bossManager.draw(this.ctx);
+      if (this.upgradeManager) this.upgradeManager.draw(this.ctx);
       if (this.player) this.player.draw(this.ctx);
     if (this.projectiles) {
         for (const proj of this.projectiles) {
@@ -588,9 +601,13 @@ class Player {
       bounced = true;
     }
 
+
     if (bounced) {
+      if (!this.bouncesThisLaunch) this.bouncesThisLaunch = 0;
+      this.bouncesThisLaunch++;
       audio.playBounce();
     }
+
 
     // Check if player gets squished by the shrinking arena
     const minimumSafeSize = this.radius * 2 + 10; // Player diameter + buffer
@@ -625,6 +642,7 @@ class Player {
 
     if (input.wasKeyPressed('Space') || touchReleased || mouseReleased) {
       this.isLaunched = true;
+      this.bouncesThisLaunch = 0;
       this.vx = Math.cos(this.aimAngle) * this.speed;
       this.vy = Math.sin(this.aimAngle) * this.speed;
       if (window.engine) window.engine.audio.playLaunch();
@@ -798,17 +816,40 @@ class EnemyManager {
             engine.audio.playHit();
           }
         } else {
+
           // Hit
           let died = true;
-          if (typeof enemy.takeHit === 'function') {
-              died = enemy.takeHit();
-          } else {
-              enemy.active = false;
+          let playerDmg = 1;
+          if (engine.upgradeManager) {
+              if (engine.upgradeManager.hasPerk('dmg_up')) playerDmg += 0.25;
+              if (engine.upgradeManager.hasPerk('bounce_dmg') && player.bouncesThisLaunch) {
+                  playerDmg += 0.10 * player.bouncesThisLaunch;
+              }
           }
+          if (typeof enemy.takeHit === 'function') {
+              died = enemy.takeHit(playerDmg);
+          } else {
+              if (!enemy.hp) enemy.hp = 1;
+              enemy.hp -= playerDmg;
+              if (enemy.hp <= 0) died = true;
+              else died = false;
+          }
+
+
 
           if (died) {
               enemy.active = false;
-              engine.score += 100;
+              let dmgMultiplier = 1;
+              if (engine.upgradeManager) {
+                  dmgMultiplier = engine.upgradeManager.comboMultiplier;
+                  engine.upgradeManager.addCombo();
+
+                  // Biomass Extractor
+                  if (engine.upgradeManager.hasPerk('heal_pickup') && Math.random() < 0.2) {
+                      engine.upgradeManager.spawnPickup(enemy.x, enemy.y, 'health');
+                  }
+              }
+              engine.score += 100 * dmgMultiplier;
               if (typeof Spawner !== 'undefined' && enemy instanceof Spawner) {
                   for (let j = 0; j < 3; j++) {
                       let swarmer = new Swarmer(enemy.x, enemy.y);
@@ -818,6 +859,7 @@ class EnemyManager {
                   }
               }
           }
+
 
           engine.audio.playHit();
 
@@ -838,6 +880,7 @@ class EnemyManager {
     }
 
     // Wave progression logic: if score passes threshold, increase wave and expand arena slightly
+
     const targetWave = Math.floor(engine.score / 1000) + 1;
     if (targetWave > engine.wave) {
         engine.wave = targetWave;
@@ -845,10 +888,31 @@ class EnemyManager {
         engine.arena.width = Math.min(engine.arena.maxWidth, engine.arena.width + 100);
         engine.arena.height = Math.min(engine.arena.maxHeight, engine.arena.height + 100);
         engine.arena.shrinkRate += 2; // Make it harder
+
+        if (engine.upgradeManager) {
+            window.engine.setState('UPGRADE_DRAFT');
+            const choices = engine.upgradeManager.generateDraft();
+            const draftContainer = document.getElementById('draftChoices');
+            draftContainer.innerHTML = '';
+            choices.forEach(choice => {
+                const btn = document.createElement('button');
+                btn.innerHTML = `<strong>${choice.name}</strong><br><small>${choice.desc}</small>`;
+                btn.style.width = '100%';
+                btn.style.textAlign = 'left';
+                btn.onclick = () => {
+                    engine.upgradeManager.applyPerk(choice.id, engine.player, engine);
+                    window.engine.setState('PLAYING');
+                    engine.lastTime = performance.now(); // reset time to prevent dt spike
+                };
+                draftContainer.appendChild(btn);
+            });
+        }
+
         if (engine.wave % 5 === 0 && engine.bossManager && (!engine.bossManager.activeBoss && engine.bossManager.warningTimer <= 0)) {
             engine.bossManager.triggerBoss(engine.wave, engine);
         }
     }
+
   }
 
   spawnEnemy(arena) {
