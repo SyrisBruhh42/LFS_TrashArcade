@@ -36,10 +36,12 @@ class InputManager {
         this.touchActive = false;
         this.joystickDir = { x: 0, y: 0 };
         this.detonatePressed = false;
+        this.dashPressed = false;
 
         window.addEventListener('keydown', e => {
             this.keys[e.code] = true;
             if(e.code === 'Space') this.detonatePressed = true;
+            if(e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.dashPressed = true;
         });
         window.addEventListener('keyup', e => this.keys[e.code] = false);
 
@@ -105,11 +107,27 @@ class InputManager {
                 this.detonatePressed = true;
             });
         }
+
+        const btnDash = document.getElementById('btnDash');
+        if(btnDash){
+            btnDash.addEventListener('touchstart', e => {
+                e.preventDefault();
+                this.dashPressed = true;
+            });
+        }
     }
 
     consumeDetonate() {
         if(this.detonatePressed){
             this.detonatePressed = false;
+            return true;
+        }
+        return false;
+    }
+
+    consumeDash() {
+        if(this.dashPressed){
+            this.dashPressed = false;
             return true;
         }
         return false;
@@ -299,25 +317,170 @@ class Player {
         this.x = x;
         this.y = y;
         this.radius = 15;
-        this.speed = 250;
-    }
-    update(dt, inputVector, canvasWidth, canvasHeight) {
-        this.x += inputVector.x * this.speed * dt;
-        this.y += inputVector.y * this.speed * dt;
 
-        if (this.x < this.radius) this.x = this.radius;
-        if (this.x > canvasWidth - this.radius) this.x = canvasWidth - this.radius;
-        if (this.y < this.radius) this.y = this.radius;
-        if (this.y > canvasHeight - this.radius) this.y = canvasHeight - this.radius;
+        // Momentum / Physics base
+        this.vx = 0;
+        this.vy = 0;
+        this.friction = 0.92;
+        this.accel = 2000;
+
+        // Dash ability
+        this.dashTimer = 0;
+        this.dashCooldown = 1.5;
+        this.isDashing = false;
+        this.dashDuration = 0.2;
+        this.dashTimeActive = 0;
+        this.dashSpeed = 1200;
+
+        // Visuals
+        this.lastInputVec = {x: 0, y: -1};
+        this.trailParticles = [];
+        this.invulnerableTimer = 0;
     }
+
+    startDash(inputVector) {
+        if (this.dashTimer > 0) return false;
+
+        this.dashTimer = this.dashCooldown;
+        this.isDashing = true;
+        this.dashTimeActive = this.dashDuration;
+        this.invulnerableTimer = this.dashDuration + 0.1; // iframe padding
+
+        let dx = inputVector.x;
+        let dy = inputVector.y;
+        if (dx === 0 && dy === 0) {
+            dx = this.lastInputVec.x;
+            dy = this.lastInputVec.y;
+        }
+
+        this.vx = dx * this.dashSpeed;
+        this.vy = dy * this.dashSpeed;
+
+        // Spawn dash start explosion
+        for (let i = 0; i < 10; i++) {
+            this.trailParticles.push({
+                x: this.x, y: this.y,
+                vx: (Math.random() - 0.5) * 400 - (dx * 200),
+                vy: (Math.random() - 0.5) * 400 - (dy * 200),
+                life: 0.5, maxLife: 0.5,
+                color: '#fff', size: Math.random() * 4 + 2
+            });
+        }
+        return true;
+    }
+
+    update(dt, inputVector, canvasWidth, canvasHeight) {
+        if (inputVector.x !== 0 || inputVector.y !== 0) {
+            this.lastInputVec.x = inputVector.x;
+            this.lastInputVec.y = inputVector.y;
+        }
+
+        if (this.dashTimer > 0) this.dashTimer -= dt;
+        if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
+
+        if (this.isDashing) {
+            this.dashTimeActive -= dt;
+            if (this.dashTimeActive <= 0) {
+                this.isDashing = false;
+            }
+            // Add dash trail
+            if (Math.random() < 0.5) {
+                this.trailParticles.push({
+                    x: this.x + (Math.random() - 0.5) * 10,
+                    y: this.y + (Math.random() - 0.5) * 10,
+                    vx: 0, vy: 0, life: 0.3, maxLife: 0.3,
+                    color: '#c86464', size: 6
+                });
+            }
+        } else {
+            // Normal movement accel
+            this.vx += inputVector.x * this.accel * dt;
+            this.vy += inputVector.y * this.accel * dt;
+
+            // Apply friction
+            this.vx *= Math.pow(this.friction, dt * 60);
+            this.vy *= Math.pow(this.friction, dt * 60);
+        }
+
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        if (this.x < this.radius) { this.x = this.radius; this.vx = Math.abs(this.vx)*0.5; }
+        if (this.x > canvasWidth - this.radius) { this.x = canvasWidth - this.radius; this.vx = -Math.abs(this.vx)*0.5; }
+        if (this.y < this.radius) { this.y = this.radius; this.vy = Math.abs(this.vy)*0.5; }
+        if (this.y > canvasHeight - this.radius) { this.y = canvasHeight - this.radius; this.vy = -Math.abs(this.vy)*0.5; }
+
+        // Update particles
+        for (let i = this.trailParticles.length - 1; i >= 0; i--) {
+            let p = this.trailParticles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+            if (p.life <= 0) this.trailParticles.splice(i, 1);
+        }
+    }
+
     draw(ctx) {
+        // Draw trail
+        for (let p of this.trailParticles) {
+            ctx.globalAlpha = p.life / p.maxLife;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1.0;
+
+        // Blink if invulnerable
+        if (this.invulnerableTimer > 0 && Math.floor(this.invulnerableTimer * 20) % 2 === 0) {
+            ctx.globalAlpha = 0.5;
+        }
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        // Calculate angle based on velocity or input
+        let angle = Math.atan2(this.lastInputVec.y, this.lastInputVec.x);
+        if (Math.hypot(this.vx, this.vy) > 10 && !this.isDashing) {
+            angle = Math.atan2(this.vy, this.vx);
+        } else if (this.isDashing) {
+            angle = Math.atan2(this.vy, this.vx);
+        }
+        ctx.rotate(angle);
+
+        // Core chassis
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = '#6c9b81';
+        ctx.moveTo(15, 0);
+        ctx.lineTo(-10, 10);
+        ctx.lineTo(-5, 0);
+        ctx.lineTo(-10, -10);
+        ctx.closePath();
+
+        ctx.fillStyle = this.isDashing ? '#c86464' : '#6c9b81';
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.stroke();
+
+        // Thrust exhaust
+        if (!this.isDashing && Math.hypot(this.vx, this.vy) > 50) {
+            ctx.beginPath();
+            ctx.moveTo(-6, 0);
+            ctx.lineTo(-15 - Math.random() * 10, 0);
+            ctx.strokeStyle = '#f5ca53';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+
+        // Telegraph vector ring (cooldown indicator)
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius + 5, 0, Math.PI * 2 * Math.max(0, 1 - (this.dashTimer / this.dashCooldown)));
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.restore();
+        ctx.globalAlpha = 1.0;
     }
 }
 
@@ -448,6 +611,17 @@ GameEngine.prototype.detonateTether = function() {
 
     let explosionRadius = 60;
 
+    // Apply Recoil to Player
+    let firstNode = this.tetherManager.nodes[0];
+    let dx = firstNode.x - this.player.x;
+    let dy = firstNode.y - this.player.y;
+    let dist = Math.hypot(dx, dy);
+    if (dist > 0) {
+        let recoilForce = 800 + (this.tetherManager.nodes.length * 100);
+        this.player.vx -= (dx / dist) * recoilForce;
+        this.player.vy -= (dy / dist) * recoilForce;
+    }
+
     for (let i = 0; i < this.tetherManager.nodes.length; i++) {
         let node = this.tetherManager.nodes[i];
         this.createExplosion(node.x, node.y, explosionRadius, '#f5ca53');
@@ -481,8 +655,25 @@ GameEngine.prototype.update = function(dt) {
     }
 
     let inputVec = this.inputManager.getMovementVector();
+    if (this.inputManager.consumeDash()) {
+        if (this.player.startDash(inputVec)) {
+            this.soundEngine.playSynth(800, 'sine', 0.2);
+        }
+    }
+
     this.player.update(dt, inputVec, this.canvas.width, this.canvas.height);
     this.tetherManager.update(dt, this.player);
+
+    let dashDisplay = document.getElementById('dashCooldownDisplay');
+    if (dashDisplay) {
+        if (this.player.dashTimer <= 0) {
+            dashDisplay.innerText = "DASH: READY";
+            dashDisplay.style.color = "#fff";
+        } else {
+            dashDisplay.innerText = "DASH: " + this.player.dashTimer.toFixed(1) + "s";
+            dashDisplay.style.color = "#aaa";
+        }
+    }
 
     this.enemySpawnTimer -= dt;
     if (this.enemySpawnTimer <= 0) {
@@ -493,15 +684,20 @@ GameEngine.prototype.update = function(dt) {
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
         let e = this.enemies[i];
-        e.update(dt, this.player.x, this.player.y, this.tetherManager);
-
-        if (!e.isTethered) {
+        e.update(dt, this.player.x, this.player.y, this.tetherManager);        if (!e.isTethered) {
             // Check player collision -> Game Over
             let distToPlayer = Math.hypot(this.player.x - e.x, this.player.y - e.y);
             if (distToPlayer < this.player.radius + e.radius) {
-                this.soundEngine.playSynth(100, 'square', 0.5);
-                this.setState('GAME_OVER');
-                return; // Stop updating
+                if (this.player.invulnerableTimer > 0) {
+                    // Destroy enemy if player dashes into them
+                    e.markedForDeath = true;
+                    this.updateScore(10);
+                    this.soundEngine.playSynth(200, 'square', 0.1);
+                } else {
+                    this.soundEngine.playSynth(100, 'square', 0.5);
+                    this.setState('GAME_OVER');
+                    return; // Stop updating
+                }
             }
 
             // Check tether collision
