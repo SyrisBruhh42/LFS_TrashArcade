@@ -410,6 +410,7 @@ class Game {
     this.magmaRenderer = new MagmaRenderer();
     this.bg = new ParallaxBackground();
     this.hazardManager = new HazardManager();
+    this.vfxManager = new VFXManager();
 
     this.resizeOb = new ResizeObserver(() => this.resize());
     this.resizeOb.observe(document.body);
@@ -518,7 +519,12 @@ class Game {
        this.player.cooldown = 0.2 * this.player.upgrades.fireRate;
        this.audio.playShoot();
 
-       for(let i=0; i<5; i++) this.particles.push(new Particle(this.player.x, this.player.y, '#e09ff1'));
+       if (this.vfxManager) {
+           this.vfxManager.emitParticles(this.player.x, this.player.y, '#e09ff1', 10, 150, -dx, -dy, Math.PI/4);
+           this.vfxManager.addScreenShake(5, 0.1, -dx, -dy);
+       } else {
+           for(let i=0; i<5; i++) this.particles.push(new Particle(this.player.x, this.player.y, '#e09ff1'));
+       }
     }
   }
   update(dt) {
@@ -586,12 +592,16 @@ class Game {
     if (this.trailManager) {
         if (this.player && this.player.dashActive > 0) {
             this.trailManager.add(this.player.x, this.player.y, this.player.radius, '#fff', 0.3);
+        } else if (this.player && Math.abs(this.player.vx) + Math.abs(this.player.vy) > 800) {
+            // High speed motion trail
+            this.trailManager.add(this.player.x, this.player.y, this.player.radius, '#0ff', 0.2);
         }
         this.trailManager.update(dt);
     }
     if (this.magmaRenderer) this.magmaRenderer.update(dt);
     if (this.bg) this.bg.update(this.cameraY);
     if (this.hazardManager) this.hazardManager.update(dt, this.player, this.enemies, this.cameraY, height);
+    if (this.vfxManager) this.vfxManager.update(dt);
     for (let p of this.platforms) { if (p.update) p.update(dt); }
 
     for (let b of this.bullets) {
