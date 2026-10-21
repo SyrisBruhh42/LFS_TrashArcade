@@ -118,6 +118,7 @@ class UpgradeManager {
   applyPerk(perkId, player, engine) {
     const perk = this.perkPool.find(p => p.id === perkId);
     if (perk) {
+      if (engine && engine.audio && engine.audio.playUpgradeSelect) engine.audio.playUpgradeSelect();
       this.activePerks.push(perk);
 
       // Apply immediate stat changes if any

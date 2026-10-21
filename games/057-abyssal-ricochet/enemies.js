@@ -102,6 +102,7 @@ class Sniper extends Enemy {
           const px = (dx / dist) * 200;
           const py = (dy / dist) * 200;
           engine.projectiles.push(new Projectile(this.x, this.y, px, py));
+        if (engine && engine.audio && engine.audio.playEnemyShoot) engine.audio.playEnemyShoot();
         }
       }
     }

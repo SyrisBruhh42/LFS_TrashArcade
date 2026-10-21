@@ -170,6 +170,11 @@ class SoundEngine {
     this.sfxGain = null;
     this.musicGain = null;
     this.initialized = false;
+    this.bgmActive = false;
+    this.nextNoteTime = 0;
+    this.tempo = 120;
+    this.currentStep = 0;
+    this.filter = null;
   }
 
   init() {
@@ -181,13 +186,22 @@ class SoundEngine {
     this.sfxGain = this.ctx.createGain();
     this.musicGain = this.ctx.createGain();
 
+    this.filter = this.ctx.createBiquadFilter();
+    this.filter.type = 'lowpass';
+    this.filter.frequency.value = 800;
+
     this.sfxGain.connect(this.masterGain);
-    this.musicGain.connect(this.masterGain);
+    this.musicGain.connect(this.filter);
+    this.filter.connect(this.masterGain);
     this.masterGain.connect(this.ctx.destination);
 
     this.masterGain.gain.value = 0.5;
+    this.sfxGain.gain.value = 0.8;
+    this.musicGain.gain.value = 0.6;
 
     this.initialized = true;
+    this.bgmActive = true;
+    this.nextNoteTime = this.ctx.currentTime + 0.1;
   }
 
   resume() {
@@ -196,37 +210,165 @@ class SoundEngine {
     }
   }
 
-  playOscillator(freq, type, duration, vol = 1) {
+  update(dt, engine) {
+    if (!this.initialized || !this.bgmActive) return;
+
+    let isBoss = engine.bossManager && (engine.bossManager.activeBoss || engine.bossManager.warningTimer > 0);
+    let isHighAction = engine.combo > 5 || isBoss;
+
+    this.tempo = isHighAction ? 150 : (isBoss ? 140 : 110);
+
+    const targetFreq = isHighAction ? 2000 : (isBoss ? 1200 : 800);
+    this.filter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.5);
+
+    while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+      this.scheduleNextNote(isBoss);
+    }
+  }
+
+  scheduleNextNote(isBoss) {
+    const secondsPerBeat = 60.0 / this.tempo;
+    const noteDuration = secondsPerBeat * 0.25;
+
+    const baseFreq = isBoss ? 55 : 110;
+    const arpOffsets = isBoss ? [0, 3, 7, 10, 12, 10, 7, 3] : [0, 4, 7, 12, 7, 4];
+    const offset = arpOffsets[this.currentStep % arpOffsets.length];
+    const freq = baseFreq * Math.pow(1.05946, offset);
+
+    this.playOscillator(freq, 'triangle', noteDuration, 0.2, this.musicGain);
+
+    if (this.currentStep % 4 === 0) {
+      this.playOscillator(60, 'sine', 0.1, 0.5, this.musicGain);
+    } else if (this.currentStep % 2 === 0) {
+      this.playNoise(0.05, 0.1, this.musicGain, 'highpass', 5000);
+    }
+
+    this.nextNoteTime += noteDuration;
+    this.currentStep++;
+  }
+
+  playNoise(duration, vol, targetGain, filterType = null, filterFreq = 1000) {
+    if (!this.initialized) return;
+    const bufferSize = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    let connectTo = targetGain;
+    if (filterType) {
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = filterType;
+        filter.frequency.value = filterFreq;
+        noise.connect(filter);
+        connectTo = filter;
+    }
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+    connectTo.connect(gain);
+    gain.connect(targetGain);
+    noise.start(this.ctx.currentTime);
+  }
+
+  playOscillator(freq, type, duration, vol = 1, targetGain = this.sfxGain, endFreq = null) {
     if (!this.initialized) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-
     osc.type = type;
     osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-
+    if (endFreq !== null) {
+      osc.frequency.exponentialRampToValueAtTime(endFreq, this.ctx.currentTime + duration);
+    }
     gain.gain.setValueAtTime(vol, this.ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-
     osc.connect(gain);
-    gain.connect(this.sfxGain);
-
+    gain.connect(targetGain);
     osc.start();
     osc.stop(this.ctx.currentTime + duration);
   }
 
-  playBounce() {
-    this.playOscillator(440, 'sine', 0.1, 0.5);
-  }
-
-  playLaunch() {
-    this.playOscillator(150, 'square', 0.2, 0.6);
-  }
-
+  playBounce() { this.playOscillator(440, 'sine', 0.1, 0.5); }
+  playLaunch() { this.playOscillator(150, 'square', 0.2, 0.6, this.sfxGain, 50); }
   playHit() {
     this.playOscillator(100, 'sawtooth', 0.15, 0.7);
+    this.playNoise(0.1, 0.5, this.sfxGain, 'lowpass', 1000);
+  }
+  playEnemyShoot() { this.playOscillator(600, 'square', 0.1, 0.4, this.sfxGain, 200); }
+  playBossHit() {
+    this.playOscillator(80, 'sawtooth', 0.3, 0.8);
+    this.playNoise(0.2, 0.6, this.sfxGain, 'lowpass', 800);
+  }
+  playBossSpawn() {
+    this.playOscillator(50, 'sawtooth', 2.0, 1.0, this.sfxGain, 100);
+    this.playNoise(1.5, 0.8, this.sfxGain, 'lowpass', 400);
+  }
+  playUpgradeSelect() {
+    this.playOscillator(800, 'sine', 0.1, 0.4, this.sfxGain, 1200);
+    setTimeout(() => { if (this.initialized) this.playOscillator(1200, 'sine', 0.2, 0.4, this.sfxGain, 1600); }, 100);
+  }
+  playLevelUp() {
+    this.playOscillator(400, 'square', 0.1, 0.4, this.sfxGain, 600);
+    setTimeout(() => { if (this.initialized) this.playOscillator(600, 'square', 0.1, 0.4, this.sfxGain, 800); }, 100);
+    setTimeout(() => { if (this.initialized) this.playOscillator(800, 'square', 0.3, 0.4, this.sfxGain, 1200); }, 200);
+  }
+  playPlayerHit() {
+    this.playOscillator(200, 'sawtooth', 0.2, 0.8, this.sfxGain, 50);
+    this.playNoise(0.3, 0.8, this.sfxGain, 'lowpass', 500);
+  }
+  playDash() { this.playNoise(0.2, 0.4, this.sfxGain, 'highpass', 2000); }
+
+  // Utility Audio Functions
+  getMusicGain() {
+    return this.musicGain.gain.value;
+  }
+
+  setMusicGain(val) {
+    if (!this.initialized) return;
+    this.musicGain.gain.setValueAtTime(val, this.ctx.currentTime);
+  }
+
+  getSfxGain() {
+    return this.sfxGain.gain.value;
+  }
+
+  setSfxGain(val) {
+    if (!this.initialized) return;
+    this.sfxGain.gain.setValueAtTime(val, this.ctx.currentTime);
+  }
+
+  getMasterGain() {
+    return this.masterGain.gain.value;
+  }
+
+  setMasterGain(val) {
+    if (!this.initialized) return;
+    this.masterGain.gain.setValueAtTime(val, this.ctx.currentTime);
+  }
+
+  toggleMute() {
+    if (!this.initialized) return;
+    if (this.masterGain.gain.value > 0) {
+      this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
+    } else {
+      this.masterGain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+    }
+  }
+
+  isMuted() {
+    if (!this.initialized) return false;
+    return this.masterGain.gain.value === 0;
+  }
+
+  playWarning() {
+    this.playOscillator(800, 'square', 0.2, 0.4, this.sfxGain, 400);
+    setTimeout(() => { if (this.initialized) this.playOscillator(800, 'square', 0.2, 0.4, this.sfxGain, 400); }, 300);
   }
 }
-
 class GameEngine {
   constructor() {
     this.canvas = document.getElementById('gameCanvas');
@@ -348,6 +490,7 @@ class GameEngine {
   }
 
   update(dt) {
+    if (this.audio && this.audio.update) this.audio.update(dt, this);
     if (this.state !== 'PLAYING') return;
     this.vfxManager.update(dt);
     if (this.vfxManager.hitStop > 0) return;
@@ -380,7 +523,7 @@ class GameEngine {
                         const angle = Math.atan2(dy, dx);
                         this.player.recoil = 1;
                         this.player.recoilAngle = angle;
-                        this.audio.playHit();
+                        if (this.audio && this.audio.playPlayerHit) this.audio.playPlayerHit(); else this.audio.playHit();
                     }
                     this.projectiles[i].active = false;
                 }
@@ -540,6 +683,7 @@ class Player {
     const touchDoubleTap = input.usingTouch && input.wasTouchPressed();
     if ((input.wasKeyPressed('ShiftLeft') || touchDoubleTap) && this.dashCooldown <= 0) {
       this.isDashing = true;
+      if (this.audio && this.audio.playDash) this.audio.playDash();
       this.dashTimer = 0.3;
       this.dashCooldown = this.maxDashCooldown;
       this.invulnerableTimer = 0.5;

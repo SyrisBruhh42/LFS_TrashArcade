@@ -5,6 +5,7 @@ class BossManager {
   }
   triggerBoss(wave, engine) {
     this.warningTimer = 3; // 3 seconds warning
+    if (engine && engine.audio && engine.audio.playBossSpawn) engine.audio.playBossSpawn();
     document.getElementById('bossUI').classList.remove('hidden');
     document.getElementById('bossWarning').style.display = 'block';
     document.getElementById('bossName').style.display = 'none';
@@ -115,6 +116,7 @@ class TrenchLeviathanBoss extends Boss {
         for (let i = 0; i < numProj; i++) {
             const a = angleToPlayer - spread/2 + (spread/(numProj-1)) * i;
             engine.projectiles.push(new Projectile(this.x, this.y, Math.cos(a)*150, Math.sin(a)*150));
+        if (engine && engine.audio && engine.audio.playEnemyShoot) engine.audio.playEnemyShoot();
         }
     }
   }
@@ -187,7 +189,7 @@ class AbyssalCoreBoss extends Boss {
         const angle = Math.atan2(player.y - this.y, player.x - this.x);
         player.recoil = 1;
         player.recoilAngle = angle;
-        engine.audio.playHit();
+        if (engine && engine.audio && engine.audio.playBossHit) engine.audio.playBossHit(); else engine.audio.playHit();
     }
   }
   normalizeAngle(a) {
