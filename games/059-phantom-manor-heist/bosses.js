@@ -98,6 +98,7 @@ class SpectralWarden extends BaseBoss {
         if (this.attackTimer > (this.phase === 1 ? 4.0 : 2.5)) {
             this.attackTimer = 0;
             hazards.push({x: this.x, y: this.y, life: 0.8, type: 'blast', radius: 10});
+            if (window.engine && window.engine.sound && window.engine.sound.ready) window.engine.sound.playWeaponFire();
         }
 
         if (Math.hypot(dx, dy) < this.radius + player.radius) return 'caught';
@@ -127,6 +128,7 @@ class MirrorWraith extends BaseBoss {
         if (this.trailTimer > 0.5) {
             this.trailTimer = 0;
             hazards.push({x: this.x, y: this.y, life: this.phase === 1 ? 5.0 : 10.0, type: 'zone', radius: 30});
+            if (window.engine && window.engine.sound && window.engine.sound.ready) window.engine.sound.playAbilityUse();
         }
 
         if (Math.hypot(player.x - this.x, player.y - this.y) < this.radius + player.radius) return 'caught';
