@@ -235,6 +235,7 @@ class GameEngine {
         this.uiPaused = document.getElementById('screenPaused');
         this.uiGameOver = document.getElementById('screenGameOver');
         this.uiHud = document.getElementById('hud');
+        this.uiUpgrade = document.getElementById('screenUpgrade');
 
         document.getElementById('highScoreDisplay').innerText = `Best: ${this.saveManager.data.highScore}`;
     }
@@ -255,6 +256,7 @@ class GameEngine {
         this.uiPaused.classList.remove('active');
         this.uiGameOver.classList.remove('active');
         this.uiHud.classList.remove('active');
+        if(this.uiUpgrade) this.uiUpgrade.classList.remove('active');
 
         if(newState === 'TITLE') this.uiTitle.classList.add('active');
         if(newState === 'PAUSED') this.uiPaused.classList.add('active');
@@ -269,7 +271,33 @@ class GameEngine {
             this.saveManager.data.totalGamesPlayed++;
             this.saveManager.save();
         }
-        if(newState === 'PLAYING') this.uiHud.classList.add('active');
+        if(newState === 'PLAYING') {
+            this.uiHud.classList.add('active');
+            if(this.waveDirector) this.waveDirector.active = true;
+        }
+        if(newState === 'UPGRADE_DRAFT') {
+            if(this.uiUpgrade) this.uiUpgrade.classList.add('active');
+
+            let choicesContainer = document.getElementById('upgradeChoices');
+            if (choicesContainer && this.upgradeManager) {
+                choicesContainer.innerHTML = '';
+                let choices = this.upgradeManager.getDraftChoices();
+                choices.forEach(c => {
+                    let btn = document.createElement('button');
+                    btn.style.display = 'flex';
+                    btn.style.flexDirection = 'column';
+                    btn.style.alignItems = 'center';
+                    btn.style.padding = '10px';
+                    btn.style.width = '200px';
+                    btn.innerHTML = `<strong>${c.name}</strong><span style="font-size:1rem; font-weight:normal; margin-top:5px;">${c.desc}</span>`;
+                    btn.onclick = () => {
+                        this.upgradeManager.applyUpgrade(c.id);
+                        this.setState('PLAYING');
+                    };
+                    choicesContainer.appendChild(btn);
+                });
+            }
+        }
     }
 
     startGame() {
@@ -545,6 +573,15 @@ GameEngine.prototype.initGame = function() {
     this.hazardManager = new HazardManager(this.canvas.width, this.canvas.height);
     this.bossManager = new BossManager(this);
     this.scoreThresholdForBoss = 2000;
+
+    // Progression additions
+    this.waveDirector = new WaveDirector(this);
+    this.upgradeManager = new UpgradeManager(this);
+    this.pickupManager = new PickupManager(this);
+    this.maxComboDecayTimer = 5.0;
+    this.comboDecayTimer = this.maxComboDecayTimer;
+    this.scoreBonusMultiplier = 1.0;
+    this.explosionRadiusMod = 1.0;
 };
 
 GameEngine.prototype.spawnEnemy = function() {
@@ -606,6 +643,7 @@ GameEngine.prototype.detonateTether = function() {
         let pts = 100 * this.comboMultiplier;
         this.updateScore(pts);
         this.comboMultiplier++;
+        this.comboDecayTimer = this.maxComboDecayTimer;
 
         // check for chaining with other enemies
         for (let j = 0; j < this.enemies.length; j++) {
@@ -617,10 +655,13 @@ GameEngine.prototype.detonateTether = function() {
                         other.takeDamage(50 * this.comboMultiplier);
                         if (other.hp <= 0) {
                             other.markedForDeath = true;
+                            if(this.pickupManager) this.pickupManager.dropPickup(other.x, other.y);
                         }
                     } else {
                         other.markedForDeath = true;
                         this.updateScore(50 * this.comboMultiplier);
+                        if(this.pickupManager) this.pickupManager.dropPickup(other.x, other.y);
+                        if(this.waveDirector) this.waveDirector.onEnemyKilled();
                     }
                 }
             }
@@ -642,6 +683,32 @@ GameEngine.prototype.detonateTether = function() {
 };
 
 GameEngine.prototype.update = function(dt) {
+    if (this.state !== 'PLAYING') return;
+
+    if (this.waveDirector) this.waveDirector.update(dt);
+    if (this.pickupManager) this.pickupManager.update(dt);
+
+    // Combo Decay Logic
+    if (this.comboMultiplier > 1) {
+        this.comboDecayTimer -= dt;
+        if (this.comboDecayTimer <= 0) {
+            this.comboMultiplier = 1;
+            this.comboDecayTimer = this.maxComboDecayTimer;
+        }
+    }
+
+    let comboBar = document.getElementById('comboDecayBar');
+    if (comboBar) {
+        if (this.comboMultiplier > 1) {
+            let pct = Math.max(0, (this.comboDecayTimer / this.maxComboDecayTimer) * 100);
+            comboBar.innerText = `COMBO: ${this.comboMultiplier}x (${pct.toFixed(0)}%)`;
+            comboBar.style.color = '#f5ca53';
+        } else {
+            comboBar.innerText = `COMBO: 1.0x (100%)`;
+            comboBar.style.color = '#aaa';
+        }
+    }
+
     if (this.bossManager) {
         this.bossManager.update(dt);
         if (!this.bossManager.activeBoss && this.score >= this.scoreThresholdForBoss) {
@@ -731,6 +798,8 @@ GameEngine.prototype.update = function(dt) {
                         e.markedForDeath = true;
                         this.updateScore(10);
                         this.soundEngine.playSynth(200, 'square', 0.1);
+                        if(this.pickupManager) this.pickupManager.dropPickup(e.x, e.y);
+                        if(this.waveDirector) this.waveDirector.onEnemyKilled();
                     }
                 } else {
                     this.soundEngine.playSynth(100, 'square', 0.5);
@@ -788,6 +857,7 @@ GameEngine.prototype.draw = function() {
 
     this.hazardManager.draw(this.ctx);
     this.tetherManager.draw(this.ctx, this.player);
+    if(this.pickupManager) this.pickupManager.draw(this.ctx);
 
     for (let e of this.enemies) {
         e.draw(this.ctx);
