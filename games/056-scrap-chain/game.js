@@ -484,40 +484,6 @@ class Player {
     }
 }
 
-class Enemy {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.radius = 12;
-        this.speed = 100;
-        this.isTethered = false;
-        this.tetherIndex = -1; // -1 if not tethered
-        this.markedForDeath = false;
-    }
-    update(dt, playerX, playerY, tetherManager) {
-        if (this.isTethered) {
-            // position is updated by tether manager
-        } else {
-            let dx = playerX - this.x;
-            let dy = playerY - this.y;
-            let dist = Math.hypot(dx, dy);
-            if (dist > 0) {
-                this.x += (dx / dist) * this.speed * dt;
-                this.y += (dy / dist) * this.speed * dt;
-            }
-        }
-    }
-    draw(ctx) {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this.isTethered ? '#f5ca53' : '#a34a4a';
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
-}
-
 class TetherManager {
     constructor() {
         this.nodes = []; // List of tethered enemies
@@ -571,6 +537,7 @@ GameEngine.prototype.initGame = function() {
     this.tetherManager = new TetherManager();
     this.enemies = [];
     this.particles = [];
+    this.projectiles = [];
     this.enemySpawnTimer = 0;
     this.enemySpawnInterval = 1.0;
     this.comboMultiplier = 1;
@@ -585,7 +552,13 @@ GameEngine.prototype.spawnEnemy = function() {
     else if (side === 1) { x = this.canvas.width + 20; y = Math.random() * this.canvas.height; }
     else if (side === 2) { x = Math.random() * this.canvas.width; y = this.canvas.height + 20; }
     else { x = -20; y = Math.random() * this.canvas.height; }
-    this.enemies.push(new Enemy(x, y));
+
+    let type = Math.floor(Math.random() * 5);
+    if (type === 0) this.enemies.push(new SwarmerEnemy(x, y));
+    else if (type === 1) this.enemies.push(new BruiserEnemy(x, y));
+    else if (type === 2) this.enemies.push(new SniperEnemy(x, y));
+    else if (type === 3) this.enemies.push(new SplitterEnemy(x, y));
+    else this.enemies.push(new HazardEnemy(x, y));
 };
 
 GameEngine.prototype.createExplosion = function(x, y, radius, color) {
@@ -694,17 +667,40 @@ GameEngine.prototype.update = function(dt) {
         this.enemySpawnInterval = Math.max(0.2, this.enemySpawnInterval - 0.02);
     }
 
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+        let p = this.projectiles[i];
+        p.update(dt);
+        if (p.life <= 0) {
+            this.projectiles.splice(i, 1);
+            continue;
+        }
+
+        let dist = Math.hypot(this.player.x - p.x, this.player.y - p.y);
+        if (dist < this.player.radius + p.radius && this.player.invulnerableTimer <= 0) {
+            this.soundEngine.playSynth(100, 'square', 0.5);
+            this.setState('GAME_OVER');
+            return;
+        }
+    }
+
     for (let i = this.enemies.length - 1; i >= 0; i--) {
         let e = this.enemies[i];
-        e.update(dt, this.player.x, this.player.y, this.tetherManager);        if (!e.isTethered) {
+        e.update(dt, this.player.x, this.player.y, this.tetherManager, this);
+        if (!e.isTethered) {
             // Check player collision -> Game Over
             let distToPlayer = Math.hypot(this.player.x - e.x, this.player.y - e.y);
             if (distToPlayer < this.player.radius + e.radius) {
                 if (this.player.invulnerableTimer > 0) {
-                    // Destroy enemy if player dashes into them
-                    e.markedForDeath = true;
-                    this.updateScore(10);
-                    this.soundEngine.playSynth(200, 'square', 0.1);
+                    if (e.shield) {
+                        e.shield = false;
+                        this.player.vx = -this.player.vx * 0.5;
+                        this.player.vy = -this.player.vy * 0.5;
+                    } else {
+                        // Destroy enemy if player dashes into them
+                        e.markedForDeath = true;
+                        this.updateScore(10);
+                        this.soundEngine.playSynth(200, 'square', 0.1);
+                    }
                 } else {
                     this.soundEngine.playSynth(100, 'square', 0.5);
                     this.setState('GAME_OVER');
@@ -742,6 +738,10 @@ GameEngine.prototype.update = function(dt) {
 
         if (e.markedForDeath) {
             this.createExplosion(e.x, e.y, 10, '#a34a4a');
+            if (e.constructor.name === 'SplitterEnemy') {
+                this.enemies.push(new SwarmerEnemy(e.x - 15, e.y));
+                this.enemies.push(new SwarmerEnemy(e.x + 15, e.y));
+            }
             this.enemies.splice(i, 1);
         }
     }
@@ -768,6 +768,10 @@ GameEngine.prototype.draw = function() {
 
     for (let e of this.enemies) {
         e.draw(this.ctx);
+    }
+
+    for (let p of this.projectiles) {
+        p.draw(this.ctx);
     }
 
     this.player.draw(this.ctx);
