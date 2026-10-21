@@ -37,6 +37,11 @@ class BossManager {
       document.getElementById('bossHealthBar').style.width = hpPct + '%';
 
       if (!this.activeBoss.active) {
+          if (engine.vfxManager) {
+              engine.vfxManager.emitExplosion(this.activeBoss.x, this.activeBoss.y, '#8800ff', 50);
+              engine.vfxManager.triggerScreenShake(20);
+              engine.vfxManager.triggerHitStop(0.5);
+          }
           this.activeBoss = null;
           document.getElementById('bossUI').classList.add('hidden');
           engine.score += 5000;
