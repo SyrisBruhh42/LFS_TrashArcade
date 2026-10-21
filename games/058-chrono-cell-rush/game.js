@@ -759,14 +759,258 @@ class EffectsManager {
   }
 }
 
+class HazardPuddle {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.radius = 0;
+    this.maxRadius = 40;
+    this.lifeTime = 5;
+    this.age = 0;
+  }
+  update(dt) {
+    this.age += dt;
+    if (this.radius < this.maxRadius) this.radius += dt * 20;
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(0, 255, 0, ${1 - this.age / this.lifeTime})`;
+    ctx.fill();
+    ctx.closePath();
+  }
+}
+
+class EnemySwarmer {
+  constructor(x, y) {
+    this.x = x; this.y = y; this.radius = 12; this.hp = 20;
+    this.speed = 80;
+  }
+  update(dt, player, manager) {
+    const dx = player.x - this.x; const dy = player.y - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist > 0) { this.x += (dx/dist)*this.speed*dt; this.y += (dy/dist)*this.speed*dt; }
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#00ff00';
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y - this.radius);
+    ctx.lineTo(this.x + this.radius, this.y + this.radius);
+    ctx.lineTo(this.x - this.radius, this.y + this.radius);
+    ctx.fill();
+    ctx.closePath();
+  }
+}
+
+class EnemySniper {
+  constructor(x, y) {
+    this.x = x; this.y = y; this.radius = 15; this.hp = 30;
+    this.speed = 40; this.shootTimer = 0; this.state = 'position';
+    this.telegraph = 0; this.targetAngle = 0;
+  }
+  update(dt, player, manager) {
+    const dx = player.x - this.x; const dy = player.y - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(this.state === 'position') {
+      if(dist < 200) { this.x -= (dx/dist)*this.speed*dt; this.y -= (dy/dist)*this.speed*dt; }
+      else if(dist > 250) { this.x += (dx/dist)*this.speed*dt; this.y += (dy/dist)*this.speed*dt; }
+      this.shootTimer += dt;
+      if(this.shootTimer > 2) { this.state = 'telegraph'; this.telegraph = 0; this.targetAngle = Math.atan2(dy, dx); }
+    } else if(this.state === 'telegraph') {
+      this.telegraph += dt;
+      if(this.telegraph > 1) {
+        manager.bullets.push(new EnemyBullet(this.x, this.y, this.targetAngle));
+        this.state = 'position'; this.shootTimer = 0;
+      }
+    }
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#00ffff';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.closePath();
+    if(this.state === 'telegraph') {
+      ctx.strokeStyle = `rgba(255, 0, 0, ${this.telegraph})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y);
+      ctx.lineTo(this.x + Math.cos(this.targetAngle)*500, this.y + Math.sin(this.targetAngle)*500);
+      ctx.stroke();
+    }
+  }
+}
+
+class EnemyBruiser {
+  constructor(x, y) {
+    this.x = x; this.y = y; this.radius = 25; this.hp = 100;
+    this.speed = 30; this.shield = 50; this.shieldMax = 50;
+  }
+  update(dt, player, manager) {
+    const dx = player.x - this.x; const dy = player.y - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist > 0) { this.x += (dx/dist)*this.speed*dt; this.y += (dy/dist)*this.speed*dt; }
+    if(this.shield < this.shieldMax) this.shield += dt * 5;
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#ff8800';
+    ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius*2, this.radius*2);
+    if(this.shield > 0) {
+      ctx.strokeStyle = `rgba(0, 0, 255, ${this.shield / this.shieldMax})`;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(this.x - this.radius - 5, this.y - this.radius - 5, this.radius*2 + 10, this.radius*2 + 10);
+    }
+  }
+}
+
+class EnemySpawner {
+  constructor(x, y) {
+    this.x = x; this.y = y; this.radius = 20; this.hp = 60;
+    this.speed = 20; this.spawnTimer = 0; this.telegraph = 0;
+    this.tx = Math.random()*window.innerWidth; this.ty = Math.random()*window.innerHeight;
+  }
+  update(dt, player, manager) {
+    const dx = this.tx - this.x; const dy = this.ty - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist > 10) { this.x += (dx/dist)*this.speed*dt; this.y += (dy/dist)*this.speed*dt; }
+    else { this.tx = Math.random()*window.innerWidth; this.ty = Math.random()*window.innerHeight; }
+
+    this.spawnTimer += dt;
+    if(this.spawnTimer > 4) {
+      this.telegraph += dt;
+      if(this.telegraph > 1) {
+        manager.enemies.push(new EnemySwarmer(this.x + 20, this.y));
+        manager.enemies.push(new EnemySwarmer(this.x - 20, this.y));
+        this.spawnTimer = 0; this.telegraph = 0;
+      }
+    }
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#aa00aa';
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y - this.radius);
+    ctx.lineTo(this.x + this.radius, this.y);
+    ctx.lineTo(this.x, this.y + this.radius);
+    ctx.lineTo(this.x - this.radius, this.y);
+    ctx.fill();
+    ctx.closePath();
+    if(this.telegraph > 0) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${this.telegraph})`;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 10, 0, Math.PI*2);
+      ctx.fill();
+      ctx.closePath();
+    }
+  }
+}
+
+class EnemyHazardMaker {
+  constructor(x, y) {
+    this.x = x; this.y = y; this.radius = 18; this.hp = 40;
+    this.speed = 50; this.hazardTimer = 0; this.telegraph = 0;
+  }
+  update(dt, player, manager) {
+    const dx = player.x - this.x; const dy = player.y - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist > 100) { this.x += (dx/dist)*this.speed*dt; this.y += (dy/dist)*this.speed*dt; }
+
+    this.hazardTimer += dt;
+    if(this.hazardTimer > 3) {
+      this.telegraph += dt;
+      if(this.telegraph > 0.5) {
+        manager.hazards.push(new HazardPuddle(this.x, this.y));
+        this.hazardTimer = 0; this.telegraph = 0;
+      }
+    }
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#555500';
+    ctx.beginPath();
+    for(let i=0; i<6; i++) {
+      const a = (i/6)*Math.PI*2;
+      ctx.lineTo(this.x + Math.cos(a)*this.radius, this.y + Math.sin(a)*this.radius);
+    }
+    ctx.fill();
+    ctx.closePath();
+    if(this.telegraph > 0) {
+      ctx.fillStyle = `rgba(0, 255, 0, ${this.telegraph*2})`;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.closePath();
+    }
+  }
+}
+
 class EnemyManager {
 
   constructor() {
     this.boss = new EnemyBoss(window.innerWidth / 2, 100);
     this.bullets = [];
+    this.enemies = [];
+    this.hazards = [];
+    this.spawnTimer = 0;
   }
 
   update(dt, player) {
+    this.spawnTimer += dt;
+    if(this.spawnTimer > 3) {
+      this.spawnTimer = 0;
+      const type = Math.floor(Math.random() * 5);
+      let nx = Math.random() > 0.5 ? 0 : window.innerWidth;
+      let ny = Math.random() * window.innerHeight;
+      if (type === 0) this.enemies.push(new EnemySwarmer(nx, ny));
+      else if (type === 1) this.enemies.push(new EnemySniper(nx, ny));
+      else if (type === 2) this.enemies.push(new EnemyBruiser(nx, ny));
+      else if (type === 3) this.enemies.push(new EnemySpawner(nx, ny));
+      else if (type === 4) this.enemies.push(new EnemyHazardMaker(nx, ny));
+    }
+
+    for (let i = this.hazards.length - 1; i >= 0; i--) {
+      let h = this.hazards[i];
+      h.update(dt);
+      if (player && !player.isDashing) {
+        const dx = player.x - h.x; const dy = player.y - h.y;
+        if (Math.sqrt(dx*dx + dy*dy) < h.radius + player.radius) {
+           window.engine.setState('GAME_OVER');
+           return;
+        }
+      }
+      if (h.age > h.lifeTime) this.hazards.splice(i, 1);
+    }
+
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      let e = this.enemies[i];
+      e.update(dt, player, this);
+
+      if (player) {
+        const dx = player.x - e.x; const dy = player.y - e.y;
+        if (Math.sqrt(dx*dx + dy*dy) < e.radius + player.radius && !player.isDashing) {
+           window.engine.setState('GAME_OVER');
+           return;
+        }
+
+        for (let j = player.bullets.length - 1; j >= 0; j--) {
+          let b = player.bullets[j];
+          const bx = b.x - e.x; const by = b.y - e.y;
+          if (Math.sqrt(bx*bx + by*by) < e.radius + b.radius) {
+             if (e.shield !== undefined && e.shield > 0) {
+                 e.shield -= 10;
+                 if (e.shield < 0) e.shield = 0;
+             } else {
+                 e.hp -= 10;
+             }
+             player.bullets.splice(j, 1);
+             window.engine.audio.playHit();
+             window.engine.score += 10;
+          }
+        }
+      }
+      if (e.hp <= 0) {
+        window.engine.score += 50;
+        this.enemies.splice(i, 1);
+      }
+    }
     if (this.boss) {
       this.boss.update(dt, this);
 
@@ -817,6 +1061,12 @@ class EnemyManager {
 
   draw(ctx) {
     if (this.boss) this.boss.draw(ctx);
+    for (const h of this.hazards) {
+      h.draw(ctx);
+    }
+    for (const e of this.enemies) {
+      e.draw(ctx);
+    }
     for (const b of this.bullets) {
       b.draw(ctx);
     }
