@@ -729,7 +729,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD / Arrows to move. Space / Touch Button to detonate tether.",
     "createdAt": "2024-10-21",
     "accentColor": "#6c9b81",
-    "phase": "9",
+    "phase": "10",
     "path": "./games/056-scrap-chain/index.html"
   },
   {
