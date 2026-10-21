@@ -319,6 +319,8 @@ class GameEngine {
     if (typeof Arena !== 'undefined') this.arena = new Arena(this.canvas.width, this.canvas.height);
     if (typeof Player !== 'undefined') this.player = new Player(this.canvas.width/2, this.canvas.height/2);
     if (typeof EnemyManager !== 'undefined') this.enemyManager = new EnemyManager();
+    if (typeof ParallaxBackground !== 'undefined') this.background = new ParallaxBackground(this.canvas.width, this.canvas.height);
+    if (typeof EnvironmentHazardManager !== 'undefined') this.hazards = new EnvironmentHazardManager();
   }
 
   resumeGame() {
@@ -349,9 +351,11 @@ class GameEngine {
       return;
     }
 
+    if (this.background) this.background.update(dt);
     if (this.arena) this.arena.update(dt);
     if (this.player) this.player.update(dt, this.input, this.arena, this.audio);
     if (this.enemyManager) this.enemyManager.update(dt, this.player, this);
+    if (this.hazards) this.hazards.update(dt, this.arena, this.player, this.enemyManager ? this.enemyManager.enemies : []);
 
     document.getElementById('scoreDisplay').innerText = `SCORE: ${Math.floor(this.score)}`;
     document.getElementById('waveDisplay').innerText = `WAVE: ${this.wave}`;
@@ -373,7 +377,9 @@ class GameEngine {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     if (this.state !== 'TITLE') {
+      if (this.background) this.background.draw(this.ctx);
       if (this.arena) this.arena.draw(this.ctx);
+      if (this.hazards) this.hazards.draw(this.ctx);
       if (this.enemyManager) this.enemyManager.draw(this.ctx);
       if (this.player) this.player.draw(this.ctx);
     }
