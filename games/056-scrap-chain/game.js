@@ -574,6 +574,8 @@ GameEngine.prototype.initGame = function() {
     this.enemySpawnTimer = 0;
     this.enemySpawnInterval = 1.0;
     this.comboMultiplier = 1;
+    this.parallax = new ParallaxBackground(this.canvas.width, this.canvas.height);
+    this.hazardManager = new HazardManager(this.canvas.width, this.canvas.height);
 };
 
 GameEngine.prototype.spawnEnemy = function() {
@@ -643,6 +645,14 @@ GameEngine.prototype.detonateTether = function() {
         }
 
         node.markedForDeath = true;
+        for (let k = 0; k < this.hazardManager.covers.length; k++) {
+            let cover = this.hazardManager.covers[k];
+            let dist = Math.hypot(node.x - cover.x, node.y - cover.y);
+            if (dist < explosionRadius + cover.radius) {
+                cover.hp -= 1;
+                this.createExplosion(cover.x, cover.y, 20, '#555');
+            }
+        }
     }
 
     // Clear tether
@@ -663,6 +673,8 @@ GameEngine.prototype.update = function(dt) {
 
     this.player.update(dt, inputVec, this.canvas.width, this.canvas.height);
     this.tetherManager.update(dt, this.player);
+    this.parallax.update(dt, this.player);
+    this.hazardManager.update(dt, this);
 
     let dashDisplay = document.getElementById('dashCooldownDisplay');
     if (dashDisplay) {
@@ -749,18 +761,9 @@ GameEngine.prototype.draw = function() {
     this.ctx.fillStyle = '#111';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Draw Grid
-    this.ctx.strokeStyle = '#222';
-    this.ctx.lineWidth = 1;
-    this.ctx.beginPath();
-    for (let x = 0; x < this.canvas.width; x += 50) {
-        this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.canvas.height);
-    }
-    for (let y = 0; y < this.canvas.height; y += 50) {
-        this.ctx.moveTo(0, y); this.ctx.lineTo(this.canvas.width, y);
-    }
-    this.ctx.stroke();
+    this.parallax.draw(this.ctx, this.canvas.width, this.canvas.height);
 
+    this.hazardManager.draw(this.ctx);
     this.tetherManager.draw(this.ctx, this.player);
 
     for (let e of this.enemies) {
