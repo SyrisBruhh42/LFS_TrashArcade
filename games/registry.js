@@ -673,7 +673,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move, Mouse to aim and auto-shoot. Touch: Left side for movement, Right side to aim/shoot.",
     "createdAt": "2024-10-25",
     "accentColor": "#59c297",
-    "phase": "6",
+    "phase": "7",
     "path": "./games/052-sky-shifting-arena/index.html"
   },
   {
