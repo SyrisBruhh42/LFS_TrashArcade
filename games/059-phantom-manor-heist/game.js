@@ -1,7 +1,7 @@
 class InputManager {
     constructor() {
         this.keys = {};
-        this.touch = { active: false, x: 0, y: 0, tap: false, action: false, startX: 0, startY: 0 };
+        this.touch = { active: false, x: 0, y: 0, tap: false, action: false, dash: false, startX: 0, startY: 0 };
         window.addEventListener('keydown', e => { this.keys[e.code] = true; });
         window.addEventListener('keyup', e => { this.keys[e.code] = false; });
         window.addEventListener('touchstart', e => this.handleTouchStart(e), {passive: false});
@@ -14,8 +14,12 @@ class InputManager {
         e.preventDefault();
         const touch = e.changedTouches[0];
         if (touch.clientX > window.innerWidth / 2) {
-            this.touch.action = true;
-            this.touch.tap = true;
+            if (touch.clientY < window.innerHeight / 2) {
+                this.touch.dash = true;
+            } else {
+                this.touch.action = true;
+                this.touch.tap = true;
+            }
         } else {
             this.touch.active = true;
             this.touch.startX = touch.clientX;
@@ -48,6 +52,7 @@ class InputManager {
             if (touch.clientX > window.innerWidth / 2) {
                 this.touch.action = false;
                 this.touch.tap = false;
+                this.touch.dash = false;
             } else {
                 this.touch.active = false;
                 this.touch.x = 0;
@@ -75,6 +80,15 @@ class InputManager {
         if (this.keys['Space'] || this.touch.action) {
             this.keys['Space'] = false;
             this.touch.action = false;
+            return true;
+        }
+        return false;
+    }
+    consumeDash() {
+        if (this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.touch.dash) {
+            this.keys['ShiftLeft'] = false;
+            this.keys['ShiftRight'] = false;
+            this.touch.dash = false;
             return true;
         }
         return false;
@@ -148,22 +162,76 @@ class SaveManager {
 
 class Player {
     constructor(x, y) {
-        this.x = x; this.y = y; this.radius = 12; this.speed = 150;
+        this.x = x; this.y = y; this.radius = 12;
+        this.vx = 0; this.vy = 0;
+        this.accel = 1200; this.maxSpeed = 200; this.friction = 0.85;
         this.echo = null;
         this.color = '#fff';
+        this.dashCooldown = 0;
+        this.dashCooldownMax = 3.0;
+        this.isDashing = false;
+        this.dashTimer = 0;
+        this.recoil = 0;
+        this.trail = [];
+        this.aimAngle = 0;
+        this.invulnTimer = 0;
     }
     update(dt, input, walls) {
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+        if (this.dashTimer > 0) {
+            this.dashTimer -= dt;
+            if (this.dashTimer <= 0) this.isDashing = false;
+        }
+        if (this.recoil > 0) this.recoil -= dt * 5;
+        if (this.invulnTimer > 0) this.invulnTimer -= dt;
+
         const dir = input.getDir();
-        let nx = this.x + dir.dx * this.speed * dt;
-        let ny = this.y + dir.dy * this.speed * dt;
+        if (dir.dx !== 0 || dir.dy !== 0) {
+            this.aimAngle = Math.atan2(dir.dy, dir.dx);
+            if (!this.isDashing) {
+                this.vx += dir.dx * this.accel * dt;
+                this.vy += dir.dy * this.accel * dt;
+            }
+        }
+
+        if (input.consumeDash() && this.dashCooldown <= 0) {
+            this.isDashing = true;
+            this.dashTimer = 0.2;
+            this.invulnTimer = 0.2;
+            this.dashCooldown = this.dashCooldownMax;
+            this.vx = Math.cos(this.aimAngle) * 800;
+            this.vy = Math.sin(this.aimAngle) * 800;
+            this.recoil = 1.0;
+        }
+
+        if (!this.isDashing) {
+            this.vx *= Math.pow(this.friction, dt * 60);
+            this.vy *= Math.pow(this.friction, dt * 60);
+            const speed = Math.hypot(this.vx, this.vy);
+            if (speed > this.maxSpeed) {
+                this.vx = (this.vx / speed) * this.maxSpeed;
+                this.vy = (this.vy / speed) * this.maxSpeed;
+            }
+        }
+
+        let nx = this.x + this.vx * dt;
+        let ny = this.y + this.vy * dt;
 
         let cx = false, cy = false;
         for (let w of walls) {
             if (nx + this.radius > w.x && nx - this.radius < w.x + w.w && this.y + this.radius > w.y && this.y - this.radius < w.y + w.h) cx = true;
             if (this.x + this.radius > w.x && this.x - this.radius < w.x + w.w && ny + this.radius > w.y && ny - this.radius < w.y + w.h) cy = true;
         }
-        if (!cx) this.x = nx;
-        if (!cy) this.y = ny;
+        if (!cx) { this.x = nx; } else { this.vx = 0; }
+        if (!cy) { this.y = ny; } else { this.vy = 0; }
+
+        if (this.isDashing || Math.hypot(this.vx, this.vy) > 50) {
+            this.trail.push({x: this.x, y: this.y, life: 0.2});
+        }
+        for (let i = this.trail.length - 1; i >= 0; i--) {
+            this.trail[i].life -= dt;
+            if (this.trail[i].life <= 0) this.trail.splice(i, 1);
+        }
 
         if (input.consumeAction()) {
             if (this.echo) {
@@ -174,10 +242,51 @@ class Player {
         }
     }
     draw(ctx) {
-        ctx.fillStyle = this.color;
+        for (let t of this.trail) {
+            ctx.fillStyle = `rgba(100, 200, 255, ${t.life * 2})`;
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, this.radius * 0.8 * (t.life / 0.2), 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        let currentScale = 1.0 + Math.sin(this.recoil * Math.PI) * 0.3;
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.aimAngle);
+        ctx.scale(currentScale, currentScale);
+
+        if (Math.hypot(this.vx, this.vy) > 20 && !this.isDashing) {
+            ctx.fillStyle = '#f80';
+            ctx.beginPath();
+            ctx.moveTo(-this.radius, -this.radius*0.5);
+            ctx.lineTo(-this.radius - 10 * Math.random(), 0);
+            ctx.lineTo(-this.radius, this.radius*0.5);
+            ctx.fill();
+        }
+
+        if (this.invulnTimer > 0) {
+            ctx.fillStyle = (Math.floor(Date.now() / 50) % 2 === 0) ? '#fff' : '#0ff';
+        } else {
+            ctx.fillStyle = this.color;
+        }
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+        ctx.arc(0, 0, this.radius, 0, Math.PI*2);
         ctx.fill();
+
+        ctx.fillStyle = '#0ff';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.4, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(this.radius + 15, -5);
+        ctx.lineTo(this.radius + 15, 5);
+        ctx.fill();
+
+        ctx.restore();
     }
 }
 
@@ -187,6 +296,8 @@ class Echo {
         this.active = true;
         this.color = 'rgba(173, 166, 185, 0.6)';
         this.noise = 0;
+        this.isDashing = false;
+        this.invulnTimer = 0;
     }
     update(dt, input, walls) {
         // Echo moves opposite to player
@@ -263,7 +374,9 @@ class Guard {
             this.y += Math.sin(this.angle) * this.speed * 1.5 * dt;
 
             if (Math.hypot(dx, dy) < this.radius + this.target.radius) {
-                return 'caught';
+                if (!this.target.isDashing && this.target.invulnTimer <= 0) {
+                    return 'caught';
+                }
             }
         }
         return false;
@@ -494,6 +607,37 @@ class Game {
             this.ctx.font = '20px monospace';
             this.ctx.textAlign = 'left';
             this.ctx.fillText(`Score: ${this.score}`, 20, 40);
+
+            let dashStatus = this.player.dashCooldown <= 0 ? 'READY' : this.player.dashCooldown.toFixed(1) + 's';
+            this.ctx.fillStyle = this.player.dashCooldown <= 0 ? '#0ff' : '#888';
+            this.ctx.fillText(`Dash (Shift): ${dashStatus}`, 20, 70);
+
+            // Render extra HUD info
+            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            this.ctx.fillRect(20, 80, 100, 10);
+            this.ctx.fillStyle = '#0ff';
+            let dashFill = 1;
+            if (this.player.dashCooldown > 0) {
+                dashFill = 1 - (this.player.dashCooldown / this.player.dashCooldownMax);
+            }
+            this.ctx.fillRect(20, 80, 100 * dashFill, 10);
+
+            // Draw speed indicator
+            const speed = Math.hypot(this.player.vx, this.player.vy);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText(`Vel: ${speed.toFixed(0)}`, 20, 110);
+
+            // Draw state
+            if (this.player.isDashing) {
+                this.ctx.fillStyle = '#f0f';
+                this.ctx.fillText('>>> DASHING <<<', 20, 140);
+            }
+            // Just one more simple helper
+            if (this.player.invulnTimer > 0) {
+                this.ctx.fillStyle = '#ff0';
+                this.ctx.fillText('GHOST', 20, 170);
+            }
+
 
             if (this.state === 'PAUSED') {
                 this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
