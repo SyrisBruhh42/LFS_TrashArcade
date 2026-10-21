@@ -174,7 +174,7 @@ class Player {
         this.recoil = 0;
         this.trail = [];
         this.aimAngle = 0;
-        this.invulnTimer = 0;
+        this.invulnTimer = 0; this.speedBuffTimer = 0; this.baseSpeedMod = 0; this.baseDashCdMod = 0;
     }
     update(dt, input, walls) {
         if (this.dashCooldown > 0) this.dashCooldown -= dt;
@@ -198,7 +198,7 @@ class Player {
             this.isDashing = true;
             this.dashTimer = 0.2;
             this.invulnTimer = 0.2;
-            this.dashCooldown = this.dashCooldownMax;
+            this.dashCooldown = Math.max(0.5, this.dashCooldownMax + this.baseDashCdMod);
             this.vx = Math.cos(this.aimAngle) * 800;
             this.vy = Math.sin(this.aimAngle) * 800;
             this.recoil = 1.0;
@@ -207,10 +207,12 @@ class Player {
         if (!this.isDashing) {
             this.vx *= Math.pow(this.friction, dt * 60);
             this.vy *= Math.pow(this.friction, dt * 60);
+            if(this.speedBuffTimer > 0) this.speedBuffTimer -= dt;
             const speed = Math.hypot(this.vx, this.vy);
-            if (speed > this.maxSpeed) {
-                this.vx = (this.vx / speed) * this.maxSpeed;
-                this.vy = (this.vy / speed) * this.maxSpeed;
+            let currentMax = this.maxSpeed + this.baseSpeedMod + (this.speedBuffTimer > 0 ? 100 : 0);
+            if (speed > currentMax) {
+                this.vx = (this.vx / speed) * currentMax;
+                this.vy = (this.vy / speed) * currentMax;
             }
         }
 
@@ -297,7 +299,7 @@ class Echo {
         this.color = 'rgba(173, 166, 185, 0.6)';
         this.noise = 0;
         this.isDashing = false;
-        this.invulnTimer = 0;
+        this.invulnTimer = 0; this.speedBuffTimer = 0; this.baseSpeedMod = 0; this.baseDashCdMod = 0;
     }
     update(dt, input, walls) {
         // Echo moves opposite to player
@@ -427,6 +429,19 @@ class Guard {
     }
 }
 
+class Pickup {
+    constructor(x, y, type) {
+        this.x = x; this.y = y; this.type = type; this.radius = 12; this.active = true;
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.fillStyle = this.type === 'speed' ? '#0ff' : (this.type === 'invuln' ? '#f0f' : '#ff0');
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.textBaseline='middle';
+        ctx.fillText(this.type === 'speed' ? 'S' : (this.type === 'invuln' ? 'I' : 'M'), this.x, this.y);
+    }
+}
+
 class Loot {
     constructor(x, y) { this.x = x; this.y = y; this.radius = 8; this.active = true; }
     draw(ctx) {
@@ -468,10 +483,43 @@ class Game {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
     }
+    generateDraftChoices() {
+        const pool = [
+            {id: 'speed', name: 'Swiftness', desc: '+20 Base Speed'},
+            {id: 'dash_cd', name: 'Agility', desc: '-0.5s Dash Cooldown'},
+            {id: 'combo_time', name: 'Momentum', desc: '+1.0s Combo Time'},
+            {id: 'loot_score', name: 'Greed', desc: '+50 Base Loot Score'},
+            {id: 'boss_dmg', name: 'Boss Slayer', desc: '+1 Boss Damage'},
+            {id: 'pickup_freq', name: 'Scavenger', desc: 'More frequent pickups'},
+            {id: 'shield', name: 'Shielding', desc: 'Start wave with 5s Invuln'},
+            {id: 'echo_rad', name: 'Ghostly Reach', desc: '+10 Echo Pickup Radius'}
+        ];
+        pool.sort(() => Math.random() - 0.5);
+        return pool.slice(0, 3);
+    }
+    applyUpgrade(id) {
+        if (id === 'speed') this.player.baseSpeedMod += 20;
+        if (id === 'dash_cd') this.player.baseDashCdMod -= 0.5;
+        if (id === 'combo_time') this.maxComboTimer += 1.0;
+        if (id === 'loot_score') this.baseLootScore += 50;
+        if (id === 'boss_dmg') this.bossDamageMod += 1;
+        if (id === 'pickup_freq') this.pickupSpawnRateMod += 2.0;
+        if (id === 'shield') this.player.invulnTimer = 5.0;
+        if (id === 'echo_rad') this.echoRadiusMod += 10;
+    }
     reset() {
         this.score = 0;
         this.wave = 1;
         this.activeBoss = null;
+        this.comboMultiplier = 1;
+        this.comboTimer = 0;
+        this.maxComboTimer = 3.0;
+        this.pickups = [];
+        this.pickupTimer = 10.0;
+        this.baseLootScore = 100;
+        this.bossDamageMod = 0;
+        this.pickupSpawnRateMod = 0;
+        this.echoRadiusMod = 0;
         this.hazards = [];
         this.player = new Player(100, 100);
         this.world = new World();
@@ -535,6 +583,26 @@ class Game {
             this.player.update(dt, this.input, this.walls);
             if (this.player.echo) this.player.echo.update(dt, this.input, this.walls);
 
+            if (this.comboTimer > 0) {
+                this.comboTimer -= dt;
+                if (this.comboTimer <= 0) this.comboMultiplier = 1;
+            }
+            this.pickupTimer -= dt;
+            if (this.pickupTimer <= 0) {
+                this.pickupTimer = Math.max(3.0, 15.0 - this.pickupSpawnRateMod);
+                const types = ['speed', 'invuln', 'multiplier'];
+                this.pickups.push(new Pickup(50 + Math.random()*(window.innerWidth-100), 50 + Math.random()*(window.innerHeight-100), types[Math.floor(Math.random()*types.length)]));
+            }
+            for (let i = this.pickups.length - 1; i >= 0; i--) {
+                let p = this.pickups[i];
+                if (Math.hypot(this.player.x - p.x, this.player.y - p.y) < this.player.radius + p.radius) {
+                    if (p.type === 'speed') this.player.speedBuffTimer = 5.0;
+                    if (p.type === 'invuln') this.player.invulnTimer = 3.0;
+                    if (p.type === 'multiplier') { this.comboMultiplier++; this.comboTimer = this.maxComboTimer; }
+                    this.pickups.splice(i, 1);
+                    this.sound.playLoot();
+                }
+            }
             for (let i = this.hazards.length - 1; i >= 0; i--) {
                 this.hazards[i].life -= dt;
                 if (this.hazards[i].life <= 0) {
@@ -591,37 +659,64 @@ class Game {
                 }
             }
 
+            for (let p of this.pickups) p.draw(this.ctx);
             for (let l of this.loot) {
                 if (l.active) {
                     if (Math.hypot(this.player.x - l.x, this.player.y - l.y) < this.player.radius + l.radius) {
                         l.active = false;
-                        this.score += 100;
+                        this.score += this.baseLootScore * this.comboMultiplier;
+                        this.comboMultiplier++;
+                        this.comboTimer = this.maxComboTimer;
                         this.sound.playLoot();
                         if (this.activeBoss && !this.activeBoss.isSpawning && !this.activeBoss.isTransitioning) {
-                            this.activeBoss.hp -= 1;
+                            this.activeBoss.hp -= (1 + this.bossDamageMod);
                             if (this.activeBoss.hp > 0) {
                                 l.x = 50 + Math.random() * (window.innerWidth - 100);
                                 l.y = 50 + Math.random() * (window.innerHeight - 100);
                                 l.active = true;
                             } else {
-                                this.score += 5000;
+                                this.score += 5000 * this.comboMultiplier;
+                                this.comboMultiplier += 5;
+                                this.comboTimer = this.maxComboTimer;
                                 this.activeBoss = null;
+        this.comboMultiplier = 1;
+        this.comboTimer = 0;
+        this.maxComboTimer = 3.0;
+        this.pickups = [];
+        this.pickupTimer = 10.0;
+        this.baseLootScore = 100;
+        this.bossDamageMod = 0;
+        this.pickupSpawnRateMod = 0;
+        this.echoRadiusMod = 0;
                             }
                         }
                     }
                     if (this.player.echo && Math.hypot(this.player.echo.x - l.x, this.player.echo.y - l.y) < this.player.echo.radius + l.radius) {
                         l.active = false;
-                        this.score += 100;
+                        this.score += this.baseLootScore * this.comboMultiplier;
+                        this.comboMultiplier++;
+                        this.comboTimer = this.maxComboTimer;
                         this.sound.playLoot();
                         if (this.activeBoss && !this.activeBoss.isSpawning && !this.activeBoss.isTransitioning) {
-                            this.activeBoss.hp -= 1;
+                            this.activeBoss.hp -= (1 + this.bossDamageMod);
                             if (this.activeBoss.hp > 0) {
                                 l.x = 50 + Math.random() * (window.innerWidth - 100);
                                 l.y = 50 + Math.random() * (window.innerHeight - 100);
                                 l.active = true;
                             } else {
-                                this.score += 5000;
+                                this.score += 5000 * this.comboMultiplier;
+                                this.comboMultiplier += 5;
+                                this.comboTimer = this.maxComboTimer;
                                 this.activeBoss = null;
+        this.comboMultiplier = 1;
+        this.comboTimer = 0;
+        this.maxComboTimer = 3.0;
+        this.pickups = [];
+        this.pickupTimer = 10.0;
+        this.baseLootScore = 100;
+        this.bossDamageMod = 0;
+        this.pickupSpawnRateMod = 0;
+        this.echoRadiusMod = 0;
                             }
                         }
                     }
@@ -629,6 +724,11 @@ class Game {
             }
 
             if (this.loot.every(l => !l.active)) {
+                this.state = 'UPGRADE_DRAFT';
+                this.draftChoices = this.generateDraftChoices();
+                // We keep the old brace logic balanced.
+                // The actual wave setup is handled in UPGRADE_DRAFT state.
+            } else if (false) { // Dummy block to consume the rest of old setup block if needed
                 this.wave++;
                 if (this.wave % 5 === 0) {
                     this.guards = [];
@@ -654,6 +754,44 @@ class Game {
                 }
             }
 
+                } else if (this.state === 'UPGRADE_DRAFT') {
+            if (this.input.consumeTap()) {
+                let w = window.innerWidth, h = window.innerHeight;
+                let cardW = 200, cardH = 300, spacing = 50;
+                let startX = w/2 - (cardW*3 + spacing*2)/2;
+                let my = h/2;
+                for (let i=0; i<3; i++) {
+                    let cx = startX + i*(cardW+spacing) + cardW/2;
+                    let cy = my;
+                    if (Math.abs(this.input.touch.x - cx) < cardW/2 && Math.abs(this.input.touch.y - cy) < cardH/2) {
+                        this.applyUpgrade(this.draftChoices[i].id);
+                        this.wave++;
+                        if (this.wave % 5 === 0) {
+                            this.guards = [];
+                            this.loot = [new Loot(window.innerWidth/2, window.innerHeight/2)];
+                            this.activeBoss = this.wave % 10 === 0 ? new MirrorWraith(window.innerWidth/2, 100) : new SpectralWarden(window.innerWidth/2, 100);
+                        } else {
+                            this.score += 500;
+                            if (this.loot.length === 1) {
+                                this.loot = [new Loot(150, 400), new Loot(500, 150), new Loot(700, 300)];
+                            }
+                            this.loot.forEach(l => {
+                                l.x = 50 + Math.random() * (window.innerWidth - 100);
+                                l.y = 50 + Math.random() * (window.innerHeight - 100);
+                                l.active = true;
+                            });
+                            const types = [Swarmer, Sniper, Bruiser, Spawner, HazardEnemy];
+                            const Type = types[Math.floor(Math.random()*types.length)];
+                            this.guards.push(new Type(
+                                window.innerWidth/2, window.innerHeight/2,
+                                [{x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight},
+                                 {x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight}]
+                            ));
+                        }
+                        this.state = 'PLAYING';
+                    }
+                }
+            }
         } else if (this.state === 'PAUSED') {
             if (this.input.keys['Escape'] || this.input.keys['KeyP'] || this.input.consumeTap()) {
                 this.input.keys['Escape'] = false;
@@ -667,6 +805,36 @@ class Game {
         }
     }
     draw() {
+        if (this.state === 'UPGRADE_DRAFT') {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '40px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('Choose Upgrade', this.canvas.width/2, 100);
+
+            let cardW = 200, cardH = 300, spacing = 50;
+            let startX = this.canvas.width/2 - (cardW*3 + spacing*2)/2;
+            let my = this.canvas.height/2;
+
+            for (let i=0; i<3; i++) {
+                let choice = this.draftChoices[i];
+                let cx = startX + i*(cardW+spacing);
+                let cy = my - cardH/2;
+                this.ctx.fillStyle = '#334';
+                this.ctx.fillRect(cx, cy, cardW, cardH);
+                this.ctx.strokeStyle = '#ada6b9';
+                this.ctx.strokeRect(cx, cy, cardW, cardH);
+
+                this.ctx.fillStyle = '#ff0';
+                this.ctx.font = '20px monospace';
+                this.ctx.fillText(choice.name, cx + cardW/2, cy + 50);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '14px monospace';
+                this.ctx.fillText(choice.desc, cx + cardW/2, cy + 150);
+            }
+        }
+
         if (this.state === 'TITLE' || !this.world) {
             this.ctx.fillStyle = '#1a1a24';
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -693,6 +861,7 @@ class Game {
                 this.ctx.fillRect(w.x, w.y, w.w, w.h);
             }
 
+            for (let p of this.pickups) p.draw(this.ctx);
             for (let l of this.loot) {
                 l.draw(this.ctx);
                 if (l.active && this.activeBoss) {
@@ -740,6 +909,11 @@ class Game {
             this.ctx.textAlign = 'left';
             this.ctx.fillText(`Score: ${this.score}`, 20, 40);
             this.ctx.fillText(`Wave: ${this.wave}`, 20, 90);
+            this.ctx.fillText(`Combo: x${this.comboMultiplier}`, 20, 130);
+            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            this.ctx.fillRect(20, 140, 100, 10);
+            this.ctx.fillStyle = '#ff0';
+            this.ctx.fillRect(20, 140, 100 * (this.comboTimer / this.maxComboTimer), 10);
 
             let dashStatus = this.player.dashCooldown <= 0 ? 'READY' : this.player.dashCooldown.toFixed(1) + 's';
             this.ctx.fillStyle = this.player.dashCooldown <= 0 ? '#0ff' : '#888';
