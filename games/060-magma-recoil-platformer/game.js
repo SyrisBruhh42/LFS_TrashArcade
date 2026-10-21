@@ -96,6 +96,7 @@ class Player {
     this.recoilForce = 500;
     this.grounded = false;
     this.cooldown = 0;
+    this.upgrades = { damage: 1, multishot: 0, pierce: 0, recoil: 1, fireRate: 1, comboDuration: 1, magnet: 0, dashCooldown: 2 };
 
     // Phase 2: Overdrive Dash
     this.dashCooldown = 0;
@@ -146,7 +147,7 @@ class Player {
             this.vx = dx * this.dashSpeed;
             this.vy = dy * this.dashSpeed;
             this.dashActive = this.dashDuration;
-            this.dashCooldown = 3.0;
+            this.dashCooldown = this.upgrades.dashCooldown;
             this.invulnTime = 0.3; // Invulnerable during and slightly after dash
             if (window.game) window.game.audio.playShoot(); // Reuse shoot sound for dash
         }
@@ -300,11 +301,13 @@ class MagmaRenderer {
 
 
 class Bullet {
-  constructor(x, y, dx, dy) {
+  constructor(x, y, dx, dy, damage=1, pierce=0) {
     this.x = x; this.y = y;
     this.vx = dx * 800; this.vy = dy * 800;
     this.radius = 4;
     this.life = 2;
+    this.damage = damage;
+    this.pierce = pierce;
   }
   update(dt) {
     this.x += this.vx * dt;
@@ -399,6 +402,9 @@ class Game {
     this.particles = [];
     this.platforms = [];
     this.cameraY = 0;
+    this.comboManager = new ComboManager();
+    this.pickupManager = new PickupManager();
+    this.upgradeDraft = new UpgradeDraft();
         this.ui = new UIOverlay();
     this.trailManager = new TrailManager();
     this.magmaRenderer = new MagmaRenderer();
@@ -474,6 +480,10 @@ class Game {
        this.reset();
        return;
     }
+    if (this.state === 'UPGRADE_DRAFT') {
+        this.upgradeDraft.handlePointerDown(e, this, width, height);
+        return;
+    }
     if (this.state === 'PAUSED') {
        const rect = canvas.getBoundingClientRect();
        const x = e.clientX - rect.left;
@@ -497,17 +507,25 @@ class Game {
        if (len > 0) { dx /= len; dy /= len; }
        else { dx = 0; dy = -1; }
 
-       this.bullets.push(new Bullet(this.player.x, this.player.y, dx, dy));
-       this.player.vx -= dx * this.player.recoilForce;
-       this.player.vy -= dy * this.player.recoilForce;
-       this.player.cooldown = 0.2;
+       for (let i = 0; i <= this.player.upgrades.multishot; i++) {
+           let spread = (i - this.player.upgrades.multishot / 2) * 0.1;
+           let vx = dx * Math.cos(spread) - dy * Math.sin(spread);
+           let vy = dx * Math.sin(spread) + dy * Math.cos(spread);
+           this.bullets.push(new Bullet(this.player.x, this.player.y, vx, vy, this.player.upgrades.damage, this.player.upgrades.pierce));
+       }
+       this.player.vx -= dx * this.player.recoilForce * this.player.upgrades.recoil;
+       this.player.vy -= dy * this.player.recoilForce * this.player.upgrades.recoil;
+       this.player.cooldown = 0.2 * this.player.upgrades.fireRate;
        this.audio.playShoot();
 
        for(let i=0; i<5; i++) this.particles.push(new Particle(this.player.x, this.player.y, '#e09ff1'));
     }
   }
   update(dt) {
+    if (this.state === 'UPGRADE_DRAFT') return;
     if (this.state !== 'PLAYING') return;
+    this.comboManager.update(dt);
+    this.pickupManager.update(dt, this.player, this);
 
     this.player.update(dt, this.input, this.platforms);
 
@@ -582,14 +600,16 @@ class Game {
             let dx = b.x - e.x; let dy = b.y - e.y;
             if (Math.sqrt(dx*dx + dy*dy) < b.radius + e.radius) {
                 if (e.shield > 0) {
-                    e.shield--;
-                    b.life = 0;
+                    e.shield -= b.damage;
+                    if (b.pierce > 0) b.pierce--; else b.life = 0;
                     this.audio.playExplosion();
                     for(let i=0; i<5; i++) this.particles.push(new Particle(e.x, e.y, '#fff'));
                 } else {
                     e.alive = false;
-                    b.life = 0;
-                    this.score += 100;
+                    if (b.pierce > 0) b.pierce--; else b.life = 0;
+                    this.comboManager.addCombo(this.player.upgrades.comboDuration);
+                    this.score += 100 * this.comboManager.getMultiplier();
+                    this.pickupManager.spawn(e.x, e.y);
                     this.audio.playExplosion();
                     for(let i=0; i<10; i++) this.particles.push(new Particle(e.x, e.y, '#f00'));
                     if (e instanceof SplitterEnemy) {
@@ -603,14 +623,21 @@ class Game {
             if (!boss.alive || boss.state !== 'ACTIVE') continue;
             let dx = b.x - boss.x; let dy = b.y - boss.y;
             if (Math.sqrt(dx*dx + dy*dy) < b.radius + boss.radius) {
-                boss.hp -= 50;
-                b.life = 0;
+                boss.hp -= 50 * b.damage;
+                if (b.pierce > 0) b.pierce--; else b.life = 0;
                 this.audio.playExplosion();
                 for(let i=0; i<5; i++) this.particles.push(new Particle(boss.x, boss.y, '#fff'));
                 if (boss.hp <= 0) {
                     boss.alive = false;
-                    this.score += 1000;
+                    this.score += 1000 * this.comboManager.getMultiplier();
+                    this.comboManager.addCombo(this.player.upgrades.comboDuration);
                     for(let i=0; i<30; i++) this.particles.push(new Particle(boss.x, boss.y, '#ff0'));
+
+                    let allBossesDead = this.bosses.every(b => !b.alive);
+                    if (allBossesDead) {
+                        this.state = 'UPGRADE_DRAFT';
+                        this.upgradeDraft.generateOptions();
+                    }
                 }
             }
         }
@@ -680,6 +707,7 @@ class Game {
     for (let e of this.enemies) e.draw(ctx);
     for (let b of this.bosses) b.draw(ctx);
     for (let p of this.particles) p.draw(ctx);
+    this.pickupManager.draw(ctx);
     if (this.trailManager) this.trailManager.draw(ctx);
     for (let b of this.bullets) b.draw(ctx);
     for (let b of this.enemyBullets) b.draw(ctx);
@@ -739,6 +767,11 @@ class Game {
        ctx.fillText('Click to restart', width/2, height/2 + 60);
     } else {
        ctx.fillText('Score: ' + this.score, 20, 30);
+       this.comboManager.draw(ctx, width);
+    }
+
+    if (this.state === 'UPGRADE_DRAFT') {
+        this.upgradeDraft.draw(ctx, width, height);
     }
   }
   loop(t) {
