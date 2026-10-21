@@ -8,9 +8,61 @@ let width, height;
 
 class SaveManager {
   constructor() {
-    this.data = { highScore: 0, totalGamesPlayed: 0 };
+    this.data = {
+        highScore: 0,
+        totalGamesPlayed: 0,
+        settings: {
+            masterVolume: 1,
+            musicVolume: 1,
+            sfxVolume: 1,
+            screenShake: 1,
+            particleDensity: 1,
+            highContrast: false,
+            showFPS: false,
+            touchMode: 'auto', // auto, always, off
+            swapControls: false
+        },
+        milestones: {
+            firstBoss: false,
+            score10k: false,
+            score50k: false,
+            combo10x: false,
+            combo25x: false,
+            play10Games: false
+        }
+    };
     this.load();
   }
+
+  exportSave() {
+      return btoa(JSON.stringify(this.data));
+  }
+
+  importSave(base64Str) {
+      try {
+          const decoded = atob(base64Str);
+          const parsed = JSON.parse(decoded);
+          Object.assign(this.data, parsed);
+          this.save();
+          return true;
+      } catch(e) {
+          return false;
+      }
+  }
+
+  resetSave() {
+      this.data = {
+        highScore: 0,
+        totalGamesPlayed: 0,
+        settings: this.data.settings,
+        milestones: {
+            firstBoss: false, score10k: false, score50k: false,
+            combo10x: false, combo25x: false, play10Games: false
+        }
+      };
+      this.save();
+  }
+
   load() {
     try {
       const stored = localStorage.getItem(SAVE_KEY);
@@ -59,6 +111,13 @@ class SoundEngine {
     this.musicGain.connect(this.master);
     this.sfxGain.connect(this.master);
     this.master.connect(this.ctx.destination);
+
+    if (window.game && window.game.save) {
+        let s = window.game.save.data.settings;
+        this.master.gain.value = 0.5 * s.masterVolume;
+        this.musicGain.gain.value = 0.4 * s.musicVolume;
+        this.sfxGain.gain.value = 0.6 * s.sfxVolume;
+    }
 
     this.startMusic();
   }
@@ -575,6 +634,10 @@ class Platform {
 class Game {
   constructor() {
     this.state = 'TITLE';
+    this.confirmReset = false;
+    this.fps = 0;
+    this.frames = 0;
+    this.lastFpsTime = 0;
     this.save = new SaveManager();
     this.audio = new SoundEngine();
     this.input = new InputManager();
@@ -656,16 +719,83 @@ class Game {
   }
   handlePointerDown(e) {
     this.audio.init();
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
     if (this.state === 'TITLE') {
-       const rect = canvas.getBoundingClientRect();
-       const x = e.clientX - rect.left;
-       const y = e.clientY - rect.top;
        if (y > 20 && y < 60 && x > 20 && x < 200) {
           window.location.href = '../../index.html';
           return;
        }
+       if (y > 20 && y < 60 && x > width - 150) {
+          this.state = 'SETTINGS';
+          this.confirmReset = false;
+          return;
+       }
        this.state = 'PLAYING';
        this.reset();
+       return;
+    }
+    if (this.state === 'SETTINGS') {
+       if (y > 20 && y < 60 && x > 20 && x < 200) {
+          this.state = 'TITLE';
+          this.save.save();
+          return;
+       }
+
+       let s = this.save.data.settings;
+       let cy = 100;
+       let cx = width/2 - 150;
+
+       // Fixed hitboxes handling the +20 offset for buttons 9, 10, 11
+       const checkClick = (idx) => {
+           let targetY = cy + (idx * 40) + (idx >= 9 ? 20 : 0);
+           return y > targetY - 20 && y < targetY + 10;
+       };
+
+       if (checkClick(0)) { s.masterVolume = (s.masterVolume + 0.25 > 1) ? 0 : s.masterVolume + 0.25; this.audio.master.gain.value = 0.5 * s.masterVolume; }
+       else if (checkClick(1)) { s.musicVolume = (s.musicVolume + 0.25 > 1) ? 0 : s.musicVolume + 0.25; this.audio.musicGain.gain.value = 0.4 * s.musicVolume; }
+       else if (checkClick(2)) { s.sfxVolume = (s.sfxVolume + 0.25 > 1) ? 0 : s.sfxVolume + 0.25; this.audio.sfxGain.gain.value = 0.6 * s.sfxVolume; }
+       else if (checkClick(3)) {
+           if (s.screenShake === 1) s.screenShake = 0.5;
+           else if (s.screenShake === 0.5) s.screenShake = 0;
+           else s.screenShake = 1;
+           // Compatibility with vfx.js which expects options
+           if (!this.save.data.options) this.save.data.options = {};
+           this.save.data.options.screenShake = s.screenShake === 1 ? '100%' : (s.screenShake === 0.5 ? '50%' : 'Off');
+       }
+       else if (checkClick(4)) { s.particleDensity = s.particleDensity === 1 ? 0.25 : 1; }
+       else if (checkClick(5)) { s.highContrast = !s.highContrast; }
+       else if (checkClick(6)) { s.showFPS = !s.showFPS; }
+       else if (checkClick(7)) {
+           if (s.touchMode === 'auto') s.touchMode = 'always';
+           else if (s.touchMode === 'always') s.touchMode = 'off';
+           else s.touchMode = 'auto';
+       }
+       else if (checkClick(8)) { s.swapControls = !s.swapControls; }
+       else if (checkClick(9)) { // Reset
+           if (this.confirmReset) {
+               this.save.resetSave();
+               this.confirmReset = false;
+               this.state = 'TITLE';
+           } else {
+               this.confirmReset = true;
+           }
+       }
+       else if (checkClick(10)) { // Export
+           let b64 = this.save.exportSave();
+           prompt("Copy your save data:", b64);
+       }
+       else if (checkClick(11)) { // Import
+           let b64 = prompt("Paste your save data:");
+           if (b64) {
+               if (this.save.importSave(b64)) alert("Save imported!");
+               else alert("Invalid save data.");
+           }
+       }
+
+       this.save.save();
        return;
     }
     if (this.state === 'UPGRADE_DRAFT') {
@@ -685,6 +815,10 @@ class Game {
     }
     if (this.state === 'GAME_OVER') {
        this.state = 'TITLE';
+    this.confirmReset = false;
+    this.fps = 0;
+    this.frames = 0;
+    this.lastFpsTime = 0;
        return;
     }
 
@@ -710,7 +844,8 @@ class Game {
            this.vfxManager.emitParticles(this.player.x, this.player.y, '#e09ff1', 10, 150, -dx, -dy, Math.PI/4);
            this.vfxManager.addScreenShake(5, 0.1, -dx, -dy);
        } else {
-           for(let i=0; i<5; i++) this.particles.push(new Particle(this.player.x, this.player.y, '#e09ff1'));
+           let cnt = Math.floor(5 * this.save.data.settings.particleDensity);
+           for(let i=0; i<cnt; i++) this.particles.push(new Particle(this.player.x, this.player.y, '#e09ff1'));
        }
     }
   }
@@ -815,6 +950,8 @@ class Game {
                     if (b.pierce > 0) b.pierce--; else b.life = 0;
                     this.comboManager.addCombo(this.player.upgrades.comboDuration);
                     this.score += 100 * this.comboManager.getMultiplier();
+                    if (this.score >= 10000) { this.save.data.milestones.score10k = true; }
+                    if (this.score >= 50000) { this.save.data.milestones.score50k = true; }
                     this.pickupManager.spawn(e.x, e.y);
                     this.audio.playSFX('explosion', 1.0 + Math.random() * 0.5);
                     for(let i=0; i<10; i++) this.particles.push(new Particle(e.x, e.y, '#f00'));
@@ -838,8 +975,14 @@ class Game {
                 if (boss.hp <= 0) {
                     boss.alive = false;
                     this.score += 1000 * this.comboManager.getMultiplier();
+                    if (this.score >= 10000) { this.save.data.milestones.score10k = true; }
+                    if (this.score >= 50000) { this.save.data.milestones.score50k = true; }
                     this.comboManager.addCombo(this.player.upgrades.comboDuration);
-                    for(let i=0; i<30; i++) this.particles.push(new Particle(boss.x, boss.y, '#ff0'));
+                    let bcnt = Math.floor(30 * this.save.data.settings.particleDensity);
+                    for(let i=0; i<bcnt; i++) this.particles.push(new Particle(boss.x, boss.y, '#ff0'));
+
+                    this.save.data.milestones.firstBoss = true;
+                    this.save.save();
 
                     let allBossesDead = this.bosses.every(b => !b.alive);
                     if (allBossesDead) {
@@ -863,7 +1006,9 @@ class Game {
                 this.state = 'GAME_OVER';
                 if (this.audio) this.audio.playSFX('explosion', 0.5);
                 if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
-                this.save.data.totalGamesPlayed++; this.save.save();
+                this.save.data.totalGamesPlayed++;
+            if (this.save.data.totalGamesPlayed >= 10) this.save.data.milestones.play10Games = true;
+            this.save.save();
             }
         }
     }
@@ -877,6 +1022,8 @@ class Game {
                 // Dash kills enemy
                 e.alive = false;
                 this.score += 200;
+                    if (this.score >= 10000) { this.save.data.milestones.score10k = true; }
+                    if (this.score >= 50000) { this.save.data.milestones.score50k = true; }
                 this.audio.playSFX('explosion', 1.0 + Math.random() * 0.5);
                 for(let i=0; i<15; i++) this.particles.push(new Particle(e.x, e.y, '#0ff'));
             } else if (this.player.invulnTime <= 0) {
@@ -888,6 +1035,7 @@ class Game {
                     this.save.save();
                 }
                 this.save.data.totalGamesPlayed++;
+                if (this.save.data.totalGamesPlayed >= 10) this.save.data.milestones.play10Games = true;
                 this.save.save();
             }
         }
@@ -899,15 +1047,23 @@ class Game {
             this.state = 'GAME_OVER';
                 if (this.audio) this.audio.playSFX('explosion', 0.5);
             if (this.score > this.save.data.highScore) { this.save.data.highScore = this.score; this.save.save(); }
-            this.save.data.totalGamesPlayed++; this.save.save();
+            this.save.data.totalGamesPlayed++;
+            if (this.save.data.totalGamesPlayed >= 10) this.save.data.milestones.play10Games = true;
+            this.save.save();
         }
     }
   }
   draw(ctx) {
-    if (this.bg) this.bg.draw(ctx, width, height, this.cameraY);
-    else {
-        ctx.fillStyle = '#201010';
-        ctx.fillRect(0, 0, width, height);
+    if (this.save.data.settings.highContrast) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0,0,width,height);
+    } else {
+        if (this.bg) {
+            this.bg.draw(ctx, width, height, this.cameraY);
+        } else {
+            ctx.fillStyle = '#201010';
+            ctx.fillRect(0, 0, width, height);
+        }
     }
 
     ctx.save();
@@ -956,6 +1112,13 @@ class Game {
        ctx.fillText('High Score: ' + this.save.data.highScore, width/2, height/2 + 60);
        ctx.textAlign = 'left';
        ctx.fillText('< Back to Arcade', 20, 40);
+       ctx.textAlign = 'right';
+       ctx.fillText('Settings >', width - 20, 40);
+
+       this.drawMilestones(ctx, width, height, 100);
+
+    } else if (this.state === 'SETTINGS') {
+       this.drawSettings(ctx, width, height);
     } else if (this.state === 'PAUSED') {
        ctx.fillStyle = 'rgba(0,0,0,0.5)';
        ctx.fillRect(0,0,width,height);
@@ -976,6 +1139,7 @@ class Game {
        ctx.font = '20px sans-serif';
        ctx.fillText('Score: ' + this.score, width/2, height/2 + 20);
        ctx.fillText('Click to restart', width/2, height/2 + 60);
+       this.drawMilestones(ctx, width, height, height/2 + 100);
     } else {
        ctx.fillText('Score: ' + this.score, 20, 30);
        this.comboManager.draw(ctx, width);
@@ -984,10 +1148,104 @@ class Game {
     if (this.state === 'UPGRADE_DRAFT') {
         this.upgradeDraft.draw(ctx, width, height);
     }
+
+    if (this.save.data.settings.showFPS) {
+        ctx.fillStyle = '#0f0';
+        ctx.textAlign = 'right';
+        ctx.font = '16px monospace';
+        ctx.fillText(`FPS: ${this.fps}`, width - 10, 20);
+    }
+  }
+
+  drawMilestones(ctx, width, height, startY) {
+      let m = this.save.data.milestones;
+      ctx.textAlign = 'center';
+      ctx.font = '14px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('Milestones:', width/2, startY);
+
+      const badges = [
+          { key: 'firstBoss', label: 'Boss Slayer' },
+          { key: 'score10k', label: '10k Points' },
+          { key: 'score50k', label: '50k Points' },
+          { key: 'combo10x', label: '10x Combo' },
+          { key: 'combo25x', label: '25x Combo' },
+          { key: 'play10Games', label: 'Veteran' },
+      ];
+
+      let x = width/2 - 125;
+      let y = startY + 25;
+
+      badges.forEach((b, i) => {
+          ctx.fillStyle = m[b.key] ? '#fd0' : '#444';
+          ctx.beginPath();
+          ctx.arc(x, y, 15, 0, Math.PI*2);
+          ctx.fill();
+          if (m[b.key]) {
+              ctx.fillStyle = '#000';
+              ctx.fillText('★', x, y+5);
+          }
+          ctx.fillStyle = m[b.key] ? '#fff' : '#888';
+          ctx.fillText(b.label, x, y + 30);
+          x += 50;
+      });
+  }
+
+  drawSettings(ctx, width, height) {
+      ctx.fillStyle = 'rgba(0,0,0,0.9)';
+      ctx.fillRect(0,0,width,height);
+      ctx.fillStyle = '#e09ff1';
+      ctx.textAlign = 'center';
+      ctx.font = '30px sans-serif';
+      ctx.fillText('Settings', width/2, 50);
+
+      ctx.textAlign = 'left';
+      ctx.fillText('< Back', 20, 40);
+
+      ctx.font = '20px sans-serif';
+      let s = this.save.data.settings;
+      let cy = 100;
+      let cx = width/2 - 150;
+
+      const drawOption = (label, valStr) => {
+          ctx.fillStyle = '#fff';
+          ctx.fillText(label, cx, cy);
+          ctx.fillStyle = '#0ff';
+          ctx.fillText(valStr, cx + 200, cy);
+          cy += 40;
+      }
+
+      drawOption('Master Volume', Math.round(s.masterVolume*100) + '%');
+      drawOption('Music Volume', Math.round(s.musicVolume*100) + '%');
+      drawOption('SFX Volume', Math.round(s.sfxVolume*100) + '%');
+      drawOption('Screen Shake', s.screenShake === 1 ? '100%' : (s.screenShake === 0.5 ? '50%' : 'Off'));
+      drawOption('Particle Density', s.particleDensity === 1 ? 'High' : 'Low');
+      drawOption('High Contrast', s.highContrast ? 'On' : 'Off');
+      drawOption('Show FPS', s.showFPS ? 'On' : 'Off');
+      drawOption('Touch Controls', s.touchMode);
+      drawOption('Swap Controls', s.swapControls ? 'Left-handed' : 'Right-handed');
+
+      cy += 20;
+      ctx.fillStyle = '#f00';
+      ctx.fillText(this.confirmReset ? 'Click again to confirm Reset!' : 'Reset Save Data', cx, cy);
+
+      cy += 40;
+      ctx.fillStyle = '#0f0';
+      ctx.fillText('Export Save', cx, cy);
+      cy += 40;
+      ctx.fillText('Import Save', cx, cy);
   }
   loop(t) {
     let dt = Math.min((t - this.lastTime) / 1000, 0.1);
     this.lastTime = t;
+
+    this.frames++;
+    if (t - this.lastFpsTime > 1000) {
+        this.fps = this.frames;
+        this.frames = 0;
+        this.lastFpsTime = t;
+    }
+
     this.update(dt);
          if (this.ui) this.ui.update(dt, this);
     this.draw(ctx);
@@ -1025,6 +1283,33 @@ class UIOverlay {
     ctx.fillText('Height: ' + Math.floor(-game.player.y), width - this.padding, 30);
     ctx.fillText('Cooldown: ' + Math.max(0, Math.ceil(game.player.cooldown * 100)) + '%', width - this.padding, 50);
     ctx.fillText('Grounded: ' + (game.player.grounded ? 'Yes' : 'No'), width - this.padding, 70);
+
+    let hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    let s = game.save.data.settings;
+    let showTouch = s.touchMode === 'always' || (s.touchMode === 'auto' && hasTouch);
+    if (showTouch) {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+
+        let joyX = s.swapControls ? width - 80 : 80;
+        let joyY = height - 80;
+        ctx.beginPath();
+        ctx.arc(joyX, joyY, 50, 0, Math.PI*2);
+        ctx.fill();
+
+        let fireX = s.swapControls ? 80 : width - 80;
+        let fireY = height - 80;
+        ctx.beginPath();
+        ctx.arc(fireX, fireY, 50, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px sans-serif';
+        ctx.fillText('AIM', joyX, joyY + 5);
+        ctx.fillText('FIRE', fireX, fireY + 5);
+
+        ctx.textAlign = 'right';
+    }
 
     let dashCdStr = game.player.dashCooldown > 0 ? game.player.dashCooldown.toFixed(1) : 'READY';
     ctx.fillStyle = game.player.dashCooldown <= 0 ? '#0ff' : '#aaa';

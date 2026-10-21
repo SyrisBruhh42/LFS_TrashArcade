@@ -1,6 +1,13 @@
 class ComboManager {
     constructor() { this.combo = 0; this.comboTimer = 0; this.maxComboTimer = 5; }
-    addCombo(durationMultiplier=1) { this.combo++; this.comboTimer = this.maxComboTimer * durationMultiplier; }
+    addCombo(durationMultiplier=1) {
+        this.combo++;
+        this.comboTimer = this.maxComboTimer * durationMultiplier;
+        if (window.game && window.game.save) {
+            if (this.combo >= 10) { window.game.save.data.milestones.combo10x = true; }
+            if (this.combo >= 25) { window.game.save.data.milestones.combo25x = true; }
+        }
+    }
     getMultiplier() { if (this.combo < 5) return 1; if (this.combo < 15) return 2; if (this.combo < 30) return 3; return 4; }
     update(dt) {
         if (this.comboTimer > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) { this.combo = 0; this.comboTimer = 0; } }
