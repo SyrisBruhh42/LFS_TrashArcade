@@ -743,7 +743,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Desktop: WASD/Arrows to aim, Space to launch. Touch: Drag to aim, release to launch.",
     "createdAt": "2023-10-24",
     "accentColor": "#70e2f9",
-    "phase": "4",
+    "phase": "5",
     "path": "./games/057-abyssal-ricochet/index.html"
   },
   {
