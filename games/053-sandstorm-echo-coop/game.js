@@ -1113,6 +1113,35 @@ class GameEngine {
         this.collectibles = [];
         this.hazards = [];
         this.crates = [];
+        this.currentBoss = null;
+
+        if (this.wave > 0 && this.wave % 5 === 0) {
+            // Boss Wave
+            const bossX = this.width / 2;
+            const bossY = -100;
+            if (this.wave % 10 === 0) {
+                this.currentBoss = new MirageSerpent(bossX, bossY, this.player);
+            } else {
+                this.currentBoss = new SandstormDjinn(bossX, bossY, this.player);
+            }
+            // Spawn some crates for cover
+            for (let i=0; i<5; i++) {
+                const w = 40;
+                const h = 40;
+                const x = Math.random() * (this.width - w);
+                const y = Math.random() * (this.height - h);
+                if (Math.abs(x - this.player.x) > 100 && Math.abs(y - this.player.y) > 100) {
+                    this.crates.push(new DestructibleCrate(x, y, w, h));
+                }
+            }
+            if (this.player.history.length > 0) {
+                this.ghosts.push(new Ghost(this.player.history, 5.0));
+                this.sound.playGhostSpawn();
+            }
+            this.player.history = [];
+            this.player.time = 0;
+            return; // Don't spawn normal stuff
+        }
 
         // Spawn Quicksand
         for (let i=0; i<2; i++) {
@@ -1235,6 +1264,40 @@ class GameEngine {
         }
 
 
+        if (this.currentBoss) {
+            this.currentBoss.update(dt);
+            if (this.currentBoss.active && this.currentBoss.collides(this.player)) {
+                if (this.player.isDashing) {
+                    if (this.currentBoss.hitTimer <= 0) {
+                        this.currentBoss.hp -= 10; // Dash damage
+                        this.currentBoss.hitTimer = 0.2;
+                        this.sound.playHit();
+                        this.player.triggerRecoil();
+                        this.vfx.spawnExplosion(this.currentBoss.x, this.currentBoss.y, 20, '#ff0000');
+                    }
+                } else {
+                    this.vfx.spawnPlayerHit(this.player.x, this.player.y);
+                    this.gameOver();
+                    return;
+                }
+            }
+
+            // Ghost body-blocking projectile logic is handled if we let projectiles hit ghosts
+            // Wait, we need to make sure projectiles that hit player/ghost are destroyed
+
+            if (this.currentBoss.hp <= 0) {
+                this.score += 1000;
+                this.sound.playEcho(); // Boss death
+                this.vfx.spawnExplosion(this.currentBoss.x, this.currentBoss.y, 100, '#ffaaaa');
+                this.currentBoss = null;
+                // Move to next wave
+                this.wave++;
+                this.beatInterval = Math.max(0.3, this.beatInterval - 0.05);
+                this.generateLevel();
+                return; // Early return to avoid issues
+            }
+        }
+
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const p = this.projectiles[i];
             p.update(dt);
@@ -1242,6 +1305,18 @@ class GameEngine {
                 this.projectiles.splice(i, 1);
                 continue;
             }
+
+            let blocked = false;
+            for (const ghost of this.ghosts) {
+                if (p.collidesEntity(ghost)) {
+                    blocked = true;
+                    this.vfx.spawnExplosion(p.x, p.y, 5, p.color);
+                    this.projectiles.splice(i, 1);
+                    break;
+                }
+            }
+            if (blocked) continue;
+
             if (p.collidesEntity(this.player) && !this.player.isDashing) {
                 this.vfx.spawnPlayerHit(this.player.x, this.player.y);
                 this.gameOver();
@@ -1371,7 +1446,7 @@ class GameEngine {
             }
         }
 
-        if (this.collectibles.length === 0) {
+        if (!this.currentBoss && this.collectibles.length === 0) {
             this.wave++;
             this.beatInterval = Math.max(0.3, this.beatInterval - 0.05);
             this.generateLevel();
@@ -1418,9 +1493,13 @@ class GameEngine {
         for (const p of this.projectiles) p.draw(this.ctx);
 
         for (const enemy of this.enemies) enemy.draw(this.ctx);
+            if (this.currentBoss) this.currentBoss.draw(this.ctx);
             if (this.player) this.player.draw(this.ctx);
 
             if (this.vfx) this.vfx.draw(this.ctx);
+
+            if (this.currentBoss) this.currentBoss.drawUI(this.ctx);
+
 
             this.ctx.fillStyle = '#c6f8c8';
             this.ctx.font = '24px monospace';
