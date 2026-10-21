@@ -56,6 +56,7 @@ class InputManager {
     this.canvas = canvas;
     this.keys = new Set();
     this.mouse = { x: 0, y: 0, down: false };
+    this.mouseSecondaryDown = false;
     this.touches = [];
 
     // Virtual joystick state
@@ -83,6 +84,7 @@ class InputManager {
     window.addEventListener('keydown', (e) => this.keys.add(e.code));
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
 
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener('mousedown', (e) => this.handleMouse(e, true));
     this.canvas.addEventListener('mouseup', (e) => this.handleMouse(e, false));
     this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
@@ -104,11 +106,15 @@ class InputManager {
   }
 
   handleMouse(e, isDown) {
-    this.mouse.down = isDown;
-    if (isDown && !this.actionButton.active) {
-       this.actionButton.active = true;
-    } else if (!isDown) {
-       this.actionButton.active = false;
+    if (e && e.button === 2) {
+      this.mouseSecondaryDown = isDown;
+    } else {
+      this.mouse.down = isDown;
+      if (isDown && !this.actionButton.active) {
+         this.actionButton.active = true;
+      } else if (!isDown) {
+         this.actionButton.active = false;
+      }
     }
     this.handleMouseMove(e);
   }
@@ -228,6 +234,10 @@ class InputManager {
   isActionPressed() {
     return this.isDown('Space') || this.actionButton.active || this.mouse.down || this.joystick.active;
   }
+
+  isSecondaryPressed() {
+    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.mouseSecondaryDown;
+  }
 }
 
 class SoundEngine {
@@ -328,6 +338,30 @@ class Particle {
   }
 }
 
+class IceCrystal {
+  constructor(logicalWidth, logicalHeight) {
+    this.x = Math.random() * logicalWidth;
+    this.y = Math.random() * logicalHeight;
+    this.size = 2 + Math.random() * 4;
+    this.alpha = 0.1 + Math.random() * 0.3;
+    this.phase = Math.random() * Math.PI * 2;
+    this.speed = 0.5 + Math.random() * 1.5;
+  }
+  update(dt) {
+    this.phase += this.speed * dt;
+  }
+  draw(ctx) {
+    const blink = this.alpha + Math.sin(this.phase) * 0.1;
+    ctx.fillStyle = `rgba(216, 176, 226, ${blink})`;
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y - this.size);
+    ctx.lineTo(this.x + this.size/2, this.y);
+    ctx.lineTo(this.x, this.y + this.size);
+    ctx.lineTo(this.x - this.size/2, this.y);
+    ctx.fill();
+  }
+}
+
 class Block {
   constructor(x, y, w, h, hp) {
     this.x = x;
@@ -393,6 +427,53 @@ class Enemy {
   }
 }
 
+class DasherEnemy extends Enemy {
+  constructor(x, y) {
+    super(x, y);
+    this.hp = 4;
+    this.r = 18;
+    this.dashTimer = 2;
+    this.dashCooldown = 3;
+    this.isDashing = false;
+  }
+  update(dt, playerX, playerY) {
+    this.dashTimer -= dt;
+    const dx = playerX - this.x;
+    const dy = playerY - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+
+    if (this.dashTimer <= 0) {
+      this.dashTimer = this.dashCooldown;
+      this.isDashing = true;
+      this.vx = (dx / dist) * 400;
+      this.vy = (dy / dist) * 400;
+    } else if (this.dashTimer > 2.5) {
+       // still dashing
+       this.vx *= 0.95;
+       this.vy *= 0.95;
+       if (Math.random() < 0.2) {
+         // emit trailing particles
+       }
+    } else {
+       this.isDashing = false;
+       this.vx += (dx / dist) * 20 * dt;
+       this.vy += (dy / dist) * 20 * dt;
+    }
+    this.vx *= 0.99;
+    this.vy *= 0.99;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+  }
+  draw(ctx) {
+    ctx.fillStyle = this.isDashing ? '#f2a65a' : '#c94242';
+    ctx.beginPath();
+    ctx.moveTo(this.x + this.r, this.y);
+    ctx.lineTo(this.x - this.r, this.y + this.r);
+    ctx.lineTo(this.x - this.r, this.y - this.r);
+    ctx.fill();
+  }
+}
+
 class Player {
   constructor(x, y) {
     this.x = x;
@@ -404,8 +485,26 @@ class Player {
     this.drilling = false;
     this.drillTimer = 0;
     this.drillCooldown = 0.1;
+    this.overdriveTimer = 0;
+    this.overdriveCooldown = 3;
+    this.isOverdrive = false;
+    this.invulnerableTimer = 0;
   }
   update(dt, input) {
+    this.overdriveTimer -= dt;
+    this.invulnerableTimer -= dt;
+    if (this.invulnerableTimer <= 0.3) {
+      this.isOverdrive = false;
+    }
+
+    if (input.isSecondaryPressed && input.isSecondaryPressed() && this.overdriveTimer <= 0) {
+      this.isOverdrive = true;
+      this.overdriveTimer = this.overdriveCooldown;
+      this.invulnerableTimer = 0.5;
+      this.vx += this.aimDir.x * 600;
+      this.vy += this.aimDir.y * 600;
+    }
+
     // Recoil-as-movement mechanic
     const aim = input.getAimVector(this.x, this.y);
     if (aim.active) {
@@ -441,31 +540,44 @@ class Player {
   }
 
   draw(ctx) {
-    // Draw body
-    ctx.fillStyle = '#d8b0e2';
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Draw drill
+    if (this.invulnerableTimer > 0 && Math.floor(Date.now() / 100) % 2 === 0) return;
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(Math.atan2(this.aimDir.y, this.aimDir.x));
 
-    ctx.fillStyle = '#aaa';
+    // Telegraph line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
     ctx.beginPath();
-    ctx.moveTo(this.r, -5);
-    ctx.lineTo(this.r + 20, 0);
-    ctx.lineTo(this.r, 5);
+    ctx.moveTo(this.r, 0);
+    ctx.lineTo(this.r + 50, 0);
+    ctx.stroke();
+
+    // Engine block
+    ctx.fillStyle = (this.isOverdrive || this.drilling) ? '#f2a65a' : '#555';
+    const engOffset = (this.isOverdrive || this.drilling) ? -5 : 0;
+    ctx.fillRect(-this.r - 8 + engOffset, -8, 10, 16);
+
+    // Hull
+    ctx.fillStyle = '#d8b0e2';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.r, 0, Math.PI * 2);
     ctx.fill();
 
-    // Drill active visual
+    // Drill
+    ctx.fillStyle = '#aaa';
+    const drillOffset = this.drilling ? -3 + Math.random()*6 : 0;
+    ctx.beginPath();
+    ctx.moveTo(this.r + drillOffset, -5);
+    ctx.lineTo(this.r + 20 + drillOffset, 0);
+    ctx.lineTo(this.r + drillOffset, 5);
+    ctx.fill();
+
     if (this.drilling) {
-       ctx.strokeStyle = '#fff';
-       ctx.beginPath();
-       ctx.moveTo(this.r + 20, 0);
-       ctx.lineTo(this.r + 25 + Math.random()*10, (Math.random()-0.5)*10);
-       ctx.stroke();
+      ctx.strokeStyle = '#fff';
+      ctx.beginPath();
+      ctx.moveTo(this.r + 20 + drillOffset, 0);
+      ctx.lineTo(this.r + 25 + drillOffset + Math.random()*10, (Math.random()-0.5)*10);
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -489,6 +601,10 @@ class GameEngine {
     this.particles = [];
     this.blocks = [];
     this.enemies = [];
+    this.crystals = [];
+    for (let i=0; i<30; i++) {
+      this.crystals.push(new IceCrystal(this.logicalWidth, this.logicalHeight));
+    }
     this.score = 0;
 
     this.setupResizeObserver();
@@ -532,6 +648,10 @@ class GameEngine {
     this.particles = [];
     this.blocks = [];
     this.enemies = [];
+    this.crystals = [];
+    for (let i=0; i<30; i++) {
+      this.crystals.push(new IceCrystal(this.logicalWidth, this.logicalHeight));
+    }
     this.score = 0;
     this.generateBlocks();
   };
@@ -551,10 +671,17 @@ class GameEngine {
 
   GameEngine.prototype.spawnEnemy = function() {
     if (Math.random() < 0.02) {
-      this.enemies.push(new Enemy(
-        Math.random() > 0.5 ? 0 : this.logicalWidth,
-        Math.random() * this.logicalHeight
-      ));
+      if (Math.random() < 0.3) {
+        this.enemies.push(new DasherEnemy(
+          Math.random() > 0.5 ? 0 : this.logicalWidth,
+          Math.random() * this.logicalHeight
+        ));
+      } else {
+        this.enemies.push(new Enemy(
+          Math.random() > 0.5 ? 0 : this.logicalWidth,
+          Math.random() * this.logicalHeight
+        ));
+      }
     }
   };
 
@@ -617,9 +744,23 @@ class GameEngine {
       const dx = this.player.x - e.x;
       const dy = this.player.y - e.y;
       if (dx*dx + dy*dy < (this.player.r + e.r) * (this.player.r + e.r)) {
-        this.state = 'GAME_OVER';
-        this.saveManager.updateScore(this.score);
-        this.spawnParticles(this.player.x, this.player.y, '#d8b0e2', 30);
+        if (this.player.isOverdrive) {
+          e.hp -= 5;
+          e.vx += this.player.aimDir.x * 400;
+          e.vy += this.player.aimDir.y * 400;
+          this.spawnParticles(e.x, e.y, '#f2a65a', 10);
+          if (e.hp <= 0) {
+             const idx = this.enemies.indexOf(e);
+             if (idx > -1) this.enemies.splice(idx, 1);
+             this.score += 50;
+             this.sound.playHit();
+             this.spawnParticles(e.x, e.y, '#e26b6b', 20);
+          }
+        } else if (this.player.invulnerableTimer <= 0) {
+          this.state = 'GAME_OVER';
+          this.saveManager.updateScore(this.score);
+          this.spawnParticles(this.player.x, this.player.y, '#d8b0e2', 30);
+        }
       }
     }
   };
@@ -655,8 +796,19 @@ class GameEngine {
        // visual smoke
        this.spawnParticles(this.player.x - this.player.aimDir.x*10, this.player.y - this.player.aimDir.y*10, 'rgba(255,255,255,0.3)', 1);
     }
+    if (this.player.isOverdrive) {
+       this.spawnParticles(this.player.x - this.player.aimDir.x*15, this.player.y - this.player.aimDir.y*15, '#fff', 2);
+       // extra visual flair for overdrive
+       if (Math.random() < 0.3) {
+         this.spawnParticles(this.player.x - this.player.aimDir.x*20 + (Math.random()-0.5)*10, this.player.y - this.player.aimDir.y*20 + (Math.random()-0.5)*10, '#f2a65a', 1);
+       }
+       if (Math.random() < 0.1) {
+         this.spawnParticles(this.player.x - this.player.aimDir.x*5 + (Math.random()-0.5)*20, this.player.y - this.player.aimDir.y*5 + (Math.random()-0.5)*20, '#d8b0e2', 1);
+       }
+    }
 
     this.spawnEnemy();
+    for (const c of this.crystals) c.update(dt);
 
     for (const e of this.enemies) e.update(dt, this.player.x, this.player.y);
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -671,6 +823,13 @@ class GameEngine {
     // Clear
     this.ctx.fillStyle = '#0b1a2a'; // Deep arctic water
     this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
+
+    // Draw crystals
+    for (const c of this.crystals) {
+      if (this.crystals) {
+        c.draw(this.ctx);
+      }
+    }
 
     // Draw blocks
     for (const b of this.blocks) b.draw(this.ctx);
@@ -692,6 +851,13 @@ class GameEngine {
     this.ctx.textAlign = 'left';
     this.ctx.fillText('Score: ' + this.score, 10, 30);
     this.ctx.fillText('High: ' + this.saveManager.data.highScore, 10, 60);
+
+    // Overdrive Cooldown Bar
+    this.ctx.fillStyle = '#555';
+    this.ctx.fillRect(10, 70, 100, 10);
+    this.ctx.fillStyle = '#f2a65a';
+    const ratio = Math.max(0, this.player.overdriveCooldown - this.player.overdriveTimer) / this.player.overdriveCooldown;
+    this.ctx.fillRect(10, 70, 100 * ratio, 10);
 
     // Overlays
     if (this.state === 'TITLE') {
