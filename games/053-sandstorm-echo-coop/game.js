@@ -339,7 +339,16 @@ class Particle extends Entity {
         this.duration = duration;
         this.time = 0;
     }
+    triggerHitStop(duration) {
+        this.hitStopTimer = Math.max(this.hitStopTimer, duration);
+    }
     update(dt) {
+        if (this.hitStopTimer > 0) {
+            this.hitStopTimer -= dt;
+            if (this.vfx) this.vfx.update(dt);
+            if (this.background) this.background.update(dt);
+            if (this.hitStopTimer > 0) return;
+        }
         this.time += dt;
         super.update(dt);
         if (this.time > this.duration) {
@@ -354,7 +363,88 @@ class Particle extends Entity {
     }
 }
 
+
+class FloatingText extends Particle {
+    constructor(x, y, text, color, size, duration) {
+        super(x, y, 0, 0, color, duration);
+        this.text = text;
+        this.size = size;
+        this.startY = y;
+        this.distance = 40;
+    }
+    triggerHitStop(duration) {
+        this.hitStopTimer = Math.max(this.hitStopTimer, duration);
+    }
+    update(dt) {
+        if (this.hitStopTimer > 0) {
+            this.hitStopTimer -= dt;
+            if (this.vfx) this.vfx.update(dt);
+            if (this.background) this.background.update(dt);
+            if (this.hitStopTimer > 0) return;
+        }
+        this.time += dt;
+        // Ease out quad
+        const t = Math.min(this.time / this.duration, 1.0);
+        const easeT = t * (2 - t);
+        this.y = this.startY - easeT * this.distance;
+        if (this.time > this.duration) {
+            this.active = false;
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = 1 - (this.time / this.duration);
+        ctx.font = `bold ${this.size}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
 class VisualFXManager {
+    spawnHitParticle(x, y, color) {
+        // Generates an inward converging particle burst that stays localized
+        for (let i=0; i<10; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 10 + Math.random() * 20;
+            const px = x + Math.cos(angle) * dist;
+            const py = y + Math.sin(angle) * dist;
+            const vx = (x - px) * 2;
+            const vy = (y - py) * 2;
+            const duration = 0.2 + Math.random() * 0.2;
+            const p = new Particle(px, py, vx, vy, color, duration);
+            p.draw = function(ctx) {
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = 1 - (this.time / this.duration);
+                ctx.fillRect(this.x - 2, this.y - 2, 4, 4);
+                ctx.globalAlpha = 1.0;
+            };
+            this.particles.push(p);
+        }
+    }
+
+    spawnPlayerDashPoof(x, y, color) {
+        // A ring of dust when the player dashes
+        const numParticles = 12;
+        for (let i=0; i<numParticles; i++) {
+            const angle = (i / numParticles) * Math.PI * 2;
+            const speed = 20 + Math.random() * 30;
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed;
+            const duration = 0.4 + Math.random() * 0.3;
+            const p = new Particle(x, y, vx, vy, color, duration);
+            p.draw = function(ctx) {
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = (1 - (this.time / this.duration)) * 0.8;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 3 * (1 - (this.time / this.duration)), 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            };
+            this.particles.push(p);
+        }
+    }
+
     constructor() {
         this.particles = [];
         this.screenShake = 0;
@@ -385,6 +475,34 @@ class VisualFXManager {
             ctx.globalAlpha = 1.0;
         }
     }
+    spawnDirectionalExplosion(x, y, count, color, dx, dy, spread) {
+        for (let i=0; i<count; i++) {
+            const baseAngle = Math.atan2(dy, dx);
+            const angle = baseAngle + (Math.random() - 0.5) * spread;
+            const speed = 50 + Math.random() * 250;
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed;
+            const duration = 0.3 + Math.random() * 0.4;
+            this.particles.push(new Particle(x, y, vx, vy, color, duration));
+        }
+    }
+    spawnFloatingText(x, y, text, color, size, duration = 1.0) {
+        this.particles.push(new FloatingText(x, y, text, color, size, duration));
+    }
+    spawnMotionTrail(x, y, radius, color, duration = 0.3) {
+        const p = new Particle(x, y, 0, 0, color, duration);
+        p.radius = radius;
+        p.draw = function(ctx) {
+            ctx.fillStyle = this.color;
+            ctx.globalAlpha = (1 - (this.time / this.duration)) * 0.5;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        };
+        this.particles.push(p);
+    }
+
     spawnExplosion(x, y, count, color) {
         for (let i=0; i<count; i++) {
             const angle = Math.random() * Math.PI * 2;
@@ -396,7 +514,11 @@ class VisualFXManager {
         }
     }
     triggerShake(amount) {
-        this.screenShake = Math.max(this.screenShake, amount);
+        let intensity = 1.0;
+        if (typeof game !== 'undefined' && game && game.save && game.save.data && game.save.data.options && game.save.data.options.shakeIntensity !== undefined) {
+            intensity = game.save.data.options.shakeIntensity;
+        }
+        this.screenShake = Math.max(this.screenShake, amount * intensity);
     }
     triggerFlash(color, amount) {
         this.flashColor = color;
@@ -971,6 +1093,8 @@ class GameEngine {
         this.width = 1280;
         this.height = 720;
 
+        this.hitStopTimer = 0;
+
         this.save = new SaveManager();
         this.sound = new SoundEngine();
         this.input = new InputManager();
@@ -1238,7 +1362,16 @@ class GameEngine {
         requestAnimationFrame(t => this.loop(t));
     }
 
+    triggerHitStop(duration) {
+        this.hitStopTimer = Math.max(this.hitStopTimer, duration);
+    }
     update(dt) {
+        if (this.hitStopTimer > 0) {
+            this.hitStopTimer -= dt;
+            if (this.vfx) this.vfx.update(dt);
+            if (this.background) this.background.update(dt);
+            if (this.hitStopTimer > 0) return;
+        }
         this.time += dt;
 
         if (this.vfx) this.vfx.update(dt);
@@ -1273,7 +1406,10 @@ class GameEngine {
                         this.currentBoss.hitTimer = 0.2;
                         this.sound.playHit();
                         this.player.triggerRecoil();
-                        this.vfx.spawnExplosion(this.currentBoss.x, this.currentBoss.y, 20, '#ff0000');
+                        this.triggerHitStop(0.1);
+                        this.vfx.triggerShake(0.5);
+                        this.vfx.spawnDirectionalExplosion(this.currentBoss.x, this.currentBoss.y, 25, '#ff0000', this.player.vx, this.player.vy, 1.0);
+                        this.vfx.spawnFloatingText(this.currentBoss.x, this.currentBoss.y - 30, 'CRIT 10', '#ffff00', 24, 0.8);
                     }
                 } else {
                     this.vfx.spawnPlayerHit(this.player.x, this.player.y);
@@ -1288,7 +1424,10 @@ class GameEngine {
             if (this.currentBoss.hp <= 0) {
                 this.score += 1000;
                 this.sound.playEcho(); // Boss death
-                this.vfx.spawnExplosion(this.currentBoss.x, this.currentBoss.y, 100, '#ffaaaa');
+                this.triggerHitStop(0.5);
+                this.vfx.triggerShake(1.5);
+                this.vfx.spawnDirectionalExplosion(this.currentBoss.x, this.currentBoss.y, 100, '#ffaaaa', 0, -1, Math.PI * 2);
+                this.vfx.spawnFloatingText(this.currentBoss.x, this.currentBoss.y - 50, 'BOSS DEFEATED', '#ffffff', 32, 2.0);
                 this.currentBoss = null;
                 // Move to next wave
                 this.wave++;
@@ -1327,6 +1466,10 @@ class GameEngine {
         const oldX = this.player.x;
         const oldY = this.player.y;
         this.player.update(dt, axis);
+        if (this.player.isDashing) {
+            this.vfx.spawnMotionTrail(this.player.x, this.player.y, this.player.radius, '#ffffff', 0.2);
+            this.vfx.spawnDirectionalExplosion(this.player.x, this.player.y, 2, '#88ccff', -this.player.vx, -this.player.vy, 0.5);
+        }
 
         for (let i = this.crates.length - 1; i >= 0; i--) {
             const crate = this.crates[i];
@@ -1357,7 +1500,12 @@ class GameEngine {
             obs.update(dt);
         }
 
-        for (const ghost of this.ghosts) ghost.update(dt);
+        for (const ghost of this.ghosts) {
+            ghost.update(dt);
+            if (ghost.isDashing) {
+                this.vfx.spawnMotionTrail(ghost.x, ghost.y, ghost.radius, '#c6f8c8', 0.2);
+            }
+        }
 
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const enemy = this.enemies[i];
