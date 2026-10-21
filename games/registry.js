@@ -701,7 +701,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows/Mouse/Touch to aim and drill/move.",
     "createdAt": "2024-10-21",
     "accentColor": "#d8b0e2",
-    "phase": "3",
+    "phase": "4",
     "path": "./games/054-arctic-drill-recoil/index.html"
   }
 ];
