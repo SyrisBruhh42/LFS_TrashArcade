@@ -231,6 +231,7 @@ class MagneticNode {
     }
 }
 
+
 class BaseEnemy {
     constructor(x, y, isPos) {
         this.x = x;
@@ -276,6 +277,241 @@ class BaseEnemy {
         // Override
     }
 }
+
+class BaseBoss extends BaseEnemy {
+    constructor(x, y, isPos) {
+        super(x, y, isPos);
+        this.maxHealth = 20;
+        this.health = 20;
+        this.radius = 40;
+        this.phase2 = false;
+        this.phaseTransitionAlpha = 0;
+        this.bossName = "BOSS";
+        this.type = 'boss';
+    }
+
+    takeDamage(amount) {
+        this.health -= amount;
+        if (this.health <= this.maxHealth / 2 && !this.phase2) {
+            this.phase2 = true;
+            this.phaseTransitionAlpha = 1.0;
+            this.onPhase2();
+        }
+    }
+
+    onPhase2() {
+        // Override in subclasses
+    }
+
+    drawHealthBar(ctx, width) {
+        const barWidth = width * 0.8;
+        const barHeight = 20;
+        const x = (width - barWidth) / 2;
+        const y = 80;
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(x, y, barWidth, barHeight);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(x, y, barWidth, barHeight);
+
+        const fillWidth = barWidth * (Math.max(0, this.health) / this.maxHealth);
+        ctx.fillStyle = this.isPos ? COLORS.pos : COLORS.neg;
+        ctx.fillRect(x + 2, y + 2, fillWidth - 4, barHeight - 4);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.bossName, width / 2, y + 15);
+
+        if (this.phaseTransitionAlpha > 0) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${this.phaseTransitionAlpha})`;
+            ctx.font = '30px monospace';
+            ctx.fillText('WARNING: PHASE 2!', width / 2, y + 60);
+            this.phaseTransitionAlpha = Math.max(0, this.phaseTransitionAlpha - 0.02);
+        }
+    }
+}
+
+class OrbitalBoss extends BaseBoss {
+    constructor(x, y, isPos) {
+        super(x, y, isPos);
+        this.bossName = "ORBITAL PRIME";
+        this.radius = 50;
+        this.orbitals = [];
+        for (let i=0; i<4; i++) {
+            this.orbitals.push({ angle: (Math.PI / 2) * i, dist: 80, isPos: Math.random() > 0.5 });
+        }
+        this.orbitalSpeed = 1.5;
+        this.attackTimer = 2.0;
+    }
+
+    onPhase2() {
+        this.orbitalSpeed = 3.0;
+        this.isPos = !this.isPos; // Switch polarity on phase 2
+        for (let o of this.orbitals) {
+            o.dist = 120;
+        }
+    }
+
+    update(dt, w, h, game) {
+        const player = game ? game.player : null;
+        super.update(dt, w, h, game);
+        if (player) {
+            const targetX = w/2 + (player.x - w/2) * 0.3;
+            const targetY = h/2 + (player.y - h/2) * 0.3;
+            this.vx += (targetX - this.x) * dt * 2;
+            this.vy += (targetY - this.y) * dt * 2;
+        }
+        this.vx *= 0.95;
+        this.vy *= 0.95;
+
+        for (let o of this.orbitals) {
+            o.angle += this.orbitalSpeed * dt;
+        }
+
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) {
+            this.attackTimer = this.phase2 ? 1.5 : 3.0;
+            this.fireBulletHell(game);
+        }
+    }
+
+    fireBulletHell(game) {
+        if (!game) return;
+        game.sound.playShoot();
+        const numBullets = this.phase2 ? 12 : 8;
+        for (let i = 0; i < numBullets; i++) {
+            const angle = (Math.PI * 2 / numBullets) * i + this.time;
+            const speed = 150;
+            game.enemyProjectiles.push(new EnemyProjectile(
+                this.x + Math.cos(angle) * this.radius,
+                this.y + Math.sin(angle) * this.radius,
+                Math.cos(angle) * speed,
+                Math.sin(angle) * speed,
+                this.isPos
+            ));
+        }
+    }
+
+    drawGeometry(ctx) {
+        ctx.rotate(this.time);
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        for (let i=1; i<6; i++) {
+            const angle = (Math.PI * 2 / 6) * i;
+            ctx.lineTo(Math.cos(angle) * this.radius, Math.sin(angle) * this.radius);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        for (let o of this.orbitals) {
+            ctx.save();
+            ctx.rotate(o.angle);
+            ctx.translate(o.dist, 0);
+            ctx.fillStyle = o.isPos ? COLORS.pos : COLORS.neg;
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+}
+
+class LaserBoss extends BaseBoss {
+    constructor(x, y, isPos) {
+        super(x, y, isPos);
+        this.bossName = "BEAM CONSTRUCT";
+        this.radius = 45;
+        this.laserTimer = 3.0;
+        this.lasers = [];
+        this.rotSpeed = 0.5;
+    }
+
+    onPhase2() {
+        this.rotSpeed = 1.0;
+    }
+
+    update(dt, w, h, game) {
+        const player = game ? game.player : null;
+        super.update(dt, w, h, game);
+        if (player) {
+            const dx = w/2 - this.x;
+            const dy = h/2 - this.y;
+            this.vx += dx * dt * 2;
+            this.vy += dy * dt * 2;
+        }
+        this.vx *= 0.95;
+        this.vy *= 0.95;
+
+        this.laserTimer -= dt;
+        if (this.laserTimer <= 0) {
+            this.laserTimer = this.phase2 ? 3.0 : 5.0;
+            this.lasers = [
+                { angle: 0, duration: 2.0, active: true },
+                { angle: Math.PI / 2, duration: 2.0, active: true },
+                { angle: Math.PI, duration: 2.0, active: true },
+                { angle: Math.PI * 1.5, duration: 2.0, active: true }
+            ];
+            if (game) game.sound.playShoot();
+        }
+
+        for (let i = this.lasers.length - 1; i >= 0; i--) {
+            let l = this.lasers[i];
+            l.duration -= dt;
+            if (l.duration <= 0) {
+                this.lasers.splice(i, 1);
+            } else if (player && game) {
+                const rotAngle = this.time * this.rotSpeed + l.angle;
+                const px = player.x - this.x;
+                const py = player.y - this.y;
+                const dist = Math.hypot(px, py);
+                const angleToPlayer = Math.atan2(py, px);
+
+                let diff = angleToPlayer - rotAngle;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+
+                if (Math.abs(diff) < 0.15 && dist < 2000) {
+                    if (game.health > 0 && !player.isInvulnerable) {
+                        game.health--;
+                        game.sound.playHit();
+                        game.spawnParticles(player.x, player.y, '#ff0000', 30);
+                        player.triggerRecoil(Math.cos(rotAngle), Math.sin(rotAngle), 600, true);
+                        if (game.health <= 0) {
+                            game.triggerGameOver();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    drawGeometry(ctx) {
+        const rotAngle = this.time * this.rotSpeed;
+        ctx.rotate(rotAngle);
+
+        ctx.beginPath();
+        ctx.rect(-this.radius, -this.radius, this.radius*2, this.radius*2);
+        ctx.stroke();
+
+        for (let l of this.lasers) {
+            ctx.save();
+            ctx.rotate(l.angle);
+            ctx.beginPath();
+            ctx.moveTo(this.radius, 0);
+            ctx.lineTo(2000, 0);
+            ctx.lineWidth = l.duration > 1.0 ? 6 : (l.duration * 6);
+            ctx.strokeStyle = this.isPos ? COLORS.pos : COLORS.neg;
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
 
 class SwarmerEnemy extends BaseEnemy {
     constructor(x, y, isPos) {
@@ -1009,17 +1245,42 @@ class Game {
         this.world.update(dt, this);
 
         // Enemy spawner logic
-        this.enemySpawnTimer += dt;
-        const spawnInterval = Math.max(0.5, 3.0 - (this.wave * 0.15));
+        let hasBoss = false;
+        for (let e of this.enemies) {
+            if (e.type === 'boss') hasBoss = true;
+        }
 
-        if (this.enemySpawnTimer > spawnInterval) {
-            this.enemySpawnTimer = 0;
+        // Trigger boss every 5 waves
+        if (this.wave > 0 && this.wave % 5 === 0 && !hasBoss && this.bossSpawnedWave !== this.wave) {
+            this.bossSpawnedWave = this.wave;
             const isPos = Math.random() > 0.5;
+            const ex = this.width / 2;
+            const ey = this.height / 2;
 
-            // Keep enemies away from edges when spawning
-            const ex = Math.random() * (this.width - 100) + 50;
-            const ey = Math.random() * (this.height - 100) + 50;
-            this.enemies.push(getRandomEnemy(ex, ey, isPos));
+            // Clear existing enemies for boss fight
+            this.enemies = [];
+            this.enemyProjectiles = [];
+
+            if (Math.random() > 0.5) {
+                this.enemies.push(new OrbitalBoss(ex, ey, isPos));
+            } else {
+                this.enemies.push(new LaserBoss(ex, ey, isPos));
+            }
+        }
+
+        if (!hasBoss) {
+            this.enemySpawnTimer += dt;
+            const spawnInterval = Math.max(0.5, 3.0 - (this.wave * 0.15));
+
+            if (this.enemySpawnTimer > spawnInterval) {
+                this.enemySpawnTimer = 0;
+                const isPos = Math.random() > 0.5;
+
+                // Keep enemies away from edges when spawning
+                const ex = Math.random() * (this.width - 100) + 50;
+                const ey = Math.random() * (this.height - 100) + 50;
+                this.enemies.push(getRandomEnemy(ex, ey, isPos));
+            }
         }
 
         this.updateEnemies(dt);
@@ -1169,6 +1430,17 @@ class Game {
     }
 
     drawHUD() {
+        let boss = null;
+        for (let e of this.enemies) {
+            if (e.type === 'boss') {
+                boss = e;
+                break;
+            }
+        }
+        if (boss) {
+            boss.drawHealthBar(this.ctx, this.width);
+        }
+
         this.ctx.fillStyle = COLORS.text;
         this.ctx.font = '20px monospace';
         this.ctx.textAlign = 'left';
