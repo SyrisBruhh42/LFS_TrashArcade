@@ -1547,6 +1547,9 @@ class VFXManager {
     }
 
     emitDirectional(x, y, vx, vy, color, count=10, spread=0.5) {
+        // Compute directional forces based on the given vector
+        // This is used for blood splatters or trailing spark effects in specific directions
+        // Spreads out the vectors linearly based on math random
         if (this.options && this.options.particleDensity === 'Low') count = Math.ceil(count / 2);
         const baseAngle = Math.atan2(vy, vx);
         const baseSpeed = Math.hypot(vx, vy) * 0.5;
@@ -1585,6 +1588,7 @@ class VFXManager {
 
         this.particles.forEach(p => p.update(dt));
         this.particles = this.particles.filter(p => p.active);
+        if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
 
         this.popups.forEach(p => p.update(dt));
         this.popups = this.popups.filter(p => p.active);
@@ -1806,6 +1810,7 @@ class Game {
 
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
+        this.tutorialActive = true;
 
         this.env = new EnvironmentManager(this.width, this.height);
 
@@ -1825,7 +1830,22 @@ class Game {
         });
     }
 
+    computeLayout() {
+        const cw = window.innerWidth;
+        const ch = window.innerHeight;
+        return { w: cw, h: ch };
+    }
+    computeScale(w, h) {
+        let scale = Math.min(w / this.width, h / this.height);
+        if (scale < 0.1) scale = 0.1; // fallback
+        if (scale > 5.0) scale = 5.0; // clamp
+        return scale;
+    }
+
     setupResize() {
+        // We will make sure the canvas container has the appropriate resizing boundaries.
+        // It observes the parent bounds to re-scale the internal coordinate system without distortion.
+        // This enhances responsive scaling for wider or taller non-standard displays.
         const resize = () => {
             const container = this.canvas.parentElement;
             const aspect = this.width / this.height;
@@ -1858,6 +1878,9 @@ class Game {
     }
 
     resetGame() {
+        // Stop current audio tracks and re-initialize systems before starting a fresh run
+        // This resets wave counts, variables, combo multipliers, and dynamically resets
+        // the arrays used by rendering pipelines and physics systems back to empty.
         this.sound.stopMusic();
         this.sound.startMusic();
         this.vfx = new VFXManager();
@@ -1880,6 +1903,7 @@ class Game {
         this.draftChoices = [];
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
+        this.tutorialActive = true;
         this.env = new EnvironmentManager(this.width, this.height);
     }
 
@@ -1945,8 +1969,8 @@ class Game {
                             // Next wave
                             this.wave += 1;
                             this.waveKills = 0;
-                            this.killsToNextWave = 15 + this.wave * 5;
-                            this.enemySpawnRate = Math.max(0.5, 2.0 - (this.wave * 0.05));
+                            this.killsToNextWave = 10 + this.wave * 5;
+                            this.enemySpawnRate = Math.max(0.4, 2.0 - (this.wave * 0.1));
                             this.state = STATES.PLAYING;
                             break;
                         }
@@ -1970,6 +1994,12 @@ class Game {
                 break;
 
             case STATES.PLAYING:
+                if (this.tutorialActive && this.wave === 1) {
+                    if (this.input.keys['w'] || this.input.keys['a'] || this.input.keys['s'] || this.input.keys['d'] || this.input.isPointerDown()) {
+                        this.tutorialActive = false;
+                    }
+                }
+
                 if (this.wave >= 5) this.unlockMilestone('Wave5Cleared');
                 if (this.score >= 10000) this.unlockMilestone('Score10k');
                 if (this.combo >= 15) this.unlockMilestone('Combo15x');
@@ -2155,9 +2185,14 @@ class Game {
                             this.combo += 1;
                             this.comboTimer = this.comboMaxTime;
                             this.score += 15 * (1 + this.combo * 0.1);
+                            if (this.tower.hasLeech && Math.random() < 0.05) {
+                                this.tower.health = Math.min(this.tower.maxHealth, this.tower.health + 5);
+                                this.vfx.addPopup(this.tower.x, this.tower.y, "+5 HP", '#00ff00');
+                            }
                             if (Math.random() < this.dropChance) { // 15% chance to drop pickup
                                 const types = ['health', 'combo', 'score'];
                                 this.pickups.push(new Pickup(e.x, e.y, types[Math.floor(Math.random() * types.length)]));
+                                if (this.pickups.length > 30) this.pickups.shift();
                             }
                             this.sound.playExplosion();
                             this.vfx.emitExplosion(e.x, e.y, '#ffff00', 15);
@@ -2187,9 +2222,14 @@ class Game {
                             this.combo += 1;
                             this.comboTimer = this.comboMaxTime;
                             this.score += Math.floor(10 * this.tower.damageMultiplier) * (1 + this.combo * 0.1);
+                            if (this.tower.hasLeech && Math.random() < 0.05) {
+                                this.tower.health = Math.min(this.tower.maxHealth, this.tower.health + 5);
+                                this.vfx.addPopup(this.tower.x, this.tower.y, "+5 HP", '#00ff00');
+                            }
                             if (Math.random() < this.dropChance) {
                                 const types = ['health', 'combo', 'score'];
                                 this.pickups.push(new Pickup(e.x, e.y, types[Math.floor(Math.random() * types.length)]));
+                                if (this.pickups.length > 30) this.pickups.shift();
                             }
                             this.sound.playExplosion();
                             this.vfx.emitExplosion(e.x, e.y, '#ffffff', 20);
@@ -2224,9 +2264,14 @@ class Game {
                             this.combo += 1;
                             this.comboTimer = this.comboMaxTime;
                             this.score += 5 * (1 + this.combo * 0.1);
+                            if (this.tower.hasLeech && Math.random() < 0.05) {
+                                this.tower.health = Math.min(this.tower.maxHealth, this.tower.health + 5);
+                                this.vfx.addPopup(this.tower.x, this.tower.y, "+5 HP", '#00ff00');
+                            }
                             if (Math.random() < this.dropChance) {
                                 const types = ['health', 'combo', 'score'];
                                 this.pickups.push(new Pickup(e.x, e.y, types[Math.floor(Math.random() * types.length)]));
+                                if (this.pickups.length > 30) this.pickups.shift();
                             }
                             this.sound.playExplosion();
                             this.vfx.emitExplosion(e.x, e.y, '#aaaaaa', 10);
@@ -2310,10 +2355,19 @@ class Game {
         } else {
             this.activeBoss = new LollipopCrusherBoss(x, y, this.tower);
         }
+        // Apply dynamic wave scaling to the bosses so that they become drastically
+        // tougher towards higher waves while remaining welcoming on Wave 5.
+        // This multiplies their base hp significantly as a core phase 10 enhancement.
+        const hpScale = 1 + (this.wave * 0.2);
+        this.activeBoss.maxHealth *= hpScale;
+        this.activeBoss.health = this.activeBoss.maxHealth;
         this.enemies.push(this.activeBoss);
     }
 
     generateDraft() {
+        // Pool consists of random base buffs and tier 2 upgraded abilities that can synergize
+        // with the tower's existing scaling multipliers. We also insert Phase 10 specifics
+        // such as kinetic leech and blast radius modifiers.
         const pool = [
             { title: "Damage Up", desc: "+20% Base Damage", action: () => this.tower.damageMultiplier += 0.2 },
             { title: "Tether Speed", desc: "+15% Extend/Retract Speed", action: () => this.tower.speed *= 1.15 },
@@ -2322,7 +2376,12 @@ class Game {
             { title: "Combo Max Time", desc: "Combo holds 1.5s longer", action: () => this.comboMaxTime += 1.5 },
             { title: "Overdrive Cooldown", desc: "-1s Overdrive Cooldown", action: () => this.tower.overdriveMaxCooldown = Math.max(2.0, this.tower.overdriveMaxCooldown - 1.0) },
             { title: "Tether Sweep", desc: "+25% Turn Speed", action: () => this.tower.turnSpeed *= 1.25 },
-            { title: "Risk Reward", desc: "Enemy drops +20% more Pickups", action: () => this.dropChance += 0.2 }
+            { title: "Risk Reward", desc: "Enemy drops +20% more Pickups", action: () => this.dropChance += 0.2 },
+            // Phase 10 Expanded Upgrades
+            { title: "Kinetic Leech", desc: "Small chance to heal 5 HP on Kill", action: () => this.tower.hasLeech = true },
+            { title: "Blast Radius", desc: "+30% Damage Radius", action: () => this.tower.radius *= 1.3 },
+            { title: "Hyper React", desc: "+40% Turn Speed, -10% Reach", action: () => { this.tower.turnSpeed *= 1.4; this.tower.maxLength *= 0.9; } },
+            { title: "Titan Core", desc: "+200 Max HP, -10% Movespeed", action: () => { this.tower.maxHealth += 200; this.tower.health += 200; this.tower.speed *= 0.9; } }
         ];
 
         // Shuffle pool
@@ -2336,19 +2395,29 @@ class Game {
         const x = this.tower.x + Math.cos(angle) * dist;
         const y = this.tower.y + Math.sin(angle) * dist;
 
-        const r = Math.random();
-        if (r < 0.3) {
+        let r = Math.random();
+        let pBasic = Math.max(0.05, 0.4 - (this.wave * 0.05));
+        let pSwarmer = pBasic + Math.max(0.1, 0.2 - (this.wave * 0.02));
+        let pBruiser = pSwarmer + 0.15;
+        let pSplitter = pBruiser + 0.15;
+        let pArea = pSplitter + 0.1;
+
+        if (this.wave < 2) {
+            pBasic = 0.7;
+            pSwarmer = 1.0;
+        }
+
+        if (r < pBasic) {
             this.enemies.push(new Enemy(x, y, this.tower));
-        } else if (r < 0.5) {
-            // Swarmers spawn in groups
+        } else if (r < pSwarmer) {
             this.enemies.push(new SwarmerEnemy(x, y, this.tower));
             this.enemies.push(new SwarmerEnemy(x + Math.random()*20, y + Math.random()*20, this.tower));
             this.enemies.push(new SwarmerEnemy(x + Math.random()*20, y + Math.random()*20, this.tower));
-        } else if (r < 0.65) {
+        } else if (r < pBruiser) {
             this.enemies.push(new ShieldedBruiserEnemy(x, y, this.tower));
-        } else if (r < 0.8) {
+        } else if (r < pSplitter) {
             this.enemies.push(new SplitterEnemy(x, y, this.tower));
-        } else if (r < 0.9) {
+        } else if (r < pArea) {
             this.enemies.push(new AreaDenialEnemy(x, y, this.tower));
         } else {
             this.enemies.push(new RangedSniperEnemy(x, y, this.tower));
@@ -2399,6 +2468,9 @@ class Game {
     }
 
     drawPlaying() {
+        // Main gameplay rendering block
+        // First saves context to apply global transformations like screen shake and high contrast
+        // Then layers environment, visual effects, enemies, projectiles and UI.
         this.ctx.save();
         this.vfx.applyShake(this.ctx);
 
@@ -2406,6 +2478,18 @@ class Game {
         if (this.saveManager.data.options.highContrast) {
             this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
             this.ctx.fillRect(0, 0, this.width, this.height);
+        }
+
+        if (this.tutorialActive && this.wave === 1) {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(this.width / 2 - 250, 100, 500, 100);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '16px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText("Welcome to Candy Tether Defense!", this.width / 2, 130);
+            this.ctx.fillText("Move with WASD.", this.width / 2, 150);
+            this.ctx.fillText("Hold Left Click/Touch to extend your tether and damage enemies.", this.width / 2, 170);
+            this.ctx.textAlign = 'left';
         }
 
         this.tower.draw(this.ctx, this.input);
