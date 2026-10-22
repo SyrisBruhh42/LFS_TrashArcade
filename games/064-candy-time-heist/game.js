@@ -513,6 +513,330 @@ class Guard {
     }
 }
 
+
+class SwarmerGuard extends Guard {
+    constructor(x, y, path) {
+        super(x, y, path);
+        this.speed = 150;
+        this.radius = 10;
+        this.color = '#ff9800';
+        this.visionSpread = Math.PI / 2;
+        this.visionRange = 80;
+        this.timeSinceSpeedChange = 0;
+    }
+    update(dt, globalTimeScale) {
+        super.update(dt, globalTimeScale);
+        this.timeSinceSpeedChange += dt * globalTimeScale;
+        if (this.timeSinceSpeedChange > 1) {
+            this.speed = 100 + Math.random() * 100;
+            this.timeSinceSpeedChange = 0;
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.visionAngle);
+
+        if (this.stunTimer > 0) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('STUNNED', 0, -30);
+            ctx.globalAlpha = 0.5;
+        }
+
+        ctx.fillStyle = 'rgba(255, 152, 0, 0.2)';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, this.visionRange, -this.visionSpread, this.visionSpread);
+        ctx.lineTo(0, 0);
+        ctx.fill();
+
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(-this.radius, this.radius);
+        ctx.lineTo(-this.radius, -this.radius);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class SniperGuard extends Guard {
+    constructor(x, y, path) {
+        super(x, y, path);
+        this.speed = 50;
+        this.radius = 12;
+        this.color = '#9c27b0';
+        this.visionSpread = Math.PI / 16;
+        this.visionRange = 400;
+        this.sweepAngle = 0;
+        this.baseAngle = 0;
+        this.sweepSpeed = 1;
+        this.preAttackTimer = 0;
+        this.lockedPlayer = null;
+    }
+    update(dt, globalTimeScale) {
+        const adjustedDt = dt * globalTimeScale;
+
+        if (this.path.length > 0) {
+            const target = this.path[this.pathIndex];
+            const dx = target.x - this.x;
+            const dy = target.y - this.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist < 5) {
+                this.pathIndex = (this.pathIndex + 1) % this.path.length;
+            } else {
+                this.x += (dx / dist) * this.speed * adjustedDt;
+                this.y += (dy / dist) * this.speed * adjustedDt;
+                this.baseAngle = Math.atan2(dy, dx);
+            }
+        }
+
+        if (this.state === 'LOCK_ON' && this.lockedPlayer) {
+            this.preAttackTimer += adjustedDt;
+            const dx = this.lockedPlayer.x - this.x;
+            const dy = this.lockedPlayer.y - this.y;
+            const targetAngle = Math.atan2(dy, dx);
+
+            let diff = targetAngle - this.visionAngle;
+            while(diff < -Math.PI) diff += Math.PI * 2;
+            while(diff > Math.PI) diff -= Math.PI * 2;
+            this.visionAngle += diff * 2 * adjustedDt;
+        } else {
+            this.sweepAngle += this.sweepSpeed * adjustedDt;
+            this.visionAngle = this.baseAngle + Math.sin(this.sweepAngle) * (Math.PI / 3);
+            this.preAttackTimer = 0;
+        }
+    }
+
+    canSee(player) {
+        if (this.stunTimer > 0) return false;
+
+        const sees = super.canSee(player);
+        if (sees) {
+            if (this.state !== 'LOCK_ON') {
+                this.state = 'LOCK_ON';
+                this.lockedPlayer = player;
+                this.preAttackTimer = 0;
+            }
+            if (this.preAttackTimer > 1.5) {
+                return true;
+            }
+            return false;
+        } else {
+            this.state = 'PATROL';
+            this.lockedPlayer = null;
+            return false;
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.visionAngle);
+
+        if (this.stunTimer > 0) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('STUNNED', 0, -30);
+            ctx.globalAlpha = 0.5;
+        }
+
+        if (this.state === 'LOCK_ON') {
+            const alpha = 0.2 + 0.3 * Math.abs(Math.sin(this.preAttackTimer * 10));
+            ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+        } else {
+            ctx.fillStyle = 'rgba(156, 39, 176, 0.2)';
+        }
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, this.visionRange, -this.visionSpread, this.visionSpread);
+        ctx.lineTo(0, 0);
+        ctx.fill();
+
+        ctx.strokeStyle = this.state === 'LOCK_ON' ? 'rgba(255,0,0,0.8)' : 'rgba(156, 39, 176, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(this.visionRange, 0);
+        ctx.stroke();
+
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(0, this.radius);
+        ctx.lineTo(-this.radius, 0);
+        ctx.lineTo(0, -this.radius);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class ShieldedBruiserGuard extends Guard {
+    constructor(x, y, path) {
+        super(x, y, path);
+        this.speed = 60;
+        this.radius = 20;
+        this.color = '#3f51b5';
+        this.visionSpread = Math.PI / 3;
+        this.visionRange = 120;
+    }
+
+    get hasShield() { return true; }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.visionAngle);
+
+        if (this.stunTimer > 0) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('STUNNED', 0, -30);
+            ctx.globalAlpha = 0.5;
+        }
+
+        ctx.fillStyle = 'rgba(63, 81, 181, 0.2)';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, this.visionRange, -this.visionSpread, this.visionSpread);
+        ctx.lineTo(0, 0);
+        ctx.fill();
+
+        ctx.fillStyle = this.color;
+        ctx.fillRect(-this.radius, -this.radius, this.radius*2, this.radius*2);
+
+        ctx.strokeStyle = '#00bcd4';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius + 4, -this.visionSpread, this.visionSpread);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+}
+
+class SplitterGuard extends Guard {
+    constructor(x, y, path) {
+        super(x, y, path);
+        this.speed = 80;
+        this.radius = 18;
+        this.color = '#e91e63';
+        this.visionSpread = Math.PI;
+        this.visionRange = 100;
+        this.pulseTimer = 0;
+        this.hasSplit = false;
+    }
+
+    update(dt, globalTimeScale) {
+        super.update(dt, globalTimeScale);
+        this.pulseTimer += dt * globalTimeScale * 3;
+        this.visionRange = 80 + Math.sin(this.pulseTimer) * 20;
+    }
+
+    canSee(player) {
+        if (this.stunTimer > 0 || this.hasSplit) return false;
+        const sees = super.canSee(player);
+        if (sees) {
+            this.state = 'SPLITTING';
+            return false;
+        }
+        return false;
+    }
+
+    draw(ctx) {
+        if (this.hasSplit) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.visionAngle);
+
+        if (this.stunTimer > 0) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('STUNNED', 0, -30);
+            ctx.globalAlpha = 0.5;
+        }
+
+        ctx.fillStyle = 'rgba(233, 30, 99, 0.15)';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.visionRange, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            const px = Math.cos(angle) * this.radius;
+            const py = Math.sin(angle) * this.radius;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+class HazardGuard extends Guard {
+    constructor(x, y, path) {
+        super(x, y, path);
+        this.speed = 40;
+        this.radius = 16;
+        this.color = '#4caf50';
+        this.visionSpread = Math.PI / 8;
+        this.visionRange = 250;
+        this.rotationSpeed = 2;
+    }
+
+    update(dt, globalTimeScale) {
+        super.update(dt, globalTimeScale);
+        this.visionAngle += this.rotationSpeed * dt * globalTimeScale;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.visionAngle);
+
+        if (this.stunTimer > 0) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('STUNNED', 0, -30);
+            ctx.globalAlpha = 0.5;
+        }
+
+        ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, this.visionRange, -this.visionSpread, this.visionSpread);
+        ctx.lineTo(0, 0);
+        ctx.fill();
+
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+            const angle = (i * Math.PI) / 4 + Math.PI / 8;
+            const px = Math.cos(angle) * this.radius;
+            const py = Math.sin(angle) * this.radius;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
 class Candy {
     constructor(x, y, value = 10) {
         this.x = x;
@@ -745,7 +1069,9 @@ class SteamVent {
                 for (const guard of guards) {
                     if (guard.x > this.x && guard.x < this.x + this.width &&
                         guard.y > this.y - 100 && guard.y < this.y + this.height) {
-                        guard.stunTimer = 1.5; // Stun guard for 1.5 seconds
+                        if (!guard.hasShield) {
+                            guard.stunTimer = 1.5; // Stun guard for 1.5 seconds
+                        }
                     }
                 }
             }
@@ -886,6 +1212,11 @@ class Game {
         this.belts.push(new ConveyorBelt(100, 300, this.width - 200, 100, -50, 0));
 
         this.guards.push(new Guard(200, 250, [{x: 200, y: 250}, {x: this.width - 200, y: 250}]));
+        this.guards.push(new SwarmerGuard(150, 400, [{x: 150, y: 400}, {x: 150, y: 550}]));
+        this.guards.push(new SniperGuard(this.width - 150, 150, [{x: this.width - 150, y: 150}, {x: this.width - 150, y: 50}]));
+        this.guards.push(new ShieldedBruiserGuard(400, 350, [{x: 400, y: 350}, {x: 600, y: 350}]));
+        this.guards.push(new SplitterGuard(300, 150, [{x: 300, y: 150}, {x: 500, y: 150}]));
+        this.guards.push(new HazardGuard(this.width / 2, this.height - 100, [{x: 200, y: this.height - 100}, {x: this.width - 200, y: this.height - 100}]));
 
         this.vents = [];
         this.vents.push(new SteamVent(this.width / 2 - 40, 420, 80, 20, 3, 1));
@@ -935,11 +1266,27 @@ class Game {
             belt.update(dt, this.timeScale);
         }
 
+        let newGuards = [];
         for (const guard of this.guards) {
             guard.update(dt, this.timeScale);
+            if (guard.state === 'SPLITTING' && !guard.hasSplit) {
+                guard.hasSplit = true;
+                // Spawn 3 swarmers
+                for(let j=0; j<3; j++) {
+                    const angle = (j * Math.PI * 2) / 3;
+                    const path = [
+                        {x: guard.x + Math.cos(angle)*100, y: guard.y + Math.sin(angle)*100},
+                        {x: guard.x, y: guard.y}
+                    ];
+                    newGuards.push(new SwarmerGuard(guard.x, guard.y, path));
+                }
+            }
             if (guard.canSee(this.player) && !this.player.invulnerable) {
                 this.gameOver();
             }
+        }
+        if (newGuards.length > 0) {
+            this.guards.push(...newGuards);
         }
 
         for (let i = this.candies.length - 1; i >= 0; i--) {
