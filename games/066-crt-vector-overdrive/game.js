@@ -667,6 +667,299 @@ class VectorGrid {
     }
 }
 
+
+// --- PHASE 3: ENVIRONMENT SUBSYSTEM ---
+class ParallaxLayer {
+    constructor(game, speed, color, count, zIndex) {
+        this.game = game;
+        this.speed = speed;
+        this.color = color;
+        this.zIndex = zIndex;
+        this.shapes = [];
+        for(let i=0; i<count; i++) {
+            this.shapes.push({
+                x: randomRange(0, CONSTANTS.CANVAS_BASE_W),
+                y: randomRange(0, CONSTANTS.CANVAS_BASE_H),
+                size: randomRange(10, 40) / zIndex,
+                rot: randomRange(0, Math.PI * 2),
+                type: Math.floor(randomRange(0, 3)) // 0: square, 1: triangle, 2: hex
+            });
+        }
+    }
+    update(dt) {
+        // move slowly, affected slightly by player movement context
+        let dx = 0;
+        let dy = 0;
+        if (this.game.player) {
+            dx = this.game.player.vx * dt * this.speed;
+            dy = this.game.player.vy * dt * this.speed;
+        } else {
+            dx = this.speed * 10 * dt;
+            dy = this.speed * 5 * dt;
+        }
+
+        this.shapes.forEach(s => {
+            s.x -= dx;
+            s.y -= dy;
+            s.rot += dt * 0.5 * this.speed;
+            if (s.x < -50) s.x = CONSTANTS.CANVAS_BASE_W + 50;
+            if (s.x > CONSTANTS.CANVAS_BASE_W + 50) s.x = -50;
+            if (s.y < -50) s.y = CONSTANTS.CANVAS_BASE_H + 50;
+            if (s.y > CONSTANTS.CANVAS_BASE_H + 50) s.y = -50;
+        });
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 1;
+        this.shapes.forEach(s => {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(s.rot);
+            ctx.beginPath();
+            if (s.type === 0) {
+                ctx.rect(-s.size/2, -s.size/2, s.size, s.size);
+            } else if (s.type === 1) {
+                ctx.moveTo(0, -s.size/2);
+                ctx.lineTo(s.size/2, s.size/2);
+                ctx.lineTo(-s.size/2, s.size/2);
+                ctx.closePath();
+            } else {
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI / 3) * i;
+                    const px = Math.cos(angle) * s.size;
+                    const py = Math.sin(angle) * s.size;
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+            }
+            ctx.stroke();
+            ctx.restore();
+        });
+        ctx.restore();
+    }
+}
+
+class EnvironmentManager {
+    constructor(game) {
+        this.game = game;
+        this.layers = [
+            new ParallaxLayer(game, 0.05, 'rgba(0, 255, 204, 0.1)', 15, 3),
+            new ParallaxLayer(game, 0.1, 'rgba(255, 51, 102, 0.15)', 20, 2),
+            new ParallaxLayer(game, 0.2, 'rgba(250, 247, 189, 0.2)', 25, 1)
+        ];
+        this.hazards = [];
+        this.initHazards();
+    }
+    initHazards() {
+        this.hazards = [];
+        // Destructible Cover
+        for (let i = 0; i < 5; i++) {
+            this.hazards.push(new DestructibleCover(
+                randomRange(100, CONSTANTS.CANVAS_BASE_W - 100),
+                randomRange(100, CONSTANTS.CANVAS_BASE_H - 100)
+            ));
+        }
+        // Gravity Zones
+        this.hazards.push(new GravityZone(
+            CONSTANTS.CANVAS_BASE_W / 2,
+            CONSTANTS.CANVAS_BASE_H / 2,
+            150,
+            500 // pull strength
+        ));
+        // Shifting Geometry (Laser fence)
+        this.hazards.push(new LaserFence(
+            150, 100, 150, CONSTANTS.CANVAS_BASE_H - 100
+        ));
+        this.hazards.push(new LaserFence(
+            CONSTANTS.CANVAS_BASE_W - 150, 100, CONSTANTS.CANVAS_BASE_W - 150, CONSTANTS.CANVAS_BASE_H - 100
+        ));
+    }
+    update(dt) {
+        this.layers.forEach(l => l.update(dt));
+        this.hazards.forEach(h => h.update(dt, this.game));
+        this.hazards = this.hazards.filter(h => h.active);
+    }
+    drawBackground(ctx) {
+        this.layers.forEach(l => l.draw(ctx));
+    }
+    drawForeground(ctx) {
+        this.hazards.forEach(h => h.draw(ctx));
+    }
+}
+
+class DestructibleCover {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 60;
+        this.height = 60;
+        this.hp = 10;
+        this.active = true;
+    }
+    update(dt, game) {
+        // block player and enemies
+        const checkCollision = (entity) => {
+            if (entity.x > this.x && entity.x < this.x + this.width &&
+                entity.y > this.y && entity.y < this.y + this.height) {
+                // push out
+                const cx = this.x + this.width/2;
+                const cy = this.y + this.height/2;
+                const dx = entity.x - cx;
+                const dy = entity.y - cy;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    entity.x = dx > 0 ? this.x + this.width + entity.radius : this.x - entity.radius;
+                } else {
+                    entity.y = dy > 0 ? this.y + this.height + entity.radius : this.y - entity.radius;
+                }
+            }
+        };
+        if (game.player) checkCollision(game.player);
+        game.enemies.forEach(e => checkCollision(e));
+
+        // absorb projectiles
+        game.projectiles.forEach(p => {
+            if (p.active && p.x > this.x && p.x < this.x + this.width && p.y > this.y && p.y < this.y + this.height) {
+                p.active = false;
+                this.hp -= p.isOverdrive ? 3 : 1;
+                game.spawnParticles(p.x, p.y, COLORS.text, 3);
+            }
+        });
+
+        if (this.hp <= 0) {
+            this.active = false;
+            game.sound.explosion();
+            game.spawnParticles(this.x + this.width/2, this.y + this.height/2, COLORS.text, 20);
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.strokeStyle = COLORS.text;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+        // draw crack lines based on hp
+        ctx.beginPath();
+        if (this.hp < 8) { ctx.moveTo(this.x, this.y); ctx.lineTo(this.x + 20, this.y + 30); }
+        if (this.hp < 5) { ctx.moveTo(this.x + this.width, this.y); ctx.lineTo(this.x + 30, this.y + 40); }
+        if (this.hp < 3) { ctx.moveTo(this.x + this.width/2, this.y + this.height); ctx.lineTo(this.x + 10, this.y + 10); }
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class GravityZone {
+    constructor(x, y, radius, force) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.force = force;
+        this.active = true;
+        this.angle = 0;
+    }
+    update(dt, game) {
+        this.angle += dt;
+        const applyGravity = (entity) => {
+            const dx = this.x - entity.x;
+            const dy = this.y - entity.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < this.radius && dist > 10) {
+                const pull = (this.force * (1 - dist / this.radius)) * dt;
+                entity.x += (dx / dist) * pull;
+                entity.y += (dy / dist) * pull;
+            }
+        };
+        if (game.player) applyGravity(game.player);
+        game.enemies.forEach(e => applyGravity(e));
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        ctx.strokeStyle = 'rgba(255, 0, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.6, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.setLineDash([10, 10]);
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class LaserFence {
+    constructor(x1, y1, x2, y2) {
+        this.x1 = x1;
+        this.y1 = y1;
+        this.x2 = x2;
+        this.y2 = y2;
+        this.active = true;
+        this.timer = 0;
+        this.isOn = true;
+    }
+    update(dt, game) {
+        this.timer += dt;
+        if (this.timer > 3) {
+            this.isOn = !this.isOn;
+            this.timer = 0;
+        }
+        if (!this.isOn) return;
+
+        const checkLineCollision = (entity) => {
+            // Distance from point to line segment
+            const l2 = Math.pow(this.x1 - this.x2, 2) + Math.pow(this.y1 - this.y2, 2);
+            if (l2 === 0) return distance(entity.x, entity.y, this.x1, this.y1) < entity.radius;
+            let t = ((entity.x - this.x1) * (this.x2 - this.x1) + (entity.y - this.y1) * (this.y2 - this.y1)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            const projX = this.x1 + t * (this.x2 - this.x1);
+            const projY = this.y1 + t * (this.y2 - this.y1);
+            if (distance(entity.x, entity.y, projX, projY) < entity.radius + 5) {
+                return true;
+            }
+            return false;
+        };
+
+        if (game.player && checkLineCollision(game.player)) {
+            game.player.takeDamage(20 * dt); // continuous damage
+        }
+        game.enemies.forEach(e => {
+            if (checkLineCollision(e)) {
+                e.takeDamage(10 * dt);
+            }
+        });
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.strokeStyle = COLORS.enemy;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(this.x1, this.y1);
+        ctx.lineTo(this.x2, this.y2);
+
+        if (this.isOn) {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = COLORS.enemy;
+            ctx.stroke();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        } else {
+            ctx.strokeStyle = 'rgba(255, 51, 102, 0.2)';
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+}
+
 class Particle {
     constructor(x, y, color) {
         this.x = x;
@@ -720,6 +1013,7 @@ class Game {
         this.enemies = [];
         this.particles = [];
         this.vectorGrid = new VectorGrid(this);
+        this.envManager = new EnvironmentManager(this);
 
         this.score = 0;
         this.wave = 1;
@@ -852,6 +1146,7 @@ class Game {
 
         this.particles.forEach(p => p.update(dt));
         this.vectorGrid.update(dt);
+        this.envManager.update(dt);
         this.particles = this.particles.filter(p => p.active);
 
         // Collisions: Projectile vs Enemy
@@ -930,6 +1225,7 @@ class Game {
         this.ctx.fillRect(0, 0, CONSTANTS.CANVAS_BASE_W, CONSTANTS.CANVAS_BASE_H);
 
         if (this.player) { this.vectorGrid.draw(this.ctx, this.player.x, this.player.y); } else { this.drawGrid(this.ctx); }
+        if (this.envManager) { this.envManager.drawBackground(this.ctx); }
 
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = COLORS.text;
@@ -961,6 +1257,7 @@ class Game {
         this.particles.forEach(p => p.draw(this.ctx));
         this.enemies.forEach(e => e.draw(this.ctx));
         this.projectiles.forEach(p => p.draw(this.ctx));
+        if (this.envManager) { this.envManager.drawForeground(this.ctx); }
 
         if (this.player) {
             this.player.draw(this.ctx);
