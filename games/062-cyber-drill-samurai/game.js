@@ -67,11 +67,17 @@ class InputManager {
     this.pointer = { x: 0, y: 0, active: false, justPressed: false };
     this.actionPressed = false;
     this.actionJustPressed = false;
+    this.dashPressed = false;
+    this.dashJustPressed = false;
     this.joystick = { active: false, dx: 0, dy: 0, startX: 0, startY: 0, id: null };
 
     window.addEventListener('keydown', e => {
       this.keys[e.code] = true;
       if (e.code === 'Space') this.actionPressed = true;
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        this.dashPressed = true;
+        this.dashJustPressed = true;
+      }
     });
     window.addEventListener('keyup', e => {
       this.keys[e.code] = false;
@@ -87,9 +93,12 @@ class InputManager {
       this.pointer.x = x;
       this.pointer.y = y;
 
-      if (x > canvas.width / 2) {
+      if (x > canvas.width * 0.75) {
         this.actionPressed = true;
         this.actionJustPressed = true;
+      } else if (x > canvas.width * 0.5) {
+        this.dashPressed = true;
+        this.dashJustPressed = true;
       } else {
         this.joystick.active = true;
         this.joystick.startX = x;
@@ -127,6 +136,7 @@ class InputManager {
         this.joystick.id = null;
       }
       this.actionPressed = false;
+      this.dashPressed = false;
     });
     canvas.addEventListener('pointercancel', e => {
       this.pointer.active = false;
@@ -137,11 +147,13 @@ class InputManager {
         this.joystick.id = null;
       }
       this.actionPressed = false;
+      this.dashPressed = false;
     });
   }
   update() {
     this.pointer.justPressed = false;
     this.actionJustPressed = false;
+    this.dashJustPressed = false;
   }
   getMovement() {
     let dx = 0;
@@ -279,38 +291,175 @@ class Player {
     this.speed = 200;
     this.drillActive = false;
     this.angle = Math.PI / 2; // pointing down
-  }
-  update(dt, input) {
-    const mov = input.getMovement();
-    this.vx = mov.dx * this.speed;
-    this.vy = mov.dy * this.speed;
 
-    if (mov.dx !== 0 || mov.dy !== 0) {
-      this.angle = Math.atan2(mov.dy, mov.dx);
-      this.drillActive = true;
-    } else {
-      this.drillActive = false;
-    }
+    // Phase 2: Dash/Overdrive & Reactive Sprite
+    this.dashCooldown = 0;
+    this.dashTimer = 0;
+    this.isDashing = false;
+    this.dashDuration = 0.2;
+    this.dashSpeedMultiplier = 3;
+    this.invulnTimer = 0;
+    this.recoilTimer = 0;
+    this.recoilForceX = 0;
+    this.recoilForceY = 0;
+    this.thrustLevel = 0;
+    this.aimLineLength = 50;
   }
+
+  applyRecoil(force, angle) {
+    this.recoilTimer = 0.15;
+    this.recoilForceX = -Math.cos(angle) * force;
+    this.recoilForceY = -Math.sin(angle) * force;
+  }
+
+  update(dt, input) {
+    // Cooldowns & Timers
+    if (this.dashCooldown > 0) this.dashCooldown -= dt;
+    if (this.invulnTimer > 0) this.invulnTimer -= dt;
+    if (this.recoilTimer > 0) this.recoilTimer -= dt;
+    if (this.dashTimer > 0) {
+      this.dashTimer -= dt;
+      if (this.dashTimer <= 0) {
+        this.isDashing = false;
+      }
+    }
+
+    const mov = input.getMovement();
+
+    // Handle Input for movement & dash
+    if (input.dashJustPressed && this.dashCooldown <= 0) {
+      this.isDashing = true;
+      this.dashTimer = this.dashDuration;
+      this.dashCooldown = 2.5; // 2.5 second cooldown
+      this.invulnTimer = this.dashDuration; // Invulnerable while dashing
+      this.applyRecoil(100, this.angle);
+
+      // If pressing a direction, dash there, else dash forward
+      if (mov.dx !== 0 || mov.dy !== 0) {
+        this.angle = Math.atan2(mov.dy, mov.dx);
+      }
+    }
+
+    // Momentum / Movement computation
+    let targetVx = mov.dx * this.speed;
+    let targetVy = mov.dy * this.speed;
+
+    if (this.isDashing) {
+      targetVx = Math.cos(this.angle) * this.speed * this.dashSpeedMultiplier;
+      targetVy = Math.sin(this.angle) * this.speed * this.dashSpeedMultiplier;
+      this.thrustLevel = 1.0;
+    } else {
+      if (mov.dx !== 0 || mov.dy !== 0) {
+        this.angle = Math.atan2(mov.dy, mov.dx);
+        this.drillActive = true;
+        this.thrustLevel = Math.min(1.0, this.thrustLevel + dt * 5);
+      } else {
+        this.drillActive = false;
+        this.thrustLevel = Math.max(0.0, this.thrustLevel - dt * 5);
+      }
+    }
+
+    // Add recoil vector if active
+    let rX = 0, rY = 0;
+    if (this.recoilTimer > 0) {
+      const p = this.recoilTimer / 0.15;
+      rX = this.recoilForceX * p;
+      rY = this.recoilForceY * p;
+    }
+
+    // Tighter friction/lerping towards target velocities
+    const friction = 10 * dt;
+    this.vx += (targetVx + rX - this.vx) * friction;
+    this.vy += (targetVy + rY - this.vy) * friction;
+  }
+
   draw(ctx, cameraY) {
+    if (this.invulnTimer > 0 && Math.floor(Date.now() / 50) % 2 === 0) {
+        return; // Blink invulnerability
+    }
+
     ctx.save();
     ctx.translate(this.x, this.y - cameraY);
     ctx.rotate(this.angle);
 
-    // Body
+    // Aim Telegraph Line (Reactive)
+    if (this.thrustLevel > 0 && !this.isDashing) {
+        ctx.strokeStyle = `rgba(58, 155, 220, ${this.thrustLevel * 0.3})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(this.r * 1.5, 0);
+        ctx.lineTo(this.r * 1.5 + this.aimLineLength * this.thrustLevel, 0);
+        ctx.stroke();
+    }
+
+    // Thruster Jet (Multi-part sprite element 1)
+    if (this.thrustLevel > 0 || this.isDashing) {
+        const jetLength = this.isDashing ? 30 : 15 * this.thrustLevel;
+        ctx.fillStyle = this.isDashing ? '#f14668' : '#3a9bdc';
+        ctx.beginPath();
+        ctx.moveTo(-this.r * 0.8, -5);
+        ctx.lineTo(-this.r * 0.8 - jetLength - Math.random() * 5, 0);
+        ctx.lineTo(-this.r * 0.8, 5);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Recoil offset for body drawing
+    let rx = 0;
+    if (this.recoilTimer > 0) {
+        rx = -Math.cos(0) * (this.recoilTimer / 0.15) * 5; // Local space recoil shift backwards
+    }
+
+    ctx.translate(rx, 0);
+
+    // Cyber Samurai Shoulders/Armor (Multi-part sprite element 2)
+    ctx.fillStyle = '#1c222b';
+    ctx.fillRect(-this.r * 0.6, -this.r, this.r * 1.2, this.r * 2);
+    ctx.strokeStyle = '#f5ca53';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-this.r * 0.6, -this.r, this.r * 1.2, this.r * 2);
+
+    // Core Body/Helmet (Multi-part sprite element 3)
     ctx.fillStyle = '#3a9bdc';
     ctx.beginPath();
-    ctx.arc(0, 0, this.r, 0, Math.PI*2);
+    ctx.arc(0, 0, this.r * 0.8, 0, Math.PI*2);
     ctx.fill();
 
-    // Drill
-    ctx.fillStyle = this.drillActive ? '#f5ca53' : '#aaaaaa';
+    // Visor / Eye (Multi-part sprite element 4)
+    ctx.fillStyle = this.isDashing ? '#f14668' : '#a0efb8';
     ctx.beginPath();
-    ctx.moveTo(this.r * 0.5, -this.r * 0.8);
-    ctx.lineTo(this.r * 1.5, 0);
-    ctx.lineTo(this.r * 0.5, this.r * 0.8);
+    ctx.rect(-2, -this.r * 0.4, this.r * 0.8, this.r * 0.8);
+    ctx.fill();
+
+    // The Drill (Multi-part sprite element 5)
+    // Rotate the drill visually if active
+    let drillAngleOffset = 0;
+    if (this.drillActive || this.isDashing) {
+        drillAngleOffset = (Date.now() % 360) * Math.PI / 180;
+    }
+
+    ctx.translate(this.r * 0.8, 0);
+
+    ctx.fillStyle = (this.drillActive || this.isDashing) ? '#f5ca53' : '#aaaaaa';
+
+    // Drill base
+    ctx.beginPath();
+    ctx.moveTo(0, -this.r * 0.6);
+    ctx.lineTo(this.r, 0);
+    ctx.lineTo(0, this.r * 0.6);
     ctx.closePath();
     ctx.fill();
+
+    // Spiral details (reactive)
+    if (this.drillActive || this.isDashing) {
+        ctx.strokeStyle = '#b89437';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        let phase = (Date.now() / 50) % (this.r);
+        ctx.moveTo(phase, -(this.r * 0.6) * (1 - phase/this.r));
+        ctx.lineTo(phase, (this.r * 0.6) * (1 - phase/this.r));
+        ctx.stroke();
+    }
 
     ctx.restore();
   }
@@ -495,11 +644,19 @@ class Engine {
 
       if (distanceSquared < (this.player.r * this.player.r)) {
         if (b.type === 1) { // Rock
-          hitSolid = true;
-          // bounce
-          this.player.vx = -this.player.vx * 0.5;
-          this.player.vy = -this.player.vy * 0.5;
-          break; // Stop checking
+          if (this.player.isDashing) {
+            // Dash destroys rocks!
+            b.active = false;
+            this.soundEngine.playExplosion();
+            this.spawnParticles(b.x + b.w/2, b.y + b.h/2, '#6a6b6d', 10);
+          } else {
+            hitSolid = true;
+            // bounce
+            this.player.vx = -this.player.vx * 0.5;
+            this.player.vy = -this.player.vy * 0.5;
+            this.player.applyRecoil(200, this.player.angle);
+            break; // Stop checking
+          }
         } else {
           // Drill dirt/gem
           b.active = false;
@@ -592,7 +749,15 @@ class Engine {
       // Collision with player
       const distToPlayer = Math.hypot(e.x - this.player.x, e.y - this.player.y);
       if (distToPlayer < e.r + this.player.r) {
-        this.gameOver();
+        if (this.player.isDashing) {
+          // Dash kills enemies!
+          e.active = false;
+          this.spawnParticles(e.x, e.y, '#f14668', 15);
+          this.soundEngine.playHit();
+          this.score += 20 * this.multiplier;
+        } else if (this.player.invulnTimer <= 0) {
+          this.gameOver();
+        }
       }
 
       // Collision with tether (severing)
@@ -719,6 +884,21 @@ class Engine {
     this.ctx.fillRect(this.width/2 - 100, 30, 200, 5);
     this.ctx.fillStyle = '#a0efb8';
     this.ctx.fillRect(this.width/2 - 100, 30, 200 * (this.tetherLength / this.maxTetherLength), 5);
+
+    // Dash Cooldown HUD Indicator
+    this.ctx.fillStyle = '#4a4b4d';
+    this.ctx.fillRect(this.width/2 - 50, 42, 100, 4);
+    if (this.player && this.player.dashCooldown > 0) {
+        this.ctx.fillStyle = '#f14668';
+        this.ctx.fillRect(this.width/2 - 50, 42, 100 * (this.player.dashCooldown / 2.5), 4);
+    } else {
+        this.ctx.fillStyle = '#3a9bdc';
+        this.ctx.fillRect(this.width/2 - 50, 42, 100, 4);
+        this.ctx.font = '10px Courier New';
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('DASH READY', this.width/2, 54);
+    }
 
     // Draw touch controls if active
     if (this.inputManager.joystick.active) {
