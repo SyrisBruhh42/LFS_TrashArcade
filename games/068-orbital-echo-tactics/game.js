@@ -2,7 +2,7 @@
 
 const SaveManager = {
   key: 'arcade_game_068_068-orbital-echo-tactics_v1',
-  data: { highScore: 0, totalGamesPlayed: 0, options: { mute: false } },
+  data: { highScore: 0, totalGamesPlayed: 0, options: { mute: false, screenShake: 1.0, particles: 'high' } },
   load: function() {
     try {
       const stored = localStorage.getItem(this.key);
@@ -326,6 +326,38 @@ class Entity {
 }
 
 
+class DamagePopup {
+  constructor(x, y, amount, color) {
+    this.x = x * GRID_SIZE + GRID_SIZE/2;
+    this.y = y * GRID_SIZE;
+    this.amount = amount;
+    this.color = color;
+    this.life = 1.0;
+  }
+}
+
+
+class MotionTrailManager {
+  constructor() {
+    this.trails = [];
+  }
+  add(x, y, dx, dy, color) {
+    this.trails.push(new DashTrail(x, y, dx, dy, color));
+  }
+  update(dt) {
+    for (let i = this.trails.length - 1; i >= 0; i--) {
+      this.trails[i].update(dt);
+      if (this.trails[i].life <= 0) {
+        this.trails.splice(i, 1);
+      }
+    }
+  }
+  draw(ctx) {
+    for (let t of this.trails) {
+      t.draw(ctx);
+    }
+  }
+}
 class DashTrail {
   constructor(x, y, dx, dy, color) {
     this.x = x;
@@ -947,8 +979,15 @@ const Engine = {
   ],
   pickups: [],
 
+  hitStopTimer: 0,
+  cameraShakeTimer: 0,
+  cameraShakeIntensity: 0,
+  damagePopups: [],
 
-
+  cameraShake: function(duration, intensity) {
+    this.cameraShakeTimer = duration;
+    this.cameraShakeIntensity = intensity * (SaveManager.data.options.screenShake !== undefined ? SaveManager.data.options.screenShake : 1.0);
+  },
 
   selectUpgrade: function(upgradeName) {
     this.applyUpgrade(upgradeName);
@@ -1071,7 +1110,7 @@ const Engine = {
     this.enemies = [];
     this.walls = [];
     this.particles = [];
-    this.dashTrails = [];
+    this.trailManager = new MotionTrailManager();
     this.conveyors = [];
     this.lasers = [];
     this.acidPools = [];
@@ -1240,6 +1279,15 @@ const Engine = {
     }
   },
 
+
+  // Extra helper for bounds checking safely
+  isOutOfBounds: function(x, y) {
+    if (x < 0) return true;
+    if (x >= COLS) return true;
+    if (y < 0) return true;
+    if (y >= ROWS) return true;
+    return false;
+  },
   isSolid: function(x, y) {
     if(x < 0 || x >= COLS || y < 0 || y >= ROWS) return true;
     for(let w of this.walls) if(w.x === x && w.y === y) return true;
@@ -1250,13 +1298,60 @@ const Engine = {
     return this.enemies.find(e => e.targetX === x && e.targetY === y);
   },
 
-  spawnParticles: function(x, y, color) {
-    for(let i=0; i<10; i++) {
+  spawnExplosion: function(x, y, color, intensity=1) {
+    let count = SaveManager.data.options.particles === 'low' ? 10 : 25;
+    count = Math.floor(count * intensity);
+    for(let i=0; i<count; i++) {
+      const speed = Math.random() * 200 + 50;
+      const angle = Math.random() * Math.PI * 2;
       this.particles.push({
         x: x * GRID_SIZE + GRID_SIZE/2,
         y: y * GRID_SIZE + GRID_SIZE/2,
-        vx: (Math.random() - 0.5) * 100,
-        vy: (Math.random() - 0.5) * 100,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.5 + Math.random() * 0.8,
+        color: Math.random() > 0.5 ? color : '#ffffff'
+      });
+    }
+  },
+
+  spawnHitSpark: function(x, y) {
+    let count = SaveManager.data.options.particles === 'low' ? 3 : 8;
+    for(let i=0; i<count; i++) {
+      const speed = Math.random() * 300 + 100;
+      const angle = Math.random() * Math.PI * 2;
+      this.particles.push({
+        x: x * GRID_SIZE + GRID_SIZE/2,
+        y: y * GRID_SIZE + GRID_SIZE/2,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.2 + Math.random() * 0.3,
+        color: '#f1c40f'
+      });
+    }
+  },
+
+  spawnThrusterExhaust: function(x, y, dx, dy) {
+    if (SaveManager.data.options.particles === 'low') return;
+    for(let i=0; i<3; i++) {
+      this.particles.push({
+        x: x * GRID_SIZE + GRID_SIZE/2 - (dx * GRID_SIZE/2),
+        y: y * GRID_SIZE + GRID_SIZE/2 - (dy * GRID_SIZE/2),
+        vx: -dx * (Math.random() * 50 + 50) + (Math.random() - 0.5) * 20,
+        vy: -dy * (Math.random() * 50 + 50) + (Math.random() - 0.5) * 20,
+        life: 0.3 + Math.random() * 0.2,
+        color: '#3498db'
+      });
+    }
+  },
+  spawnParticles: function(x, y, color, dx = 0, dy = 0) {
+    let count = SaveManager.data.options.particles === 'low' ? 5 : 10;
+    for(let i=0; i<count; i++) {
+      this.particles.push({
+        x: x * GRID_SIZE + GRID_SIZE/2,
+        y: y * GRID_SIZE + GRID_SIZE/2,
+        vx: (Math.random() - 0.5) * 100 + (dx * 150),
+        vy: (Math.random() - 0.5) * 100 + (dy * 150),
         life: 0.5 + Math.random() * 0.5,
         color: color
       });
@@ -1311,7 +1406,10 @@ const Engine = {
              const enemy = this.getEnemyAt(nx, ny);
              if (enemy) {
                enemy.hp -= this.player.dashDamage;
-               this.spawnParticles(nx, ny, enemy.color);
+               this.spawnParticles(nx, ny, enemy.color, dx, dy);
+               this.hitStopTimer = 0.05;
+               this.cameraShake(0.1, 5);
+               this.damagePopups.push(new DamagePopup(nx, ny, this.player.dashDamage, '#f1c40f'));
                if (enemy.hp <= 0) {
                  SoundEngine.playDestroy();
                  if (enemy.onDeath) enemy.onDeath(this);
@@ -1333,7 +1431,7 @@ const Engine = {
 
         this.player.moveTo(nx, ny);
         this.player.recordMove(nx, ny);
-        this.dashTrails.push(new DashTrail(this.player.x, this.player.y, dx, dy, '#3498db'));
+        this.trailManager.add(this.player.x, this.player.y, dx, dy, '#3498db');
         SoundEngine.playTone(800, 'square', 0.2, 0.1);
 
         this.turnState = 'ANIMATING';
@@ -1346,9 +1444,11 @@ const Engine = {
         const ny = this.player.y + dy;
 
         if (!wait && !this.isSolid(nx, ny) && !this.getEnemyAt(nx, ny)) {
+          this.trailManager.add(this.player.x, this.player.y, dx, dy, 'rgba(207, 124, 212, 0.3)');
           this.player.moveTo(nx, ny);
           this.player.recordMove(nx, ny);
           this.player.thrustTimer = 0.15;
+          this.spawnThrusterExhaust(this.player.x, this.player.y, dx, dy);
           SoundEngine.playMove();
 
           if(this.player.getEchoPos()) SoundEngine.playEchoMove();
@@ -1420,7 +1520,7 @@ const Engine = {
            let hit = l.isHorizontal ? (e.y === l.y) : (e.x === l.x);
            if (hit) {
              e.hp -= 2;
-             this.spawnParticles(e.x, e.y, e.color);
+             this.spawnHitSpark(e.x, e.y); this.spawnParticles(e.x, e.y, e.color);
              if (e.hp <= 0) {
                SoundEngine.playDestroy();
                if (e.onDeath) e.onDeath(this);
@@ -1506,9 +1606,13 @@ const Engine = {
 
       if (eHit) {
         e.hp--;
-        this.spawnParticles(e.x, e.y, e.color);
+        this.spawnHitSpark(e.x, e.y); this.spawnParticles(e.x, e.y, e.color);
+        this.hitStopTimer = e.isBoss ? 0.2 : 0.05;
+        this.cameraShake(e.isBoss ? 0.5 : 0.1, e.isBoss ? 15 : 5);
+        this.damagePopups.push(new DamagePopup(e.x, e.y, 1, '#f1c40f'));
         SoundEngine.playDestroy();
         if (e.hp <= 0) {
+           this.spawnExplosion(e.x, e.y, e.color, e.isBoss ? 2 : 1);
            if (e.onDeath) e.onDeath(this);
            this.enemies.splice(i, 1);
            let baseScore = e.isBoss ? 1000 : 100;
@@ -1524,7 +1628,10 @@ const Engine = {
     }
 
     if (playerHit) {
+      this.spawnExplosion(this.player.x, this.player.y, this.player.color, 1.5);
       this.spawnParticles(this.player.x, this.player.y, this.player.color);
+      this.cameraShake(0.4, 20);
+      this.hitStopTimer = 0.1;
       this.gameOver();
       return;
     }
@@ -1589,6 +1696,15 @@ const Engine = {
   },
 
   update: function(dt) {
+    if (this.hitStopTimer > 0) {
+      this.hitStopTimer -= dt;
+      return;
+    }
+
+    if (this.cameraShakeTimer > 0) {
+      this.cameraShakeTimer -= dt;
+    }
+
     if (this.comboMultiplier > 1.0) {
        this.comboDecayTimer -= dt;
        if (this.comboDecayTimer <= 0) {
@@ -1614,10 +1730,13 @@ const Engine = {
       p.life -= dt;
       if (p.life <= 0) this.particles.splice(i, 1);
     }
-    for (let i = this.dashTrails.length - 1; i >= 0; i--) {
-      this.dashTrails[i].update(dt);
-      if (this.dashTrails[i].life <= 0) this.dashTrails.splice(i, 1);
+    for (let i = this.damagePopups.length - 1; i >= 0; i--) {
+      let dp = this.damagePopups[i];
+      dp.y -= 30 * dt;
+      dp.life -= dt;
+      if (dp.life <= 0) this.damagePopups.splice(i, 1);
     }
+    this.trailManager.update(dt);
 
     if (this.turnState === 'PLAYER_TURN') {
       this.processPlayerTurn();
@@ -1640,6 +1759,11 @@ const Engine = {
     // Clear
     this.ctx.fillStyle = '#111';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this.ctx.save();
+    if (this.cameraShakeTimer > 0) {
+      this.ctx.translate((Math.random() - 0.5) * this.cameraShakeIntensity, (Math.random() - 0.5) * this.cameraShakeIntensity);
+    }
 
     // Parallax background
     ParallaxBG.draw(this.ctx, this.canvas.width, this.canvas.height);
@@ -1759,7 +1883,7 @@ const Engine = {
        this.ctx.fillText('WARNING: BOSS INCOMING', this.canvas.width/2, this.canvas.height/2 + 10);
        this.ctx.textAlign = 'left';
     }
-    this.dashTrails.forEach(t => t.draw(this.ctx));
+    this.trailManager.draw(this.ctx);
 
     // Particles
     this.particles.forEach(p => {
@@ -1768,6 +1892,19 @@ const Engine = {
       this.ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
     });
     this.ctx.globalAlpha = 1.0;
+
+    // Damage Popups
+    this.ctx.font = 'bold 20px Courier New';
+    this.ctx.textAlign = 'center';
+    this.damagePopups.forEach(dp => {
+      this.ctx.fillStyle = dp.color;
+      this.ctx.globalAlpha = Math.max(0, dp.life);
+      this.ctx.fillText(dp.amount, dp.x, dp.y);
+    });
+    this.ctx.globalAlpha = 1.0;
+    this.ctx.textAlign = 'left';
+
+    this.ctx.restore();
   }
 };
 
