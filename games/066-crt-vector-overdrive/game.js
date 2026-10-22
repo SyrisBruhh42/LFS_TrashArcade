@@ -27,6 +27,9 @@ const CONSTANTS = {
     OVERDRIVE_DURATION: 3.0,
     PROJECTILE_SPEED: 600,
     MAX_HEALTH: 100,
+    DASH_SPEED: 800,
+    DASH_DURATION: 0.2,
+    DASH_COOLDOWN: 1.5,
     GRID_SIZE: 50,
     ENEMY_SPAWN_RATE_BASE: 2.0,
     ENEMY_SPEED: 100,
@@ -130,6 +133,7 @@ class SoundEngine {
     explosion() { this.playTone(100, 'triangle', 0.4, 0.5); }
     overdriveStart() { this.playTone(600, 'sine', 0.5, 0.6); }
     hurt() { this.playTone(150, 'sawtooth', 0.3, 0.6); }
+    dash() { this.playTone(500, 'triangle', 0.2, 0.4); }
 }
 
 class InputManager {
@@ -143,6 +147,8 @@ class InputManager {
         this.joystickLeft = { active: false, id: null, origin: { x: 0, y: 0 }, current: { x: 0, y: 0 }, vector: { x: 0, y: 0 } };
         this.joystickRight = { active: false, id: null, origin: { x: 0, y: 0 }, current: { x: 0, y: 0 }, vector: { x: 0, y: 0 } };
         this.overdriveTouch = false;
+        this.dashTouch = false;
+        this.dashTouch = false;
 
         this.bindEvents();
     }
@@ -176,6 +182,10 @@ class InputManager {
         // Touch overdrive button area (top center)
         if (y < rect.height * 0.2 && x > rect.width * 0.4 && x < rect.width * 0.6) {
             this.overdriveTouch = true;
+            return;
+        }
+        if (y < rect.height * 0.2 && x > rect.width * 0.2 && x < rect.width * 0.4) {
+            this.dashTouch = true;
             return;
         }
 
@@ -289,6 +299,9 @@ class InputManager {
     isOverdrivePressed() {
         return this.keys['Space'] || this.overdriveTouch;
     }
+    isDashPressed() {
+        return this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.dashTouch;
+    }
 
     isActionPressed() {
         return this.keys['Space'] || this.keys['Enter'] || this.mouse.down || this.pointers.size > 0;
@@ -310,15 +323,55 @@ class Player {
         this.vx = 0;
         this.vy = 0;
         this.invulnTimer = 0;
+        this.dashTimer = 0;
+        this.dashCooldownTimer = 0;
+        this.dashVector = {x: 0, y: 0};
+        this.afterimages = [];
+        this.recoilOffset = {x: 0, y: 0};
+        this.thrustAnim = 0;
     }
     update(dt) {
         // Movement
         const move = this.game.input.getMoveVector();
-        this.vx = move.x * CONSTANTS.PLAYER_SPEED;
-        this.vy = move.y * CONSTANTS.PLAYER_SPEED;
+
+        if (this.dashCooldownTimer > 0) this.dashCooldownTimer -= dt;
+
+        if (this.game.input.isDashPressed() && this.dashCooldownTimer <= 0 && this.dashTimer <= 0 && (move.x !== 0 || move.y !== 0)) {
+            this.dashTimer = CONSTANTS.DASH_DURATION;
+            this.dashCooldownTimer = CONSTANTS.DASH_COOLDOWN;
+            this.dashVector = {x: move.x, y: move.y};
+            this.game.sound.dash && this.game.sound.dash();
+        }
+
+        if (this.dashTimer > 0) {
+            this.dashTimer -= dt;
+            this.vx = this.dashVector.x * CONSTANTS.DASH_SPEED;
+            this.vy = this.dashVector.y * CONSTANTS.DASH_SPEED;
+            // spawn afterimage
+            if (Math.random() < 0.5) {
+                const aim = this.game.input.getAimVector(this.x, this.y, this.game.scaleX, this.game.scaleY);
+                let angle = aim ? Math.atan2(aim.y, aim.x) : Math.atan2(this.vy, this.vx);
+                this.afterimages.push(new Afterimage(this.x, this.y, angle, this.radius, 0.3, this.inOverdrive ? COLORS.overdrive : COLORS.player));
+            }
+        } else {
+            // Apply tight momentum tuning
+            const targetVx = move.x * CONSTANTS.PLAYER_SPEED;
+            const targetVy = move.y * CONSTANTS.PLAYER_SPEED;
+            this.vx += (targetVx - this.vx) * 15 * dt;
+            this.vy += (targetVy - this.vy) * 15 * dt;
+        }
 
         this.x += this.vx * dt;
         this.y += this.vy * dt;
+
+        // recoil decay
+        this.recoilOffset.x *= 0.8;
+        this.recoilOffset.y *= 0.8;
+        this.thrustAnim += dt * 10;
+
+        this.afterimages.forEach(a => a.update(dt));
+        this.afterimages = this.afterimages.filter(a => a.life > 0);
+
 
         // Constrain to bounds
         this.x = Math.max(this.radius, Math.min(CONSTANTS.CANVAS_BASE_W - this.radius, this.x));
@@ -365,6 +418,10 @@ class Player {
                     this.game.projectiles.push(new Projectile(this.x, this.y, aim.x, aim.y, false));
                     this.game.sound.shoot();
                 }
+
+                // apply recoil
+                this.recoilOffset.x = -aim.x * 5;
+                this.recoilOffset.y = -aim.y * 5;
             }
         }
     }
@@ -382,24 +439,49 @@ class Player {
     draw(ctx) {
         if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 20) % 2 === 0) return; // blink
 
+
+        this.afterimages.forEach(a => a.draw(ctx));
+
         ctx.save();
-        ctx.translate(this.x, this.y);
+        ctx.translate(this.x + this.recoilOffset.x, this.y + this.recoilOffset.y);
 
         ctx.strokeStyle = this.inOverdrive ? COLORS.overdrive : COLORS.player;
         ctx.lineWidth = 2;
-        ctx.beginPath();
-        // Draw ship vector shape
+
         const aim = this.game.input.getAimVector(this.x, this.y, this.game.scaleX, this.game.scaleY);
         let angle = aim ? Math.atan2(aim.y, aim.x) : Math.atan2(this.vy, this.vx);
         if (aim === null && this.vx === 0 && this.vy === 0) angle = -Math.PI / 2;
 
         ctx.rotate(angle);
 
+        // Core ship body
+        ctx.beginPath();
         ctx.moveTo(this.radius, 0);
         ctx.lineTo(-this.radius, this.radius * 0.8);
         ctx.lineTo(-this.radius * 0.5, 0);
         ctx.lineTo(-this.radius, -this.radius * 0.8);
         ctx.closePath();
+        ctx.stroke();
+
+        // Aim telegraph
+        if (aim) {
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.moveTo(this.radius, 0);
+            ctx.lineTo(this.radius + 30, 0);
+            ctx.stroke();
+        }
+
+        // Thrust flame
+        const speed = Math.hypot(this.vx, this.vy);
+        if (speed > 50 && this.dashTimer <= 0) {
+            const flicker = Math.sin(this.thrustAnim) * 5;
+            ctx.beginPath();
+            ctx.strokeStyle = '#ff8800';
+            ctx.moveTo(-this.radius * 0.5, 0);
+            ctx.lineTo(-this.radius * 1.5 - flicker, 0);
+            ctx.stroke();
+        }
         ctx.stroke();
 
         if (this.inOverdrive) {
@@ -512,6 +594,79 @@ class Enemy {
     }
 }
 
+
+class Afterimage {
+    constructor(x, y, angle, radius, life, color) {
+        this.x = x;
+        this.y = y;
+        this.angle = angle;
+        this.radius = radius;
+        this.life = life;
+        this.maxLife = life;
+        this.color = color;
+    }
+    update(dt) {
+        this.life -= dt;
+    }
+    draw(ctx) {
+        const alpha = Math.max(0, this.life / this.maxLife);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(-this.radius, this.radius * 0.8);
+        ctx.lineTo(-this.radius * 0.5, 0);
+        ctx.lineTo(-this.radius, -this.radius * 0.8);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+
+class VectorGrid {
+    constructor(game) {
+        this.game = game;
+        this.spacing = CONSTANTS.GRID_SIZE;
+        this.offset = {x: 0, y: 0};
+        this.pulseAnim = 0;
+    }
+    update(dt) {
+        this.pulseAnim += dt * 2;
+    }
+    draw(ctx, dx, dy) {
+        ctx.save();
+        ctx.strokeStyle = COLORS.grid;
+        ctx.lineWidth = 1;
+
+        // Dynamic grid pulse based on player movement and overdrive
+        const isOverdrive = this.game.player && this.game.player.inOverdrive;
+        if (isOverdrive) {
+            ctx.strokeStyle = 'rgba(255, 170, 0, 0.2)';
+            ctx.lineWidth = 2 + Math.sin(this.pulseAnim) * 1;
+        }
+
+        const offsetX = -(dx * 0.2) % this.spacing;
+        const offsetY = -(dy * 0.2) % this.spacing;
+
+        ctx.beginPath();
+        for (let x = offsetX; x < CONSTANTS.CANVAS_BASE_W; x += this.spacing) {
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, CONSTANTS.CANVAS_BASE_H);
+        }
+        for (let y = offsetY; y < CONSTANTS.CANVAS_BASE_H; y += this.spacing) {
+            ctx.moveTo(0, y);
+            ctx.lineTo(CONSTANTS.CANVAS_BASE_W, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
 class Particle {
     constructor(x, y, color) {
         this.x = x;
@@ -564,6 +719,7 @@ class Game {
         this.projectiles = [];
         this.enemies = [];
         this.particles = [];
+        this.vectorGrid = new VectorGrid(this);
 
         this.score = 0;
         this.wave = 1;
@@ -695,6 +851,7 @@ class Game {
         this.enemies = this.enemies.filter(e => e.active);
 
         this.particles.forEach(p => p.update(dt));
+        this.vectorGrid.update(dt);
         this.particles = this.particles.filter(p => p.active);
 
         // Collisions: Projectile vs Enemy
@@ -746,6 +903,7 @@ class Game {
         ctx.font = '20px monospace';
         ctx.textAlign = 'left';
         ctx.fillText(`SCORE: ${this.score}`, 20, 30);
+        ctx.fillText(`DASH: ${Math.max(0, this.player.dashCooldownTimer).toFixed(1)}s`, 20, 150);
         ctx.fillText(`HI: ${this.saveManager.data.highScore}`, 20, 60);
 
         // Health bar
@@ -771,7 +929,7 @@ class Game {
         this.ctx.fillStyle = COLORS.bg;
         this.ctx.fillRect(0, 0, CONSTANTS.CANVAS_BASE_W, CONSTANTS.CANVAS_BASE_H);
 
-        this.drawGrid(this.ctx);
+        if (this.player) { this.vectorGrid.draw(this.ctx, this.player.x, this.player.y); } else { this.drawGrid(this.ctx); }
 
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = COLORS.text;
