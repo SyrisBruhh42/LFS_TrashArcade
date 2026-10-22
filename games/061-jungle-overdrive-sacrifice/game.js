@@ -1311,7 +1311,68 @@ class Pickup {
   }
 }
 
+
+
+class VisualUtils {
+    static drawGlowingText(ctx, text, x, y, size, color, glowColor) {
+        ctx.save();
+        ctx.font = size + 'px Arial';
+        ctx.textAlign = 'center';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = glowColor;
+        ctx.fillStyle = color;
+        ctx.fillText(text, x, y);
+        ctx.restore();
+    }
+
+    static drawHealthOrb(ctx, x, y, radius, percentage) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fill();
+        ctx.clip();
+
+        ctx.beginPath();
+        ctx.rect(x - radius, y + radius - (radius * 2 * percentage), radius * 2, radius * 2 * percentage);
+        ctx.fillStyle = percentage > 0.3 ? '#0f0' : '#f00';
+        ctx.fill();
+        ctx.restore();
+    }
+
+    static drawDashBar(ctx, x, y, width, height, percentage) {
+        ctx.save();
+        ctx.fillStyle = '#444';
+        ctx.fillRect(x, y, width, height);
+        ctx.fillStyle = '#0ff';
+        ctx.fillRect(x, y, width * percentage, height);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(x, y, width, height);
+        ctx.restore();
+    }
+
+    static calculateIntensity(score) {
+        return Math.min(1.0, score / 100000);
+    }
+
+    static applyScreenShake(ctx, intensity) {
+        if (intensity > 0) {
+            let dx = (Math.random() - 0.5) * intensity;
+            let dy = (Math.random() - 0.5) * intensity;
+            ctx.translate(dx, dy);
+        }
+    }
+
+    static getIntensityColor(intensity) {
+        let r = Math.floor(255 * intensity);
+        let g = Math.floor(255 * (1 - intensity));
+        return `rgb(${r}, ${g}, 0)`;
+    }
+}
 class Game {
+
+
+
   constructor() {
     this.state = 'TITLE';
     this.paused = false;
@@ -1331,6 +1392,7 @@ class Game {
     this.bgOffset = 0;
     this.boss = null;
     this.bossWarningTimer = 0;
+    this.tutorialTimer = 10.0;
     this.bossIndex = 0;
     this.nextBossScore = 1000;
 
@@ -1404,6 +1466,7 @@ class Game {
     this.enemySpawnTimer = 0;
     this.boss = null;
     this.bossWarningTimer = 0;
+    this.tutorialTimer = 10.0;
     this.bossIndex = 0;
     this.nextBossScore = 1000;
     this.envManager = new EnvironmentManager();
@@ -1414,6 +1477,7 @@ class Game {
   }
 
   startNextWave(initial = false) {
+    if (initial) this.tutorialTimer = 10.0;
     if (!initial) this.currentWave++;
     this.enemiesToSpawn = 5 + this.currentWave * 2;
     this.enemiesRemainingInWave = this.enemiesToSpawn;
@@ -1440,6 +1504,7 @@ class Game {
     }
   }
 
+
   applyUpgrade(choice) {
     switch (choice.id) {
         case 'hp': this.player.maxHealth += 50; this.player.health += 50; break;
@@ -1449,9 +1514,14 @@ class Game {
         case 'combo_time': this.playerStats.comboTimeMult += 0.5; break;
         case 'dash_cd': this.playerStats.dashCdMult *= 0.8; break;
         case 'range': this.playerStats.rangeMult += 0.3; break;
+
         case 'od_cost': this.playerStats.odCost = Math.max(10, this.playerStats.odCost - 5); break;
+        case 'lifesteal': this.playerStats.lifesteal = (this.playerStats.lifesteal || 0) + 1; break;
+        case 'attack_speed': this.playerStats.attackSpeedMult = (this.playerStats.attackSpeedMult || 1) * 0.85; break;
     }
   }
+
+
 
   gameOver() {
     this.state = 'GAME_OVER';
@@ -1583,6 +1653,9 @@ class Game {
         }
       }
     } else if (this.state === 'PLAYING') {
+      if (this.tutorialTimer > 0 && this.currentWave === 1) {
+          this.tutorialTimer -= dt;
+      }
       this.beatTracker.update(dt);
       this.player.update(dt, this.inputManager, height);
       if (this.envManager) this.envManager.update(dt);
@@ -1675,6 +1748,11 @@ class Game {
               } else {
                   this.boss = new OverdriveIdol(width + 100, height / 2);
               }
+              // Boss scaling
+              let bossHpMult = 1.0 + Math.floor(this.currentWave / 5) * 0.5;
+              this.boss.maxHealth *= bossHpMult;
+              this.boss.health = this.boss.maxHealth;
+
           }
       }
 
@@ -1693,24 +1771,54 @@ class Game {
         this.enemySpawnTimer -= dt;
         if (this.enemySpawnTimer <= 0 && this.enemiesToSpawn > 0) {
           this.enemiesToSpawn--;
-          let spawnType = Math.random();
+
+        // Scale enemy types with wave
+        let spawnType = Math.random();
+
+        let sSwarmer = Math.min(0.2, 0.05 + this.currentWave * 0.01);
+        let sBruiser = Math.min(0.2, 0.05 + this.currentWave * 0.015);
+        let sSniper  = Math.min(0.2, 0.05 + this.currentWave * 0.015);
+        let sSplitter= Math.min(0.15, 0.02 + this.currentWave * 0.01);
+        let sSpawner = Math.min(0.15, 0.02 + this.currentWave * 0.01);
+
+        // remaining is normal enemy
+        let cSwarmer = 1.0 - sSwarmer - sBruiser - sSniper - sSplitter - sSpawner;
+
+        let r1 = cSwarmer;
+        let r2 = r1 + sSwarmer;
+        let r3 = r2 + sBruiser;
+        let r4 = r3 + sSniper;
+        let r5 = r4 + sSplitter;
+
         let spawnY = Math.random() * (height - 200) + 100; // Keep within playable area
         let newEnemy;
-        if (spawnType < 0.2) {
+        if (spawnType < r1) {
             newEnemy = new Enemy(width + 50, spawnY);
-        } else if (spawnType < 0.4) {
+        } else if (spawnType < r2) {
             newEnemy = new SwarmerEnemy(width + 50, spawnY);
-        } else if (spawnType < 0.6) {
+        } else if (spawnType < r3) {
             newEnemy = new BruiserEnemy(width + 50, spawnY);
-        } else if (spawnType < 0.8) {
+        } else if (spawnType < r4) {
             newEnemy = new SniperEnemy(width + 50, spawnY);
-        } else if (spawnType < 0.9) {
+        } else if (spawnType < r5) {
             newEnemy = new SplitterEnemy(width + 50, spawnY);
         } else {
             newEnemy = new SpawnerEnemy(width + 50, spawnY);
         }
+
+        // Apply wave scaling to HP and Damage
+        let hpMult = 1.0 + (this.currentWave - 1) * 0.15;
+        let dmgMult = 1.0 + (this.currentWave - 1) * 0.1;
+        newEnemy.maxHealth *= hpMult;
+        newEnemy.health = newEnemy.maxHealth;
+        newEnemy.damage = (newEnemy.damage || 10) * dmgMult;
+
         this.enemies.push(newEnemy);
-        this.enemySpawnTimer = 1.5 + Math.random(); // Varied interval
+
+        // Scaling spawn timer: faster on later waves
+        let baseSpawnTime = Math.max(0.4, 1.5 - this.currentWave * 0.05);
+        this.enemySpawnTimer = baseSpawnTime + Math.random() * 0.5;
+
         }
       }
 
@@ -1750,9 +1858,12 @@ class Game {
         this.recordOverdriveUse();
       }
 
+
       // Attack Logic
-      if (this.inputManager.tapped) {
+      if (this.inputManager.tapped && this.player.attackCooldown <= 0) {
+        this.player.attackCooldown = 0.5 * (this.playerStats.attackSpeedMult || 1);
         let acc = this.beatTracker.getHitAccuracy();
+
         let dmg = this.playerStats.baseDmg;
         if (this.player.overdriveActive) dmg *= this.playerStats.odDmgMult;
         if (acc > 0.5) dmg *= 2; // Bonus for hitting on beat
@@ -1780,6 +1891,10 @@ class Game {
           this.player.recoilOffset = 20;
           closest.health -= dmg;
           this.soundEngine.playEnemyHit();
+
+          if (this.playerStats.lifesteal && acc > 0.5) {
+              this.player.health = Math.min(this.player.maxHealth, this.player.health + this.playerStats.lifesteal);
+          }
 
           // Increase combo on hit
           this.combo++;
@@ -1937,8 +2052,25 @@ class Game {
       for (let p of this.particles) p.draw(ctx);
       for (let t of this.texts) t.draw(ctx);
 
+
       // UI
       if (this.boss) this.boss.draw(ctx);
+
+      if (this.tutorialTimer > 0 && this.currentWave === 1) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.fillRect(0, 0, width, height);
+          ctx.fillStyle = '#fff';
+          ctx.font = '30px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText("Welcome to Jungle Overdrive Sacrifice!", width/2, height/2 - 50);
+          ctx.font = '20px Arial';
+          ctx.fillText("Tap or press space on the beat to strike.", width/2, height/2);
+          ctx.fillText("Press Shift or two fingers to activate Overdrive (costs HP).", width/2, height/2 + 30);
+          ctx.fillText("Survive the waves and defeat the bosses!", width/2, height/2 + 60);
+          ctx.fillStyle = '#ffaa00';
+          ctx.fillText("Tutorial closes in: " + Math.ceil(this.tutorialTimer), width/2, height/2 + 100);
+      }
+
       if (this.bossWarningTimer > 0) {
           ctx.fillStyle = Math.floor(this.bossWarningTimer * 10) % 2 === 0 ? '#ff0000' : '#ffffff';
           ctx.font = '40px Arial';
