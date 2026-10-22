@@ -26,14 +26,14 @@ class UpgradeManager {
     this.game = game;
     this.draft = [];
     this.pool = [
-      { name: "Max HP Up", desc: "+20 Max HP", apply: (g) => { g.player.maxHp = (g.player.maxHp || 100) + 20; g.player.hp += 20; } },
-      { name: "Dash Cooldown", desc: "Dash CD -20%", apply: (g) => { g.player.dashCooldown *= 0.8; } },
+      { name: "Max HP Up", desc: "+30 Max HP", apply: (g) => { g.player.maxHp = (g.player.maxHp || 100) + 30; g.player.hp += 30; } },
+      { name: "Dash Cooldown", desc: "Dash CD -25%", apply: (g) => { g.player.dashCooldown *= 0.75; } },
       { name: "Drill Damage", desc: "Blocks Break Faster", apply: (g) => { g.player.drillDamage = (g.player.drillDamage || 1) + 1; } },
       { name: "Tether Capacity", desc: "+10 Tether Max Length", apply: (g) => { g.maxTetherLength += 10; } },
       { name: "Combo Time", desc: "Max Combo Time +2s", apply: (g) => { g.comboMaxTimer += 2; } },
       { name: "Pickup Radius", desc: "Larger Pickup Range", apply: (g) => { g.player.pickupRadius = (g.player.pickupRadius || 0) + 30; } },
       { name: "Shockwave Range", desc: "Shockwave Radius +100", apply: (g) => { g.shockwaveRadiusMax = (g.shockwaveRadiusMax || 400) + 100; } },
-      { name: "Speed Boost", desc: "Move Speed +10%", apply: (g) => { g.player.speed *= 1.1; } }
+      { name: "Speed Boost", desc: "Move Speed +15%", apply: (g) => { g.player.speed *= 1.15; } }
     ];
   }
   generateDraft() {

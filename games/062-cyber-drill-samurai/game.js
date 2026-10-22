@@ -779,10 +779,16 @@ class Engine {
       this.blocks.push(new Block(x, y, type));
     }
 
-    // spawn enemy occasionally
-    if (Math.random() < 0.05 + (this.depth * 0.00002)) {
+    // spawn enemy occasionally (balanced pacing based on wave/depth)
+    let enemySpawnChance = 0.02 + (this.waveCounter * 0.015) + (this.depth * 0.00001);
+    // Cap spawn chance so it doesn't get utterly ridiculous
+    enemySpawnChance = Math.min(enemySpawnChance, 0.15);
+    if (Math.random() < enemySpawnChance) {
       const rand = Math.random();
+      // Adjust enemy weights: harder enemies appear later
+      let bruiserThreshold = 0.4 + Math.max(0, 0.2 - this.waveCounter * 0.05);
       if (rand < 0.2) this.enemies.push(new SwarmerEnemy(Math.random() * this.width, rowY));
+      else if (rand < bruiserThreshold) this.enemies.push(new SniperEnemy(Math.random() * this.width, rowY));
       else if (rand < 0.4) this.enemies.push(new SniperEnemy(Math.random() * this.width, rowY));
       else if (rand < 0.6) this.enemies.push(new BruiserEnemy(Math.random() * this.width, rowY));
       else if (rand < 0.8) this.enemies.push(new SplitterEnemy(Math.random() * this.width, rowY));
@@ -948,16 +954,31 @@ class Engine {
       this.cameraY += (targetCameraY - this.cameraY) * 5 * dt;
     }
 
+    // --- Memory Leak Prevention / Garbage Collection ---
+    const cleanupY = this.cameraY - 1000;
+    this.blocks = this.blocks.filter(b => b.y > cleanupY);
+    this.enemies = this.enemies.filter(e => e.y > cleanupY);
+    this.hazards = this.hazards.filter(h => h.y > cleanupY);
+    if (this.enemyProjectiles) {
+        this.enemyProjectiles = this.enemyProjectiles.filter(p => p.y > cleanupY);
+    }
+
     // Boss spawn logic
     if (this.depth > this.nextBossDepth) {
         this.nextBossDepth += 500;
         this.waveCounter++;
         const bossY = this.player.y + 400;
+        let b;
         if (this.waveCounter % 2 === 1) {
-            this.bosses.push(new TetherSeverBoss(this.width / 2, bossY));
+            b = new TetherSeverBoss(this.width / 2, bossY);
         } else {
-            this.bosses.push(new GroundPoundBoss(this.width / 2, bossY));
+            b = new GroundPoundBoss(this.width / 2, bossY);
         }
+        // Scale Boss HP based on wave
+        let hpMultiplier = 1 + (this.waveCounter - 1) * 0.4;
+        b.maxHp *= hpMultiplier;
+        b.hp = b.maxHp;
+        this.bosses.push(b);
     }
 
 
@@ -1405,6 +1426,9 @@ class Engine {
     }
     if (this.uiManager) {
       this.uiManager.draw(this.ctx);
+      if (this.state === 'PLAYING') {
+          this.uiManager.drawMasterpieceBorders(this.ctx);
+      }
     }
   }
 
