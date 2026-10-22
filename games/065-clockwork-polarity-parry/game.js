@@ -561,7 +561,7 @@ class Game {
         this.soundEngine = new SoundEngine(this.saveManager);
         this.inputManager = new InputManager(this.canvas, this.soundEngine);
 
-        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER, UPGRADE
         this.lastTime = 0;
 
         this.width = 800;
@@ -572,6 +572,9 @@ class Game {
         this.enemies = [];
         this.environment = new Environment(this.width, this.height);
         this.score = 0;
+        this.pickupManager = new PickupManager();
+        this.comboManager = new ComboManager();
+        this.upgradeManager = new UpgradeManager();
         this.combo = 0;
 
 
@@ -623,6 +626,9 @@ class Game {
         this.player = new Player(this.width / 2, this.height / 2);
         this.enemies = [];
         this.score = 0;
+        this.pickupManager = new PickupManager();
+        this.comboManager = new ComboManager();
+        this.upgradeManager = new UpgradeManager();
         this.combo = 0;
 
         this.spawnTimer = 0;
@@ -680,6 +686,19 @@ class Game {
             }
             return;
         }
+
+        this.pickupManager.draw(this.ctx);
+
+        if (this.state === 'UPGRADE') {
+            this.upgradeManager.draw(this.ctx, this.width, this.height, this.inputManager, (upgradeId) => {
+                this.upgradeManager.applyUpgrade(upgradeId, this.player);
+                this.state = 'PLAYING';
+            });
+            return;
+        }
+
+        this.comboManager.draw(this.ctx, this.width);
+
         if (this.state === 'PAUSED') {
             if (this.inputManager.actions.parry || this.inputManager.actions.back) {
                 this.state = 'PLAYING';
@@ -702,6 +721,10 @@ class Game {
             }
             return;
         }
+        if (this.state === 'UPGRADE') {
+            return; // State is handled entirely in draw for this phase
+        }
+
         if (this.state === 'GAME_OVER') {
             if (this.inputManager.actions.parry) {
                 this.state = 'TITLE';
@@ -718,6 +741,8 @@ class Game {
 
         this.player.update(dt, this.inputManager, this.width, this.height, this.soundEngine);
         this.environment.update(dt, this.player, this.enemies, this.soundEngine);
+        this.pickupManager.update(dt, this.player, this.soundEngine, this.comboManager);
+        this.comboManager.update(dt, this.player);
 
         if (this.bossWarningTimer > 0) {
             this.bossWarningTimer -= dt;
@@ -742,6 +767,8 @@ class Game {
                 this.enemiesDefeated++;
 
                 if (this.enemiesDefeated > 0 && this.enemiesDefeated % 20 === 0) {
+                    this.state = 'UPGRADE';
+                    this.upgradeManager.generateChoices();
                     this.wave++;
                     if (this.wave % 5 === 0) {
                         this.bossWarningTimer = 3.0; // 3 seconds warning
@@ -753,7 +780,7 @@ class Game {
 
         if (this.bossActive && !this.bossActive.active) {
             this.bossActive = null;
-            this.score += 500;
+            this.score += 500 * this.comboManager.multiplier;
         }
 
 
@@ -791,16 +818,16 @@ class Game {
                                 e.shieldActive = false;
                                 e.state = 'STUNNED';
                                 e.chargeTimer = 2.0;
-                                this.score += 50;
+                                this.score += 50 * this.comboManager.multiplier;
                                 this.soundEngine.playHit();
                             } else if (e.isBoss) {
                                 e.takeDamage(1);
-                                this.score += 20;
+                                this.score += 20 * this.comboManager.multiplier;
                                 this.soundEngine.playHit();
                             } else {
 
                                 e.active = false;
-                                this.score += 100;
+                                this.score += 100 * this.comboManager.multiplier;
                                 this.soundEngine.playHit();
                                 if (e.type === 'SPLITTER' && e.size === 1) {
                                     // Spawn smaller splitters
@@ -869,7 +896,7 @@ class Game {
 
                     if (Math.abs(angleDiff) < Math.PI/3) {
                         p.active = false;
-                        this.score += 25;
+                        this.score += 25 * this.comboManager.multiplier;
                         this.soundEngine.playHit();
                         continue;
                     }
@@ -1018,6 +1045,19 @@ class Game {
             this.ctx.fillRect(this.width/2 - 50, this.height - 30, fillWidth, 10);
         }
 
+
+        this.pickupManager.draw(this.ctx);
+
+        if (this.state === 'UPGRADE') {
+            this.upgradeManager.draw(this.ctx, this.width, this.height, this.inputManager, (upgradeId) => {
+                this.upgradeManager.applyUpgrade(upgradeId, this.player);
+                this.state = 'PLAYING';
+            });
+            return;
+        }
+
+        this.comboManager.draw(this.ctx, this.width);
+
         if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -1033,6 +1073,10 @@ class Game {
             this.ctx.font = '14px monospace';
             this.ctx.textAlign = 'left';
             this.ctx.fillText('< Back to Arcade', 25, 40);
+        }
+
+        if (this.state === 'UPGRADE') {
+            return; // State is handled entirely in draw for this phase
         }
 
         if (this.state === 'GAME_OVER') {
