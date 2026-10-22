@@ -570,6 +570,7 @@ class Game {
 
         this.player = null;
         this.enemies = [];
+        this.environment = new Environment(this.width, this.height);
         this.score = 0;
         this.combo = 0;
 
@@ -682,6 +683,7 @@ class Game {
         }
 
         this.player.update(dt, this.inputManager, this.width, this.height, this.soundEngine);
+        this.environment.update(dt, this.player, this.enemies, this.soundEngine);
 
         this.spawnTimer -= dt;
         if (this.spawnTimer <= 0) {
@@ -764,14 +766,21 @@ class Game {
         this.ctx.fillStyle = '#2a2029'; // Base bg color
         this.ctx.fillRect(0, 0, this.width, this.height);
 
-        // Grid background for steampunk feel
-        this.ctx.strokeStyle = '#3a2e38';
-        this.ctx.lineWidth = 1;
-        for(let x=0; x<this.width; x+=40) {
-            this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.height); this.ctx.stroke();
-        }
-        for(let y=0; y<this.height; y+=40) {
-            this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.width, y); this.ctx.stroke();
+        if (this.environment) {
+            // Fake camera based on player pos
+            let cx = this.player ? this.player.x - this.width/2 : 0;
+            let cy = this.player ? this.player.y - this.height/2 : 0;
+            this.environment.drawBackground(this.ctx, cx, cy);
+        } else {
+            // Grid background fallback
+            this.ctx.strokeStyle = '#3a2e38';
+            this.ctx.lineWidth = 1;
+            for(let x=0; x<this.width; x+=40) {
+                this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.height); this.ctx.stroke();
+            }
+            for(let y=0; y<this.height; y+=40) {
+                this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.width, y); this.ctx.stroke();
+            }
         }
 
         if (this.state === 'TITLE') {
