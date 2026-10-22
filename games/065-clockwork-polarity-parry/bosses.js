@@ -35,6 +35,7 @@ class BossWarden {
 
         if (this.health <= 0) {
             this.active = false;
+                if (game && game.vfxManager) { game.vfxManager.emitExplosion(this.x, this.y, "#fff", 50); game.vfxManager.addHitStop(0.5); game.vfxManager.addScreenShake(20, 1.0); }
         }
     }
 
@@ -162,6 +163,7 @@ class BossFluxCore {
 
         if (this.health <= 0) {
             this.active = false;
+                if (game && game.vfxManager) { game.vfxManager.emitExplosion(this.x, this.y, "#fff", 50); game.vfxManager.addHitStop(0.5); game.vfxManager.addScreenShake(20, 1.0); }
         }
     }
 
