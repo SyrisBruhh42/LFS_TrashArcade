@@ -857,5 +857,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#634a60",
     "phase": "8",
     "path": "./games/065-clockwork-polarity-parry/index.html"
+  },
+  {
+    "id": "066",
+    "slug": "066-crt-vector-overdrive",
+    "title": "CRT Vector Overdrive",
+    "genre": "Twin-Stick Arena",
+    "coreMechanic": "Sacrifice Health for Overdrive Power",
+    "setting": "Retro CRT Vector Grid",
+    "description": "Navigate a retro CRT vector grid in this twin-stick arena, sacrificing your health to unleash devastating overdrive power.",
+    "controls": "WASD to move. Mouse/Arrows to aim and shoot. SPACE to sacrifice health for Overdrive. Touch controls available.",
+    "createdAt": "2024-10-22",
+    "accentColor": "#faf7bd",
+    "phase": "1",
+    "path": "./games/066-crt-vector-overdrive/index.html"
   }
 ];
