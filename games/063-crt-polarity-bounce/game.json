@@ -1,0 +1,13 @@
+{
+  "id": "063",
+  "slug": "063-crt-polarity-bounce",
+  "title": "CRT Polarity Bounce",
+  "genre": "Pinball/Ricochet Dungeon",
+  "coreMechanic": "Polarity/Magnetism Switching",
+  "setting": "Retro CRT Vector Grid",
+  "description": "Ricochet through a retro CRT vector grid! Switch your polarity to attract or repel from magnetic nodes, steering yourself to smash enemies of matching polarity while avoiding opposites.",
+  "controls": "WASD/Arrows to move (initial launch), Space/Click/Touch to switch polarity.",
+  "createdAt": "2024-05-18",
+  "accentColor": "#e382d8",
+  "phase": "1"
+}
