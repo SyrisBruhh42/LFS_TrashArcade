@@ -799,7 +799,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Tap or press space on the beat to strike, press Shift or two fingers to activate Overdrive.",
     "createdAt": "2023-11-20",
     "accentColor": "#61d2b5",
-    "phase": "9",
+    "phase": "10",
     "path": "./games/061-jungle-overdrive-sacrifice/index.html"
   },
   {
