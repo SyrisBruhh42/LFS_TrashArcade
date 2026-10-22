@@ -1547,6 +1547,174 @@ class FieldPickup {
         ctx.restore();
     }
 }
+
+class VFXParticle {
+    constructor(x, y, vx, vy, color, size, life) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.color = color;
+        this.size = size;
+        this.life = life;
+        this.maxLife = life;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt;
+    }
+    draw(ctx) {
+        if (this.life <= 0) return;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class DamagePopup {
+    constructor(x, y, text, color) {
+        this.x = x;
+        this.y = y;
+        this.text = text;
+        this.color = color;
+        this.life = 1.0;
+        this.maxLife = 1.0;
+        this.vy = -30;
+    }
+    update(dt) {
+        this.y += this.vy * dt;
+        this.life -= dt;
+    }
+    draw(ctx) {
+        if (this.life <= 0) return;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+        ctx.fillStyle = this.color;
+        ctx.font = 'bold 20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.restore();
+    }
+}
+
+class Afterimage {
+    constructor(x, y, radius, color, life) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.color = color;
+        this.life = life;
+        this.maxLife = life;
+    }
+    update(dt) {
+        this.life -= dt;
+    }
+    draw(ctx) {
+        if (this.life <= 0) return;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, (this.life / this.maxLife) * 0.5);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class VFXManager {
+    constructor() {
+        this.particles = [];
+        this.popups = [];
+        this.afterimages = [];
+        this.hitStopTimer = 0;
+        this.shakeTimer = 0;
+        this.shakeIntensity = 0;
+    }
+
+    addHitStop(duration) {
+        this.hitStopTimer = duration;
+    }
+
+    addScreenShake(intensity, duration) {
+        this.shakeIntensity = intensity;
+        this.shakeTimer = duration;
+    }
+
+    addParticle(x, y, vx, vy, color, size, life) {
+        this.particles.push(new VFXParticle(x, y, vx, vy, color, size, life));
+    }
+
+    addDirectionalParticles(x, y, angle, spread, speed, color, count) {
+        for (let i = 0; i < count; i++) {
+            const pAngle = angle + (Math.random() - 0.5) * spread;
+            const pSpeed = speed * (0.5 + Math.random() * 0.5);
+            const vx = Math.cos(pAngle) * pSpeed;
+            const vy = Math.sin(pAngle) * pSpeed;
+            this.addParticle(x, y, vx, vy, color, 2 + Math.random() * 3, 0.5 + Math.random() * 0.5);
+        }
+    }
+
+    addExplosion(x, y, color, count) {
+        for (let i = 0; i < count; i++) {
+            const pAngle = Math.random() * Math.PI * 2;
+            const pSpeed = 50 + Math.random() * 100;
+            const vx = Math.cos(pAngle) * pSpeed;
+            const vy = Math.sin(pAngle) * pSpeed;
+            this.addParticle(x, y, vx, vy, color, 3 + Math.random() * 4, 0.5 + Math.random() * 0.5);
+        }
+    }
+
+    addPopup(x, y, text, color) {
+        this.popups.push(new DamagePopup(x, y, text, color));
+    }
+
+    addAfterimage(x, y, radius, color, life) {
+        this.afterimages.push(new Afterimage(x, y, radius, color, life));
+    }
+
+    update(dt) {
+        if (this.hitStopTimer > 0) {
+            this.hitStopTimer -= dt;
+        }
+
+        if (this.shakeTimer > 0) {
+            this.shakeTimer -= dt;
+        }
+
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            this.particles[i].update(dt);
+            if (this.particles[i].life <= 0) this.particles.splice(i, 1);
+        }
+        for (let i = this.popups.length - 1; i >= 0; i--) {
+            this.popups[i].update(dt);
+            if (this.popups[i].life <= 0) this.popups.splice(i, 1);
+        }
+        for (let i = this.afterimages.length - 1; i >= 0; i--) {
+            this.afterimages[i].update(dt);
+            if (this.afterimages[i].life <= 0) this.afterimages.splice(i, 1);
+        }
+    }
+
+    applyShake(ctx) {
+        if (this.shakeTimer > 0) {
+            const dx = (Math.random() - 0.5) * this.shakeIntensity;
+            const dy = (Math.random() - 0.5) * this.shakeIntensity;
+            ctx.translate(dx, dy);
+        }
+    }
+
+    draw(ctx) {
+        for (const p of this.afterimages) p.draw(ctx);
+        for (const p of this.particles) p.draw(ctx);
+        for (const p of this.popups) p.draw(ctx);
+    }
+}
+
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -1594,6 +1762,7 @@ class Game {
         this.comboTimerMax = 3.0; // Seconds before combo drops
 
         this.pickups = [];
+        this.vfx = new VFXManager();
         this.globalFreezeTimer = 0;
 this.timeScale = 1.0;
         this.dilationTarget = 1.0;
@@ -1688,6 +1857,7 @@ if (this.state === 'PLAYING') {
         this.comboMulti = this.perks.baseCombo;
         this.comboTimer = 0;
         this.pickups = [];
+        this.vfx = new VFXManager();
         this.globalFreezeTimer = 0;
         this.perkManager.activePerks = [];
         this.baseDilation = 0.1;
@@ -1713,8 +1883,18 @@ this.spawnCandy();
         setTimeout(() => this.spawnCandy(), 2000 + Math.random() * 2000);
     }
 
-    update(dt) {
+
+    update(rawDt) {
+        // Run VFX regardless of pause/hit-stop
+        this.vfx.update(rawDt);
+
+        let dt = rawDt;
+        if (this.vfx.hitStopTimer > 0) {
+            dt = 0; // Freeze game logic
+        }
+
         if (this.state !== 'PLAYING') return;
+
 
 
         // Freeze logic
@@ -1745,6 +1925,9 @@ this.spawnCandy();
 
                         if (this.activeBoss && this.activeBoss.state === 'FIGHT') {
                             this.activeBoss.takeDamage(this.perks.bossDamage);
+                            this.vfx.addScreenShake(3, 0.1);
+                            this.vfx.addDirectionalParticles(this.activeBoss.x, this.activeBoss.y, 0, Math.PI*2, 100, '#ff0', 5);
+                            this.vfx.addPopup(this.activeBoss.x, this.activeBoss.y, `-${this.perks.bossDamage}`, '#ff0000');
                         }
 
                         if (this.score > this.saveManager.data.highScore) {
@@ -1816,6 +1999,9 @@ const input = this.inputManager.getMovementVector();
 
         // Time Dilation Mechanic
         const isActuallyStill = !this.player.isMoving && !this.player.isDashing && Math.abs(this.player.vx) < 5 && Math.abs(this.player.vy) < 5;
+        if (this.player.isDashing) {
+            this.vfx.addAfterimage(this.player.x, this.player.y, this.player.radius, this.player.color || '#fff', 0.2);
+        }
         this.dilationTarget = isActuallyStill ? this.baseDilation : 1.0;
         this.timeScale += (this.dilationTarget - this.timeScale) * 10 * dt;
 
@@ -1840,7 +2026,13 @@ const input = this.inputManager.getMovementVector();
 
         if (this.activeBoss) {
             this.activeBoss.update(dt, this.timeScale, this.player, this);
+
             if (this.activeBoss.state === 'DEFEATED') {
+                this.vfx.addHitStop(0.5);
+                this.vfx.addScreenShake(15, 0.5);
+                this.vfx.addExplosion(this.activeBoss.x, this.activeBoss.y, '#ffaa00', 50);
+                this.vfx.addPopup(this.activeBoss.x, this.activeBoss.y, 'BOSS DEFEATED!', '#ffcc00');
+
                 this.activeBoss = null;
                 this.bossesDefeated++;
                 // Clear all guards for a clean slate
@@ -1909,6 +2101,8 @@ const input = this.inputManager.getMovementVector();
                 this.comboTimer = this.comboTimerMax;
 
                 this.soundEngine.playCollect();
+                this.vfx.addDirectionalParticles(candy.x, candy.y, 0, Math.PI*2, 100, candy.color || '#fff', 10);
+                this.vfx.addPopup(candy.x, candy.y, `+${Math.floor(candy.value * this.comboMulti)}`, '#fff');
                 this.candies.splice(i, 1);
 
                 this.candiesCollectedInWave++;
@@ -1920,6 +2114,9 @@ const input = this.inputManager.getMovementVector();
 
                 if (this.activeBoss && this.activeBoss.state === 'FIGHT') {
                     this.activeBoss.takeDamage(this.perks.bossDamage);
+                    this.vfx.addScreenShake(3, 0.1);
+                    this.vfx.addDirectionalParticles(this.activeBoss.x, this.activeBoss.y, 0, Math.PI*2, 100, '#ff0', 5);
+                    this.vfx.addPopup(this.activeBoss.x, this.activeBoss.y, `-${this.perks.bossDamage}`, '#ff0000');
                 }
 
                 if (this.score > this.saveManager.data.highScore) {
@@ -2004,6 +2201,9 @@ const input = this.inputManager.getMovementVector();
         this.ctx.fillStyle = '#111';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
+        this.ctx.save();
+        this.vfx.applyShake(this.ctx);
+
         this.background.draw(this.ctx);
 
         if (this.state === 'TITLE') {
@@ -2045,6 +2245,9 @@ const input = this.inputManager.getMovementVector();
         if (this.player) {
             this.player.draw(this.ctx);
         }
+
+        this.vfx.draw(this.ctx);
+        this.ctx.restore();
 
         // UI
         this.ctx.fillStyle = '#fff';
