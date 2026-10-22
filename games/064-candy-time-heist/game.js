@@ -44,10 +44,17 @@ class SoundEngine {
         this.masterGain = null;
         this.sfxGain = null;
         this.musicGain = null;
+        this.bgmFilter = null;
+        this.bgmOsc = null;
+        this.bgmOsc2 = null;
+        this.bgmGain = null;
         this.initialized = false;
 
-        // Setup placeholders for actual procedural generation later
-        this.oscillators = [];
+        this.bgmBeat = 0;
+        this.bgmNextNoteTime = 0;
+        this.bgmTempo = 120;
+        this.bgmActive = false;
+        this.intensity = 0; // 0 to 1
     }
 
     init() {
@@ -59,12 +66,21 @@ class SoundEngine {
         this.masterGain = this.ctx.createGain();
         this.sfxGain = this.ctx.createGain();
         this.musicGain = this.ctx.createGain();
+        this.bgmFilter = this.ctx.createBiquadFilter();
+
+        this.sfxGain.gain.value = 0.6;
+        this.musicGain.gain.value = 0.4;
 
         this.sfxGain.connect(this.masterGain);
-        this.musicGain.connect(this.masterGain);
+        this.musicGain.connect(this.bgmFilter);
+        this.bgmFilter.connect(this.masterGain);
         this.masterGain.connect(this.ctx.destination);
 
+        this.bgmFilter.type = 'lowpass';
+        this.bgmFilter.frequency.value = 2000;
+
         this.initialized = true;
+        this.startBGM();
     }
 
     resume() {
@@ -73,37 +89,219 @@ class SoundEngine {
         }
     }
 
+    startBGM() {
+        if (!this.ctx || this.bgmActive) return;
+        this.bgmActive = true;
+        this.bgmNextNoteTime = this.ctx.currentTime + 0.1;
+    }
+
+    updateBGM(dt, game) {
+        if (!this.initialized || !this.ctx || !this.bgmActive) return;
+
+        // Calculate intensity based on game state
+        let targetIntensity = 0.2; // Base intensity
+        if (game.state === 'PLAYING') {
+            if (game.activeBoss) {
+                targetIntensity = 0.9;
+                this.bgmTempo = 160;
+            } else {
+                targetIntensity = 0.4;
+                this.bgmTempo = 120;
+            }
+            if (game.player && game.player.hp <= 1) {
+                targetIntensity = 0.8;
+                this.bgmTempo = 140;
+            }
+            if (game.player && game.timeScale < 1.0) {
+                // Time dilation reduces tempo and filter
+                this.bgmTempo *= game.timeScale;
+                targetIntensity *= game.timeScale;
+            }
+        } else {
+            this.bgmTempo = 90;
+        }
+
+        this.intensity += (targetIntensity - this.intensity) * dt * 2.0;
+        this.bgmFilter.frequency.setTargetAtTime(500 + this.intensity * 4000, this.ctx.currentTime, 0.1);
+
+        while (this.bgmNextNoteTime < this.ctx.currentTime + 0.1) {
+            this.scheduleBGMNote(this.bgmBeat, this.bgmNextNoteTime);
+            this.bgmNextNoteTime += (60.0 / this.bgmTempo) / 4.0;
+            this.bgmBeat = (this.bgmBeat + 1) % 16;
+        }
+    }
+
+    scheduleBGMNote(beat, time) {
+        // Kick
+        if (beat % 4 === 0 || (this.intensity > 0.6 && beat % 4 === 2)) {
+            this.playDrum(time, 150, 40, 0.5, 'sine');
+        }
+        // Hihat
+        if (beat % 2 === 0) {
+            this.playDrum(time, 8000, 4000, 0.1, 'square');
+        }
+
+        // Bass / Arp
+        const scale = [220, 246.94, 261.63, 293.66, 329.63, 349.23, 392.00]; // A minor
+        let note = scale[beat % 7];
+        if (this.intensity > 0.5) note *= 2; // Octave up
+
+        this.playToneAt(note, 'sawtooth', 0.1, 0.2, time, this.musicGain);
+    }
+
+    playDrum(time, startFreq, endFreq, dur, type) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+
+        osc.frequency.setValueAtTime(startFreq, time);
+        osc.frequency.exponentialRampToValueAtTime(endFreq, time + dur);
+
+        gain.gain.setValueAtTime(0.5, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + dur);
+
+        osc.connect(gain);
+        gain.connect(this.musicGain);
+        osc.start(time);
+        osc.stop(time + dur);
+    }
+
+    playToneAt(freq, type, duration, vol, time, dest) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+
+        gain.gain.setValueAtTime(vol, time);
+        gain.gain.setTargetAtTime(0, time, duration / 3);
+
+        osc.connect(gain);
+        gain.connect(dest);
+        osc.start(time);
+        osc.stop(time + duration);
+    }
+
     playTone(freq, type, duration, vol = 1) {
         if (!this.initialized || !this.ctx) return;
+        const time = this.ctx.currentTime;
+
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
 
         osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        osc.frequency.setValueAtTime(freq, time);
 
-        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        gain.gain.setValueAtTime(vol, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
 
         osc.connect(gain);
         gain.connect(this.sfxGain);
 
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
+        osc.start(time);
+        osc.stop(time + duration);
     }
 
+    // 1. Collect
     playCollect() {
-        this.playTone(800, 'sine', 0.1, 0.5);
-        setTimeout(() => this.playTone(1200, 'sine', 0.15, 0.5), 50);
+        if (!this.initialized || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        this.playToneAt(800, 'sine', 0.1, 0.4, t, this.sfxGain);
+        this.playToneAt(1200, 'sine', 0.15, 0.4, t + 0.05, this.sfxGain);
     }
 
+    // 2. Alert
     playAlert() {
-        this.playTone(200, 'sawtooth', 0.3, 0.6);
-        setTimeout(() => this.playTone(150, 'sawtooth', 0.4, 0.6), 100);
+        if (!this.initialized || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        this.playToneAt(200, 'sawtooth', 0.3, 0.5, t, this.sfxGain);
+        this.playToneAt(150, 'sawtooth', 0.4, 0.5, t + 0.1, this.sfxGain);
     }
 
+    // 3. Game Over
     playGameOver() {
-        this.playTone(150, 'square', 0.5, 0.7);
-        setTimeout(() => this.playTone(100, 'square', 0.8, 0.7), 200);
+        if (!this.initialized || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        this.playToneAt(150, 'square', 0.5, 0.6, t, this.sfxGain);
+        this.playToneAt(100, 'square', 0.8, 0.6, t + 0.2, this.sfxGain);
+        this.playToneAt(50, 'square', 1.0, 0.6, t + 0.4, this.sfxGain);
+    }
+
+    // 4. Player Dash
+    playDash() {
+        if (!this.initialized || !this.ctx) return;
+        this.playDrum(this.ctx.currentTime, 400, 100, 0.3, 'sine');
+    }
+
+    // 5. Boss Hit
+    playBossHit() {
+        this.playTone(300, 'square', 0.1, 0.5);
+    }
+
+    // 6. Boss Defeat
+    playBossDefeat() {
+        if (!this.initialized || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        for(let i=0; i<5; i++) {
+            this.playToneAt(100 + i*50, 'sawtooth', 0.2, 0.6, t + i*0.1, this.sfxGain);
+        }
+    }
+
+    // 7. Time Slow
+    playTimeSlow() {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const t = this.ctx.currentTime;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, t);
+        osc.frequency.exponentialRampToValueAtTime(100, t + 0.5);
+        gain.gain.setValueAtTime(0.3, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.5);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(t);
+        osc.stop(t + 0.5);
+    }
+
+    // 8. Time Resume
+    playTimeResume() {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const t = this.ctx.currentTime;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(100, t);
+        osc.frequency.exponentialRampToValueAtTime(600, t + 0.3);
+        gain.gain.setValueAtTime(0.3, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.3);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(t);
+        osc.stop(t + 0.3);
+    }
+
+    // 9. Enemy Shoot
+    playEnemyShoot() {
+        this.playTone(1200, 'triangle', 0.1, 0.3);
+    }
+
+    // 10. Upgrade Select
+    playUpgrade() {
+        if (!this.initialized || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        this.playToneAt(400, 'sine', 0.1, 0.4, t, this.sfxGain);
+        this.playToneAt(600, 'sine', 0.1, 0.4, t + 0.1, this.sfxGain);
+        this.playToneAt(800, 'sine', 0.2, 0.4, t + 0.2, this.sfxGain);
+    }
+
+    // 11. UI Hover/Click
+    playUIClick() {
+        this.playTone(1000, 'sine', 0.05, 0.2);
+    }
+
+    // 12. Shield Pop
+    playShieldPop() {
+        this.playDrum(this.ctx.currentTime, 800, 200, 0.2, 'square');
     }
 }
 
@@ -131,6 +329,7 @@ class InputManager {
         this.canvas.addEventListener('pointerdown', (e) => {
             this.soundEngine.init();
             this.soundEngine.resume();
+            this.soundEngine.playUIClick();
             this.pointer.isDown = true;
             this.updatePointer(e);
 
@@ -257,6 +456,7 @@ class Player {
         this.dashCooldown = 0;
         this.dashCooldownMax = 2.0;
         this.isDashing = false;
+        this.wasMoving = true;
         this.dashDuration = 0;
         this.dashDurationMax = 0.2;
         this.dashSpeed = 800;
@@ -277,6 +477,7 @@ class Player {
 
         if (dashRequested && this.dashCooldown <= 0 && !this.isDashing) {
             this.isDashing = true;
+            game.soundEngine.playDash();
             this.dashDuration = this.dashDurationMax;
             this.dashCooldown = this.dashCooldownMax;
 
@@ -321,6 +522,7 @@ class Player {
 
             if (this.dashDuration <= 0) {
                 this.isDashing = false;
+        this.wasMoving = true;
                 if (!window.game.perks.invulnAfterDash) {
                     this.invulnerable = false;
                 } else {
@@ -1225,6 +1427,7 @@ class BaseBoss {
     }
 
     takeDamage(amount) {
+        if (window.game && window.game.soundEngine) window.game.soundEngine.playBossHit();
         this.hp -= amount;
         if (this.hp <= 0) {
             this.state = 'DEFEATED';
@@ -1328,6 +1531,7 @@ class OverseerBoss extends BaseBoss {
 
             const speed = this.phase === 1 ? 250 : 350;
             this.projectiles.push(new BossWeapon(this.x, this.y, dirX * speed, dirY * speed, 'laser'));
+            if (game && game.soundEngine) game.soundEngine.playEnemyShoot();
 
             if (this.phase === 2) {
                 // Shoot a spread in phase 2
@@ -1338,10 +1542,12 @@ class OverseerBoss extends BaseBoss {
                 const dirX1 = dirX * cosSpread - dirY * sinSpread;
                 const dirY1 = dirX * sinSpread + dirY * cosSpread;
                 this.projectiles.push(new BossWeapon(this.x, this.y, dirX1 * speed, dirY1 * speed, 'laser'));
+            if (game && game.soundEngine) game.soundEngine.playEnemyShoot();
 
                 const dirX2 = dirX * cosSpread + dirY * sinSpread;
                 const dirY2 = -dirX * sinSpread + dirY * cosSpread;
                 this.projectiles.push(new BossWeapon(this.x, this.y, dirX2 * speed, dirY2 * speed, 'laser'));
+            if (game && game.soundEngine) game.soundEngine.playEnemyShoot();
             }
         }
     }
@@ -1501,6 +1707,7 @@ class PerkManager {
             const x = startX + i * (cardWidth + spacing);
             if (pointer.x >= x && pointer.x <= x + cardWidth &&
                 pointer.y >= y && pointer.y <= y + cardHeight) {
+                window.game.soundEngine.playUpgrade();
                 this.applyPerk(this.offeredPerks[i]);
                 return true;
             }
@@ -1767,6 +1974,7 @@ class Game {
 this.timeScale = 1.0;
         this.dilationTarget = 1.0;
         this.baseDilation = 0.1; // Slow down to 10% speed when still
+        this.wasStill = false;
 
         this.setupResizeObserver();
         this.bindEvents();
@@ -1885,6 +2093,7 @@ this.spawnCandy();
 
 
     update(rawDt) {
+        this.soundEngine.updateBGM(rawDt, this);
         // Run VFX regardless of pause/hit-stop
         this.vfx.update(rawDt);
 
@@ -2003,6 +2212,11 @@ const input = this.inputManager.getMovementVector();
             this.vfx.addAfterimage(this.player.x, this.player.y, this.player.radius, this.player.color || '#fff', 0.2);
         }
         this.dilationTarget = isActuallyStill ? this.baseDilation : 1.0;
+
+        if (isActuallyStill && !this.wasStill) this.soundEngine.playTimeSlow();
+        if (!isActuallyStill && this.wasStill) this.soundEngine.playTimeResume();
+        this.wasStill = isActuallyStill;
+
         this.timeScale += (this.dilationTarget - this.timeScale) * 10 * dt;
 
         // Keep player in bounds
@@ -2032,6 +2246,7 @@ const input = this.inputManager.getMovementVector();
                 this.vfx.addScreenShake(15, 0.5);
                 this.vfx.addExplosion(this.activeBoss.x, this.activeBoss.y, '#ffaa00', 50);
                 this.vfx.addPopup(this.activeBoss.x, this.activeBoss.y, 'BOSS DEFEATED!', '#ffcc00');
+                this.soundEngine.playBossDefeat();
 
                 this.activeBoss = null;
                 this.bossesDefeated++;
