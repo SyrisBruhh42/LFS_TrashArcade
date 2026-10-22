@@ -599,6 +599,7 @@ class Engine {
     this.pickups = [];
     this.comboMultiplier = 1;
     this.comboTimer = 0;
+    this.vfx = new VFXManager();
     this.saveManager.data.totalGamesPlayed++;
     this.saveManager.save();
 
@@ -609,13 +610,20 @@ class Engine {
   }
 
   spawnParticles(x, y, color, count) {
-    for (let i=0; i<count; i++) {
-      this.particles.push(new Particle(x, y, color));
+    if (this.vfx) {
+      this.vfx.spawnExplosion(x, y, color, count);
+    } else {
+      for (let i=0; i<count; i++) {
+        this.particles.push(new Particle(x, y, color));
+      }
     }
   }
 
   update(dt) {
     if (this.state !== 'PLAYING') return;
+
+    if (this.vfx) this.vfx.update(dt);
+    if (this.vfx && this.vfx.hitStopTimer > 0) return; // Hitstop freeze frame
 
     if (this.comboTimer > 0) {
       this.comboTimer -= dt;
@@ -1033,6 +1041,7 @@ class Engine {
 
 
     this.particles.forEach(p => p.draw(this.ctx, this.cameraY));
+    if (this.vfx) this.vfx.draw(this.ctx, this.cameraY);
     if (this.player) this.player.draw(this.ctx, this.cameraY);
     this.enemies.forEach(e => e.draw(this.ctx, this.cameraY));
     this.bosses.forEach(b => b.draw(this.ctx, this.cameraY));
