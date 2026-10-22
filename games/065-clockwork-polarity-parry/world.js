@@ -260,15 +260,44 @@ class Environment {
             new ConveyorBelt(height * 0.4, width, 80, 80, 1),
             new ConveyorBelt(height * 0.8, width, 80, 80, -1)
         ];
+        this.projectiles = [];
+    }
+    spawnProjectile(x, y, angle, polarity) {
+        this.projectiles.push({ x, y, angle, polarity, speed: 200, radius: 6, active: true });
     }
     update(dt, player, enemies, soundEngine) {
         this.layers.forEach(l => l.update(dt));
         this.vents.forEach(v => v.update(dt, player, enemies, soundEngine));
         this.conveyors.forEach(c => c.update(dt, player, enemies));
+
+        for (let p of this.projectiles) {
+            if (!p.active) continue;
+            p.x += Math.cos(p.angle) * p.speed * dt;
+            p.y += Math.sin(p.angle) * p.speed * dt;
+
+            // Bounds check
+            if (p.x < -100 || p.x > this.width + 100 || p.y < -100 || p.y > this.height + 100) {
+                p.active = false;
+            }
+        }
+        this.projectiles = this.projectiles.filter(p => p.active);
     }
     drawBackground(ctx, cameraX, cameraY) {
         this.layers.forEach(l => l.draw(ctx, cameraX, cameraY));
         this.conveyors.forEach(c => c.draw(ctx));
         this.vents.forEach(v => v.draw(ctx));
+
+        for (let p of this.projectiles) {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.beginPath();
+            ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+            ctx.fillStyle = POLARITY_COLORS[p.polarity];
+            ctx.fill();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#fff';
+            ctx.stroke();
+            ctx.restore();
+        }
     }
 }
