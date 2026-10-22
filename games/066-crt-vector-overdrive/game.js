@@ -1373,6 +1373,189 @@ class Particle {
 
 
 // --- MAIN GAME ---
+
+class Boss {
+    constructor(game, type) {
+        this.game = game;
+        this.type = type;
+        this.hp = 1000;
+        this.maxHp = 1000;
+        this.phase = 1;
+        this.x = CONSTANTS.CANVAS_BASE_W / 2;
+        this.y = -100;
+        this.targetY = 150;
+        this.width = 120;
+        this.height = 120;
+        this.color = type === 1 ? '#ff0055' : '#5500ff';
+        this.state = 'WARNING';
+        this.attackTimer = 0;
+        this.warningTimer = 3.0;
+        this.hitTimer = 0;
+
+        // Custom attack patterns
+        if (type === 1) {
+            this.maxHp = 1500;
+            this.hp = 1500;
+        } else {
+            this.maxHp = 2000;
+            this.hp = 2000;
+        }
+    }
+
+    takeDamage(amount) {
+        if (this.state === 'WARNING' || this.state === 'ENTERING') return;
+        this.hp -= amount;
+        this.hitTimer = 0.1;
+        this.game.sound.play('hit');
+
+        if (this.hp <= this.maxHp / 2 && this.phase === 1) {
+            this.phase = 2;
+            this.game.spawnParticles(this.x, this.y, '#ffffff', 50);
+            this.game.sound.play('explosion');
+        }
+
+        if (this.hp <= 0) {
+            this.game.sound.play('explosion');
+            this.game.spawnParticles(this.x, this.y, this.color, 150);
+            this.game.boss = null;
+            this.game.score += 5000;
+
+            // Clear enemies for breather
+            this.game.enemies = [];
+            this.game.enemyProjectiles = [];
+        }
+    }
+
+    update(dt) {
+        if (this.hitTimer > 0) this.hitTimer -= dt;
+
+        if (this.state === 'WARNING') {
+            this.warningTimer -= dt;
+            if (this.warningTimer <= 0) {
+                this.state = 'ENTERING';
+            }
+            return;
+        }
+
+        if (this.state === 'ENTERING') {
+            this.y += (this.targetY - this.y) * 2 * dt;
+            if (Math.abs(this.targetY - this.y) < 1) {
+                this.y = this.targetY;
+                this.state = 'ACTIVE';
+            }
+            return;
+        }
+
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) {
+            this.attack(dt);
+        }
+
+        // Basic movement
+        this.x += Math.sin(this.game.lastTime / 1000) * 100 * dt;
+        // Keep in bounds
+        this.x = Math.max(this.width/2, Math.min(CONSTANTS.CANVAS_BASE_W - this.width/2, this.x));
+    }
+
+    attack(dt) {
+        if (!this.game.player) return;
+
+        if (this.type === 1) {
+            this.attackTimer = this.phase === 1 ? 1.5 : 0.8;
+            for(let i=0; i<12; i++) {
+                let angle = (Math.PI*2/12) * i + (this.phase === 2 ? Math.random() : 0);
+                this.game.enemyProjectiles.push(new EnemyProjectile(this.x, this.y, Math.cos(angle), Math.sin(angle)));
+            }
+            this.game.sound.play('shoot');
+            if (this.phase === 2) {
+                let pAngle = Math.atan2(this.game.player.y - this.y, this.game.player.x - this.x);
+                this.game.enemyProjectiles.push(new EnemyProjectile(this.x, this.y, Math.cos(pAngle), Math.sin(pAngle)));
+            }
+        } else {
+            this.attackTimer = this.phase === 1 ? 1.0 : 0.5;
+            let pAngle = Math.atan2(this.game.player.y - this.y, this.game.player.x - this.x);
+            let spread = this.phase === 2 ? 3 : 1;
+            for(let i=-spread; i<=spread; i++) {
+                let angle = pAngle + i*0.15;
+                this.game.enemyProjectiles.push(new EnemyProjectile(this.x, this.y, Math.cos(angle), Math.sin(angle)));
+            }
+            this.game.sound.play('shoot');
+        }
+    }
+
+    draw(ctx) {
+        if (this.state === 'WARNING') {
+            ctx.save();
+            ctx.fillStyle = `rgba(255, 0, 0, ${Math.abs(Math.sin(this.game.lastTime / 200))})`;
+            ctx.fillRect(0, CONSTANTS.CANVAS_BASE_H / 2 - 40, CONSTANTS.CANVAS_BASE_W, 80);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 40px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('WARNING: BOSS APPROACHING', CONSTANTS.CANVAS_BASE_W / 2, CONSTANTS.CANVAS_BASE_H / 2);
+            ctx.restore();
+            return;
+        }
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = this.color;
+        if (this.hitTimer > 0) {
+            ctx.fillStyle = '#ffffff';
+        } else {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        }
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = this.color;
+
+        ctx.beginPath();
+        // A complex shape
+        ctx.moveTo(0, -this.height/2);
+        ctx.lineTo(this.width/3, -this.height/3);
+        ctx.lineTo(this.width/2, 0);
+        ctx.lineTo(this.width/3, this.height/3);
+        ctx.lineTo(0, this.height/2);
+        ctx.lineTo(-this.width/3, this.height/3);
+        ctx.lineTo(-this.width/2, 0);
+        ctx.lineTo(-this.width/3, -this.height/3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Inner core
+        ctx.beginPath();
+        ctx.arc(0, 0, this.width/4, 0, Math.PI*2);
+        ctx.fillStyle = this.phase === 2 ? '#ffffff' : this.color;
+        ctx.fill();
+
+        ctx.restore();
+
+        // draw health bar
+        const barWidth = CONSTANTS.CANVAS_BASE_W * 0.8;
+        const barHeight = 20;
+        const barX = (CONSTANTS.CANVAS_BASE_W - barWidth) / 2;
+        const barY = 20;
+
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+
+        const hpPercent = Math.max(0, this.hp / this.maxHp);
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`BOSS ${this.type} - PHASE ${this.phase}`, CONSTANTS.CANVAS_BASE_W / 2, barY + barHeight / 2);
+    }
+}
+
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -1390,6 +1573,7 @@ class Game {
 
         this.player = null;
         this.projectiles = [];
+        this.boss = null;
         this.enemies = [];
         this.enemyProjectiles = [];
         this.hazards = [];
@@ -1399,6 +1583,7 @@ class Game {
 
         this.score = 0;
         this.wave = 1;
+        this.nextBossWave = 5;
         this.enemySpawnTimer = 0;
 
         this.setupResizeObserver();
@@ -1449,12 +1634,14 @@ class Game {
     resetGame() {
         this.player = new Player(this);
         this.projectiles = [];
+        this.boss = null;
         this.enemies = [];
         this.enemyProjectiles = [];
         this.hazards = [];
         this.particles = [];
         this.score = 0;
         this.wave = 1;
+        this.nextBossWave = 5;
         this.enemySpawnTimer = 0;
     }
 
@@ -1550,29 +1737,48 @@ class Game {
                     }
                 }
             }
+            if (this.boss && this.boss.state === 'ACTIVE' && p.active) {
+                if (distance(p.x, p.y, this.boss.x, this.boss.y) < p.radius + this.boss.width/2) {
+                    p.active = false;
+                    this.boss.takeDamage(100);
+                }
+            }
         }
 
-        // Enemy spawner
-        this.enemySpawnTimer -= dt;
-        if (this.enemySpawnTimer <= 0) {
-            const r = Math.random();
-            let newEnemy;
-            if (r < 0.3) newEnemy = new Swarmer(this);
-            else if (r < 0.5) newEnemy = new Sniper(this);
-            else if (r < 0.7) newEnemy = new Bruiser(this);
-            else if (r < 0.85) newEnemy = new Spawner(this);
-            else if (r < 0.95) newEnemy = new HazardEnemy(this);
-            else newEnemy = new Enemy(this);
-            this.enemies.push(newEnemy);
-            // ramp up difficulty slightly
-            const rate = Math.max(0.5, CONSTANTS.ENEMY_SPAWN_RATE_BASE - (this.score / 5000));
-            this.enemySpawnTimer = rate;
+        // Boss spawn and wave check
+        if (!this.boss && this.score > this.wave * 2000) {
+            this.wave++;
+            if (this.wave === this.nextBossWave) {
+                this.boss = new Boss(this, this.nextBossWave % 10 === 0 ? 2 : 1);
+                this.nextBossWave += 5;
+            }
+        }
+
+        if (this.boss) {
+            this.boss.update(dt);
+        } else {
+            // Enemy spawner
+            this.enemySpawnTimer -= dt;
+            if (this.enemySpawnTimer <= 0) {
+                const r = Math.random();
+                let newEnemy;
+                if (r < 0.3) newEnemy = new Swarmer(this);
+                else if (r < 0.5) newEnemy = new Sniper(this);
+                else if (r < 0.7) newEnemy = new Bruiser(this);
+                else if (r < 0.85) newEnemy = new Spawner(this);
+                else if (r < 0.95) newEnemy = new HazardEnemy(this);
+                else newEnemy = new Enemy(this);
+                this.enemies.push(newEnemy);
+                // ramp up difficulty slightly
+                const rate = Math.max(0.5, CONSTANTS.ENEMY_SPAWN_RATE_BASE - (this.score / 5000));
+                this.enemySpawnTimer = rate;
 
             // Health regen over time naturally very slow to encourage overdrive use but keep player alive
             if (Math.random() < 0.2 && this.player.health < CONSTANTS.MAX_HEALTH) {
                 this.player.health += 2;
                 if (this.player.health > CONSTANTS.MAX_HEALTH) this.player.health = CONSTANTS.MAX_HEALTH;
             }
+        }
         }
     }
 
@@ -1655,6 +1861,7 @@ class Game {
         this.particles.forEach(p => p.draw(this.ctx));
         this.hazards.forEach(h => h.draw(this.ctx));
         this.enemies.forEach(e => e.draw(this.ctx));
+        if (this.boss) this.boss.draw(this.ctx);
         this.enemyProjectiles.forEach(p => p.draw(this.ctx));
         this.projectiles.forEach(p => p.draw(this.ctx));
         if (this.envManager) { this.envManager.drawForeground(this.ctx); }
