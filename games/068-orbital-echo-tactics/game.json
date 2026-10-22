@@ -1,0 +1,13 @@
+{
+  "id": "068",
+  "slug": "068-orbital-echo-tactics",
+  "title": "Orbital Echo Tactics",
+  "genre": "Tactical Grid/Turn-Based Blitz",
+  "coreMechanic": "Echo/Ghost Self-Cooperation",
+  "setting": "Orbital Space Station",
+  "description": "Navigate an orbital space station grid where your past moves echo behind you. Coordinate with your echo to corner and defeat rogue maintenance drones.",
+  "controls": "WASD / Arrows to move. Space / Tap to end turn. Coordinate with your echo ghost to clear levels.",
+  "createdAt": "2026-10-22",
+  "accentColor": "#cf7cd4",
+  "phase": "1"
+}
