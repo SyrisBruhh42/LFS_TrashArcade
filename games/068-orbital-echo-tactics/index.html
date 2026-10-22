@@ -158,8 +158,59 @@
   <div id="screen-title" class="overlay">
     <h1>Orbital Echo Tactics</h1>
     <p>High Score: <span id="title-highscore">0</span></p>
+    <div id="title-milestones" style="margin-bottom: 10px;"></div>
     <button id="btn-play">Play</button>
+    <button id="btn-settings">Settings</button>
     <a href="../../index.html" style="text-decoration:none;"><button>Back to Arcade</button></a>
+  </div>
+
+
+  <div id="screen-settings" class="overlay hidden" style="overflow-y: auto;">
+    <h2>SETTINGS</h2>
+    <div style="text-align: left; background: rgba(0,0,0,0.8); padding: 20px; border: 1px solid var(--accent); max-width: 400px;">
+      <p>Master Volume: <input type="range" id="masterVol" min="0" max="1" step="0.1" value="1.0"></p>
+      <p>SFX Volume: <input type="range" id="sfxVol" min="0" max="1" step="0.1" value="1.0"></p>
+      <p>Music Volume: <input type="range" id="musicVol" min="0" max="1" step="0.1" value="1.0"></p>
+      <p>Screen Shake:
+        <select id="screenShake">
+          <option value="1.0">100%</option>
+          <option value="0.5">50%</option>
+          <option value="0.0">Off</option>
+        </select>
+      </p>
+      <p>Particle Density:
+        <select id="particles">
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+      </p>
+      <p><label><input type="checkbox" id="highContrast"> High-Contrast/Colorblind Mode</label></p>
+      <p><label><input type="checkbox" id="showFps"> Show FPS Counter</label></p>
+      <p>Touch Controls:
+        <select id="touchControls">
+          <option value="auto">Auto</option>
+          <option value="always">Always On</option>
+          <option value="off">Off</option>
+        </select>
+      </p>
+      <p>Handedness:
+        <select id="handedness">
+          <option value="right">Right</option>
+          <option value="left">Left</option>
+        </select>
+      </p>
+      <hr>
+      <p>Save Data (Base64):</p>
+      <textarea id="saveDataIO" rows="3" style="width:100%;"></textarea>
+      <div style="display:flex; justify-content:space-between; margin-top:5px;">
+        <button id="btn-export-save" style="font-size:0.8rem; padding:5px;">Export</button>
+        <button id="btn-import-save" style="font-size:0.8rem; padding:5px;">Import</button>
+      </div>
+      <div style="text-align:center; margin-top:15px;">
+        <button id="btn-reset-save" style="color:red; border-color:red; font-size:0.8rem;">Reset Data (Click Twice)</button>
+      </div>
+    </div>
+    <button id="btn-close-settings">Close</button>
   </div>
 
   <div id="screen-pause" class="overlay hidden">
@@ -181,6 +232,7 @@
   <div id="screen-gameover" class="overlay hidden">
     <h2>SYSTEM FAILURE</h2>
     <p>Score: <span id="go-score">0</span></p>
+    <div id="go-milestones" style="margin-bottom: 10px;"></div>
     <button id="btn-playagain">Restart</button>
     <button id="btn-quit-go">Title Screen</button>
   </div>

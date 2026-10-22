@@ -2,13 +2,33 @@
 
 const SaveManager = {
   key: 'arcade_game_068_068-orbital-echo-tactics_v1',
-  data: { highScore: 0, totalGamesPlayed: 0, options: { mute: false, screenShake: 1.0, particles: 'high' } },
+  data: {
+    highScore: 0,
+    totalGamesPlayed: 0,
+    options: {
+      masterVol: 1.0,
+      sfxVol: 1.0,
+      musicVol: 1.0,
+      screenShake: 1.0,
+      particles: 'high',
+      highContrast: false,
+      showFps: false,
+      touchControls: 'auto',
+      handedness: 'right'
+    },
+    milestones: []
+  },
   load: function() {
     try {
       const stored = localStorage.getItem(this.key);
       if (stored) {
         const parsed = JSON.parse(stored);
-        this.data = { ...this.data, ...parsed };
+        this.data.highScore = parsed.highScore !== undefined ? parsed.highScore : this.data.highScore;
+        this.data.totalGamesPlayed = parsed.totalGamesPlayed !== undefined ? parsed.totalGamesPlayed : this.data.totalGamesPlayed;
+        this.data.milestones = parsed.milestones || this.data.milestones;
+        if (parsed.options) {
+            this.data.options = { ...this.data.options, ...parsed.options };
+        }
       }
     } catch(e) { console.warn("Save load failed", e); }
   },
@@ -230,6 +250,8 @@ const SoundEngine = {
       this.musicFilter.frequency.value = 2000;
       this.musicFilter.connect(this.musicGain);
 
+      this.updateVolumes();
+
     } catch(e) { console.warn("Web Audio API not supported", e); }
   },
   resume: function() {
@@ -280,7 +302,7 @@ const SoundEngine = {
     // Percussion Loop
     let beatCount = 0;
     this.percussionInterval = setInterval(() => {
-        if (SaveManager.data && SaveManager.data.options && SaveManager.data.options.mute) return;
+        if (SaveManager.data.options.masterVol === 0 || SaveManager.data.options.musicVol === 0) return;
         this.playKick();
         if (beatCount % 2 === 1) {
             setTimeout(() => this.playSnare(), beatDuration * 500); // 8th note offset roughly
@@ -297,7 +319,7 @@ const SoundEngine = {
     const bossNotes = [196, 233.08, 293.66, 349.23]; // G minor
 
     this.arpeggiatorInterval = setInterval(() => {
-        if (SaveManager.data && SaveManager.data.options && SaveManager.data.options.mute) return;
+        if (SaveManager.data.options.masterVol === 0 || SaveManager.data.options.musicVol === 0) return;
 
         let notes = this.isBoss ? bossNotes : baseNotes;
         let freq = notes[arpIndex % notes.length];
@@ -322,7 +344,7 @@ const SoundEngine = {
   },
 
   playSynthNote: function(freq, duration) {
-      if (!this.ctx || (SaveManager.data && SaveManager.data.options && SaveManager.data.options.mute)) return;
+      if (!this.ctx || SaveManager.data.options.masterVol === 0) return;
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.type = this.isBoss ? 'sawtooth' : 'triangle';
@@ -397,7 +419,7 @@ const SoundEngine = {
   },
 
   playTone: function(freq, type, duration, vol=0.1) {
-    if (!this.ctx || (SaveManager.data && SaveManager.data.options && SaveManager.data.options.mute)) return;
+    if (!this.ctx || SaveManager.data.options.masterVol === 0) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = type;
@@ -1347,6 +1369,8 @@ const Engine = {
 
     SaveManager.load();
     document.getElementById('title-highscore').innerText = SaveManager.data.highScore;
+    this.updateTouchControlsVisibility();
+    this.updateMilestonesUI();
 
     Input.init();
 
@@ -1362,6 +1386,71 @@ const Engine = {
     document.getElementById('btn-playagain').addEventListener('click', () => this.start());
     document.getElementById('btn-quit-go').addEventListener('click', () => this.quitToTitle());
 
+    // Settings UI Binding
+    const settingsScreen = document.getElementById('screen-settings');
+    const saveDataIO = document.getElementById('saveDataIO');
+    let resetClicks = 0;
+
+    document.getElementById('btn-settings').addEventListener('click', () => {
+       settingsScreen.classList.remove('hidden');
+       document.getElementById('masterVol').value = SaveManager.data.options.masterVol ?? 1.0;
+       document.getElementById('sfxVol').value = SaveManager.data.options.sfxVol ?? 1.0;
+       document.getElementById('musicVol').value = SaveManager.data.options.musicVol ?? 1.0;
+       document.getElementById('screenShake').value = (SaveManager.data.options.screenShake ?? 1.0).toString();
+       document.getElementById('particles').value = SaveManager.data.options.particles || 'high';
+       document.getElementById('highContrast').checked = !!SaveManager.data.options.highContrast;
+       document.getElementById('showFps').checked = !!SaveManager.data.options.showFps;
+       document.getElementById('touchControls').value = SaveManager.data.options.touchControls || 'auto';
+       document.getElementById('handedness').value = SaveManager.data.options.handedness || 'right';
+       resetClicks = 0;
+       document.getElementById('btn-reset-save').innerText = 'Reset Data (Click Twice)';
+    });
+
+    document.getElementById('btn-close-settings').addEventListener('click', () => {
+       settingsScreen.classList.add('hidden');
+       SaveManager.data.options.masterVol = parseFloat(document.getElementById('masterVol').value);
+       SaveManager.data.options.sfxVol = parseFloat(document.getElementById('sfxVol').value);
+       SaveManager.data.options.musicVol = parseFloat(document.getElementById('musicVol').value);
+       SaveManager.data.options.screenShake = parseFloat(document.getElementById('screenShake').value);
+       SaveManager.data.options.particles = document.getElementById('particles').value;
+       SaveManager.data.options.highContrast = document.getElementById('highContrast').checked;
+       SaveManager.data.options.showFps = document.getElementById('showFps').checked;
+       SaveManager.data.options.touchControls = document.getElementById('touchControls').value;
+       SaveManager.data.options.handedness = document.getElementById('handedness').value;
+       SaveManager.save();
+       SoundEngine.updateVolumes();
+       if(this.updateTouchControlsVisibility) this.updateTouchControlsVisibility();
+    });
+
+    document.getElementById('btn-export-save').addEventListener('click', () => {
+       saveDataIO.value = btoa(JSON.stringify(SaveManager.data));
+    });
+
+    document.getElementById('btn-import-save').addEventListener('click', () => {
+       try {
+          const parsed = JSON.parse(atob(saveDataIO.value));
+          if (parsed && parsed.options) {
+             SaveManager.data = { ...SaveManager.data, ...parsed };
+             SaveManager.save();
+             alert('Save imported successfully! Reloading...');
+             location.reload();
+          }
+       } catch (e) {
+          alert('Invalid save data');
+       }
+    });
+
+    document.getElementById('btn-reset-save').addEventListener('click', () => {
+       resetClicks++;
+       if (resetClicks === 1) {
+          document.getElementById('btn-reset-save').innerText = 'Are you sure? Click again.';
+       } else if (resetClicks >= 2) {
+          localStorage.removeItem(SaveManager.key);
+          location.reload();
+       }
+    });
+
+
     // Auto-pause
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.state === 'PLAYING') this.pause();
@@ -1371,6 +1460,60 @@ const Engine = {
     });
 
     requestAnimationFrame(t => this.loop(t));
+  },
+
+
+  updateMilestonesUI: function() {
+    const renderBadges = (containerId) => {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = '';
+      if (!SaveManager.data.milestones) SaveManager.data.milestones = [];
+      SaveManager.data.milestones.forEach(m => {
+        const span = document.createElement('span');
+        span.innerText = m;
+        span.style.background = 'var(--accent)';
+        span.style.color = '#000';
+        span.style.padding = '2px 5px';
+        span.style.margin = '2px';
+        span.style.borderRadius = '3px';
+        span.style.fontSize = '0.8rem';
+        span.style.display = 'inline-block';
+        container.appendChild(span);
+      });
+    };
+    renderBadges('title-milestones');
+    renderBadges('go-milestones');
+  },
+
+  grantMilestone: function(name) {
+    if (!SaveManager.data.milestones) SaveManager.data.milestones = [];
+    if (!SaveManager.data.milestones.includes(name)) {
+      SaveManager.data.milestones.push(name);
+      SaveManager.save();
+    }
+  },
+
+  updateTouchControlsVisibility: function() {
+    const touchControls = document.getElementById('touch-controls');
+    const setting = SaveManager.data.options.touchControls || 'auto';
+    let show = false;
+
+    if (setting === 'always') show = true;
+    else if (setting === 'auto') show = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    else show = false;
+
+    if (show && this.state === 'PLAYING') {
+      touchControls.classList.remove('hidden');
+    } else {
+      touchControls.classList.add('hidden');
+    }
+
+    if (SaveManager.data.options.handedness === 'left') {
+      touchControls.style.flexDirection = 'row-reverse';
+    } else {
+      touchControls.style.flexDirection = 'row';
+    }
   },
 
   resize: function() {
@@ -1390,12 +1533,7 @@ const Engine = {
     this.canvas.style.width = `${gameW * scale}px`;
     this.canvas.style.height = `${gameH * scale}px`;
 
-    // Show touch controls if on mobile/small screen
-    if (cw < 800) {
-      document.getElementById('touch-controls').classList.remove('hidden');
-    } else {
-      document.getElementById('touch-controls').classList.add('hidden');
-    }
+    this.updateTouchControlsVisibility();
   },
 
   start: function() {
@@ -1403,6 +1541,7 @@ const Engine = {
     this.state = 'PLAYING';
     document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
     document.getElementById('hud').classList.remove('hidden');
+    this.updateTouchControlsVisibility();
 
     this.score = 0;
     this.wave = 1;
@@ -1559,6 +1698,8 @@ const Engine = {
     document.getElementById('hud').classList.add('hidden');
     document.getElementById('screen-title').classList.remove('hidden');
     document.getElementById('title-highscore').innerText = SaveManager.data.highScore;
+    this.updateTouchControlsVisibility();
+    this.updateMilestonesUI();
   },
 
   gameOver: function() {
@@ -1566,6 +1707,7 @@ const Engine = {
     SoundEngine.stopBgm();
     document.getElementById('screen-gameover').classList.remove('hidden');
     document.getElementById('hud').classList.add('hidden');
+    this.updateTouchControlsVisibility();
     document.getElementById('go-score').innerText = this.score;
 
     SoundEngine.playGameOver();
@@ -1574,7 +1716,14 @@ const Engine = {
     if (this.score > SaveManager.data.highScore) {
       SaveManager.data.highScore = this.score;
     }
+
+    this.grantMilestone('First Win');
+    if (this.score >= 5000) this.grantMilestone('Score 5k');
+    if (this.score >= 10000) this.grantMilestone('Score 10k');
+    if (SaveManager.data.totalGamesPlayed >= 10) this.grantMilestone('Dedicated Player');
+
     SaveManager.save();
+    this.updateMilestonesUI();
   },
 
   updateHUD: function() {
@@ -1935,6 +2084,9 @@ const Engine = {
            this.score += Math.floor(baseScore * this.comboMultiplier);
            this.comboMultiplier = Math.min(this.comboMax, this.comboMultiplier + 0.1);
            this.comboDecayTimer = this.maxComboDecay;
+
+           if (e.isBoss) this.grantMilestone('Boss Slayer');
+           if (this.comboMultiplier >= 3.0) this.grantMilestone('Combo Master');
         } else {
            // Push back slightly? Just take damage.
            this.score += Math.floor(10 * this.comboMultiplier);
@@ -2002,6 +2154,10 @@ const Engine = {
     let dt = (time - this.lastTime) / 1000;
     this.lastTime = time;
     if (dt > 0.1) dt = 0.1;
+
+    if (dt > 0) {
+      this.fps = this.fps ? (this.fps * 0.9 + (1/dt) * 0.1) : (1/dt);
+    }
 
     if (this.state === 'PLAYING') {
       this.update(dt);
@@ -2099,6 +2255,11 @@ const Engine = {
 
     // Parallax background
     ParallaxBG.draw(this.ctx, this.canvas.width, this.canvas.height);
+
+    if (SaveManager.data.options && SaveManager.data.options.highContrast) {
+       this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
 
     if (this.state === 'TITLE') {
       // Draw grid background
@@ -2237,6 +2398,12 @@ const Engine = {
     this.ctx.textAlign = 'left';
 
     this.ctx.restore();
+
+    if (SaveManager.data.options && SaveManager.data.options.showFps) {
+       this.ctx.fillStyle = '#fff';
+       this.ctx.font = '16px Courier New';
+       this.ctx.fillText(`FPS: ${Math.round(this.fps || 0)}`, 10, this.canvas.height - 20);
+    }
   }
 };
 
