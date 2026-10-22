@@ -564,6 +564,7 @@ class Game {
         this.canvas.height = this.height;
 
         this.grid = new GridSystem(this.width, this.height);
+        this.world = new WorldEnvironment(this.width, this.height);
         this.player = null;
         this.nodes = [];
         this.enemies = [];
@@ -594,6 +595,7 @@ class Game {
                 this.canvas.width = this.width;
                 this.canvas.height = this.height;
                 this.grid.resize(this.width, this.height);
+                if (this.world) this.world.resize(this.width, this.height);
             }
         });
         ro.observe(container);
@@ -613,6 +615,7 @@ class Game {
     reset() {
         this.player = new Player(this.width / 2, this.height / 2);
         this.nodes = [];
+        this.world.reset();
 
         // Spawn 4 nodes in a quad formation
         const paddingX = this.width * 0.25;
@@ -687,6 +690,7 @@ class Game {
 
         this.player.update(dt, this.input, this.width, this.height, this.nodes);
         for(let n of this.nodes) n.update(dt);
+        this.world.update(dt, this);
 
         // Enemy spawner logic
         this.enemySpawnTimer += dt;
@@ -827,8 +831,9 @@ class Game {
         this.ctx.fillStyle = COLORS.bg;
         this.ctx.fillRect(0, 0, this.width, this.height);
 
-        this.grid.draw(this.ctx, this.totalTime);
+        this.world.drawBackground(this.ctx, this.totalTime, this.grid);
         for (let n of this.nodes) n.draw(this.ctx);
+        this.world.drawHazards(this.ctx);
 
         if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
             for (let e of this.enemies) e.draw(this.ctx);
