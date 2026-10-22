@@ -897,7 +897,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD / Arrows to move. Space / Tap to end turn. Coordinate with your echo ghost to clear levels.",
     "createdAt": "2026-10-22",
     "accentColor": "#cf7cd4",
-    "phase": "6",
+    "phase": "7",
     "path": "./games/068-orbital-echo-tactics/index.html"
   },
   {
