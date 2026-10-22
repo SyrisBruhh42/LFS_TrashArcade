@@ -574,8 +574,21 @@ class Game {
         this.score = 0;
         this.combo = 0;
 
+
+
         this.spawnTimer = 0;
         this.spawnRate = 2.0;
+        this.wave = 1;
+        this.enemiesDefeated = 0;
+        this.bossActive = null;
+        this.bossWarningTimer = 0;
+
+
+        this.wave = 1;
+        this.enemiesDefeated = 0;
+        this.bossActive = null;
+        this.bossWarningTimer = 0;
+
 
         this.initResize();
         requestAnimationFrame(this.loop.bind(this));
@@ -611,9 +624,15 @@ class Game {
         this.enemies = [];
         this.score = 0;
         this.combo = 0;
+
         this.spawnTimer = 0;
         this.spawnRate = 2.0;
+        this.wave = 1;
+        this.enemiesDefeated = 0;
+        this.bossActive = null;
+        this.bossWarningTimer = 0;
     }
+
     spawnEnemy() {
         const side = Math.floor(Math.random() * 4);
         let x, y;
@@ -696,20 +715,57 @@ class Game {
             this.inputManager.actions.back = false;
         }
 
+
         this.player.update(dt, this.inputManager, this.width, this.height, this.soundEngine);
         this.environment.update(dt, this.player, this.enemies, this.soundEngine);
 
-        this.spawnTimer -= dt;
-        if (this.spawnTimer <= 0) {
-            this.spawnEnemy();
-            this.spawnTimer = this.spawnRate;
-            this.spawnRate = Math.max(0.5, this.spawnRate - 0.05); // Ramp up difficulty
+        if (this.bossWarningTimer > 0) {
+            this.bossWarningTimer -= dt;
+            if (this.bossWarningTimer <= 0) {
+                // Spawn Boss
+                const polarity = Math.random() > 0.5 ? 'POSITIVE' : 'NEGATIVE';
+                if (this.wave % 10 === 0) {
+                    this.bossActive = new BossFluxCore(this.width/2, 100, polarity);
+                } else {
+                    this.bossActive = new BossWarden(this.width/2, 100, polarity);
+                }
+                this.enemies.push(this.bossActive);
+            }
         }
+
+        if (!this.bossActive && this.bossWarningTimer <= 0) {
+            this.spawnTimer -= dt;
+            if (this.spawnTimer <= 0) {
+                this.spawnEnemy();
+                this.spawnTimer = this.spawnRate;
+                this.spawnRate = Math.max(0.5, this.spawnRate - 0.05); // Ramp up difficulty
+                this.enemiesDefeated++;
+
+                if (this.enemiesDefeated > 0 && this.enemiesDefeated % 20 === 0) {
+                    this.wave++;
+                    if (this.wave % 5 === 0) {
+                        this.bossWarningTimer = 3.0; // 3 seconds warning
+                        this.soundEngine.playHit(); // Temp sound for warning
+                    }
+                }
+            }
+        }
+
+        if (this.bossActive && !this.bossActive.active) {
+            this.bossActive = null;
+            this.score += 500;
+        }
+
 
         // Collisions
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
-            e.update(dt, this.player, this.environment);
+            if (e.isBoss) {
+                e.update(dt, this.player, this.environment, this);
+            } else {
+                e.update(dt, this.player, this.environment);
+            }
+
 
             // Check parry (tightened bounds for Phase 2)
             if (this.player.parryActive) {
@@ -730,13 +786,19 @@ class Game {
                             // Opposite polarity attracts/destroys (Wait, brief says "Switch polarities to parry... and repel")
                             // Let's say: Same polarity = Repel/Destroy (Magnetism logic)
                             // Opposite polarity = Absorbs/Damages
+
                             if (e.type === 'BRUISER' && e.shieldActive) {
                                 e.shieldActive = false;
                                 e.state = 'STUNNED';
                                 e.chargeTimer = 2.0;
                                 this.score += 50;
                                 this.soundEngine.playHit();
+                            } else if (e.isBoss) {
+                                e.takeDamage(1);
+                                this.score += 20;
+                                this.soundEngine.playHit();
                             } else {
+
                                 e.active = false;
                                 this.score += 100;
                                 this.soundEngine.playHit();
@@ -880,11 +942,50 @@ class Game {
             return;
         }
 
+
+
         // Game render
-        this.enemies.forEach(e => e.draw(this.ctx));
+        this.enemies.forEach(e => {
+            if (e.isBoss) {
+
+            }
+            e.draw(this.ctx);
+        });
         if (this.player) this.player.draw(this.ctx);
 
+        if (this.bossWarningTimer > 0) {
+            this.ctx.fillStyle = (Math.floor(this.bossWarningTimer * 10) % 2 === 0) ? '#f00' : '#fff';
+            this.ctx.font = '36px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('WARNING: BOSS APPROACHING', this.width/2, this.height/2);
+        }
+
+        if (this.bossActive) {
+            // Boss HP Bar
+            const barWidth = 400;
+            const barHeight = 20;
+            const bx = this.width/2 - barWidth/2;
+            const by = 20;
+
+            this.ctx.fillStyle = '#444';
+            this.ctx.fillRect(bx, by, barWidth, barHeight);
+
+            const hpPct = this.bossActive.health / this.bossActive.maxHealth;
+            this.ctx.fillStyle = this.bossActive.phase === 1 ? '#d45d5d' : '#f00';
+            this.ctx.fillRect(bx, by, barWidth * hpPct, barHeight);
+
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(bx, by, barWidth, barHeight);
+
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '16px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(this.bossActive.type + (this.bossActive.phase === 2 ? ' (ENRAGED)' : ''), this.width/2, by + 15);
+        }
+
         // HUD
+
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '20px monospace';
         this.ctx.textAlign = 'left';
