@@ -450,6 +450,31 @@ class Tower {
     }
 }
 
+class EnemyProjectile {
+    constructor(x, y, vx, vy, damage) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.damage = damage;
+        this.radius = 5;
+        this.active = true;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+    }
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff0000';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+}
+
 class Enemy {
     constructor(x, y, target) {
         this.x = x;
@@ -487,6 +512,239 @@ class Enemy {
 
 // --- MAIN ENGINE ---
 
+
+
+class SwarmerEnemy extends Enemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.radius = 8;
+        this.speed = 100 + Math.random() * 40;
+        this.maxHealth = 5;
+        this.health = 5;
+        this.damage = 5;
+        this.color = '#ff8800';
+        this.offset = Math.random() * Math.PI * 2;
+    }
+
+    update(dt) {
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 0) {
+            const wave = Math.sin(performance.now() * 0.005 + this.offset) * 30;
+            const perpX = -dy / dist;
+            const perpY = dx / dist;
+            this.x += ((dx / dist) * this.speed + perpX * wave) * dt;
+            this.y += ((dy / dist) * this.speed + perpY * wave) * dt;
+        }
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+}
+
+class ShieldedBruiserEnemy extends Enemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.radius = 18;
+        this.speed = 30 + Math.random() * 10;
+        this.maxHealth = 30;
+        this.health = 30;
+        this.damage = 20;
+        this.color = '#5555ff';
+        this.shieldHealth = 20;
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.rect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        if (this.shieldHealth > 0) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+    }
+}
+
+class SplitterEnemy extends Enemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.radius = 16;
+        this.speed = 40 + Math.random() * 15;
+        this.maxHealth = 15;
+        this.health = 15;
+        this.damage = 15;
+        this.color = '#ff5555';
+        this.pulse = 0;
+    }
+
+    update(dt) {
+        // Stop-and-go movement
+        this.pulse += dt;
+        const moveMult = Math.sin(this.pulse * 3) > 0 ? 1.5 : 0.2;
+
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 0) {
+            this.x += (dx / dist) * this.speed * moveMult * dt;
+            this.y += (dy / dist) * this.speed * moveMult * dt;
+        }
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
+class AreaDenialEnemy extends Enemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.radius = 14;
+        this.speed = 45 + Math.random() * 10;
+        this.maxHealth = 12;
+        this.health = 12;
+        this.damage = 10;
+        this.color = '#aa5500';
+        this.trapTimer = 0;
+        this.angleOffset = Math.random() * Math.PI * 2;
+    }
+
+    update(dt) {
+        // Moves in a zig-zag pattern
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 0) {
+            const zig = Math.sin(performance.now() * 0.002 + this.angleOffset) * 40;
+            const perpX = -dy / dist;
+            const perpY = dx / dist;
+            this.x += ((dx / dist) * this.speed + perpX * zig) * dt;
+            this.y += ((dy / dist) * this.speed + perpY * zig) * dt;
+        }
+
+        this.trapTimer += dt;
+        if (this.trapTimer > 3) {
+            this.trapTimer = 0;
+            this.dropTrap = true;
+        }
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        if (this.trapTimer > 2.5) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 4, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ff0';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    }
+}
+
+class RangedSniperEnemy extends Enemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.radius = 12;
+        this.speed = 60 + Math.random() * 20;
+        this.maxHealth = 8;
+        this.health = 8;
+        this.damage = 10;
+        this.color = '#55ff55';
+        this.shootTimer = 0;
+        this.preferredDistance = 250;
+    }
+
+    update(dt) {
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > this.preferredDistance + 10) {
+            this.x += (dx / dist) * this.speed * dt;
+            this.y += (dy / dist) * this.speed * dt;
+        } else if (dist < this.preferredDistance - 10) {
+            this.x -= (dx / dist) * this.speed * dt;
+            this.y -= (dy / dist) * this.speed * dt;
+        }
+
+        this.shootTimer += dt;
+        if (this.shootTimer > 4 && dist < this.preferredDistance + 50) {
+            this.shootTimer = 0;
+            this.shoot = true;
+        }
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(this.x - this.radius, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y + this.radius);
+        ctx.moveTo(this.x + this.radius, this.y - this.radius);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        if (this.shootTimer > 3.5) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 6, 0, Math.PI * 2);
+            ctx.strokeStyle = '#f00';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            const dx = this.target.x - this.x;
+            const dy = this.target.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 0) {
+                ctx.lineTo(this.x + (dx/dist)*30, this.y + (dy/dist)*30);
+            }
+            ctx.strokeStyle = '#f00';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+    }
+}
 class CandyCover {
     constructor(x, y) {
         this.x = x;
@@ -721,6 +979,7 @@ class Game {
 
         this.tower = null;
         this.enemies = [];
+        this.projectiles = [];
         this.score = 0;
         this.wave = 1;
 
@@ -772,6 +1031,7 @@ class Game {
     resetGame() {
         this.tower = new Tower(this.width / 2, this.height / 2);
         this.enemies = [];
+        this.projectiles = [];
         this.score = 0;
         this.wave = 1;
         this.enemySpawnTimer = 0;
@@ -821,6 +1081,28 @@ class Game {
                 }
 
                 this.env.applyHazards(this.tower, this.enemies, dt);
+
+                for (let i = this.projectiles.length - 1; i >= 0; i--) {
+                    let p = this.projectiles[i];
+                    p.update(dt);
+                    if (p.x < -100 || p.x > this.width + 100 || p.y < -100 || p.y > this.height + 100) {
+                        p.active = false;
+                    } else {
+                        const distToTower = Math.hypot(p.x - this.tower.x, p.y - this.tower.y);
+                        if (distToTower < p.radius + this.tower.radius) {
+                            if (this.tower.invulnTimer <= 0) {
+                                this.tower.health -= p.damage;
+                                this.tower.applyRecoil(p.x - this.tower.x, p.y - this.tower.y, 20);
+                                this.sound.playHit();
+                            }
+                            p.active = false;
+                        }
+                    }
+                    if (!p.active) {
+                        this.projectiles.splice(i, 1);
+                    }
+                }
+
 
                 this.tower.update(dt, this.input, this);
 
@@ -874,7 +1156,15 @@ class Game {
                     // Check collision with tether head
                     const distToTether = Math.hypot(e.x - tetherHead.x, e.y - tetherHead.y);
                     if (distToTether < e.radius + tetherHead.radius) {
-                        e.health -= 10 * this.tower.damageMultiplier;
+                        if (e.shieldHealth > 0) {
+                            e.shieldHealth -= 10 * this.tower.damageMultiplier;
+                            if (e.shieldHealth < 0) {
+                                e.health += e.shieldHealth;
+                                e.shieldHealth = 0;
+                            }
+                        } else {
+                            e.health -= 10 * this.tower.damageMultiplier;
+                        }
                         // apply some recoil to the tower from the tether hit
                         this.tower.applyRecoil(e.x - tetherHead.x, e.y - tetherHead.y, 2);
                         if (e.health <= 0) {
@@ -891,7 +1181,15 @@ class Game {
                     const lDist = this.distToSegmentSquared(e, {x:this.tower.x, y:this.tower.y}, tetherHead);
                     if (lDist < e.radius * e.radius) {
                          // Line hits do less damage
-                         e.health -= 20 * dt;
+                         if (e.shieldHealth > 0) {
+                             e.shieldHealth -= 20 * dt;
+                             if (e.shieldHealth < 0) {
+                                 e.health += e.shieldHealth;
+                                 e.shieldHealth = 0;
+                             }
+                         } else {
+                             e.health -= 20 * dt;
+                         }
                          if (e.health <= 0) {
                             e.active = false;
                             this.score += 5;
@@ -899,7 +1197,26 @@ class Game {
                          }
                     }
 
+                    if (e.dropTrap) {
+                        e.dropTrap = false;
+                        this.env.traps.push(new CaramelTrap(e.x - 20, e.y - 20, 40, 40));
+                    }
+                    if (e.shoot) {
+                        e.shoot = false;
+                        const dx = this.tower.x - e.x;
+                        const dy = this.tower.y - e.y;
+                        const dist = Math.hypot(dx, dy);
+                        if (dist > 0) {
+                            this.projectiles.push(new EnemyProjectile(e.x, e.y, (dx/dist)*150, (dy/dist)*150, e.damage));
+                        }
+                    }
+
                     if (!e.active) {
+                        if (e instanceof SplitterEnemy) {
+                            let sw1 = new SwarmerEnemy(e.x - 10, e.y, this.tower);
+                            let sw2 = new SwarmerEnemy(e.x + 10, e.y, this.tower);
+                            this.enemies.push(sw1, sw2);
+                        }
                         this.enemies.splice(i, 1);
                     }
                 }
@@ -945,7 +1262,24 @@ class Game {
         const dist = Math.max(this.width, this.height) * 0.7; // spawn outside screen
         const x = this.tower.x + Math.cos(angle) * dist;
         const y = this.tower.y + Math.sin(angle) * dist;
-        this.enemies.push(new Enemy(x, y, this.tower));
+
+        const r = Math.random();
+        if (r < 0.3) {
+            this.enemies.push(new Enemy(x, y, this.tower));
+        } else if (r < 0.5) {
+            // Swarmers spawn in groups
+            this.enemies.push(new SwarmerEnemy(x, y, this.tower));
+            this.enemies.push(new SwarmerEnemy(x + Math.random()*20, y + Math.random()*20, this.tower));
+            this.enemies.push(new SwarmerEnemy(x + Math.random()*20, y + Math.random()*20, this.tower));
+        } else if (r < 0.65) {
+            this.enemies.push(new ShieldedBruiserEnemy(x, y, this.tower));
+        } else if (r < 0.8) {
+            this.enemies.push(new SplitterEnemy(x, y, this.tower));
+        } else if (r < 0.9) {
+            this.enemies.push(new AreaDenialEnemy(x, y, this.tower));
+        } else {
+            this.enemies.push(new RangedSniperEnemy(x, y, this.tower));
+        }
     }
 
     draw() {
@@ -975,6 +1309,9 @@ class Game {
         this.env.drawBackground(this.ctx);
 
         this.tower.draw(this.ctx, this.input);
+        for (let p of this.projectiles) {
+            p.draw(this.ctx);
+        }
         for (let e of this.enemies) {
             e.draw(this.ctx);
         }
