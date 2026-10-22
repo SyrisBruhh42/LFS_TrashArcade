@@ -575,6 +575,7 @@ class Game {
         this.pickupManager = new PickupManager();
         this.comboManager = new ComboManager();
         this.upgradeManager = new UpgradeManager();
+        this.vfxManager = new VFXManager();
         this.combo = 0;
 
 
@@ -629,6 +630,7 @@ class Game {
         this.pickupManager = new PickupManager();
         this.comboManager = new ComboManager();
         this.upgradeManager = new UpgradeManager();
+        this.vfxManager = new VFXManager();
         this.combo = 0;
 
         this.spawnTimer = 0;
@@ -688,6 +690,10 @@ class Game {
         }
 
         this.pickupManager.draw(this.ctx);
+        if (this.state === "PLAYING") {
+            this.ctx.restore();
+        }
+
 
         if (this.state === 'UPGRADE') {
             this.upgradeManager.draw(this.ctx, this.width, this.height, this.inputManager, (upgradeId) => {
@@ -697,6 +703,7 @@ class Game {
             return;
         }
 
+        this.vfxManager.draw(this.ctx);
         this.comboManager.draw(this.ctx, this.width);
 
         if (this.state === 'PAUSED') {
@@ -779,8 +786,10 @@ class Game {
         }
 
         if (this.bossActive && !this.bossActive.active) {
+            if (this.vfxManager && this.bossActive) { this.vfxManager.addPopup(this.bossActive.x, this.bossActive.y, "+500", "#ff0"); }
             this.bossActive = null;
             this.score += 500 * this.comboManager.multiplier;
+
         }
 
 
@@ -819,15 +828,18 @@ class Game {
                                 e.state = 'STUNNED';
                                 e.chargeTimer = 2.0;
                                 this.score += 50 * this.comboManager.multiplier;
+                    if (this.vfxManager) { this.vfxManager.addPopup(e.x, e.y, "+100", "#ff0"); }
                                 this.soundEngine.playHit();
                             } else if (e.isBoss) {
                                 e.takeDamage(1);
                                 this.score += 20 * this.comboManager.multiplier;
+                    if (this.vfxManager) { this.vfxManager.addPopup(e.x, e.y, "+100", "#ff0"); }
                                 this.soundEngine.playHit();
                             } else {
 
                                 e.active = false;
                                 this.score += 100 * this.comboManager.multiplier;
+                    if (this.vfxManager) { this.vfxManager.addPopup(e.x, e.y, "+100", "#ff0"); }
                                 this.soundEngine.playHit();
                                 if (e.type === 'SPLITTER' && e.size === 1) {
                                     // Spawn smaller splitters
@@ -843,6 +855,7 @@ class Game {
                             // If different -> Missed Parry (take damage)
                             if (this.player.invulnTimer <= 0) {
                                 this.player.health--;
+                            if (this.vfxManager) { this.vfxManager.addHitStop(0.2); this.vfxManager.addScreenShake(15, 0.4); this.vfxManager.emitExplosion(this.player.x, this.player.y, "#f00", 30); this.vfxManager.addPopup(this.player.x, this.player.y - 20, "-1 HP", "#f00", 1.5); }
                                 this.player.invulnTimer = 1.0;
                                 this.soundEngine.playHit();
                             }
@@ -859,6 +872,7 @@ class Game {
                     if (dist < this.player.radius + e.pulseRadius) {
                         if (this.player.invulnTimer <= 0) {
                             this.player.health--;
+                            if (this.vfxManager) { this.vfxManager.addHitStop(0.2); this.vfxManager.addScreenShake(15, 0.4); this.vfxManager.emitExplosion(this.player.x, this.player.y, "#f00", 30); this.vfxManager.addPopup(this.player.x, this.player.y - 20, "-1 HP", "#f00", 1.5); }
                             this.player.invulnTimer = 1.0;
                             this.soundEngine.playHit();
                         }
@@ -867,6 +881,7 @@ class Game {
                 if (dist < this.player.radius + e.radius) {
                     if (this.player.invulnTimer <= 0) {
                         this.player.health--;
+                            if (this.vfxManager) { this.vfxManager.addHitStop(0.2); this.vfxManager.addScreenShake(15, 0.4); this.vfxManager.emitExplosion(this.player.x, this.player.y, "#f00", 30); this.vfxManager.addPopup(this.player.x, this.player.y - 20, "-1 HP", "#f00", 1.5); }
                         this.player.invulnTimer = 1.0;
                         this.soundEngine.playHit();
                         if (e.type !== 'BRUISER') {
@@ -897,6 +912,7 @@ class Game {
                     if (Math.abs(angleDiff) < Math.PI/3) {
                         p.active = false;
                         this.score += 25 * this.comboManager.multiplier;
+                        if (this.vfxManager) { this.vfxManager.addPopup(p.x, p.y, "+25", "#ff0"); }
                         this.soundEngine.playHit();
                         continue;
                     }
@@ -907,6 +923,7 @@ class Game {
             if (dist < this.player.radius + p.radius) {
                 if (this.player.invulnTimer <= 0) {
                     this.player.health--;
+                            if (this.vfxManager) { this.vfxManager.addHitStop(0.2); this.vfxManager.addScreenShake(15, 0.4); this.vfxManager.emitExplosion(this.player.x, this.player.y, "#f00", 30); this.vfxManager.addPopup(this.player.x, this.player.y - 20, "-1 HP", "#f00", 1.5); }
                     this.player.invulnTimer = 1.0;
                     this.soundEngine.playHit();
                     p.active = false;
@@ -928,6 +945,10 @@ class Game {
         // Clear
         this.ctx.fillStyle = '#2a2029'; // Base bg color
         this.ctx.fillRect(0, 0, this.width, this.height);
+        if (this.state === "PLAYING") {
+            this.ctx.save();
+            this.vfxManager.applyShake(this.ctx);
+        }
 
         if (this.environment) {
             // Fake camera based on player pos
@@ -1056,6 +1077,7 @@ class Game {
             return;
         }
 
+        this.vfxManager.draw(this.ctx);
         this.comboManager.draw(this.ctx, this.width);
 
         if (this.state === 'PAUSED') {
@@ -1097,10 +1119,17 @@ class Game {
     }
     loop(now) {
         requestAnimationFrame(this.loop.bind(this));
-        let dt = (now - this.lastTime) / 1000;
+        let rawDt = (now - this.lastTime) / 1000;
         this.lastTime = now;
-        if (dt > 0.1) dt = 0.1; // Cap dt
-        if (Number.isNaN(dt)) dt = 0.016;
+        if (rawDt > 0.1) rawDt = 0.1; // Cap dt
+        if (Number.isNaN(rawDt)) rawDt = 0.016;
+
+        this.vfxManager.update(rawDt);
+
+        let dt = rawDt;
+        if (this.vfxManager.hitStopTimer > 0) {
+            dt = 0;
+        }
 
         this.update(dt);
         this.draw();
