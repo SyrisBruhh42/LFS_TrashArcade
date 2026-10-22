@@ -484,6 +484,10 @@ class Engine {
     this.blocks = [];
     this.enemies = [];
     this.particles = [];
+    this.hazards = []; // Interactive stage hazards
+    if (typeof ParallaxBackground !== 'undefined') {
+        this.background = new ParallaxBackground(this.width, this.height);
+    }
     this.tether = []; // array of {x, y}
     this.tetherLength = 0;
     this.maxTetherLength = 100;
@@ -581,6 +585,11 @@ class Engine {
     if (Math.random() < 0.05 + (this.depth * 0.00002)) {
       this.enemies.push(new Enemy(Math.random() * this.width, rowY));
     }
+    // spawn hazard occasionally
+    if (typeof Hazard !== 'undefined' && Math.random() < 0.04 + (this.depth * 0.00001)) {
+        let type = Math.random() < 0.5 ? 'geyser' : 'shifter';
+        this.hazards.push(new Hazard(Math.random() * this.width, rowY, type));
+    }
   }
 
   startGame() {
@@ -590,6 +599,7 @@ class Engine {
     this.blocks = [];
     this.enemies = [];
     this.particles = [];
+    this.hazards = [];
     this.tether = [{x: this.player.x, y: this.player.y}];
     this.tetherLength = 0;
     this.maxTetherLength = 10; // capacity starts low
@@ -788,9 +798,20 @@ class Engine {
       }
     }
 
+    // --- Update Hazards ---
+    this.hazards.forEach(h => {
+        if (!h.active) return;
+        h.update(dt, this);
+    });
+
+    if (this.background) {
+        this.background.update(dt, this.cameraY);
+    }
+
     // --- Cleanup ---
     this.blocks = this.blocks.filter(b => b.active && b.y > this.cameraY - 200);
     this.enemies = this.enemies.filter(e => e.active && e.y > this.cameraY - 400 && e.y < this.cameraY + this.height + 400);
+    this.hazards = this.hazards.filter(h => h.active && h.y > this.cameraY - 400 && h.y < this.cameraY + this.height + 400);
 
     this.inputManager.update();
   }
@@ -807,6 +828,10 @@ class Engine {
   draw() {
     this.ctx.fillStyle = '#0b0c10';
     this.ctx.fillRect(0, 0, this.width, this.height);
+
+    if (this.background && (this.state === 'PLAYING' || this.state === 'GAME_OVER' || this.state === 'PAUSED')) {
+        this.background.draw(this.ctx, this.width, this.height);
+    }
 
     if (this.state === 'TITLE') {
       this.ctx.fillStyle = '#a0efb8';
@@ -827,7 +852,11 @@ class Engine {
     }
 
     // --- Draw Game World ---
+    if (this.background) {
+        // Additional atmospheric mid-layer could go here
+    }
     this.blocks.forEach(b => b.draw(this.ctx, this.cameraY));
+    this.hazards.forEach(h => h.draw(this.ctx, this.cameraY));
 
     // Tether
     if (this.tether.length > 1) {
