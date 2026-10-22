@@ -19,6 +19,177 @@ const SaveManager = {
   }
 };
 
+const ParallaxBG = {
+  layers: [],
+  init: function() {
+    this.layers = [
+      { speed: 10, items: [], type: 'star' }, // Distant stars
+      { speed: 30, items: [], type: 'debris' }, // Space debris
+      { speed: 70, items: [], type: 'strut' }  // Station struts
+    ];
+    for (let i = 0; i < 50; i++) this.spawnItem(this.layers[0], true);
+    for (let i = 0; i < 20; i++) this.spawnItem(this.layers[1], true);
+    for (let i = 0; i < 5; i++)  this.spawnItem(this.layers[2], true);
+  },
+  spawnItem: function(layer, initial = false) {
+    const ww = window.innerWidth;
+    const hh = window.innerHeight;
+    const x = initial ? Math.random() * ww : ww + 50;
+    const y = Math.random() * hh;
+
+    if (layer.type === 'star') {
+      layer.items.push({ x, y, size: Math.random() * 2 + 1, alpha: Math.random() * 0.5 + 0.1 });
+    } else if (layer.type === 'debris') {
+      layer.items.push({ x, y, size: Math.random() * 4 + 2, rot: Math.random() * Math.PI * 2, vrot: (Math.random() - 0.5) * 2 });
+    } else if (layer.type === 'strut') {
+      layer.items.push({ x, y, w: Math.random() * 100 + 50, h: Math.random() * 300 + 100 });
+    }
+  },
+  update: function(dt) {
+    const ww = window.innerWidth;
+    for (let layer of this.layers) {
+      for (let i = layer.items.length - 1; i >= 0; i--) {
+        let item = layer.items[i];
+        item.x -= layer.speed * dt;
+        if (layer.type === 'debris') item.rot += item.vrot * dt;
+
+        // Remove if off screen
+        if (layer.type === 'star' || layer.type === 'debris') {
+           if (item.x < -20) layer.items.splice(i, 1);
+        } else if (layer.type === 'strut') {
+           if (item.x + item.w < -20) layer.items.splice(i, 1);
+        }
+      }
+
+      // Respawn
+      let expected = layer.type === 'star' ? 50 : (layer.type === 'debris' ? 20 : 5);
+      if (layer.items.length < expected && Math.random() < 0.1) {
+        this.spawnItem(layer);
+      }
+    }
+  },
+  draw: function(ctx, w, h) {
+    for (let layer of this.layers) {
+      if (layer.type === 'star') {
+        ctx.fillStyle = '#fff';
+        for (let s of layer.items) {
+          ctx.globalAlpha = s.alpha;
+          ctx.fillRect(s.x, s.y, s.size, s.size);
+        }
+        ctx.globalAlpha = 1.0;
+      } else if (layer.type === 'debris') {
+        ctx.fillStyle = '#666';
+        for (let d of layer.items) {
+          ctx.save();
+          ctx.translate(d.x, d.y);
+          ctx.rotate(d.rot);
+          ctx.fillRect(-d.size/2, -d.size/2, d.size, d.size);
+          ctx.restore();
+        }
+      } else if (layer.type === 'strut') {
+        ctx.fillStyle = 'rgba(34, 40, 49, 0.5)';
+        for (let st of layer.items) {
+          ctx.fillRect(st.x, st.y, st.w, st.h);
+        }
+      }
+    }
+  }
+};
+
+class Conveyor {
+  constructor(x, y, dx, dy) {
+    this.x = x;
+    this.y = y;
+    this.dx = dx;
+    this.dy = dy;
+    this.animTimer = 0;
+  }
+  update(dt) {
+    this.animTimer += dt * 5;
+  }
+  draw(ctx) {
+    ctx.fillStyle = 'rgba(52, 152, 219, 0.2)';
+    ctx.fillRect(this.x * GRID_SIZE, this.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+
+    // Draw arrows
+    ctx.strokeStyle = 'rgba(52, 152, 219, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    let cx = this.x * GRID_SIZE + GRID_SIZE/2;
+    let cy = this.y * GRID_SIZE + GRID_SIZE/2;
+
+    let offset = (this.animTimer % 1) * GRID_SIZE/2;
+
+    if (this.dx > 0) {
+      ctx.moveTo(cx - GRID_SIZE/4 + offset, cy - GRID_SIZE/4);
+      ctx.lineTo(cx + offset, cy);
+      ctx.lineTo(cx - GRID_SIZE/4 + offset, cy + GRID_SIZE/4);
+    } else if (this.dx < 0) {
+      ctx.moveTo(cx + GRID_SIZE/4 - offset, cy - GRID_SIZE/4);
+      ctx.lineTo(cx - offset, cy);
+      ctx.lineTo(cx + GRID_SIZE/4 - offset, cy + GRID_SIZE/4);
+    } else if (this.dy > 0) {
+      ctx.moveTo(cx - GRID_SIZE/4, cy - GRID_SIZE/4 + offset);
+      ctx.lineTo(cx, cy + offset);
+      ctx.lineTo(cx + GRID_SIZE/4, cy - GRID_SIZE/4 + offset);
+    } else if (this.dy < 0) {
+      ctx.moveTo(cx - GRID_SIZE/4, cy + GRID_SIZE/4 - offset);
+      ctx.lineTo(cx, cy - offset);
+      ctx.lineTo(cx + GRID_SIZE/4, cy + GRID_SIZE/4 - offset);
+    }
+    ctx.stroke();
+  }
+}
+
+class LaserTrap {
+  constructor(x, y, isHorizontal) {
+    this.x = x;
+    this.y = y;
+    this.isHorizontal = isHorizontal;
+    this.turnCounter = 0; // fires when turnCounter % 3 === 0
+    this.isFiring = false;
+    this.fireTimer = 0;
+  }
+  update(dt) {
+    if (this.isFiring) {
+      this.fireTimer -= dt;
+      if (this.fireTimer <= 0) {
+        this.isFiring = false;
+      }
+    }
+  }
+  fire() {
+    this.isFiring = true;
+    this.fireTimer = 0.5;
+  }
+  draw(ctx) {
+    // Emitter base
+    ctx.fillStyle = '#e74c3c';
+    ctx.fillRect(this.x * GRID_SIZE + 4, this.y * GRID_SIZE + 4, GRID_SIZE - 8, GRID_SIZE - 8);
+
+    // Laser beam
+    if (this.isFiring) {
+      ctx.fillStyle = `rgba(231, 76, 60, ${Math.random() * 0.5 + 0.5})`;
+      if (this.isHorizontal) {
+        ctx.fillRect((this.x + 1) * GRID_SIZE, this.y * GRID_SIZE + GRID_SIZE/2 - 4, COLS * GRID_SIZE, 8);
+      } else {
+        ctx.fillRect(this.x * GRID_SIZE + GRID_SIZE/2 - 4, (this.y + 1) * GRID_SIZE, 8, ROWS * GRID_SIZE);
+      }
+    } else {
+      // Warning line
+      if (this.turnCounter % 3 === 2) {
+        ctx.fillStyle = `rgba(241, 196, 15, ${Math.random() * 0.3 + 0.2})`;
+        if (this.isHorizontal) {
+          ctx.fillRect((this.x + 1) * GRID_SIZE, this.y * GRID_SIZE + GRID_SIZE/2 - 2, COLS * GRID_SIZE, 4);
+        } else {
+          ctx.fillRect(this.x * GRID_SIZE + GRID_SIZE/2 - 2, (this.y + 1) * GRID_SIZE, 4, ROWS * GRID_SIZE);
+        }
+      }
+    }
+  }
+}
+
 const SoundEngine = {
   ctx: null,
   init: function() {
@@ -284,12 +455,268 @@ class Player extends Entity {
 
 }
 
+
 class Enemy extends Entity {
-  constructor(x, y) {
-    super(x, y, '#e74c3c');
+  constructor(x, y, color = '#e74c3c') {
+    super(x, y, color);
     this.hp = 1;
+    this.type = 'Enemy';
+    this.telegraph = false; // generic telegraph
+  }
+
+  takeTurn(engine) {
+    // Default AI: move towards player
+    let dx = engine.player.x - this.x;
+    let dy = engine.player.y - this.y;
+
+    let stepX = 0, stepY = 0;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      stepX = dx > 0 ? 1 : -1;
+    } else if (Math.abs(dy) > 0) {
+      stepY = dy > 0 ? 1 : -1;
+    }
+
+    const nx = this.x + stepX;
+    const ny = this.y + stepY;
+
+    if (!engine.isSolid(nx, ny) && !engine.getEnemyAt(nx, ny) && (nx !== engine.player.x || ny !== engine.player.y)) {
+      this.moveTo(nx, ny);
+    }
+  }
+
+  draw(ctx) {
+    // Override draw for generic fallback
+    super.draw(ctx);
   }
 }
+
+class Swarmer extends Enemy {
+  constructor(x, y) {
+    super(x, y, '#e74c3c');
+    this.type = 'Swarmer';
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -GRID_SIZE/2 + 4);
+    ctx.lineTo(GRID_SIZE/2 - 4, 0);
+    ctx.lineTo(0, GRID_SIZE/2 - 4);
+    ctx.lineTo(-GRID_SIZE/2 + 4, 0);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+class ShieldBruiser extends Enemy {
+  constructor(x, y) {
+    super(x, y, '#9b59b6');
+    this.hp = 2;
+    this.type = 'ShieldBruiser';
+    this.turnCounter = 0;
+  }
+
+  takeTurn(engine) {
+    this.turnCounter++;
+    if (this.turnCounter % 2 === 0) {
+      // Moves every 2 turns
+      super.takeTurn(engine);
+    }
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = this.color;
+    ctx.fillRect(-GRID_SIZE/2 + 8, -GRID_SIZE/2 + 8, GRID_SIZE - 16, GRID_SIZE - 16);
+    if (this.hp > 1) {
+      ctx.strokeStyle = '#2980b9';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.rect(-GRID_SIZE/2 + 4, -GRID_SIZE/2 + 4, GRID_SIZE - 8, GRID_SIZE - 8);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+class RangedSniper extends Enemy {
+  constructor(x, y) {
+    super(x, y, '#f1c40f');
+    this.type = 'RangedSniper';
+    this.telegraphing = false;
+    this.aimX = 0;
+    this.aimY = 0;
+  }
+
+  takeTurn(engine) {
+    if (this.telegraphing) {
+      // Fire instantly
+      this.telegraphing = false;
+      let currX = this.x + this.aimX;
+      let currY = this.y + this.aimY;
+      while (!engine.isSolid(currX, currY)) {
+        engine.spawnParticles(currX, currY, '#f1c40f'); // Draw laser path via particles
+        if (currX === engine.player.x && currY === engine.player.y && engine.player.invulnTimer <= 0) {
+           engine.spawnParticles(engine.player.x, engine.player.y, engine.player.color);
+           engine.gameOver();
+        }
+        currX += this.aimX;
+        currY += this.aimY;
+      }
+    } else {
+      // Check if aligned with player
+      let dx = engine.player.x - this.x;
+      let dy = engine.player.y - this.y;
+      if ((dx === 0 || dy === 0) && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
+        // Can see player, start telegraphing
+        this.telegraphing = true;
+        this.aimX = dx === 0 ? 0 : Math.sign(dx);
+        this.aimY = dy === 0 ? 0 : Math.sign(dy);
+      } else {
+        // Move towards player, or if too close move away?
+        // simple: just use super
+        super.takeTurn(engine);
+      }
+    }
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -GRID_SIZE/2 + 6);
+    ctx.lineTo(GRID_SIZE/2 - 6, GRID_SIZE/2 - 6);
+    ctx.lineTo(-GRID_SIZE/2 + 6, GRID_SIZE/2 - 6);
+    ctx.fill();
+
+    // Draw telegraph line
+    if (this.telegraphing) {
+       ctx.strokeStyle = 'rgba(241, 196, 15, 0.5)';
+       ctx.lineWidth = 2;
+       ctx.beginPath();
+       ctx.moveTo(0, 0);
+       ctx.lineTo(this.aimX * GRID_SIZE * 15, this.aimY * GRID_SIZE * 15);
+       ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+class Splitter extends Enemy {
+  constructor(x, y) {
+    super(x, y, '#2ecc71');
+    this.type = 'Splitter';
+  }
+
+  onDeath(engine) {
+    // spawn 2 swarmers if spaces available
+    const dirs = [{dx: 1, dy: 0}, {dx: -1, dy: 0}, {dx: 0, dy: 1}, {dx: 0, dy: -1}];
+    let spawned = 0;
+    for(let d of dirs) {
+      if(spawned >= 2) break;
+      const nx = this.x + d.dx;
+      const ny = this.y + d.dy;
+      if (!engine.isSolid(nx, ny) && !engine.getEnemyAt(nx, ny) && (nx !== engine.player.x || ny !== engine.player.y)) {
+         engine.enemies.push(new Swarmer(nx, ny));
+         spawned++;
+      }
+    }
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(-4, -4, 6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(4, 4, 6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+class AreaDenialHazard extends Enemy {
+  constructor(x, y) {
+    super(x, y, '#e67e22');
+    this.type = 'AreaDenialHazard';
+  }
+
+  takeTurn(engine) {
+    let oldX = this.x;
+    let oldY = this.y;
+    // Move away from player if close, else random
+    let dx = this.x - engine.player.x;
+    let dy = this.y - engine.player.y;
+    let stepX = 0, stepY = 0;
+    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        stepX = dx > 0 ? 1 : -1;
+      } else {
+        stepY = dy > 0 ? 1 : -1;
+      }
+    } else {
+       // Random move
+       const dirs = [{dx: 1, dy: 0}, {dx: -1, dy: 0}, {dx: 0, dy: 1}, {dx: 0, dy: -1}];
+       let d = dirs[Math.floor(Math.random() * dirs.length)];
+       stepX = d.dx;
+       stepY = d.dy;
+    }
+
+    const nx = this.x + stepX;
+    const ny = this.y + stepY;
+    if (!engine.isSolid(nx, ny) && !engine.getEnemyAt(nx, ny) && (nx !== engine.player.x || ny !== engine.player.y)) {
+      this.moveTo(nx, ny);
+      // Drop hazard pool where it was
+      engine.acidPools = engine.acidPools || [];
+      engine.acidPools.push({x: oldX, y: oldY, turns: 3});
+    }
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    const sides = 8;
+    for(let i=0; i<sides; i++) {
+       const ang = (i / sides) * Math.PI * 2;
+       const px = Math.cos(ang) * (GRID_SIZE/2 - 4);
+       const py = Math.sin(ang) * (GRID_SIZE/2 - 4);
+       if (i === 0) ctx.moveTo(px, py);
+       else ctx.lineTo(px, py);
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 
 const Engine = {
   state: 'TITLE',
@@ -300,6 +727,7 @@ const Engine = {
   init: function() {
     this.canvas = document.getElementById('gameCanvas');
     this.ctx = this.canvas.getContext('2d');
+    ParallaxBG.init();
 
     SaveManager.load();
     document.getElementById('title-highscore').innerText = SaveManager.data.highScore;
@@ -374,6 +802,9 @@ const Engine = {
     this.walls = [];
     this.particles = [];
     this.dashTrails = [];
+    this.conveyors = [];
+    this.lasers = [];
+    this.acidPools = [];
 
     // Border walls
     for(let i=0; i<COLS; i++) {
@@ -385,8 +816,11 @@ const Engine = {
       this.walls.push({x: COLS-1, y: i});
     }
 
+
     // Spawn enemies
     const numEnemies = 2 + this.wave;
+    const enemyTypes = [Swarmer, ShieldBruiser, RangedSniper, Splitter, AreaDenialHazard];
+
     for(let i=0; i<numEnemies; i++) {
       let ex, ey;
       do {
@@ -396,7 +830,45 @@ const Engine = {
         this.isSolid(ex, ey) ||
         (Math.abs(ex - this.player.x) < 3 && Math.abs(ey - this.player.y) < 3)
       );
-      this.enemies.push(new Enemy(ex, ey));
+
+      // Pick random enemy type
+      let EType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+      // First wave mostly swarmers
+      if (this.wave === 1) EType = Swarmer;
+
+      this.enemies.push(new EType(ex, ey));
+    }
+
+
+    // Spawn Hazards
+    const numHazards = Math.min(2 + Math.floor(this.wave / 2), 5);
+    for(let i=0; i<numHazards; i++) {
+      if (Math.random() > 0.5) {
+        // Spawn Conveyor
+        let cx, cy;
+        do {
+          cx = 1 + Math.floor(Math.random() * (COLS-2));
+          cy = 1 + Math.floor(Math.random() * (ROWS-2));
+        } while (this.isSolid(cx, cy) || (cx === this.player.x && cy === this.player.y));
+        let dirs = [{dx:1,dy:0}, {dx:-1,dy:0}, {dx:0,dy:1}, {dx:0,dy:-1}];
+        let d = dirs[Math.floor(Math.random()*dirs.length)];
+        this.conveyors.push(new Conveyor(cx, cy, d.dx, d.dy));
+      } else {
+        // Spawn Laser
+        let lx, ly;
+        let isHoriz = Math.random() > 0.5;
+        if (isHoriz) {
+           lx = 0; // Emitter on left wall
+           ly = 1 + Math.floor(Math.random() * (ROWS-2));
+        } else {
+           lx = 1 + Math.floor(Math.random() * (COLS-2));
+           ly = 0; // Emitter on top wall
+        }
+
+        let laser = new LaserTrap(lx, ly, isHoriz);
+        laser.turnCounter = Math.floor(Math.random() * 3); // Random phase
+        this.lasers.push(laser);
+      }
     }
 
     this.turnState = 'PLAYER_TURN'; // PLAYER_TURN, ANIMATING, ENEMY_TURN, RESOLVING
@@ -575,28 +1047,90 @@ const Engine = {
     }
   },
 
+  processEnvTurn: function() {
+    let animRequired = false;
+
+    // Conveyors push entities
+    const entities = [this.player, ...this.enemies];
+    for (let c of this.conveyors) {
+      for (let ent of entities) {
+        if (ent.x === c.x && ent.y === c.y) {
+          let nx = ent.x + c.dx;
+          let ny = ent.y + c.dy;
+          if (!this.isSolid(nx, ny)) {
+             // Check if pushing into another entity could be done, for simplicity just push if not solid
+             let blocked = false;
+             for (let e2 of entities) {
+               if (e2 !== ent && e2.x === nx && e2.y === ny) blocked = true;
+             }
+             if (!blocked) {
+               ent.moveTo(nx, ny);
+               animRequired = true;
+             }
+          }
+        }
+      }
+    }
+
+    // Process acid pools
+    if (this.acidPools) {
+       for (let i = this.acidPools.length - 1; i >= 0; i--) {
+          let p = this.acidPools[i];
+          if (this.player.x === p.x && this.player.y === p.y && this.player.invulnTimer <= 0) {
+             this.spawnParticles(this.player.x, this.player.y, this.player.color);
+             this.gameOver();
+             return;
+          }
+          p.turns--;
+          if (p.turns <= 0) this.acidPools.splice(i, 1);
+       }
+    }
+
+    // Lasers fire
+    for (let l of this.lasers) {
+      l.turnCounter++;
+      if (l.turnCounter % 3 === 0) {
+        l.fire();
+        SoundEngine.playHit(); // Laser fire sound
+
+        // Kill entities in path
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+           let e = this.enemies[i];
+           let hit = l.isHorizontal ? (e.y === l.y) : (e.x === l.x);
+           if (hit) {
+             this.spawnParticles(e.x, e.y, e.color);
+             SoundEngine.playDestroy();
+             this.enemies.splice(i, 1);
+             this.score += 50; // Points for env kill
+             this.updateHUD();
+           }
+        }
+
+        let playerHit = l.isHorizontal ? (this.player.y === l.y) : (this.player.x === l.x);
+        if (playerHit && this.player.invulnTimer <= 0) {
+           this.spawnParticles(this.player.x, this.player.y, this.player.color);
+           this.gameOver();
+           return;
+        }
+      }
+    }
+
+    if (animRequired) {
+      this.turnState = 'ANIMATING';
+      this.animTimer = 0.15;
+    } else {
+      // Resolve immediately if no animations
+      this.resolveTurn();
+    }
+  },
+
   processEnemyTurn: function() {
     const echoPos = this.player.getEchoPos();
 
     this.enemies.forEach(e => {
-      // Simple AI: Move towards player or avoid echo
-      let dx = this.player.x - e.x;
-      let dy = this.player.y - e.y;
-
-      let stepX = 0, stepY = 0;
-
-      if (Math.abs(dx) > Math.abs(dy)) {
-        stepX = dx > 0 ? 1 : -1;
-      } else if (Math.abs(dy) > 0) {
-        stepY = dy > 0 ? 1 : -1;
-      }
-
-      const nx = e.x + stepX;
-      const ny = e.y + stepY;
-
-      if (!this.isSolid(nx, ny) && !this.getEnemyAt(nx, ny) && (nx !== this.player.x || ny !== this.player.y)) {
-        e.moveTo(nx, ny);
-      }
+       if (e.takeTurn) {
+         e.takeTurn(this);
+       }
     });
 
     this.turnState = 'ANIMATING';
@@ -619,26 +1153,33 @@ const Engine = {
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
-      // If enemy on echo, it dies
+      let eHit = false;
+      // If enemy on echo, it takes damage
       if (echoPos && e.x === echoPos.x && e.y === echoPos.y) {
-        this.spawnParticles(e.x, e.y, e.color);
-        SoundEngine.playDestroy();
-        this.enemies.splice(i, 1);
-        this.score += 100;
-        this.updateHUD();
+         eHit = true;
       }
       // If enemy on player
       else if (e.x === this.player.x && e.y === this.player.y) {
         if (this.player.invulnTimer > 0) {
-          // Invulnerable dash hit
-          this.spawnParticles(e.x, e.y, e.color);
-          SoundEngine.playDestroy();
-          this.enemies.splice(i, 1);
-          this.score += 100;
-          this.updateHUD();
+          eHit = true;
         } else {
           playerHit = true;
         }
+      }
+
+      if (eHit) {
+        e.hp--;
+        this.spawnParticles(e.x, e.y, e.color);
+        SoundEngine.playDestroy();
+        if (e.hp <= 0) {
+           if (e.onDeath) e.onDeath(this);
+           this.enemies.splice(i, 1);
+           this.score += 100;
+        } else {
+           // Push back slightly? Just take damage.
+           this.score += 10;
+        }
+        this.updateHUD();
       }
     }
 
@@ -648,16 +1189,19 @@ const Engine = {
       return;
     }
 
-    if (this.enemies.length === 0) {
+    if (this.enemies.length === 0 && this.state !== 'GAME_OVER') {
       this.wave++;
       this.score += 500;
       this.initLevel();
       this.updateHUD();
-    } else {
+    } else if (this.state !== 'GAME_OVER') {
       // Toggle turns
       if (this.turnPhase === 'PLAYER_DONE') {
         this.turnPhase = 'ENEMY_DONE';
         this.processEnemyTurn();
+      } else if (this.turnPhase === 'ENEMY_DONE') {
+        this.turnPhase = 'ENV_DONE';
+        this.processEnvTurn();
       } else {
         this.turnPhase = null;
         this.turnState = 'PLAYER_TURN';
@@ -681,8 +1225,11 @@ const Engine = {
   },
 
   update: function(dt) {
+    ParallaxBG.update(dt);
     this.player.update(dt);
     this.enemies.forEach(e => e.update(dt));
+    this.conveyors.forEach(c => c.update(dt));
+    this.lasers.forEach(l => l.update(dt));
 
     // Update particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -707,6 +1254,8 @@ const Engine = {
           this.resolveTurn();
         } else if (this.turnPhase === 'ENEMY_DONE') {
            this.resolveTurn();
+        } else if (this.turnPhase === 'ENV_DONE') {
+           this.resolveTurn();
         }
       }
     }
@@ -716,6 +1265,9 @@ const Engine = {
     // Clear
     this.ctx.fillStyle = '#111';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Parallax background
+    ParallaxBG.draw(this.ctx, this.canvas.width, this.canvas.height);
 
     if (this.state === 'TITLE') {
       // Draw grid background
@@ -737,6 +1289,18 @@ const Engine = {
     for(let y=0; y<this.canvas.height; y+=GRID_SIZE) {
       this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.canvas.width, y); this.ctx.stroke();
     }
+
+    // Acid Pools
+    if (this.acidPools) {
+      for (let p of this.acidPools) {
+        this.ctx.fillStyle = 'rgba(230, 126, 34, 0.5)';
+        this.ctx.fillRect(p.x * GRID_SIZE, p.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+      }
+    }
+
+    // Hazards
+    this.conveyors.forEach(c => c.draw(this.ctx));
+    this.lasers.forEach(l => l.draw(this.ctx));
 
     // Walls
     this.ctx.fillStyle = '#444';

@@ -9,5 +9,5 @@
   "controls": "WASD / Arrows to move. Space / Tap to end turn. Coordinate with your echo ghost to clear levels.",
   "createdAt": "2026-10-22",
   "accentColor": "#cf7cd4",
-  "phase": "2"
+  "phase": "4"
 }

@@ -897,7 +897,21 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD / Arrows to move. Space / Tap to end turn. Coordinate with your echo ghost to clear levels.",
     "createdAt": "2026-10-22",
     "accentColor": "#cf7cd4",
-    "phase": "2",
+    "phase": "4",
     "path": "./games/068-orbital-echo-tactics/index.html"
+  },
+  {
+    "id": "069",
+    "slug": "069-magma-shift-forge",
+    "title": "Magma Shift Forge",
+    "genre": "Gravity/Orbital Physics Action",
+    "coreMechanic": "Shrinking Arena / Shifting Geometry",
+    "setting": "Volcanic Forge World",
+    "description": "Survive the shifting geometry of a volatile volcanic forge while mastering orbital physics.",
+    "controls": "WASD to move, Mouse to aim/shoot. Touch supported.",
+    "createdAt": "2024-10-22",
+    "accentColor": "#935491",
+    "phase": "1",
+    "path": "./games/069-magma-shift-forge/index.html"
   }
 ];
