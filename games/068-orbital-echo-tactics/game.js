@@ -718,6 +718,166 @@ class AreaDenialHazard extends Enemy {
 }
 
 
+
+class Boss extends Enemy {
+  constructor(x, y, color) {
+    super(x, y, color);
+    this.type = 'Boss';
+    this.isBoss = true;
+    this.maxHp = 10;
+    this.hp = this.maxHp;
+    this.phase = 1;
+  }
+
+  checkPhaseTransition(engine) {
+    if (this.hp <= this.maxHp / 2 && this.phase === 1) {
+      this.phase = 2;
+      this.onPhaseTransition(engine);
+    }
+  }
+
+  onPhaseTransition(engine) {
+    // Override in subclasses
+    engine.spawnParticles(this.x, this.y, '#ffffff');
+    SoundEngine.playHit();
+  }
+}
+
+class OrbitalWarden extends Boss {
+  constructor(x, y) {
+    super(x, y, '#e67e22');
+    this.type = 'OrbitalWarden';
+    this.maxHp = 12;
+    this.hp = this.maxHp;
+    this.turnCounter = 0;
+  }
+
+  takeTurn(engine) {
+    this.turnCounter++;
+    this.checkPhaseTransition(engine);
+
+    if (this.phase === 1) {
+      // Phase 1: Move towards player or spawn a Swarmer occasionally
+      if (this.turnCounter % 4 === 0) {
+         // Spawn Swarmer
+         let s = new Swarmer(this.x, this.y);
+         // Find a valid spot near boss
+         for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+               if (dx === 0 && dy === 0) continue;
+               if (!engine.isSolid(this.x + dx, this.y + dy) && !engine.getEnemyAt(this.x + dx, this.y + dy)) {
+                   s.x = this.x + dx; s.y = this.y + dy;
+                   engine.enemies.push(s);
+                   return; // End turn
+               }
+            }
+         }
+      } else {
+         super.takeTurn(engine); // normal move
+      }
+    } else {
+       // Phase 2: Teleport near player, drop LaserTrap
+       if (this.turnCounter % 3 === 0) {
+          let placed = false;
+          // Teleport
+          for(let i=0; i<5; i++) {
+             let tx = engine.player.x + (Math.floor(Math.random() * 5) - 2);
+             let ty = engine.player.y + (Math.floor(Math.random() * 5) - 2);
+             if (!engine.isSolid(tx, ty) && !engine.getEnemyAt(tx, ty)) {
+                 engine.spawnParticles(this.x, this.y, '#e67e22');
+                 this.moveTo(tx, ty);
+                 this.x = tx; this.y = ty;
+                 placed = true;
+                 break;
+             }
+          }
+          if (placed) {
+              // drop a laser trap here before or after moving? Let's drop it at old pos
+              // Actually drop it at random empty spot
+              let isHor = Math.random() > 0.5;
+              engine.lasers.push(new LaserTrap(this.x, this.y, isHor));
+          }
+       } else {
+          super.takeTurn(engine);
+       }
+    }
+  }
+
+  onPhaseTransition(engine) {
+    super.onPhaseTransition(engine);
+    // Spawn immediate swarmers
+    engine.spawnParticles(this.x, this.y, '#e74c3c');
+  }
+
+  draw(ctx) {
+     super.draw(ctx);
+     // Draw a crown or symbol
+     ctx.fillStyle = '#f1c40f';
+     let rx = this.getRenderX();
+     let ry = this.getRenderY();
+     ctx.fillRect(rx + GRID_SIZE/2 - 4, ry - 4, 8, 4);
+  }
+}
+
+class EchoNullifier extends Boss {
+  constructor(x, y) {
+    super(x, y, '#9b59b6');
+    this.type = 'EchoNullifier';
+    this.maxHp = 14;
+    this.hp = this.maxHp;
+    this.turnCounter = 0;
+  }
+
+  takeTurn(engine) {
+    this.turnCounter++;
+    this.checkPhaseTransition(engine);
+    const echoPos = engine.player.getEchoPos();
+
+    if (this.phase === 1) {
+       // Phase 1: Hunt player, drop acid pools
+       if (this.turnCounter % 3 === 0) {
+          engine.acidPools.push({x: this.x, y: this.y, turns: 6});
+       }
+       super.takeTurn(engine);
+    } else {
+       // Phase 2: Explicitly hunt the Echo instead of Player
+       if (echoPos) {
+           let dx = echoPos.x - this.x;
+           let dy = echoPos.y - this.y;
+
+           let stepX = 0, stepY = 0;
+           if (Math.abs(dx) > Math.abs(dy)) {
+               stepX = dx > 0 ? 1 : -1;
+           } else if (Math.abs(dy) > 0) {
+               stepY = dy > 0 ? 1 : -1;
+           }
+
+           const nx = this.x + stepX;
+           const ny = this.y + stepY;
+
+           if (!engine.isSolid(nx, ny) && !engine.getEnemyAt(nx, ny)) {
+               this.moveTo(nx, ny);
+           }
+       } else {
+           super.takeTurn(engine);
+       }
+
+       if (this.turnCounter % 2 === 0) {
+           engine.acidPools.push({x: this.x, y: this.y, turns: 8});
+       }
+    }
+  }
+
+  draw(ctx) {
+     super.draw(ctx);
+     ctx.strokeStyle = '#8e44ad';
+     ctx.lineWidth = 2;
+     let rx = this.getRenderX();
+     let ry = this.getRenderY();
+     ctx.strokeRect(rx + 4, ry + 4, GRID_SIZE - 8, GRID_SIZE - 8);
+  }
+}
+
 const Engine = {
   state: 'TITLE',
   lastTime: 0,
@@ -842,6 +1002,19 @@ const Engine = {
 
     // Spawn Hazards
     const numHazards = Math.min(2 + Math.floor(this.wave / 2), 5);
+
+    // Boss Spawning Logic
+    if (this.wave % 5 === 0) {
+       this.bossWarningTimer = 3.0; // 3 seconds banner
+       let bX = Math.floor(COLS/2);
+       let bY = 2;
+       // find empty spot
+       while(this.isSolid(bX, bY)) { bX++; if (bX >= COLS) { bX=1; bY++; } }
+
+       let BossClass = (this.wave % 10 === 0) ? EchoNullifier : OrbitalWarden;
+       this.enemies.push(new BossClass(bX, bY));
+    }
+
     for(let i=0; i<numHazards; i++) {
       if (Math.random() > 0.5) {
         // Spawn Conveyor
@@ -995,13 +1168,19 @@ const Engine = {
              nx = tx;
              ny = ty;
 
-             // Destroy enemies in path
+             // Deal damage to enemies in path
              const enemy = this.getEnemyAt(nx, ny);
              if (enemy) {
+               enemy.hp -= 2; // Dash deals 2 damage
                this.spawnParticles(nx, ny, enemy.color);
-               SoundEngine.playDestroy();
-               this.enemies = this.enemies.filter(e => e !== enemy);
-               this.score += 100;
+               if (enemy.hp <= 0) {
+                 SoundEngine.playDestroy();
+                 if (enemy.onDeath) enemy.onDeath(this);
+                 this.enemies = this.enemies.filter(e => e !== enemy);
+                 this.score += enemy.isBoss ? 1000 : 100;
+               } else {
+                 SoundEngine.playHit();
+               }
              }
            } else {
              this.player.recoilTimer = 0.2;
@@ -1093,15 +1272,19 @@ const Engine = {
         l.fire();
         SoundEngine.playHit(); // Laser fire sound
 
-        // Kill entities in path
+        // Damage entities in path
         for (let i = this.enemies.length - 1; i >= 0; i--) {
            let e = this.enemies[i];
            let hit = l.isHorizontal ? (e.y === l.y) : (e.x === l.x);
            if (hit) {
+             e.hp -= 2;
              this.spawnParticles(e.x, e.y, e.color);
-             SoundEngine.playDestroy();
-             this.enemies.splice(i, 1);
-             this.score += 50; // Points for env kill
+             if (e.hp <= 0) {
+               SoundEngine.playDestroy();
+               if (e.onDeath) e.onDeath(this);
+               this.enemies.splice(i, 1);
+               this.score += e.isBoss ? 500 : 50; // Points for env kill
+             }
              this.updateHUD();
            }
         }
@@ -1174,7 +1357,7 @@ const Engine = {
         if (e.hp <= 0) {
            if (e.onDeath) e.onDeath(this);
            this.enemies.splice(i, 1);
-           this.score += 100;
+           this.score += e.isBoss ? 1000 : 100;
         } else {
            // Push back slightly? Just take damage.
            this.score += 10;
@@ -1225,6 +1408,9 @@ const Engine = {
   },
 
   update: function(dt) {
+    if (this.bossWarningTimer > 0) {
+      this.bossWarningTimer -= dt;
+    }
     ParallaxBG.update(dt);
     this.player.update(dt);
     this.enemies.forEach(e => e.update(dt));
@@ -1329,6 +1515,42 @@ const Engine = {
       this.player.draw(this.ctx);
     }
     this.enemies.forEach(e => e.draw(this.ctx));
+
+    // Boss UI
+    let boss = this.enemies.find(e => e.isBoss);
+    if (boss) {
+       // Health Bar
+       const barW = this.canvas.width * 0.8;
+       const barH = 20;
+       const barX = (this.canvas.width - barW) / 2;
+       const barY = 40;
+
+       this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+       this.ctx.fillRect(barX, barY, barW, barH);
+       this.ctx.strokeStyle = '#e74c3c';
+       this.ctx.strokeRect(barX, barY, barW, barH);
+
+       const hpPercent = Math.max(0, boss.hp / boss.maxHp);
+       this.ctx.fillStyle = '#e74c3c';
+       this.ctx.fillRect(barX, barY, barW * hpPercent, barH);
+
+       this.ctx.fillStyle = '#fff';
+       this.ctx.font = '14px Courier New';
+       this.ctx.textAlign = 'center';
+       this.ctx.fillText(`${boss.type} - Phase ${boss.phase}`, this.canvas.width/2, barY + 15);
+       this.ctx.textAlign = 'left';
+    }
+
+    // Boss Warning Banner
+    if (this.bossWarningTimer > 0) {
+       this.ctx.fillStyle = `rgba(231, 76, 60, ${Math.min(1, this.bossWarningTimer)})`;
+       this.ctx.fillRect(0, this.canvas.height/2 - 40, this.canvas.width, 80);
+       this.ctx.fillStyle = '#fff';
+       this.ctx.font = 'bold 32px Courier New';
+       this.ctx.textAlign = 'center';
+       this.ctx.fillText('WARNING: BOSS INCOMING', this.canvas.width/2, this.canvas.height/2 + 10);
+       this.ctx.textAlign = 'left';
+    }
     this.dashTrails.forEach(t => t.draw(this.ctx));
 
     // Particles
