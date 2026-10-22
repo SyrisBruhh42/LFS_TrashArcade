@@ -813,7 +813,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows/Touch to move/drill. Space/Action Button to consume your tether for a massive score payout and shockwave.",
     "createdAt": "2026-10-22",
     "accentColor": "#a0efb8",
-    "phase": "2",
+    "phase": "3",
     "path": "./games/062-cyber-drill-samurai/index.html"
   }
 ];
