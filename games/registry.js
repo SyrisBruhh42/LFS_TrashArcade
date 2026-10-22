@@ -843,5 +843,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#f0c97d",
     "phase": "5",
     "path": "./games/064-candy-time-heist/index.html"
+  },
+  {
+    "id": "065",
+    "slug": "065-clockwork-polarity-parry",
+    "title": "Clockwork Polarity Parry",
+    "genre": "Directional Parry/Slash Arcade",
+    "coreMechanic": "Polarity/Magnetism Switching",
+    "setting": "Clockwork Steampunk Foundry",
+    "description": "Switch polarities to parry incoming gears and repel rogue automatons in a steampunk foundry.",
+    "controls": "WASD/Arrows to move, Space/Click/Touch to parry/slash, Shift/Right-Click/Double-Tap to switch polarity.",
+    "createdAt": "2024-10-24",
+    "accentColor": "#634a60",
+    "phase": "1",
+    "path": "./games/065-clockwork-polarity-parry/index.html"
   }
 ];
