@@ -11,10 +11,20 @@ class Player {
         this.thrustIntensity = 0;
         this.recoil = 0;
         this.invulnerabilityTime = 0;
+
+        // Progression Stats
+        this.damage = 1;
+        this.maxSpeed = 300;
+        this.fireCooldown = 0.2;
+        this.fireTimer = 0;
+        this.dashCooldownMax = 1.0;
+        this.pierce = 1;
+        this.multishot = 1;
+        this.magnetRadius = 50;
     }
 
     update(dt, input, game) {
-        const speed = 300;
+        const speed = this.maxSpeed;
         let ax = 0, ay = 0;
 
         if(input.keys['KeyW'] || input.keys['ArrowUp']) ay -= 1;
@@ -36,7 +46,7 @@ class Player {
         if(this.dashTimer > 0) this.dashTimer -= dt;
 
         if((input.keys['ShiftLeft'] || input.keys['ShiftRight']) && this.dashCooldown <= 0) {
-            this.dashCooldown = 2.0; // 2 sec cooldown
+            this.dashCooldown = this.dashCooldownMax;
             this.dashTimer = 0.2; // 0.2s duration
             this.invulnerabilityTime = 0.2;
 
