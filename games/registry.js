@@ -855,7 +855,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move, Space/Click/Touch to parry/slash, Shift/Right-Click/Double-Tap to switch polarity.",
     "createdAt": "2024-10-24",
     "accentColor": "#634a60",
-    "phase": "1",
+    "phase": "2",
     "path": "./games/065-clockwork-polarity-parry/index.html"
   }
 ];
