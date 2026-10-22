@@ -73,7 +73,11 @@ class UpgradeManager {
         if (x > this.game.width/2 - 150 && x < this.game.width/2 + 150 && y > cy - 40 && y < cy + 40) {
             this.draft[i].apply(this.game);
             this.game.state = 'PLAYING';
-            this.game.soundEngine.playTone(600, 'sine', 0.2);
+            if (this.game.soundEngine.playUpgrade) {
+                this.game.soundEngine.playUpgrade();
+            } else {
+                this.game.soundEngine.playTone(600, 'sine', 0.2);
+            }
             return true;
         }
     }

@@ -26,7 +26,16 @@ class SoundEngine {
   constructor() {
     this.ctx = null;
     this.masterGain = null;
+    this.bgmOscs = [];
+    this.bgmTimer = null;
+    this.bgmStep = 0;
+    this.bgmActive = false;
+    this.tempo = 150; // bpm
+    this.isBoss = false;
+    this.isLowHp = false;
+    this.filter = null;
   }
+
   init() {
     if (this.ctx) return;
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -34,31 +43,190 @@ class SoundEngine {
       this.ctx = new AudioContext();
       this.masterGain = this.ctx.createGain();
       this.masterGain.connect(this.ctx.destination);
-      this.masterGain.gain.value = 0.3;
+      this.masterGain.gain.value = 0.4;
+
+      this.filter = this.ctx.createBiquadFilter();
+      this.filter.type = 'lowpass';
+      this.filter.frequency.value = 2000;
+      this.filter.connect(this.masterGain);
     }
   }
+
   resume() {
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
   }
-  playTone(freq, type, duration, vol=1) {
+
+  updateState(isBoss, isLowHp) {
+    this.isBoss = isBoss;
+    this.isLowHp = isLowHp;
+    this.tempo = this.isBoss ? 180 : (this.isLowHp ? 130 : 150);
+
+    if (this.filter && this.ctx) {
+       const targetFreq = this.isLowHp ? 800 : (this.isBoss ? 4000 : 2000);
+       this.filter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.5);
+    }
+
+    // Reset timer to apply new tempo if playing
+    if (this.bgmActive) {
+      this.startBGM();
+    }
+  }
+
+  startBGM() {
     if (!this.ctx) return;
+    this.stopBGM();
+    this.bgmActive = true;
+
+    const interval = (60 / this.tempo) * 1000 / 2; // 8th notes
+
+    this.bgmTimer = setInterval(() => {
+      this._playBGMStep();
+    }, interval);
+  }
+
+  stopBGM() {
+    this.bgmActive = false;
+    if (this.bgmTimer) {
+      clearInterval(this.bgmTimer);
+      this.bgmTimer = null;
+    }
+  }
+
+  _playBGMStep() {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+
+    const time = this.ctx.currentTime;
+    const isKick = this.bgmStep % 4 === 0;
+    const isSnare = this.bgmStep % 4 === 2;
+    const isHihat = this.bgmStep % 1 === 0;
+
+    // Arpeggiator / Bassline
+    const bassScale = [110, 130.81, 146.83, 164.81, 196, 220]; // A2, C3, D3, E3, G3, A3
+    const bossScale = [98, 110, 116.54, 130.81, 146.83, 164.81]; // G2, A2, Bb2, C3, D3, E3
+    const scale = this.isBoss ? bossScale : bassScale;
+
+    const noteIndex = this.bgmStep % scale.length;
+    let freq = scale[noteIndex];
+    if (this.isBoss && this.bgmStep % 8 < 4) freq *= 2; // Octave jumps for boss
+
+    this._playSynthTone(freq, this.isBoss ? 'sawtooth' : 'square', 0.15, 0.2, this.filter);
+
+    // Percussion
+    if (isKick) {
+      this._playDrum(150, 40, 0.2, 0.4);
+    }
+    if (isSnare) {
+      this._playNoise(0.2, 0.3);
+    }
+    if (isHihat) {
+      this._playNoise(0.05, 0.1, 5000);
+    }
+
+    this.bgmStep = (this.bgmStep + 1) % 16;
+  }
+
+  _playSynthTone(freq, type, duration, vol, destination) {
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = type;
     osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+
+    gain.gain.setValueAtTime(0, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
     osc.connect(gain);
-    gain.connect(this.masterGain);
+    gain.connect(destination || this.masterGain);
+
     osc.start();
     osc.stop(this.ctx.currentTime + duration);
   }
-  playShoot() { this.playTone(400, 'square', 0.1, 0.5); }
-  playHit() { this.playTone(150, 'sawtooth', 0.2, 0.8); }
-  playExplosion() { this.playTone(100, 'sawtooth', 0.4, 1.0); }
-  playCoin() { this.playTone(800, 'sine', 0.1, 0.5); }
+
+  _playDrum(startFreq, endFreq, duration, vol) {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+
+    osc.frequency.setValueAtTime(startFreq, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, this.ctx.currentTime + duration);
+
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + duration);
+  }
+
+  _playNoise(duration, vol, filterFreq) {
+    const bufferSize = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    let targetDest = this.masterGain;
+    const gain = this.ctx.createGain();
+
+    if (filterFreq) {
+      const bpFilter = this.ctx.createBiquadFilter();
+      bpFilter.type = 'bandpass';
+      bpFilter.frequency.value = filterFreq;
+      noise.connect(bpFilter);
+      bpFilter.connect(gain);
+    } else {
+      noise.connect(gain);
+    }
+
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+    gain.connect(this.masterGain);
+
+    noise.start();
+  }
+
+  // Generalized helper for SFX
+  playToneEx(freq, type, duration, vol=1, slideFreq=null) {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+
+    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+    if (slideFreq) {
+      osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+    }
+
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + duration);
+  }
+
+  // --- Required SFX (10+) ---
+  playShoot() { this.playToneEx(600, 'square', 0.1, 0.4, 200); } // 1. Base Weapon
+  playDash() { this.playToneEx(200, 'sine', 0.2, 0.5, 800); } // 2. Dash/Ability
+  playHit() { this.playToneEx(150, 'sawtooth', 0.15, 0.6, 50); } // 3. Hit
+  playExplosion() { this._playNoise(0.5, 0.8, 1000); } // 4. Explosion
+  playCoin() { this.playToneEx(1200, 'sine', 0.1, 0.4, 1800); } // 5. Collectible
+  playTetherPop() { this.playToneEx(800, 'sawtooth', 0.3, 0.6, 300); } // 6. Risk mechanic tether burst
+  playTetherGrow() { this.playToneEx(300, 'sine', 0.2, 0.3, 400); } // 7. Tether growth
+  playUpgrade() { this.playToneEx(400, 'square', 0.4, 0.5, 1200); } // 8. Upgrade
+  playUIHover() { this.playToneEx(800, 'sine', 0.05, 0.2); } // 9. UI Hover
+  playUISelect() { this.playToneEx(1000, 'square', 0.1, 0.3, 1400); } // 10. UI Select
+  playBossSpawn() { this.playToneEx(100, 'sawtooth', 1.0, 0.8, 50); } // 11. Boss Spawn
 }
 
 class InputManager {
@@ -288,6 +456,7 @@ class Player {
 
     // Handle Input for movement & dash
     if (input.dashJustPressed && this.dashCooldown <= 0) {
+      if (window.game && window.game.soundEngine) window.game.soundEngine.playDash();
       this.isDashing = true;
       this.dashTimer = this.dashDuration;
       this.dashCooldown = 2.5; // 2.5 second cooldown
@@ -497,9 +666,16 @@ class Engine {
       const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
       const y = (e.clientY - rect.top) * (this.canvas.height / rect.height);
 
-      if (this.state === 'TITLE') this.startGame();
-      else if (this.state === 'GAME_OVER') this.state = 'TITLE';
+      if (this.state === 'TITLE') {
+        if (this.soundEngine) this.soundEngine.playUISelect();
+        this.startGame();
+      }
+      else if (this.state === 'GAME_OVER') {
+        if (this.soundEngine) this.soundEngine.playUISelect();
+        this.state = 'TITLE';
+      }
       else if (this.state === 'PAUSED') {
+        if (this.soundEngine) this.soundEngine.playUISelect();
         // check back to arcade
         if (x > this.width/2 - 100 && x < this.width/2 + 100 && y > this.height/2 + 50 && y < this.height/2 + 90) {
           window.location.href = '../../index.html';
@@ -622,6 +798,25 @@ class Engine {
   update(dt) {
     if (this.state !== 'PLAYING') return;
 
+    // Update dynamic BGM state
+    if (this.soundEngine) {
+        const isBoss = this.bosses.length > 0;
+        const isLowHp = this.player && this.player.hp <= 30;
+
+        // Start BGM if not active
+        if (!this.soundEngine.bgmActive) {
+            this.soundEngine.startBGM();
+        }
+
+        // Update state
+        if (this.soundEngine.isBoss !== isBoss || this.soundEngine.isLowHp !== isLowHp) {
+            if (isBoss && !this.soundEngine.isBoss) {
+               this.soundEngine.playBossSpawn(); // Play boss spawn SFX
+            }
+            this.soundEngine.updateState(isBoss, isLowHp);
+        }
+    }
+
     if (this.vfx) this.vfx.update(dt);
     if (this.vfx && this.vfx.hitStopTimer > 0) return; // Hitstop freeze frame
 
@@ -737,6 +932,9 @@ class Engine {
       if (this.tether.length > this.maxTetherLength) {
         this.tether.pop();
       }
+      if (this.tether.length % 5 === 0 && this.soundEngine && this.soundEngine.playTetherGrow) {
+        this.soundEngine.playTetherGrow();
+      }
     }
     this.tetherLength = this.tether.length;
     this.multiplier = 1 + Math.floor(this.tetherLength / 10);
@@ -744,6 +942,7 @@ class Engine {
     // --- Cash In / Shockwave ---
     if ((this.inputManager.actionJustPressed || this.inputManager.keys['Space']) && !this.shockwaveActive && this.tetherLength > 5) {
       this.soundEngine.playExplosion();
+      this.soundEngine.playTetherPop();
       this.shockwaveActive = true;
       this.shockwaveRadius = 0;
 
@@ -967,7 +1166,10 @@ class Engine {
 
   gameOver() {
     this.state = 'GAME_OVER';
-    this.soundEngine.playHit();
+    if (this.soundEngine) {
+        this.soundEngine.stopBGM();
+        this.soundEngine.playHit();
+    }
     if (this.score > this.saveManager.data.highScore) {
       this.saveManager.data.highScore = this.score;
       this.saveManager.save();
