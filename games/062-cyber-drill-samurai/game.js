@@ -240,46 +240,6 @@ class Block {
   }
 }
 
-class Enemy {
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.r = 15;
-    this.vx = (Math.random() - 0.5) * 50;
-    this.vy = (Math.random() - 0.5) * 50;
-    this.active = true;
-  }
-  update(dt, playerX, playerY) {
-    // Float towards player slowly
-    const dx = playerX - this.x;
-    const dy = playerY - this.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist > 0 && dist < 400) {
-      this.vx += (dx / dist) * 20 * dt;
-      this.vy += (dy / dist) * 20 * dt;
-    }
-
-    // limit speed
-    const speed = Math.hypot(this.vx, this.vy);
-    if (speed > 60) {
-      this.vx = (this.vx / speed) * 60;
-      this.vy = (this.vy / speed) * 60;
-    }
-
-    this.x += this.vx * dt;
-    this.y += this.vy * dt;
-  }
-  draw(ctx, cameraY) {
-    if (!this.active) return;
-    ctx.fillStyle = '#f14668';
-    ctx.beginPath();
-    ctx.arc(this.x, this.y - cameraY, this.r, 0, Math.PI*2);
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
-}
 
 class Player {
   constructor(x, y) {
@@ -483,6 +443,7 @@ class Engine {
     this.cameraY = 0;
     this.blocks = [];
     this.enemies = [];
+    this.enemyProjectiles = [];
     this.particles = [];
     this.hazards = []; // Interactive stage hazards
     if (typeof ParallaxBackground !== 'undefined') {
@@ -583,7 +544,12 @@ class Engine {
 
     // spawn enemy occasionally
     if (Math.random() < 0.05 + (this.depth * 0.00002)) {
-      this.enemies.push(new Enemy(Math.random() * this.width, rowY));
+      const rand = Math.random();
+      if (rand < 0.2) this.enemies.push(new SwarmerEnemy(Math.random() * this.width, rowY));
+      else if (rand < 0.4) this.enemies.push(new SniperEnemy(Math.random() * this.width, rowY));
+      else if (rand < 0.6) this.enemies.push(new BruiserEnemy(Math.random() * this.width, rowY));
+      else if (rand < 0.8) this.enemies.push(new SplitterEnemy(Math.random() * this.width, rowY));
+      else this.enemies.push(new AreaDenialEnemy(Math.random() * this.width, rowY));
     }
     // spawn hazard occasionally
     if (typeof Hazard !== 'undefined' && Math.random() < 0.04 + (this.depth * 0.00001)) {
@@ -598,6 +564,7 @@ class Engine {
     this.cameraY = 0;
     this.blocks = [];
     this.enemies = [];
+    this.enemyProjectiles = [];
     this.particles = [];
     this.hazards = [];
     this.tether = [{x: this.player.x, y: this.player.y}];
@@ -743,9 +710,13 @@ class Engine {
         if (e.active) {
           const dist = Math.hypot(e.x - this.player.x, e.y - this.player.y);
           if (dist < this.shockwaveRadius) {
-            e.active = false;
-            this.spawnParticles(e.x, e.y, '#f14668', 15);
-            this.score += 100 * this.multiplier;
+            if (typeof e.takeDamage === 'function') {
+                e.takeDamage(10, this);
+            } else {
+                e.active = false;
+                this.spawnParticles(e.x, e.y, '#f14668', 15);
+                this.score += 100 * this.multiplier;
+            }
           }
         }
       });
@@ -754,17 +725,21 @@ class Engine {
     // --- Update Enemies ---
     this.enemies.forEach(e => {
       if (!e.active) return;
-      e.update(dt, this.player.x, this.player.y);
+      e.update(dt, this.player.x, this.player.y, this);
 
       // Collision with player
       const distToPlayer = Math.hypot(e.x - this.player.x, e.y - this.player.y);
       if (distToPlayer < e.r + this.player.r) {
         if (this.player.isDashing) {
-          // Dash kills enemies!
-          e.active = false;
-          this.spawnParticles(e.x, e.y, '#f14668', 15);
+          // Dash damages enemies!
+          if (typeof e.takeDamage === 'function') {
+              e.takeDamage(10, this);
+          } else {
+              e.active = false;
+              this.spawnParticles(e.x, e.y, '#f14668', 15);
+              this.score += 20 * this.multiplier;
+          }
           this.soundEngine.playHit();
-          this.score += 20 * this.multiplier;
         } else if (this.player.invulnTimer <= 0) {
           this.gameOver();
         }
@@ -782,8 +757,12 @@ class Engine {
             this.tether = this.tether.slice(0, i);
             this.maxTetherLength = Math.max(10, i);
             this.spawnParticles(pt.x, pt.y, '#a0efb8', 20);
-            // Enemy dies too
-            e.active = false;
+            // Enemy gets damaged
+            if (typeof e.takeDamage === 'function') {
+                e.takeDamage(10, this);
+            } else {
+                e.active = false;
+            }
             break;
           }
         }
@@ -796,6 +775,27 @@ class Engine {
       if (this.particles[i].life <= 0) {
         this.particles.splice(i, 1);
       }
+    }
+
+    // --- Update Enemy Projectiles ---
+    if (this.enemyProjectiles) {
+        this.enemyProjectiles.forEach(p => {
+            if (!p.active) return;
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            if (p.y < this.cameraY - 50 || p.y > this.cameraY + this.height + 50 || p.x < -50 || p.x > this.width + 50) {
+                p.active = false;
+            }
+
+            // Collision with player
+            if (this.player && this.player.invulnTimer <= 0) {
+                const distToPlayer = Math.hypot(p.x - this.player.x, p.y - this.player.y);
+                if (distToPlayer < p.r + this.player.r) {
+                    this.gameOver();
+                }
+            }
+        });
+        this.enemyProjectiles = this.enemyProjectiles.filter(p => p.active);
     }
 
     // --- Update Hazards ---
@@ -890,6 +890,15 @@ class Engine {
     this.particles.forEach(p => p.draw(this.ctx, this.cameraY));
     if (this.player) this.player.draw(this.ctx, this.cameraY);
     this.enemies.forEach(e => e.draw(this.ctx, this.cameraY));
+
+    if (this.enemyProjectiles) {
+        this.enemyProjectiles.forEach(p => {
+            this.ctx.fillStyle = '#f14668';
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y - this.cameraY, p.r, 0, Math.PI*2);
+            this.ctx.fill();
+        });
+    }
 
     // --- HUD ---
     this.ctx.fillStyle = 'rgba(11, 12, 16, 0.7)';
