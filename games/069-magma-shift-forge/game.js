@@ -190,6 +190,12 @@ class Game {
         if (typeof EnvironmentHazards !== 'undefined') {
             this.hazards = new EnvironmentHazards(this.targetWidth, this.targetHeight);
         }
+
+        this.nextBossScore = 500;
+        this.bossActive = false;
+        if (typeof BossWarning !== 'undefined') {
+            this.bossWarning = new BossWarning();
+        }
     }
 
     spawnParticle(x, y, color, speed, angle) {
@@ -215,6 +221,8 @@ class Game {
         const dist = this.arena.radius - 20;
         const x = this.targetWidth/2 + Math.cos(angle) * dist;
         const y = this.targetHeight/2 + Math.sin(angle) * dist;
+
+        if (this.bossActive) return; // don't spawn regular enemies during boss
 
         let enemyType = Math.floor(Math.random() * 5);
         let e;
@@ -254,6 +262,21 @@ class Game {
         if(this.state === 'PLAYING') {
             if (this.parallax) this.parallax.update(dt, this.player);
             if (this.hazards) this.hazards.update(dt, this);
+            if (this.bossWarning) this.bossWarning.update(dt);
+
+            // Handle boss spawning trigger logic in update loop directly as spawnEnemy only fires on timer
+            if (this.score >= this.nextBossScore && !this.bossActive && !this.bossWarning.active) {
+                this.bossWarning.trigger("WARNING: BOSS APPROACHING");
+                this.bossActive = true;
+            } else if (this.bossActive && !this.bossWarning.active && !this.enemies.find(e => e.isBoss)) {
+                // Spawn boss after warning finishes
+                const angle = Math.random() * Math.PI * 2;
+                const dist = this.arena.radius - 20;
+                const x = this.targetWidth/2 + Math.cos(angle) * dist;
+                const y = this.targetHeight/2 + Math.sin(angle) * dist;
+                let boss = Math.random() > 0.5 ? new MagmaCoreBoss(x, y) : new ForgeOverseerBoss(x, y);
+                this.enemies.push(boss);
+            }
 
             this.player.update(dt, this.input, this);
 
@@ -343,6 +366,20 @@ class Game {
                 p.y += p.vy * dt;
                 p.life -= dt;
 
+                if (p.bounce) {
+                    const toCenter = Math.hypot(this.targetWidth/2 - p.x, this.targetHeight/2 - p.y);
+                    if (toCenter + p.radius >= this.arena.radius) {
+                        // Reflect vector towards centerish slightly randomized
+                        const normalAngle = Math.atan2(this.targetHeight/2 - p.y, this.targetWidth/2 - p.x);
+                        const speed = Math.hypot(p.vx, p.vy);
+                        p.vx = Math.cos(normalAngle) * speed;
+                        p.vy = Math.sin(normalAngle) * speed;
+                        // Move inside slightly to prevent sticking
+                        p.x += p.vx * dt * 2;
+                        p.y += p.vy * dt * 2;
+                    }
+                }
+
                 if(Math.hypot(this.player.x - p.x, this.player.y - p.y) < this.player.radius + p.radius) {
                     if (this.player.invulnerabilityTime <= 0) {
                         this.gameOver();
@@ -403,9 +440,19 @@ class Game {
                     }
                 }
 
+                if (e.isBoss) {
+                    e.checkPhaseTransition(this);
+                }
+
                 if(e.hp <= 0) {
                     e.onDeath(this);
-                    this.score += 100;
+                    if (e.isBoss) {
+                        this.score += 500;
+                        this.bossActive = false;
+                        this.nextBossScore = this.score + 500;
+                    } else {
+                        this.score += 100;
+                    }
                     this.enemies.splice(i, 1);
                 }
             }
@@ -523,6 +570,14 @@ class Game {
             for(let e of this.enemies) {
                 e.draw(this.ctx, this);
             }
+
+            for (let e of this.enemies) {
+                if (e.isBoss) {
+                    e.drawHealth(this.ctx, this);
+                }
+            }
+
+            if (this.bossWarning) this.bossWarning.draw(this.ctx, this);
 
             // Draw UI
             this.ctx.fillStyle = '#fff';
