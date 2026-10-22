@@ -827,7 +827,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move (initial launch), Space/Click/Touch to switch polarity.",
     "createdAt": "2024-05-18",
     "accentColor": "#e382d8",
-    "phase": "5",
+    "phase": "6",
     "path": "./games/063-crt-polarity-bounce/index.html"
   },
   {
