@@ -841,7 +841,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows/Mouse/Touch to move. Stop moving to dilate time.",
     "createdAt": "2023-10-25",
     "accentColor": "#f0c97d",
-    "phase": "8",
+    "phase": "9",
     "path": "./games/064-candy-time-heist/index.html"
   },
   {
