@@ -60,13 +60,15 @@ class SoundEngine {
     playShoot() { this.playTone(400, 'square', 0.1, 0.05); }
     playHit() { this.playTone(150, 'sawtooth', 0.2, 0.1); }
     playSwitch() { this.playTone(800, 'sine', 0.1, 0.05); }
+    playDash() { this.playTone(600, 'triangle', 0.15, 0.1); }
+    playThrust() { this.playTone(150, 'sine', 0.05, 0.02); }
     playGameOver() { this.playTone(100, 'sawtooth', 1.0, 0.2); }
 }
 
 class InputManager {
     constructor() {
         this.keys = {};
-        this.pointer = { x: 0, y: 0, down: false, justDown: false };
+        this.pointer = { x: 0, y: 0, down: false, justDown: false, rightJustDown: false };
         this.bind();
     }
     bind() {
@@ -75,11 +77,18 @@ class InputManager {
             if (window.game && window.game.sound) window.game.sound.init();
         });
         window.addEventListener('keyup', e => this.keys[e.code] = false);
+        window.addEventListener('contextmenu', e => {
+            e.preventDefault();
+        });
         const canvas = document.getElementById('game-canvas');
         if (canvas) {
             canvas.addEventListener('pointerdown', e => {
-                this.pointer.down = true;
-                this.pointer.justDown = true;
+                if (e.button === 2 || (e.touches && e.touches.length > 1)) {
+                    this.pointer.rightJustDown = true;
+                } else {
+                    this.pointer.down = true;
+                    this.pointer.justDown = true;
+                }
                 this.updatePointer(e);
                 if (window.game && window.game.sound) window.game.sound.init();
             });
@@ -99,6 +108,11 @@ class InputManager {
         this.pointer.y = (e.clientY - rect.top) * scaleY;
     }
     isDown(code) { return this.keys[code]; }
+    consumeRightJustDown() {
+        const down = this.pointer.rightJustDown;
+        this.pointer.rightJustDown = false;
+        return down;
+    }
     consumeJustDown() {
         const down = this.pointer.justDown;
         this.pointer.justDown = false;
@@ -273,57 +287,162 @@ class Player {
         this.friction = 0.99;
         this.trail = [];
         this.time = 0;
+
+        // Phase 2 features
+        this.dashCooldown = 0;
+        this.dashCooldownMax = 2.0;
+        this.isDashing = false;
+        this.dashDuration = 0;
+        this.dashDurationMax = 0.2;
+
+        this.invulnerabilityTimer = 0;
+        this.recoilTimer = 0;
+        this.recoilForceX = 0;
+        this.recoilForceY = 0;
+        this.targetAngle = 0;
+        this.thrustAlpha = 0;
     }
+
+    get isInvulnerable() {
+        return this.invulnerabilityTimer > 0;
+    }
+
+    triggerRecoil(nx, ny, force, isDamage) {
+        this.recoilForceX = nx * force;
+        this.recoilForceY = ny * force;
+        this.recoilTimer = 0.3;
+        if (isDamage) {
+            this.invulnerabilityTimer = 1.5;
+        }
+    }
+
     switchPolarity() {
         this.isPos = !this.isPos;
         if (window.game && window.game.sound) window.game.sound.playSwitch();
     }
+
+    dash(input) {
+        if (this.dashCooldown <= 0) {
+            this.isDashing = true;
+            this.dashDuration = this.dashDurationMax;
+            this.dashCooldown = this.dashCooldownMax;
+
+            // Boost velocity in current direction or target angle
+            let curSpeed = Math.hypot(this.vx, this.vy);
+            if (curSpeed < 50) {
+                // If basically still, dash forward based on input or arbitrary
+                let dx = 0, dy = 0;
+                if (input.isDown('KeyW') || input.isDown('ArrowUp')) dy = -1;
+                if (input.isDown('KeyS') || input.isDown('ArrowDown')) dy = 1;
+                if (input.isDown('KeyA') || input.isDown('ArrowLeft')) dx = -1;
+                if (input.isDown('KeyD') || input.isDown('ArrowRight')) dx = 1;
+
+                if (dx === 0 && dy === 0) {
+                    dx = 1; // default right
+                }
+                const len = Math.hypot(dx, dy);
+                this.vx = (dx / len) * this.speed * 3;
+                this.vy = (dy / len) * this.speed * 3;
+            } else {
+                this.vx += (this.vx / curSpeed) * this.speed * 2;
+                this.vy += (this.vy / curSpeed) * this.speed * 2;
+            }
+            if (window.game && window.game.sound) window.game.sound.playDash();
+        }
+    }
+
     update(dt, input, w, h, nodes) {
         this.time += dt;
 
-        // Initial launch mechanics
-        if (this.vx === 0 && this.vy === 0) {
-            let dx = 0, dy = 0;
-            if (input.isDown('KeyW') || input.isDown('ArrowUp')) dy = -1;
-            if (input.isDown('KeyS') || input.isDown('ArrowDown')) dy = 1;
-            if (input.isDown('KeyA') || input.isDown('ArrowLeft')) dx = -1;
-            if (input.isDown('KeyD') || input.isDown('ArrowRight')) dx = 1;
-            if (dx !== 0 || dy !== 0) {
-                const len = Math.hypot(dx, dy);
-                this.vx = (dx / len) * this.speed;
-                this.vy = (dy / len) * this.speed;
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+        if (this.invulnerabilityTimer > 0) this.invulnerabilityTimer -= dt;
+        if (this.recoilTimer > 0) this.recoilTimer -= dt;
+
+        if (this.isDashing) {
+            this.dashDuration -= dt;
+            if (this.dashDuration <= 0) {
+                this.isDashing = false;
             }
         }
 
+        // Initial launch mechanics and basic movement adjustment
+        let dx = 0, dy = 0;
+        if (input.isDown('KeyW') || input.isDown('ArrowUp')) dy = -1;
+        if (input.isDown('KeyS') || input.isDown('ArrowDown')) dy = 1;
+        if (input.isDown('KeyA') || input.isDown('ArrowLeft')) dx = -1;
+        if (input.isDown('KeyD') || input.isDown('ArrowRight')) dx = 1;
+
+        if (dx !== 0 || dy !== 0) {
+            const len = Math.hypot(dx, dy);
+            const moveVx = (dx / len) * this.speed;
+            const moveVy = (dy / len) * this.speed;
+
+            // If near standstill, launch
+            if (Math.hypot(this.vx, this.vy) < 10) {
+                this.vx = moveVx;
+                this.vy = moveVy;
+            } else if (!this.isDashing) {
+                // Subtle air control / momentum tuning
+                this.vx += moveVx * dt * 2.0;
+                this.vy += moveVy * dt * 2.0;
+            }
+            this.targetAngle = Math.atan2(this.vy, this.vx);
+            this.thrustAlpha = Math.min(1.0, this.thrustAlpha + dt * 10);
+            if (Math.random() < 0.1 && window.game && window.game.sound) window.game.sound.playThrust();
+        } else {
+            this.thrustAlpha = Math.max(0.0, this.thrustAlpha - dt * 5);
+        }
+
+        if (Math.hypot(this.vx, this.vy) > 10) {
+             this.targetAngle = Math.atan2(this.vy, this.vx);
+        }
+
         // Magnetic forces from nodes
-        for (let node of nodes) {
-            const dx = node.x - this.x;
-            const dy = node.y - this.y;
-            const distSq = dx*dx + dy*dy;
+        if (!this.isDashing) {
+            for (let node of nodes) {
+                const ndx = node.x - this.x;
+                const ndy = node.y - this.y;
+                const distSq = ndx*ndx + ndy*ndy;
 
-            // Interaction range bounds
-            if (distSq > 100 && distSq < 150000) {
-                const dist = Math.sqrt(distSq);
-                const force = node.power / distSq;
-                const isAttract = (this.isPos !== node.isPos);
-                const dir = isAttract ? 1 : -1;
+                // Interaction range bounds
+                if (distSq > 100 && distSq < 150000) {
+                    const dist = Math.sqrt(distSq);
+                    const force = node.power / distSq;
+                    const isAttract = (this.isPos !== node.isPos);
+                    const dir = isAttract ? 1 : -1;
 
-                this.vx += (dx / dist) * force * dir * dt;
-                this.vy += (dy / dist) * force * dir * dt;
+                    this.vx += (ndx / dist) * force * dir * dt;
+                    this.vy += (ndy / dist) * force * dir * dt;
+                }
             }
         }
 
         // Clamp maximum speed to avoid physics glitches
-        const maxSpeed = 1000;
+        let maxSpeed = this.isDashing ? 1500 : 800;
         const curSpeed = Math.hypot(this.vx, this.vy);
         if (curSpeed > maxSpeed) {
             this.vx = (this.vx / curSpeed) * maxSpeed;
             this.vy = (this.vy / curSpeed) * maxSpeed;
         }
 
+        // Apply friction
+        if (!this.isDashing) {
+            this.vx *= this.friction;
+            this.vy *= this.friction;
+        }
+
+        // Apply recoil
+        let effectiveVx = this.vx;
+        let effectiveVy = this.vy;
+        if (this.recoilTimer > 0) {
+            const recoilFactor = (this.recoilTimer / 0.3);
+            effectiveVx += this.recoilForceX * recoilFactor;
+            effectiveVy += this.recoilForceY * recoilFactor;
+        }
+
         // Update position based on velocity
-        this.x += this.vx * dt;
-        this.y += this.vy * dt;
+        this.x += effectiveVx * dt;
+        this.y += effectiveVy * dt;
 
         // Wall bouncing logic
         if (this.x < this.radius) { this.x = this.radius; this.vx *= -1; }
@@ -333,10 +452,16 @@ class Player {
 
         // Maintain trail positions
         this.trail.push({x: this.x, y: this.y});
-        if (this.trail.length > 15) this.trail.shift();
+        if (this.trail.length > (this.isDashing ? 25 : 15)) this.trail.shift();
     }
+
     draw(ctx) {
         const color = this.isPos ? COLORS.pos : COLORS.neg;
+
+        // Invulnerability Blink
+        if (this.isInvulnerable) {
+            if (Math.floor(this.time * 20) % 2 === 0) return;
+        }
 
         // Render motion trail
         if (this.trail.length > 1) {
@@ -346,16 +471,60 @@ class Player {
                 ctx.lineTo(this.trail[i].x, this.trail[i].y);
             }
             ctx.strokeStyle = color;
-            ctx.lineWidth = 4;
+            ctx.lineWidth = this.isDashing ? 8 : 4;
             ctx.globalAlpha = 0.4;
             ctx.stroke();
             ctx.globalAlpha = 1.0;
         }
 
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        // Recoil wobble
+        if (this.recoilTimer > 0) {
+            ctx.rotate((Math.random() - 0.5) * 0.5);
+            ctx.scale(1.2, 0.8);
+        }
+
+        ctx.rotate(this.targetAngle);
+
+        // Render Aim Telegraph
+        ctx.beginPath();
+        ctx.moveTo(this.radius + 5, 0);
+        ctx.lineTo(this.radius + 20, 0);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Render Engine Thrust
+        if (this.thrustAlpha > 0) {
+            ctx.beginPath();
+            ctx.moveTo(-this.radius, -5);
+            ctx.lineTo(-this.radius - 15 - Math.random() * 10, 0);
+            ctx.lineTo(-this.radius, 5);
+            ctx.fillStyle = `rgba(255, 100, 0, ${this.thrustAlpha})`;
+            ctx.fill();
+        }
+
+        // Outer procedural ring
+        ctx.beginPath();
+        let points = 8;
+        for (let i = 0; i < points; i++) {
+            let a = (i / points) * Math.PI * 2 + this.time * 2;
+            let r = this.radius + 4 + Math.sin(this.time * 10 + i) * 2;
+            if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+            else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
         // Render player core
+        ctx.rotate(-this.targetAngle); // Unrotate for core symbols
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fill();
 
         // Render player stroke outline
@@ -367,11 +536,13 @@ class Player {
         ctx.fillStyle = '#000';
         ctx.beginPath();
         if (this.isPos) {
-            ctx.fillRect(this.x - 6, this.y - 1, 12, 2);
-            ctx.fillRect(this.x - 1, this.y - 6, 2, 12);
+            ctx.fillRect(-6, -1, 12, 2);
+            ctx.fillRect(-1, -6, 2, 12);
         } else {
-            ctx.fillRect(this.x - 6, this.y - 1, 12, 2);
+            ctx.fillRect(-6, -1, 12, 2);
         }
+
+        ctx.restore();
     }
 }
 
@@ -468,6 +639,8 @@ class Game {
     handleInput() {
         const spaceDown = this.input.isDown('Space');
         const pointerJustDown = this.input.consumeJustDown();
+        const rightJustDown = this.input.consumeRightJustDown();
+        const shiftDown = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight');
         const clickedBack = pointerJustDown && this.pointerInBackToArcade();
 
         if (this.state === 'TITLE') {
@@ -497,9 +670,14 @@ class Game {
             if ((spaceDown && !this.spaceWasDown) || pointerJustDown) {
                 this.player.switchPolarity();
             }
+
+            if ((shiftDown && !this.shiftWasDown) || rightJustDown) {
+                this.player.dash(this.input);
+            }
         }
 
         this.spaceWasDown = spaceDown;
+        this.shiftWasDown = shiftDown;
     }
 
     update(dt) {
@@ -566,6 +744,7 @@ class Game {
             // Ricochet player slightly
             this.player.vx = -nx * this.player.speed * 0.8;
             this.player.vy = -ny * this.player.speed * 0.8;
+            this.player.triggerRecoil(-nx, -ny, 300, false);
 
             // Advance waves
             if (this.score % 100 === 0) {
@@ -581,6 +760,7 @@ class Game {
             // Forceful knockback
             this.player.vx = -nx * this.player.speed * 1.5;
             this.player.vy = -ny * this.player.speed * 1.5;
+            this.player.triggerRecoil(-nx, -ny, 600, true);
 
             // Delete enemy on impact to prevent rapid multi-hits
             this.enemies.splice(index, 1);
@@ -623,6 +803,12 @@ class Game {
         this.ctx.fillText(`Score: ${this.score}`, 10, 30);
         this.ctx.fillText(`Health: ${this.health}`, 10, 60);
         this.ctx.fillText(`Wave: ${this.wave}`, 10, 90);
+
+        // Dash Cooldown indicator
+        const dashReady = this.player.dashCooldown <= 0;
+        this.ctx.fillStyle = dashReady ? '#00ff00' : '#ff0000';
+        this.ctx.fillText(`DASH: ${dashReady ? 'READY' : (this.player.dashCooldown).toFixed(1)}`, 10, 120);
+
 
         // Top-center polarity status
         this.ctx.textAlign = 'center';
