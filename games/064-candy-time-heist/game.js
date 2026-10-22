@@ -9,9 +9,16 @@ class SaveManager {
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
             options: {
+                masterMute: false,
                 masterVolume: 1,
                 sfxVolume: 1,
-                musicVolume: 1
+                musicVolume: 1,
+                screenShake: '100%',
+                particleDensity: 'High',
+                highContrast: false,
+                showFPS: false,
+                touchControls: 'Auto',
+                touchHandedness: 'Right'
             }
         };
         this.load();
@@ -27,6 +34,35 @@ class SaveManager {
         } catch (e) {
             console.warn("SaveManager: Failed to load data", e);
         }
+    }
+
+    reset() {
+        if (!this.resetConfirm) {
+            this.resetConfirm = true;
+            return false;
+        }
+        localStorage.removeItem(SAVE_KEY);
+        this.resetConfirm = false;
+        return true;
+    }
+
+    exportSave() {
+        return btoa(JSON.stringify(this.data));
+    }
+
+    importSave(base64Str) {
+        try {
+            const jsonStr = atob(base64Str);
+            const parsed = JSON.parse(jsonStr);
+            if (parsed && parsed.options) {
+                this.data = { ...this.data, ...parsed };
+                this.save();
+                return true;
+            }
+        } catch (e) {
+            console.warn("Invalid save data");
+        }
+        return false;
     }
 
     save() {
@@ -95,7 +131,18 @@ class SoundEngine {
         this.bgmNextNoteTime = this.ctx.currentTime + 0.1;
     }
 
+    updateVolumes() {
+        if (!this.initialized || !this.ctx) return;
+        const opts = window.game ? window.game.saveManager.data.options : { masterMute: false, masterVolume: 1, sfxVolume: 1, musicVolume: 1 };
+
+        this.masterGain.gain.value = opts.masterMute ? 0 : opts.masterVolume;
+        this.sfxGain.gain.value = opts.sfxVolume;
+        this.musicGain.gain.value = opts.musicVolume;
+    }
+
     updateBGM(dt, game) {
+        this.updateVolumes();
+
         if (!this.initialized || !this.ctx || !this.bgmActive) return;
 
         // Calculate intensity based on game state
@@ -321,22 +368,50 @@ class InputManager {
             this.keys[e.code] = true;
             this.soundEngine.init();
             this.soundEngine.resume();
+
+            if (window.game && (window.game.state === 'TITLE' || window.game.state === 'GAME_OVER')) {
+                if (e.code === 'KeyS') window.game.state = 'SETTINGS';
+                if (e.code === 'KeyM') window.game.state = 'MILESTONES';
+            } else if (window.game && (window.game.state === 'SETTINGS' || window.game.state === 'MILESTONES')) {
+                if (e.code === 'Escape') window.game.state = 'TITLE';
+            }
         });
         window.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
         });
 
+
         this.canvas.addEventListener('pointerdown', (e) => {
             this.soundEngine.init();
             this.soundEngine.resume();
+            this.updatePointer(e);
+
+            if (window.game) {
+                if (window.game.state === 'SETTINGS' || window.game.state === 'MILESTONES') {
+                    window.game.uiManager.handleInput(this.pointer.x, this.pointer.y);
+                    return;
+                }
+            }
+
             this.soundEngine.playUIClick();
             this.pointer.isDown = true;
-            this.updatePointer(e);
+
+            const opts = window.game ? window.game.saveManager.data.options : { touchControls: 'Auto' };
+            if (opts.touchControls === 'Off') {
+                this.dashRequested = true;
+                setTimeout(() => this.dashRequested = false, 100);
+                return;
+            }
 
             // Start virtual joystick if in bottom half of screen
             const rect = this.canvas.getBoundingClientRect();
             const y = e.clientY - rect.top;
-            if (y > rect.height / 2) {
+            const x = e.clientX - rect.left;
+
+            const isRightHanded = opts.touchHandedness === 'Right';
+            const isOnJoystickSide = isRightHanded ? (x > rect.width / 2) : (x < rect.width / 2);
+
+            if (y > rect.height / 2 && isOnJoystickSide) {
                 this.joystick.active = true;
                 this.joystick.originX = this.pointer.x;
                 this.joystick.originY = this.pointer.y;
@@ -423,7 +498,9 @@ class ThrustParticle {
         this.size = 2 + Math.random() * 3;
         this.color = Math.random() > 0.5 ? '#ffeb3b' : '#ff9800';
     }
+
     update(dt) {
+
         this.x += this.vx * dt;
         this.y += this.vy * dt;
         this.life -= dt * (2 + Math.random() * 2);
@@ -1342,7 +1419,9 @@ class BossWeapon {
         this.radius = 8;
         this.active = true;
     }
+
     update(dt) {
+
         this.x += this.vx * dt;
         this.y += this.vy * dt;
     }
@@ -1725,7 +1804,9 @@ class FieldPickup {
         this.lifeTimer = 10;
         this.wobbleOffset = Math.random() * Math.PI * 2;
     }
+
     update(dt) {
+
         this.lifeTimer -= dt;
     }
     draw(ctx) {
@@ -1766,7 +1847,9 @@ class VFXParticle {
         this.life = life;
         this.maxLife = life;
     }
+
     update(dt) {
+
         this.x += this.vx * dt;
         this.y += this.vy * dt;
         this.life -= dt;
@@ -1793,7 +1876,9 @@ class DamagePopup {
         this.maxLife = 1.0;
         this.vy = -30;
     }
+
     update(dt) {
+
         this.y += this.vy * dt;
         this.life -= dt;
     }
@@ -1818,7 +1903,9 @@ class Afterimage {
         this.life = life;
         this.maxLife = life;
     }
+
     update(dt) {
+
         this.life -= dt;
     }
     draw(ctx) {
@@ -1884,7 +1971,9 @@ class VFXManager {
         this.afterimages.push(new Afterimage(x, y, radius, color, life));
     }
 
+
     update(dt) {
+
         if (this.hitStopTimer > 0) {
             this.hitStopTimer -= dt;
         }
@@ -1932,6 +2021,7 @@ class Game {
         this.soundEngine = new SoundEngine();
         this.inputManager = new InputManager(canvas, this.soundEngine);
         this.saveManager = new SaveManager();
+        this.uiManager = new UIManager(this);
 
         this.state = 'TITLE';
         this.lastTime = 0;
@@ -1997,6 +2087,21 @@ this.timeScale = 1.0;
 
     bindEvents() {
         window.addEventListener('keydown', (e) => {
+            if (this.state === 'TITLE' || this.state === 'GAME_OVER') {
+                if (e.code === 'KeyS') { this.state = 'SETTINGS'; return; }
+                if (e.code === 'KeyM') { this.state = 'MILESTONES'; return; }
+
+                // Allow start
+                this.state = 'PLAYING';
+                this.reset();
+                this.lastTime = performance.now();
+                return;
+            }
+            if (this.state === 'SETTINGS' || this.state === 'MILESTONES') {
+                if (e.code === 'Escape') this.state = 'TITLE';
+                return;
+            }
+
             if (e.code === 'Escape' || e.code === 'KeyP') {
 
 if (this.state === 'PLAYING') {
@@ -2008,19 +2113,48 @@ if (this.state === 'PLAYING') {
             }
         });
 
+
         this.canvas.addEventListener('pointerdown', (e) => {
-            if (this.state === 'UPGRADE') {
-                this.inputManager.updatePointer(e);
-                if (this.perkManager.handleInput(this.inputManager.pointer, this.width, this.height)) {
-                    this.soundEngine.playCollect();
+            this.soundEngine.init();
+            this.soundEngine.resume();
+            this.updatePointer(e);
+
+            if (window.game) {
+                if (window.game.state === 'SETTINGS' || window.game.state === 'MILESTONES') {
+                    window.game.uiManager.handleInput(this.pointer.x, this.pointer.y);
+                    return;
                 }
+            }
+
+            this.soundEngine.playUIClick();
+            this.pointer.isDown = true;
+
+            const opts = window.game ? window.game.saveManager.data.options : { touchControls: 'Auto' };
+            if (opts.touchControls === 'Off') {
+                this.dashRequested = true;
+                setTimeout(() => this.dashRequested = false, 100);
                 return;
-            }            else if (this.state === 'TITLE') {
-                this.state = 'PLAYING';
-                this.reset();
-                this.lastTime = performance.now();
-            } else if (this.state === 'GAME_OVER') {
-                this.state = 'TITLE';
+            }
+
+            // Start virtual joystick if in bottom half of screen
+            const rect = this.canvas.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            const x = e.clientX - rect.left;
+
+            const isRightHanded = opts.touchHandedness === 'Right';
+            const isOnJoystickSide = isRightHanded ? (x > rect.width / 2) : (x < rect.width / 2);
+
+            if (y > rect.height / 2 && isOnJoystickSide) {
+                this.joystick.active = true;
+                this.joystick.originX = this.pointer.x;
+                this.joystick.originY = this.pointer.y;
+                this.joystick.x = this.pointer.x;
+                this.joystick.y = this.pointer.y;
+                this.joystick.dx = 0;
+                this.joystick.dy = 0;
+            } else {
+                this.dashRequested = true;
+                setTimeout(() => this.dashRequested = false, 100);
             }
         });
 
@@ -2412,25 +2546,35 @@ const input = this.inputManager.getMovementVector();
         ctx.strokeRect(hudX, hudY, hudWidth, hudHeight);
     }
 
+
     draw() {
-        this.ctx.fillStyle = '#111';
+        if (this.state === 'SETTINGS' || this.state === 'MILESTONES') {
+            this.uiManager.draw(this.ctx, this.width, this.height);
+            return;
+        }
+
+        const hc = this.saveManager.data.options.highContrast;
+        this.ctx.fillStyle = hc ? '#000' : '#111';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
         this.ctx.save();
+
         this.vfx.applyShake(this.ctx);
 
         this.background.draw(this.ctx);
 
         if (this.state === 'TITLE') {
-            this.ctx.fillStyle = '#f0c97d';
+            this.ctx.fillStyle = hc ? '#fff' : '#f0c97d';
             this.ctx.font = '48px sans-serif';
             this.ctx.textAlign = 'center';
-            this.ctx.fillText('Candy Time Heist', this.width / 2, this.height / 2 - 50);
+            this.ctx.fillText("Candy Time Heist", this.width / 2, this.height / 2 - 50);
 
-            this.ctx.fillStyle = '#fff';
+            this.ctx.fillStyle = hc ? '#fff' : '#aaa';
             this.ctx.font = '24px sans-serif';
-            this.ctx.fillText('Click / Tap to Start', this.width / 2, this.height / 2 + 20);
-            return;
+            this.ctx.fillText("Click / Tap / Press Any Key to Start", this.width / 2, this.height / 2 + 50);
+            this.ctx.fillText("High Score: " + this.saveManager.data.highScore, this.width / 2, this.height / 2 + 100);
+
+            this.ctx.fillText("Settings [S]  |  Milestones [M]", this.width / 2, this.height - 50);
         }
 
         for (const vent of this.vents) {
@@ -2536,15 +2680,19 @@ const input = this.inputManager.getMovementVector();
         }
 
         if (this.state === 'GAME_OVER') {
-            this.ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+            this.ctx.fillStyle = hc ? 'rgba(0, 0, 0, 0.9)' : 'rgba(255, 0, 0, 0.3)';
             this.ctx.fillRect(0, 0, this.width, this.height);
-            this.ctx.fillStyle = '#fff';
-            this.ctx.textAlign = 'center';
+
+            this.ctx.fillStyle = hc ? '#fff' : '#fff';
             this.ctx.font = '48px sans-serif';
-            this.ctx.fillText('BUSTED!', this.width / 2, this.height / 2);
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText("GAME OVER", this.width / 2, this.height / 2 - 50);
+
             this.ctx.font = '24px sans-serif';
-            this.ctx.fillText(`Final Score: ${this.score}`, this.width / 2, this.height / 2 + 40);
-            this.ctx.fillText('Click / Tap to Restart', this.width / 2, this.height / 2 + 80);
+            this.ctx.fillText("Score: " + Math.floor(this.score), this.width / 2, this.height / 2 + 20);
+            this.ctx.fillText("Click / Tap / Press Any Key to Restart", this.width / 2, this.height / 2 + 80);
+
+            this.ctx.fillText("Settings [S]  |  Milestones [M]", this.width / 2, this.height - 50);
         }
 
         // Draw virtual joystick if active
@@ -2574,7 +2722,13 @@ class Sparkle {
         this.decay = 0.02 + Math.random() * 0.03;
         this.size = 2 + Math.random() * 3;
     }
+
     update(dt) {
+        if (this.state === 'SETTINGS' || this.state === 'MILESTONES') {
+            return; // Managed by uiManager drawing
+        }
+
+
         this.life -= this.decay * dt * 60;
     }
     draw(ctx) {
@@ -2621,3 +2775,144 @@ window.onload = () => {
     window.game = new Game(canvas);
     requestAnimationFrame(gameLoop);
 };
+class UIManager {
+    constructor(game) {
+        this.game = game;
+        this.activeTab = 'SETTINGS'; // or 'MILESTONES'
+        this.importString = '';
+        this.buttons = [];
+        this.milestones = [
+            { id: 'first_heist', name: 'First Heist', desc: 'Complete your first run', check: (g) => g.saveManager.data.totalGamesPlayed >= 1 },
+            { id: 'master_thief', name: 'Master Thief', desc: 'Score over 100,000 in one run', check: (g) => g.saveManager.data.highScore >= 100000 },
+            { id: 'time_lord', name: 'Time Lord', desc: 'Reach a max combo of 50', check: (g) => g.saveManager.data.bestCombo >= 50 },
+            { id: 'sugar_rush', name: 'Sugar Rush', desc: 'Accumulate 1,000,000 total score', check: (g) => g.saveManager.data.totalScoreAccumulated >= 1000000 },
+            { id: 'pacifist', name: 'Pacifist', desc: 'Survive for 2 minutes without dashing', check: (g) => g.timeElapsed > 120 && g.dashUsedCount === 0 },
+            { id: 'boss_slayer', name: 'Boss Slayer', desc: 'Defeat 5 bosses in a single run', check: (g) => g.bossesDefeated >= 5 }
+        ];
+    }
+
+
+    update(dt) {
+
+        // Handle milestone checks
+        if (this.game.state === 'PLAYING' || this.game.state === 'GAME_OVER') {
+            const unlocks = this.game.saveManager.data.unlockedMilestones;
+            for (const m of this.milestones) {
+                if (!unlocks.includes(m.id) && m.check(this.game)) {
+                    unlocks.push(m.id);
+                    this.game.saveManager.save();
+                    this.game.vfx.addPopup(this.game.width/2, 100, `Milestone Unlocked: ${m.name}!`, '#ffaa00');
+                    this.game.soundEngine.playCollect();
+                }
+            }
+        }
+    }
+
+    handleInput(x, y) {
+        for (const b of this.buttons) {
+            if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                this.game.soundEngine.playUIClick();
+                b.action();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    draw(ctx, width, height) {
+        ctx.fillStyle = 'rgba(0,0,0,0.9)';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '30px sans-serif';
+        ctx.textAlign = 'center';
+
+        this.buttons = [];
+
+        // Tabs
+        ctx.fillText(this.activeTab, width/2, 50);
+        this.buttons.push({x: width/2 - 150, y: 20, w: 100, h: 40, action: () => this.activeTab = 'SETTINGS'});
+        ctx.strokeRect(width/2 - 150, 20, 100, 40);
+        ctx.fillText("Settings", width/2 - 100, 48);
+
+        this.buttons.push({x: width/2 + 50, y: 20, w: 120, h: 40, action: () => this.activeTab = 'MILESTONES'});
+        ctx.strokeRect(width/2 + 50, 20, 120, 40);
+        ctx.fillText("Milestones", width/2 + 110, 48);
+
+        this.buttons.push({x: width/2 - 50, y: height - 60, w: 100, h: 40, action: () => { this.game.state = 'TITLE'; }});
+        ctx.strokeRect(width/2 - 50, height - 60, 100, 40);
+        ctx.fillText("Close", width/2, height - 32);
+
+        if (this.activeTab === 'SETTINGS') {
+            this.drawSettings(ctx, width, height);
+        } else {
+            this.drawMilestones(ctx, width, height);
+        }
+    }
+
+    drawSettings(ctx, width, height) {
+        const opts = this.game.saveManager.data.options;
+        const cy = 100;
+        const dy = 50;
+        let i = 0;
+
+        const addBtn = (label, val, x, y, action) => {
+            ctx.textAlign = 'left';
+            ctx.fillText(`${label}: ${val}`, x, y + 25);
+            this.buttons.push({x, y, w: 300, h: 35, action});
+            ctx.strokeRect(x, y, 300, 35);
+        };
+
+        addBtn("Master Mute", opts.masterMute ? "ON" : "OFF", 50, cy + (i++)*dy, () => { opts.masterMute = !opts.masterMute; this.game.saveManager.save(); });
+        addBtn("Master Vol", opts.masterVolume.toFixed(1), 50, cy + (i++)*dy, () => { opts.masterVolume = (opts.masterVolume + 0.1) % 1.1; this.game.saveManager.save(); });
+        addBtn("SFX Vol", opts.sfxVolume.toFixed(1), 50, cy + (i++)*dy, () => { opts.sfxVolume = (opts.sfxVolume + 0.1) % 1.1; this.game.saveManager.save(); });
+        addBtn("Music Vol", opts.musicVolume.toFixed(1), 50, cy + (i++)*dy, () => { opts.musicVolume = (opts.musicVolume + 0.1) % 1.1; this.game.saveManager.save(); });
+
+        i = 0;
+        addBtn("Screen Shake", opts.screenShake, 400, cy + (i++)*dy, () => {
+            opts.screenShake = opts.screenShake === '100%' ? '50%' : (opts.screenShake === '50%' ? 'Off' : '100%');
+            this.game.saveManager.save();
+        });
+        addBtn("Particles", opts.particleDensity, 400, cy + (i++)*dy, () => {
+            opts.particleDensity = opts.particleDensity === 'High' ? 'Low' : 'High';
+            this.game.saveManager.save();
+        });
+        addBtn("High Contrast", opts.highContrast ? "ON" : "OFF", 400, cy + (i++)*dy, () => { opts.highContrast = !opts.highContrast; this.game.saveManager.save(); });
+        addBtn("Show FPS", opts.showFPS ? "ON" : "OFF", 400, cy + (i++)*dy, () => { opts.showFPS = !opts.showFPS; this.game.saveManager.save(); });
+        addBtn("Touch Controls", opts.touchControls, 400, cy + (i++)*dy, () => {
+            opts.touchControls = opts.touchControls === 'Auto' ? 'Always' : (opts.touchControls === 'Always' ? 'Off' : 'Auto');
+            this.game.saveManager.save();
+        });
+        addBtn("Touch Handedness", opts.touchHandedness, 400, cy + (i++)*dy, () => {
+            opts.touchHandedness = opts.touchHandedness === 'Right' ? 'Left' : 'Right';
+            this.game.saveManager.save();
+        });
+
+        // Save Export / Import / Reset
+        addBtn("Export Save (Base64 -> Console)", "", 50, cy + 5*dy, () => {
+            console.log("EXPORTED SAVE:", this.game.saveManager.exportSave());
+        });
+        addBtn("Import Save (from window.IMPORT_SAVE)", "", 50, cy + 6*dy, () => {
+            if (window.IMPORT_SAVE && this.game.saveManager.importSave(window.IMPORT_SAVE)) {
+                console.log("Import successful");
+            }
+        });
+        addBtn("Reset Data", this.game.saveManager.resetConfirm ? "Confirm?" : "Click twice", 50, cy + 7*dy, () => {
+            if (this.game.saveManager.reset()) {
+                window.location.reload();
+            }
+        });
+    }
+
+    drawMilestones(ctx, width, height) {
+        ctx.textAlign = 'left';
+        const unlocks = this.game.saveManager.data.unlockedMilestones;
+        let y = 100;
+        for (const m of this.milestones) {
+            const unlocked = unlocks.includes(m.id);
+            ctx.fillStyle = unlocked ? '#0f0' : '#888';
+            ctx.fillText(`${unlocked ? '🏆' : '🔒'} ${m.name}: ${m.desc}`, 100, y);
+            y += 50;
+        }
+    }
+}
