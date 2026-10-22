@@ -461,6 +461,16 @@ class Engine {
     this.shockwaveRadius = 0;
     this.shockwaveActive = false;
 
+    // Progression & Wave Director
+    this.pickups = [];
+    if (typeof UpgradeManager !== 'undefined') {
+      this.upgradeManager = new UpgradeManager(this);
+    }
+    this.comboMultiplier = 1;
+    this.comboTimer = 0;
+    this.comboMaxTimer = 5;
+    this.maxComboMultiplier = 5;
+
     this.handleResize();
     new ResizeObserver(() => this.handleResize()).observe(document.body);
 
@@ -495,6 +505,11 @@ class Engine {
           window.location.href = '../../index.html';
         } else {
           this.state = 'PLAYING';
+        }
+      }
+      else if (this.state === 'UPGRADE') {
+        if (this.upgradeManager) {
+          this.upgradeManager.handleInput(x, y);
         }
       }
     });
@@ -580,6 +595,10 @@ class Engine {
     this.depth = 0;
     this.maxDepthReached = 0;
     this.shockwaveActive = false;
+
+    this.pickups = [];
+    this.comboMultiplier = 1;
+    this.comboTimer = 0;
     this.saveManager.data.totalGamesPlayed++;
     this.saveManager.save();
 
@@ -597,6 +616,14 @@ class Engine {
 
   update(dt) {
     if (this.state !== 'PLAYING') return;
+
+    if (this.comboTimer > 0) {
+      this.comboTimer -= dt;
+      if (this.comboTimer <= 0) {
+        this.comboMultiplier = 1;
+        this.comboTimer = 0;
+      }
+    }
 
     // --- Update Player ---
     const oldX = this.player.x;
@@ -772,7 +799,12 @@ class Engine {
           } else {
               e.active = false;
               this.spawnParticles(e.x, e.y, '#f14668', 15);
-              this.score += 20 * this.multiplier;
+              this.score += 20 * this.multiplier * this.comboMultiplier;
+              this.comboTimer = this.comboMaxTimer;
+              this.comboMultiplier = Math.min(this.maxComboMultiplier, this.comboMultiplier + 0.2);
+              if (Math.random() < 0.2 && typeof Pickup !== 'undefined') {
+                this.pickups.push(new Pickup(e.x, e.y));
+              }
           }
           this.soundEngine.playHit();
         } else if (this.player.invulnTimer <= 0) {
@@ -804,6 +836,30 @@ class Engine {
       }
     });
 
+    // --- Update Pickups ---
+    if (this.pickups) {
+      for (let i = this.pickups.length - 1; i >= 0; i--) {
+        const p = this.pickups[i];
+        p.update(dt);
+        if (!p.active) {
+          this.pickups.splice(i, 1);
+          continue;
+        }
+        let pr = this.player.r + (this.player.pickupRadius || 0);
+        if (Math.hypot(p.x - this.player.x, p.y - this.player.y) < p.r + pr) {
+          if (p.type === 'heal') {
+            this.player.hp = Math.min(this.player.maxHp || 100, (this.player.hp || 100) + 20);
+          } else if (p.type === 'tether') {
+            this.maxTetherLength += 5;
+          } else if (p.type === 'score') {
+            this.score += 50 * this.multiplier * this.comboMultiplier;
+          }
+          this.soundEngine.playTone(800, 'sine', 0.1);
+          this.pickups.splice(i, 1);
+        }
+      }
+    }
+
     // --- Update Particles ---
     for (let i = this.particles.length - 1; i >= 0; i--) {
       this.particles[i].update(dt);
@@ -819,6 +875,11 @@ class Engine {
       b.update(dt, this.player.x, this.player.y, this);
       if (!b.active) {
         this.bosses.splice(i, 1);
+        this.score += 500 * this.multiplier * this.comboMultiplier;
+        if (this.upgradeManager) {
+          this.upgradeManager.generateDraft();
+          this.state = 'UPGRADE';
+        }
         continue;
       }
 
@@ -937,6 +998,9 @@ class Engine {
     }
     this.blocks.forEach(b => b.draw(this.ctx, this.cameraY));
     this.hazards.forEach(h => h.draw(this.ctx, this.cameraY));
+    if (this.pickups) {
+      this.pickups.forEach(p => p.draw(this.ctx, this.cameraY));
+    }
 
     // Tether
     if (this.tether.length > 1) {
@@ -1000,6 +1064,17 @@ class Engine {
     this.ctx.fillStyle = '#3a9bdc';
     this.ctx.fillText(`Depth: ${Math.floor(this.depth/10)}m`, this.width - 10, 25);
 
+    // Combo Bar
+    if (this.comboMultiplier > 1) {
+      this.ctx.textAlign = 'left';
+      this.ctx.fillStyle = '#eebb00';
+      this.ctx.fillText(`COMBO x${this.comboMultiplier.toFixed(1)}`, 10, 50);
+      this.ctx.fillRect(10, 55, 100 * (this.comboTimer / this.comboMaxTimer), 4);
+      this.ctx.strokeStyle = '#fff';
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(10, 55, 100, 4);
+    }
+
     // Capacity Bar
     this.ctx.fillStyle = '#4a4b4d';
     this.ctx.fillRect(this.width/2 - 100, 30, 200, 5);
@@ -1044,6 +1119,10 @@ class Engine {
       this.ctx.fillStyle = '#c5c6c7';
       this.ctx.fillText(`Final Score: ${this.score}`, this.width/2, this.height/2 + 40);
       this.ctx.fillText('Press SPACE or Tap to Restart', this.width/2, this.height/2 + 80);
+    } else if (this.state === 'UPGRADE') {
+      if (this.upgradeManager) {
+        this.upgradeManager.draw(this.ctx);
+      }
     } else if (this.state === 'PAUSED') {
       this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
       this.ctx.fillRect(0, 0, this.width, this.height);
