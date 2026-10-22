@@ -9,7 +9,8 @@ const STATES = {
     TITLE: 0,
     PLAYING: 1,
     GAME_OVER: 2,
-    PAUSED: 3
+    PAUSED: 3,
+    UPGRADE: 4
 };
 
 // --- CORE UTILITIES ---
@@ -113,6 +114,7 @@ class SoundEngine {
     playHit() { this.playTone(300, 'sawtooth', 0.1, 0.4); }
     playExplosion() { this.playTone(100, 'square', 0.3, 0.5); }
     playStart() { this.playTone(600, 'sine', 0.4, 0.5); }
+    playUpgrade() { this.playTone(500, 'square', 0.2, 0.5); this.playTone(700, 'sine', 0.4, 0.5); }
     playOver() { this.playTone(200, 'sawtooth', 0.6, 0.5); }
     playDash() { this.playTone(400, 'triangle', 0.2, 0.4); }
 }
@@ -1072,6 +1074,46 @@ class EnvironmentManager {
 }
 
 
+class Pickup {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type; // 'health', 'combo', 'score'
+        this.radius = 12;
+        this.active = true;
+        this.lifeTime = 10.0; // despawn after 10s
+    }
+    update(dt) {
+        this.lifeTime -= dt;
+        if (this.lifeTime <= 0) this.active = false;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        if (this.type === 'health') {
+            ctx.fillStyle = '#ff6b6b';
+        } else if (this.type === 'combo') {
+            ctx.fillStyle = '#feca57';
+        } else {
+            ctx.fillStyle = '#1dd1a1';
+        }
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Inner icon
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        let text = this.type === 'health' ? '+' : (this.type === 'combo' ? 'C' : '$');
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+    }
+}
+
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -1095,6 +1137,14 @@ class Game {
         this.bossActive = false;
         this.bossWarningTimer = 0;
         this.activeBoss = null;
+        this.waveKills = 0;
+        this.killsToNextWave = 15;
+        this.combo = 0;
+        this.comboTimer = 0;
+        this.comboMaxTime = 3.0;
+        this.dropChance = 0.15;
+        this.pickups = [];
+        this.draftChoices = [];
 
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
@@ -1151,6 +1201,14 @@ class Game {
         this.bossActive = false;
         this.bossWarningTimer = 0;
         this.activeBoss = null;
+        this.waveKills = 0;
+        this.killsToNextWave = 15;
+        this.combo = 0;
+        this.comboTimer = 0;
+        this.comboMaxTime = 3.0;
+        this.dropChance = 0.15;
+        this.pickups = [];
+        this.draftChoices = [];
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
         this.env = new EnvironmentManager(this.width, this.height);
@@ -1183,6 +1241,31 @@ class Game {
         }
 
         switch (this.state) {
+            case STATES.UPGRADE:
+                if (this.input.isPointerJustPressed()) {
+                    const px = this.input.pointer.x;
+                    const py = this.input.pointer.y;
+                    const bw = 250;
+                    const bh = 150;
+                    const startX = this.width/2 - (bw*1.5) - 20;
+                    const startY = this.height/2 - bh/2;
+                    for (let i = 0; i < this.draftChoices.length; i++) {
+                        const bx = startX + i * (bw + 20);
+                        if (px > bx && px < bx + bw && py > startY && py < startY + bh) {
+                            // Select Perk
+                            this.draftChoices[i].action();
+                            this.sound.playStart();
+                            // Next wave
+                            this.wave += 1;
+                            this.waveKills = 0;
+                            this.killsToNextWave = 15 + this.wave * 5;
+                            this.enemySpawnRate = Math.max(0.5, 2.0 - (this.wave * 0.05));
+                            this.state = STATES.PLAYING;
+                            break;
+                        }
+                    }
+                }
+                break;
             case STATES.TITLE:
                 if (this.input.isPointerJustPressed() || this.input.keys['Space']) {
                     this.resetGame();
@@ -1198,6 +1281,45 @@ class Game {
                 }
 
                 this.env.applyHazards(this.tower, this.enemies, dt);
+                // Combo decay
+                if (this.comboTimer > 0) {
+                    this.comboTimer -= dt;
+                    if (this.comboTimer <= 0) {
+                        this.combo = 0; // reset
+                    }
+                }
+
+                // Update Pickups
+                for (let i = this.pickups.length - 1; i >= 0; i--) {
+                    let p = this.pickups[i];
+                    p.update(dt);
+                    if (!p.active) {
+                        this.pickups.splice(i, 1);
+                        continue;
+                    }
+
+                    // Check collision with tower head or base
+                    const head = this.tower.getTetherHeadPos();
+                    const distToHead = Math.hypot(p.x - head.x, p.y - head.y);
+                    const distToBase = Math.hypot(p.x - this.tower.x, p.y - this.tower.y);
+
+                    if (distToHead < p.radius + head.radius || distToBase < p.radius + this.tower.radius) {
+                        // Collect pickup
+                        p.active = false;
+                        if (p.type === 'health') {
+                            this.tower.health = Math.min(this.tower.maxHealth, this.tower.health + 20);
+                            this.sound.playStart();
+                        } else if (p.type === 'combo') {
+                            this.combo += 1;
+                            this.comboTimer = this.comboMaxTime;
+                            this.sound.playDash();
+                        } else if (p.type === 'score') {
+                            this.score += 50 * (1 + this.combo * 0.1);
+                            this.sound.playShoot();
+                        }
+                    }
+                }
+
 
                 for (let i = this.projectiles.length - 1; i >= 0; i--) {
                     let p = this.projectiles[i];
@@ -1223,9 +1345,16 @@ class Game {
 
                 this.tower.update(dt, this.input, this);
 
-                if (this.score >= this.nextBossScore && !this.bossActive && !this.activeBoss) {
-                    this.bossActive = true;
-                    this.bossWarningTimer = 3.0;
+                if (this.waveKills >= this.killsToNextWave && !this.bossActive && !this.activeBoss) {
+                    if (this.wave % 5 === 0) {
+                        this.bossActive = true;
+                        this.bossWarningTimer = 3.0;
+                    } else {
+                        // Regular wave complete
+                        this.generateDraft();
+                        this.state = STATES.UPGRADE;
+                        this.sound.playUpgrade();
+                    }
                 }
 
                 if (this.bossActive && this.bossWarningTimer > 0) {
@@ -1239,10 +1368,12 @@ class Game {
                     // Boss defeated
                     this.activeBoss = null;
                     this.bossActive = false;
-                    this.score += 500; // Bonus for killing boss
-                    this.nextBossScore = this.score + 500;
-                    // Heal tower a bit
+                    this.score += 500 * (1 + this.combo * 0.1); // Bonus for killing boss
                     this.tower.health = Math.min(this.tower.maxHealth, this.tower.health + 50);
+                    // Upgrade draft
+                    this.generateDraft();
+                    this.state = STATES.UPGRADE;
+                    this.sound.playUpgrade();
                 }
 
                 // Only spawn normal enemies if no boss is active or warning
@@ -1310,7 +1441,14 @@ class Game {
                         } else if (this.tower.isDashing) {
                             e.health = 0;
                             e.active = false;
-                            this.score += 15;
+                            this.waveKills += 1;
+                            this.combo += 1;
+                            this.comboTimer = this.comboMaxTime;
+                            this.score += 15 * (1 + this.combo * 0.1);
+                            if (Math.random() < this.dropChance) { // 15% chance to drop pickup
+                                const types = ['health', 'combo', 'score'];
+                                this.pickups.push(new Pickup(e.x, e.y, types[Math.floor(Math.random() * types.length)]));
+                            }
                             this.sound.playExplosion();
                             this.tower.applyRecoil(this.tower.x - e.x, this.tower.y - e.y, 5); // tiny bounce back
                         }
@@ -1332,7 +1470,14 @@ class Game {
                         this.tower.applyRecoil(e.x - tetherHead.x, e.y - tetherHead.y, 2);
                         if (e.health <= 0) {
                             e.active = false;
-                            this.score += Math.floor(10 * this.tower.damageMultiplier);
+                            this.waveKills += 1;
+                            this.combo += 1;
+                            this.comboTimer = this.comboMaxTime;
+                            this.score += Math.floor(10 * this.tower.damageMultiplier) * (1 + this.combo * 0.1);
+                            if (Math.random() < this.dropChance) {
+                                const types = ['health', 'combo', 'score'];
+                                this.pickups.push(new Pickup(e.x, e.y, types[Math.floor(Math.random() * types.length)]));
+                            }
                             this.sound.playExplosion();
                         } else {
                             this.sound.playHit();
@@ -1355,7 +1500,14 @@ class Game {
                          }
                          if (e.health <= 0) {
                             e.active = false;
-                            this.score += 5;
+                            this.waveKills += 1;
+                            this.combo += 1;
+                            this.comboTimer = this.comboMaxTime;
+                            this.score += 5 * (1 + this.combo * 0.1);
+                            if (Math.random() < this.dropChance) {
+                                const types = ['health', 'combo', 'score'];
+                                this.pickups.push(new Pickup(e.x, e.y, types[Math.floor(Math.random() * types.length)]));
+                            }
                             this.sound.playExplosion();
                          }
                     }
@@ -1435,6 +1587,23 @@ class Game {
         this.enemies.push(this.activeBoss);
     }
 
+    generateDraft() {
+        const pool = [
+            { title: "Damage Up", desc: "+20% Base Damage", action: () => this.tower.damageMultiplier += 0.2 },
+            { title: "Tether Speed", desc: "+15% Extend/Retract Speed", action: () => this.tower.speed *= 1.15 },
+            { title: "Max Length", desc: "+20% Tether Reach", action: () => this.tower.maxLength *= 1.2 },
+            { title: "Fortify", desc: "Heal +100 & Max HP +50", action: () => { this.tower.maxHealth += 50; this.tower.health = Math.min(this.tower.maxHealth, this.tower.health + 100); } },
+            { title: "Combo Max Time", desc: "Combo holds 1.5s longer", action: () => this.comboMaxTime += 1.5 },
+            { title: "Overdrive Cooldown", desc: "-1s Overdrive Cooldown", action: () => this.tower.overdriveMaxCooldown = Math.max(2.0, this.tower.overdriveMaxCooldown - 1.0) },
+            { title: "Tether Sweep", desc: "+25% Turn Speed", action: () => this.tower.turnSpeed *= 1.25 },
+            { title: "Risk Reward", desc: "Enemy drops +20% more Pickups", action: () => this.dropChance += 0.2 }
+        ];
+
+        // Shuffle pool
+        pool.sort(() => Math.random() - 0.5);
+        this.draftChoices = pool.slice(0, 3);
+    }
+
     spawnEnemy() {
         const angle = Math.random() * Math.PI * 2;
         const dist = Math.max(this.width, this.height) * 0.7; // spawn outside screen
@@ -1472,6 +1641,10 @@ class Game {
             case STATES.PLAYING:
                 this.drawPlaying();
                 break;
+            case STATES.UPGRADE:
+                this.drawPlaying();
+                this.drawUpgrade();
+                break;
             case STATES.PAUSED:
                 this.drawPlaying(); // draw background
                 this.drawPaused();
@@ -1493,6 +1666,9 @@ class Game {
         for (let e of this.enemies) {
             e.draw(this.ctx);
         }
+        for (let p of this.pickups) {
+            p.draw(this.ctx);
+        }
 
         this.env.drawForeground(this.ctx);
 
@@ -1500,7 +1676,20 @@ class Game {
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '24px monospace';
         this.ctx.textAlign = 'left';
-        this.ctx.fillText(`Score: ${this.score}`, 20, 40);
+        this.ctx.fillText(`Score: ${Math.floor(this.score)}`, 20, 40);
+        this.ctx.fillText(`Wave: ${this.wave}`, 20, 70);
+        this.ctx.fillText(`Kills: ${this.waveKills}/${this.killsToNextWave}`, 20, 100);
+
+        // Combo UI
+        if (this.combo > 0) {
+            this.ctx.fillStyle = '#feca57';
+            this.ctx.fillText(`Combo: x${(1 + this.combo * 0.1).toFixed(1)} (+${this.combo})`, 20, 130);
+            // Combo Bar
+            this.ctx.fillStyle = '#444';
+            this.ctx.fillRect(20, 140, 150, 10);
+            this.ctx.fillStyle = '#feca57';
+            this.ctx.fillRect(20, 140, 150 * (this.comboTimer / this.comboMaxTime), 10);
+        }
 
         if (this.bossActive && this.bossWarningTimer > 0) {
             this.ctx.fillStyle = (Math.floor(this.bossWarningTimer * 5) % 2 === 0) ? '#ff0000' : '#ffff00';
@@ -1571,6 +1760,49 @@ class Game {
         this.ctx.font = '16px monospace';
         this.ctx.textAlign = 'left';
         this.ctx.fillText("Back to Arcade (../../index.html)", 70, 30);
+    }
+
+    drawUpgrade() {
+        this.ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        this.ctx.fillStyle = ACCENT_COLOR;
+        this.ctx.font = '36px monospace';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText("WAVE COMPLETE! CHOOSE AN UPGRADE", this.width/2, this.height/2 - 120);
+
+        const bw = 250;
+        const bh = 150;
+        const startX = this.width/2 - (bw*1.5) - 20;
+        const startY = this.height/2 - bh/2;
+
+        for (let i = 0; i < this.draftChoices.length; i++) {
+            const bx = startX + i * (bw + 20);
+
+            // Box
+            this.ctx.fillStyle = '#222';
+            this.ctx.strokeStyle = ACCENT_COLOR;
+            this.ctx.lineWidth = 3;
+
+            // Hover check
+            if (this.state === STATES.UPGRADE &&
+                this.input.pointer.x > bx && this.input.pointer.x < bx + bw &&
+                this.input.pointer.y > startY && this.input.pointer.y < startY + bh) {
+                this.ctx.fillStyle = '#333';
+            }
+
+            this.ctx.fillRect(bx, startY, bw, bh);
+            this.ctx.strokeRect(bx, startY, bw, bh);
+
+            // Text
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = 'bold 20px monospace';
+            this.ctx.fillText(this.draftChoices[i].title, bx + bw/2, startY + 50);
+
+            this.ctx.fillStyle = '#aaa';
+            this.ctx.font = '14px monospace';
+            this.ctx.fillText(this.draftChoices[i].desc, bx + bw/2, startY + 90);
+        }
     }
 
     drawGameOver() {
