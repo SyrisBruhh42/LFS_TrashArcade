@@ -8,7 +8,29 @@ let width, height;
 
 class SaveManager {
   constructor() {
-    this.data = { highScore: 0, totalGamesPlayed: 0 };
+    this.data = {
+      highScore: 0,
+      totalGamesPlayed: 0,
+      settings: {
+        masterMute: false,
+        sfxVolume: 0.8,
+        musicVolume: 0.6,
+        screenShake: '100%',
+        particleDensity: 'High',
+        highContrast: false,
+        showFPS: false,
+        touchControls: 'Auto',
+        touchHandedness: 'Right'
+      },
+      milestones: {
+        firstBlood: false,
+        comboMaster: false,
+        overdriven: false,
+        untouchable: false,
+        bossSlayer: false,
+        sacrificialLamb: false
+      }
+    };
     this.load();
   }
   load() {
@@ -48,9 +70,7 @@ class SoundEngine {
     this.musicGain = this.ctx.createGain();
     this.sfxGain = this.ctx.createGain();
 
-    this.master.gain.value = 0.5;
-    this.musicGain.gain.value = 0.6;
-    this.sfxGain.gain.value = 0.8;
+    this.updateVolumes();
 
     this.filter = this.ctx.createBiquadFilter();
     this.filter.type = 'lowpass';
@@ -63,6 +83,13 @@ class SoundEngine {
     this.master.connect(this.ctx.destination);
 
     this.startMusic();
+  }
+  updateVolumes() {
+    if (!this.master) return;
+    const s = window.game && window.game.saveManager ? window.game.saveManager.data.settings : { masterMute: false, musicVolume: 0.6, sfxVolume: 0.8 };
+    this.master.gain.value = s.masterMute ? 0 : 0.5;
+    this.musicGain.gain.value = s.musicVolume;
+    this.sfxGain.gain.value = s.sfxVolume;
   }
   setParams(isBoss, isLowHealth) {
     this.isBoss = isBoss;
@@ -1251,6 +1278,9 @@ class Game {
     this.state = 'TITLE';
     this.paused = false;
     this.saveManager = new SaveManager();
+    if (typeof UIManager !== 'undefined' && UIManager.initSettings) {
+        UIManager.initSettings(this.saveManager.data);
+    }
     this.soundEngine = new SoundEngine();
     this.inputManager = new InputManager();
     this.beatTracker = new BeatTracker();
@@ -1405,7 +1435,17 @@ class Game {
     this.soundEngine.setParams(isBoss, isLowHealth);
 
     if (this.state === 'TITLE') {
-      if (this.inputManager.tapped) this.start();
+      if (this.inputManager.tapped) {
+        if (this.inputManager.pointerY > height - 60 && this.inputManager.pointerY < height - 20) {
+          this.state = 'SETTINGS';
+        } else {
+          this.start();
+        }
+      }
+    } else if (this.state === 'SETTINGS') {
+      if (typeof UIManager !== 'undefined' && UIManager.updateSettings) {
+        UIManager.updateSettings(this);
+      }
     } else if (this.state === 'GAME_OVER') {
       if (this.inputManager.tapped) {
         this.state = 'TITLE';
@@ -1727,6 +1767,9 @@ class Game {
     ctx.fillRect(0, 0, width, height);
 
     // Draw procedural environment layers
+    if (this.saveManager.data.settings.highContrast) {
+      ctx.filter = 'contrast(200%) saturate(200%)';
+    }
     if (this.envManager) {
       this.envManager.draw(ctx, width, height);
     } else {
@@ -1734,6 +1777,9 @@ class Game {
       ctx.fillRect(0, height/2 - 100, width, 200);
       ctx.fillStyle = '#1c3b24';
       ctx.fillRect(0, height/2 + 50, width, height/2 - 50);
+    }
+    if (this.saveManager.data.settings.highContrast) {
+      ctx.filter = 'none';
     }
 
     if (this.state === 'TITLE') {
@@ -1745,9 +1791,22 @@ class Game {
       ctx.fillText('Tap to Start', width/2, height/2 + 20);
       ctx.fillText('High Score: ' + this.saveManager.data.highScore, width/2, height/2 + 60);
 
+      ctx.fillStyle = '#444';
+      ctx.fillRect(width/2 - 60, height - 60, 120, 40);
+      ctx.fillStyle = '#fff';
+      ctx.fillText('Settings', width/2, height - 35);
+
+      if (typeof UIManager !== 'undefined' && UIManager.drawMilestones) {
+        UIManager.drawMilestones(ctx, this, width/2, height/2 + 100);
+      }
+
       // Draw Back to Arcade button per requirements
       ctx.font = '16px Arial';
-      ctx.fillText('Back to Arcade (Esc)', width/2, height - 30);
+      ctx.fillText('Back to Arcade (Esc)', width/2, height - 90);
+    } else if (this.state === 'SETTINGS') {
+      if (typeof UIManager !== 'undefined' && UIManager.drawSettings) {
+        UIManager.drawSettings(ctx, this, width, height);
+      }
     } else if (this.state === 'PAUSED') {
       if (this.inputManager.tapped) this.state = 'PLAYING';
     } else if (this.state === 'PLAYING') {
