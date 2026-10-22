@@ -533,7 +533,6 @@ class Projectile {
 class Enemy {
     constructor(game) {
         this.game = game;
-        // Spawn outside bounds
         const side = Math.floor(Math.random() * 4);
         if (side === 0) { this.x = Math.random() * CONSTANTS.CANVAS_BASE_W; this.y = -20; }
         else if (side === 1) { this.x = CONSTANTS.CANVAS_BASE_W + 20; this.y = Math.random() * CONSTANTS.CANVAS_BASE_H; }
@@ -541,11 +540,13 @@ class Enemy {
         else { this.x = -20; this.y = Math.random() * CONSTANTS.CANVAS_BASE_H; }
 
         this.radius = 12;
-        this.hp = 1; // Basic one hit
+        this.hp = 1;
         this.active = true;
         this.speed = CONSTANTS.ENEMY_SPEED * randomRange(0.8, 1.2);
+        this.color = COLORS.enemy;
     }
     update(dt) {
+        if (!this.game.player) return;
         const dx = this.game.player.x - this.x;
         const dy = this.game.player.y - this.y;
         const dist = Math.hypot(dx, dy);
@@ -555,10 +556,9 @@ class Enemy {
             this.y += (dy / dist) * this.speed * dt;
         }
 
-        // Collision with player
         if (dist < this.radius + this.game.player.radius) {
             this.game.player.takeDamage(10);
-            this.takeDamage(1); // Die on impact
+            this.takeDamage(1);
         }
     }
     takeDamage(amount) {
@@ -567,29 +567,409 @@ class Enemy {
             this.active = false;
             this.game.score += CONSTANTS.SCORE_PER_ENEMY;
             this.game.sound.explosion();
-            this.game.spawnParticles(this.x, this.y, COLORS.enemy, 10);
+            this.game.spawnParticles(this.x, this.y, this.color, 10);
         }
     }
     draw(ctx) {
+        if (!this.game.player) return;
         ctx.save();
         ctx.translate(this.x, this.y);
-
         const dx = this.game.player.x - this.x;
         const dy = this.game.player.y - this.y;
-        const angle = Math.atan2(dy, dx);
-        ctx.rotate(angle);
-
-        ctx.strokeStyle = COLORS.enemy;
+        ctx.rotate(Math.atan2(dy, dx));
+        ctx.strokeStyle = this.color;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        // Diamond shape
         ctx.moveTo(this.radius, 0);
         ctx.lineTo(0, this.radius);
         ctx.lineTo(-this.radius, 0);
         ctx.lineTo(0, -this.radius);
         ctx.closePath();
         ctx.stroke();
+        ctx.restore();
+    }
+}
 
+class Swarmer extends Enemy {
+    constructor(game) {
+        super(game);
+        this.radius = 8;
+        this.hp = 1;
+        this.speed = CONSTANTS.ENEMY_SPEED * 1.5;
+        this.color = '#ff3366';
+        this.wobble = Math.random() * Math.PI * 2;
+    }
+    update(dt) {
+        if (!this.game.player) return;
+        const dx = this.game.player.x - this.x;
+        const dy = this.game.player.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        this.wobble += dt * 10;
+
+        if (dist > 0) {
+            const angle = Math.atan2(dy, dx) + Math.sin(this.wobble) * 0.5;
+            this.x += Math.cos(angle) * this.speed * dt;
+            this.y += Math.sin(angle) * this.speed * dt;
+        }
+
+        if (dist < this.radius + this.game.player.radius) {
+            this.game.player.takeDamage(10);
+            this.takeDamage(1);
+        }
+    }
+    draw(ctx) {
+        if (!this.game.player) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(Math.atan2(this.game.player.y - this.y, this.game.player.x - this.x));
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(-this.radius, this.radius * 0.8);
+        ctx.lineTo(-this.radius * 0.5, 0);
+        ctx.lineTo(-this.radius, -this.radius * 0.8);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class Sniper extends Enemy {
+    constructor(game) {
+        super(game);
+        this.radius = 14;
+        this.hp = 2;
+        this.speed = CONSTANTS.ENEMY_SPEED * 0.6;
+        this.color = '#33ccff';
+        this.chargeTimer = 0;
+        this.chargeTime = 2.5; // seconds to charge
+        this.telegraphing = false;
+    }
+    update(dt) {
+        if (!this.game.player) return;
+        const dx = this.game.player.x - this.x;
+        const dy = this.game.player.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        // Try to maintain a distance of 250
+        const targetDist = 250;
+        if (Math.abs(dist - targetDist) > 10) {
+            const moveSpeed = dist > targetDist ? this.speed : -this.speed;
+            this.x += (dx / dist) * moveSpeed * dt;
+            this.y += (dy / dist) * moveSpeed * dt;
+        }
+
+        // Shooting logic
+        this.chargeTimer += dt;
+        if (this.chargeTimer > this.chargeTime - 1.0) {
+            this.telegraphing = true;
+        }
+        if (this.chargeTimer >= this.chargeTime) {
+            this.chargeTimer = 0;
+            this.telegraphing = false;
+            const px = dx / dist;
+            const py = dy / dist;
+            // enemy projectile! wait, Projectile is usually player's. Let's make an EnemyProjectile class or reuse Projectile with a flag.
+            // In original code: this.projectiles are player projectiles. Let's add enemy projectiles.
+            this.game.enemyProjectiles.push(new EnemyProjectile(this.x, this.y, px, py));
+            this.game.sound.hit(); // reuse sound
+        }
+
+        if (dist < this.radius + this.game.player.radius) {
+            this.game.player.takeDamage(15);
+            this.takeDamage(2);
+        }
+    }
+    draw(ctx) {
+        if (!this.game.player) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(Math.atan2(this.game.player.y - this.y, this.game.player.x - this.x));
+
+        // Telegraph
+        if (this.telegraphing) {
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(800, 0); // long laser sight
+            ctx.strokeStyle = 'rgba(51, 204, 255, ' + (Math.sin(this.chargeTimer * 20) * 0.5 + 0.5) + ')';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(this.radius + 6, 0);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class Bruiser extends Enemy {
+    constructor(game) {
+        super(game);
+        this.radius = 20;
+        this.hp = 8;
+        this.speed = CONSTANTS.ENEMY_SPEED * 0.4;
+        this.color = '#ff9900';
+        this.shieldHp = 5;
+    }
+    takeDamage(amount) {
+        if (this.shieldHp > 0) {
+            this.shieldHp -= amount;
+            this.game.sound.hit();
+            this.game.spawnParticles(this.x, this.y, '#ffffff', 5);
+            return;
+        }
+        super.takeDamage(amount);
+    }
+    draw(ctx) {
+        if (!this.game.player) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const dx = this.game.player.x - this.x;
+        const dy = this.game.player.y - this.y;
+        ctx.rotate(Math.atan2(dy, dx));
+
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        // Hexagon
+        for (let i = 0; i < 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            if (i === 0) ctx.moveTo(Math.cos(angle) * this.radius, Math.sin(angle) * this.radius);
+            else ctx.lineTo(Math.cos(angle) * this.radius, Math.sin(angle) * this.radius);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // Shield
+        if (this.shieldHp > 0) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.3 + (this.shieldHp / 5) * 0.7) + ')';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius + 6, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+}
+
+class Spawner extends Enemy {
+    constructor(game) {
+        super(game);
+        this.radius = 16;
+        this.hp = 4;
+        this.speed = CONSTANTS.ENEMY_SPEED * 0.5;
+        this.color = '#cc33ff';
+        this.spawnTimer = 0;
+        this.spawnInterval = 4.0; // seconds
+        this.moveAngle = Math.random() * Math.PI * 2;
+    }
+    update(dt) {
+        if (!this.game.player) return;
+
+        // Move erratically/circularly
+        this.moveAngle += dt * 0.5;
+        this.x += Math.cos(this.moveAngle) * this.speed * dt;
+        this.y += Math.sin(this.moveAngle) * this.speed * dt;
+
+        // Keep inside bounds roughly
+        if (this.x < 50) { this.x = 50; this.moveAngle = 0; }
+        if (this.x > CONSTANTS.CANVAS_BASE_W - 50) { this.x = CONSTANTS.CANVAS_BASE_W - 50; this.moveAngle = Math.PI; }
+        if (this.y < 50) { this.y = 50; this.moveAngle = Math.PI/2; }
+        if (this.y > CONSTANTS.CANVAS_BASE_H - 50) { this.y = CONSTANTS.CANVAS_BASE_H - 50; this.moveAngle = -Math.PI/2; }
+
+        this.spawnTimer += dt;
+        if (this.spawnTimer >= this.spawnInterval) {
+            this.spawnTimer = 0;
+            // Spawn 2 swarmers
+            for (let i = 0; i < 2; i++) {
+                let s = new Swarmer(this.game);
+                s.x = this.x + (Math.random() - 0.5) * 20;
+                s.y = this.y + (Math.random() - 0.5) * 20;
+                this.game.enemies.push(s);
+            }
+            this.game.spawnParticles(this.x, this.y, this.color, 15);
+        }
+
+        const dx = this.game.player.x - this.x;
+        const dy = this.game.player.y - this.y;
+        if (Math.hypot(dx, dy) < this.radius + this.game.player.radius) {
+            this.game.player.takeDamage(10);
+            this.takeDamage(1);
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.moveAngle);
+
+        // Visual telegraph for spawn
+        const progress = this.spawnTimer / this.spawnInterval;
+        ctx.fillStyle = `rgba(204, 51, 255, ${progress * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * progress, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.rect(-this.radius, -this.radius, this.radius * 2, this.radius * 2);
+        ctx.moveTo(-this.radius, -this.radius);
+        ctx.lineTo(this.radius, this.radius);
+        ctx.moveTo(this.radius, -this.radius);
+        ctx.lineTo(-this.radius, this.radius);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class HazardEnemy extends Enemy {
+    constructor(game) {
+        super(game);
+        this.radius = 12;
+        this.hp = 3;
+        this.speed = CONSTANTS.ENEMY_SPEED * 0.9;
+        this.color = '#33ff33'; // green
+        this.dropTimer = 0;
+    }
+    update(dt) {
+        if (!this.game.player) return;
+        const dx = this.game.player.x - this.x;
+        const dy = this.game.player.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        // Move away if too close, else move randomly/around
+        if (dist < 150) {
+            this.x -= (dx / dist) * this.speed * dt;
+            this.y -= (dy / dist) * this.speed * dt;
+        } else {
+            this.x += Math.sin(this.game.score/1000 + this.y*0.01) * this.speed * dt;
+            this.y += Math.cos(this.game.score/1000 + this.x*0.01) * this.speed * dt;
+        }
+
+        // Keep inside bounds roughly
+        if (this.x < 50) this.x = 50;
+        if (this.x > CONSTANTS.CANVAS_BASE_W - 50) this.x = CONSTANTS.CANVAS_BASE_W - 50;
+        if (this.y < 50) this.y = 50;
+        if (this.y > CONSTANTS.CANVAS_BASE_H - 50) this.y = CONSTANTS.CANVAS_BASE_H - 50;
+
+        this.dropTimer += dt;
+        if (this.dropTimer > 1.5) {
+            this.dropTimer = 0;
+            this.game.hazards.push(new DamageZone(this.x, this.y, 25, 4.0));
+        }
+
+        if (dist < this.radius + this.game.player.radius) {
+            this.game.player.takeDamage(10);
+            this.takeDamage(1);
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.game.score / 100);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Star shape or cross
+        ctx.moveTo(-this.radius, 0);
+        ctx.lineTo(this.radius, 0);
+        ctx.moveTo(0, -this.radius);
+        ctx.lineTo(0, this.radius);
+        ctx.arc(0, 0, this.radius * 0.6, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Telegraph for drop
+        ctx.fillStyle = `rgba(51, 255, 51, ${this.dropTimer / 1.5})`;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+class DamageZone {
+    constructor(x, y, radius, lifeTime) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.lifeTime = lifeTime;
+        this.maxLife = lifeTime;
+        this.active = true;
+    }
+    update(dt, game) {
+        this.lifeTime -= dt;
+        if (this.lifeTime <= 0) {
+            this.active = false;
+        }
+        if (game.player && this.active) {
+            const dist = Math.hypot(game.player.x - this.x, game.player.y - this.y);
+            if (dist < this.radius + game.player.radius) {
+                game.player.takeDamage(20 * dt); // continuous damage
+            }
+        }
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        const alpha = (this.lifeTime / this.maxLife) * 0.5;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = `rgba(51, 255, 51, ${alpha})`;
+        ctx.strokeStyle = '#33ff33';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // inner ring
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * (1 - (this.lifeTime % 1)), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class EnemyProjectile {
+    constructor(x, y, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx * CONSTANTS.PROJECTILE_SPEED * 0.6;
+        this.vy = vy * CONSTANTS.PROJECTILE_SPEED * 0.6;
+        this.radius = 4;
+        this.active = true;
+    }
+    update(dt, game) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        if (this.x < -50 || this.x > CONSTANTS.CANVAS_BASE_W + 50 || this.y < -50 || this.y > CONSTANTS.CANVAS_BASE_H + 50) {
+            this.active = false;
+        }
+        if (game.player && this.active) {
+            const dist = Math.hypot(game.player.x - this.x, game.player.y - this.y);
+            if (dist < this.radius + game.player.radius) {
+                game.player.takeDamage(10);
+                this.active = false;
+                game.spawnParticles(this.x, this.y, '#33ccff', 10);
+            }
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = '#33ccff';
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = '#33ccff';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
     }
 }
@@ -1011,6 +1391,8 @@ class Game {
         this.player = null;
         this.projectiles = [];
         this.enemies = [];
+        this.enemyProjectiles = [];
+        this.hazards = [];
         this.particles = [];
         this.vectorGrid = new VectorGrid(this);
         this.envManager = new EnvironmentManager(this);
@@ -1068,6 +1450,8 @@ class Game {
         this.player = new Player(this);
         this.projectiles = [];
         this.enemies = [];
+        this.enemyProjectiles = [];
+        this.hazards = [];
         this.particles = [];
         this.score = 0;
         this.wave = 1;
@@ -1144,6 +1528,12 @@ class Game {
         this.enemies.forEach(e => e.update(dt));
         this.enemies = this.enemies.filter(e => e.active);
 
+        this.enemyProjectiles.forEach(p => p.update(dt, this));
+        this.enemyProjectiles = this.enemyProjectiles.filter(p => p.active);
+
+        this.hazards.forEach(h => h.update(dt, this));
+        this.hazards = this.hazards.filter(h => h.active);
+
         this.particles.forEach(p => p.update(dt));
         this.vectorGrid.update(dt);
         this.envManager.update(dt);
@@ -1165,7 +1555,15 @@ class Game {
         // Enemy spawner
         this.enemySpawnTimer -= dt;
         if (this.enemySpawnTimer <= 0) {
-            this.enemies.push(new Enemy(this));
+            const r = Math.random();
+            let newEnemy;
+            if (r < 0.3) newEnemy = new Swarmer(this);
+            else if (r < 0.5) newEnemy = new Sniper(this);
+            else if (r < 0.7) newEnemy = new Bruiser(this);
+            else if (r < 0.85) newEnemy = new Spawner(this);
+            else if (r < 0.95) newEnemy = new HazardEnemy(this);
+            else newEnemy = new Enemy(this);
+            this.enemies.push(newEnemy);
             // ramp up difficulty slightly
             const rate = Math.max(0.5, CONSTANTS.ENEMY_SPAWN_RATE_BASE - (this.score / 5000));
             this.enemySpawnTimer = rate;
@@ -1255,7 +1653,9 @@ class Game {
         }
 
         this.particles.forEach(p => p.draw(this.ctx));
+        this.hazards.forEach(h => h.draw(this.ctx));
         this.enemies.forEach(e => e.draw(this.ctx));
+        this.enemyProjectiles.forEach(p => p.draw(this.ctx));
         this.projectiles.forEach(p => p.draw(this.ctx));
         if (this.envManager) { this.envManager.drawForeground(this.ctx); }
 
