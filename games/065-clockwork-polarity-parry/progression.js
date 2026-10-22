@@ -155,10 +155,10 @@ class PickupManager {
             if (distSq < (player.radius + p.radius) * (player.radius + p.radius)) {
                 if (p.type === 'health') {
                     player.hp = Math.min(player.maxHp, player.hp + 20);
-                    soundEngine.playHit(); // Temp collect sound
+                    soundEngine.playUpgradeSelect();
                 } else if (p.type === 'energy') {
                     comboManager.addCombo(1);
-                    soundEngine.playHit();
+                    soundEngine.playWaveStart();
                 }
                 this.pickups.splice(i, 1);
                 continue;
