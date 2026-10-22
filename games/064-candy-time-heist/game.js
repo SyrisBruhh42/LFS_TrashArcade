@@ -468,6 +468,14 @@ class Guard {
         ctx.save();
         ctx.translate(this.x, this.y);
 
+        if (this.stunTimer > 0) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('STUNNED', 0, -30);
+            ctx.globalAlpha = 0.5;
+        }
+
         // Vision cone
         ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
         ctx.beginPath();
@@ -486,6 +494,8 @@ class Guard {
     }
 
     canSee(player) {
+        if (this.stunTimer > 0) return false; // Stunned guards can't see
+
         const dx = player.x - this.x;
         const dy = player.y - this.y;
         const dist = Math.hypot(dx, dy);
@@ -594,6 +604,197 @@ class ConveyorBelt {
     }
 }
 
+
+class ParallaxBackground {
+    constructor(width, height) {
+        this.width = width;
+        this.height = height;
+        this.layers = [];
+
+        // Deepest layer (slowest, darkest) - representing distant factory pipes
+        this.layers.push(new ParallaxLayer(width, height, 10, '#1a111a', 50, 20));
+
+        // Mid layer - representing background machinery
+        this.layers.push(new ParallaxLayer(width, height, 25, '#2a1a2a', 40, 15));
+
+        // Foreground layer (fastest) - representing hanging cables or closer factory elements
+        this.layers.push(new ParallaxLayer(width, height, 50, '#3a203a', 20, 10));
+    }
+
+    update(dt, timeScale) {
+        for (const layer of this.layers) {
+            layer.update(dt, timeScale);
+        }
+    }
+
+    draw(ctx) {
+        for (const layer of this.layers) {
+            layer.draw(ctx);
+        }
+    }
+
+    resize(width, height) {
+        this.width = width;
+        this.height = height;
+        for (const layer of this.layers) {
+            layer.width = width;
+            layer.height = height;
+        }
+    }
+}
+
+class ParallaxLayer {
+    constructor(width, height, speed, color, itemSize, density) {
+        this.width = width;
+        this.height = height;
+        this.speed = speed;
+        this.color = color;
+        this.items = [];
+        this.itemSize = itemSize;
+
+        for (let i = 0; i < density; i++) {
+            this.items.push({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                w: itemSize + Math.random() * itemSize,
+                h: itemSize + Math.random() * itemSize,
+                type: Math.floor(Math.random() * 3) // Different shape types
+            });
+        }
+    }
+
+    update(dt, globalTimeScale) {
+        for (const item of this.items) {
+            item.x -= this.speed * dt * globalTimeScale;
+            if (item.x < -item.w) {
+                item.x = this.width + item.w;
+                item.y = Math.random() * this.height;
+            }
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.fillStyle = this.color;
+        for (const item of this.items) {
+            if (item.type === 0) {
+                ctx.fillRect(item.x, item.y, item.w, item.h);
+            } else if (item.type === 1) {
+                ctx.beginPath();
+                ctx.arc(item.x + item.w/2, item.y + item.h/2, item.w/2, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(item.x, item.y + item.h);
+                ctx.lineTo(item.x + item.w/2, item.y);
+                ctx.lineTo(item.x + item.w, item.y + item.h);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+        ctx.restore();
+    }
+}
+
+class SteamVent {
+    constructor(x, y, width, height, burstInterval, burstDuration) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.burstInterval = burstInterval;
+        this.burstDuration = burstDuration;
+        this.timer = Math.random() * burstInterval;
+        this.active = false;
+        this.particles = [];
+        this.color = '#aa4444'; // Red base
+    }
+
+    update(dt, timeScale, player, guards) {
+        this.timer += dt * timeScale;
+
+        if (this.active) {
+            if (this.timer >= this.burstDuration) {
+                this.active = false;
+                this.timer = 0;
+            }
+
+            // Generate particles
+            if (Math.random() < 0.3 * timeScale) {
+                this.particles.push({
+                    x: this.x + Math.random() * this.width,
+                    y: this.y + this.height,
+                    vx: (Math.random() - 0.5) * 20,
+                    vy: -50 - Math.random() * 50,
+                    life: 1.0,
+                    maxLife: 0.5 + Math.random() * 0.5,
+                    size: 10 + Math.random() * 10
+                });
+            }
+
+            // Check collisions with player
+            if (player && !player.invulnerable && player.state === 'PLAYING') {
+                if (player.x > this.x && player.x < this.x + this.width &&
+                    player.y > this.y - 100 && player.y < this.y + this.height) {
+                    return 'KILL_PLAYER';
+                }
+            }
+
+            // Guard interaction logic
+            if (guards) {
+                for (const guard of guards) {
+                    if (guard.x > this.x && guard.x < this.x + this.width &&
+                        guard.y > this.y - 100 && guard.y < this.y + this.height) {
+                        guard.stunTimer = 1.5; // Stun guard for 1.5 seconds
+                    }
+                }
+            }
+        } else {
+            if (this.timer >= this.burstInterval) {
+                this.active = true;
+                this.timer = 0;
+            }
+        }
+
+        // Update particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.x += p.vx * dt * timeScale;
+            p.y += p.vy * dt * timeScale;
+            p.life -= (dt * timeScale) / p.maxLife;
+            if (p.life <= 0) {
+                this.particles.splice(i, 1);
+            }
+        }
+
+        return null;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.fillStyle = this.active ? '#ff4444' : '#552222';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        // Danger zone indicator
+        if (!this.active) {
+            const dangerRatio = this.timer / this.burstInterval;
+            if (dangerRatio > 0.8) {
+                ctx.fillStyle = `rgba(255, 0, 0, ${(dangerRatio - 0.8) * 2})`;
+                ctx.fillRect(this.x, this.y - 100, this.width, 100);
+            }
+        }
+
+        // Particles
+        for (const p of this.particles) {
+            ctx.fillStyle = `rgba(255, 200, 200, ${p.life})`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size * (1 + (1 - p.life)), 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+}
+
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -612,6 +813,8 @@ class Game {
         this.guards = [];
         this.candies = [];
         this.belts = [];
+        this.vents = [];
+        this.background = new ParallaxBackground(this.width, this.height);
 
         this.score = 0;
         this.timeScale = 1.0;
@@ -629,6 +832,7 @@ class Game {
             this.canvas.height = window.innerHeight;
             this.width = window.innerWidth;
             this.height = window.innerHeight;
+            if (this.background) this.background.resize(this.width, this.height);
         };
 
         window.addEventListener('resize', resize);
@@ -683,6 +887,10 @@ class Game {
 
         this.guards.push(new Guard(200, 250, [{x: 200, y: 250}, {x: this.width - 200, y: 250}]));
 
+        this.vents = [];
+        this.vents.push(new SteamVent(this.width / 2 - 40, 420, 80, 20, 3, 1));
+        this.vents.push(new SteamVent(150, 220, 60, 20, 4, 1.5));
+
         this.spawnCandy();
     }
 
@@ -713,6 +921,15 @@ class Game {
         // Keep player in bounds
         this.player.x = Math.max(this.player.radius, Math.min(this.width - this.player.radius, this.player.x));
         this.player.y = Math.max(this.player.radius, Math.min(this.height - this.player.radius, this.player.y));
+
+        this.background.update(dt, this.timeScale);
+
+        for (const vent of this.vents) {
+            const result = vent.update(dt, this.timeScale, this.player, this.guards);
+            if (result === 'KILL_PLAYER') {
+                this.gameOver();
+            }
+        }
 
         for (const belt of this.belts) {
             belt.update(dt, this.timeScale);
@@ -803,8 +1020,10 @@ class Game {
     }
 
     draw() {
-        this.ctx.fillStyle = '#222';
+        this.ctx.fillStyle = '#111';
         this.ctx.fillRect(0, 0, this.width, this.height);
+
+        this.background.draw(this.ctx);
 
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = '#f0c97d';
@@ -816,6 +1035,10 @@ class Game {
             this.ctx.font = '24px sans-serif';
             this.ctx.fillText('Click / Tap to Start', this.width / 2, this.height / 2 + 20);
             return;
+        }
+
+        for (const vent of this.vents) {
+            vent.draw(this.ctx);
         }
 
         for (const belt of this.belts) {
