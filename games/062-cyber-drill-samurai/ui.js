@@ -85,6 +85,82 @@ class UIManager {
     if (this.game.state === 'OPTIONS') {
       this.drawOptionsScreen(ctx);
     }
+
+    if (this.game.state === 'PLAYING' && this.game.waveCounter === 0 && this.game.depth < 2000) {
+       this.drawTutorial(ctx);
+    }
+  }
+
+  drawTutorial(ctx) {
+    const w = this.game.width;
+    const cw = w / 2;
+    // Let's create an elegant, non-intrusive overlay tutorial
+    ctx.save();
+    ctx.fillStyle = 'rgba(11, 12, 16, 0.6)';
+    ctx.fillRect(cw - 200, 100, 400, 140);
+
+    ctx.strokeStyle = '#a0efb8';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cw - 200, 100, 400, 140);
+
+    ctx.fillStyle = '#f5ca53';
+    ctx.font = '20px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('--- TUTORIAL ---', cw, 125);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px Courier New';
+    ctx.fillText('WASD / Arrows / Touch to Move & Drill.', cw, 150);
+    ctx.fillText('Drill dirt and gems to grow your Tether.', cw, 175);
+    ctx.fillText('Press SPACE when Tether > 5 for a Shockwave!', cw, 200);
+
+    // Add pulsing effect to highlight
+    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(performance.now() * 0.005);
+    ctx.fillStyle = '#a0efb8';
+    ctx.fillText('Survive and dig deep!', cw, 225);
+
+    ctx.restore();
+  }
+
+  // Extra helper to draw decorative borders for Phase 10 masterpiece polish
+  drawMasterpieceBorders(ctx) {
+      const w = this.game.width;
+      const h = this.game.height;
+      const t = performance.now();
+
+      ctx.save();
+      ctx.strokeStyle = `rgba(160, 239, 184, ${0.1 + 0.1 * Math.sin(t * 0.001)})`;
+      ctx.lineWidth = 4;
+
+      // Top left corner
+      ctx.beginPath();
+      ctx.moveTo(20, 40);
+      ctx.lineTo(20, 20);
+      ctx.lineTo(40, 20);
+      ctx.stroke();
+
+      // Top right corner
+      ctx.beginPath();
+      ctx.moveTo(w - 40, 20);
+      ctx.lineTo(w - 20, 20);
+      ctx.lineTo(w - 20, 40);
+      ctx.stroke();
+
+      // Bottom left corner
+      ctx.beginPath();
+      ctx.moveTo(20, h - 40);
+      ctx.lineTo(20, h - 20);
+      ctx.lineTo(40, h - 20);
+      ctx.stroke();
+
+      // Bottom right corner
+      ctx.beginPath();
+      ctx.moveTo(w - 40, h - 20);
+      ctx.lineTo(w - 20, h - 20);
+      ctx.lineTo(w - 20, h - 40);
+      ctx.stroke();
+
+      ctx.restore();
   }
 
   drawOptionsScreen(ctx) {
