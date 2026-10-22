@@ -321,7 +321,14 @@ class Player {
 
             if (this.dashDuration <= 0) {
                 this.isDashing = false;
-                this.invulnerable = false;
+                if (!window.game.perks.invulnAfterDash) {
+                    this.invulnerable = false;
+                } else {
+                    // Let it fade normally?
+                    // Actually, if we just want "Brief invulnerability after dashing"
+                    // we can just not clear it here and let it clear after a timer, or just manually clear it after 0.5s.
+                    setTimeout(() => { this.invulnerable = false; }, 500);
+                }
             }
         } else {
             if (inputVector.dx !== 0 || inputVector.dy !== 0) {
@@ -1374,6 +1381,172 @@ class ConveyorColossus extends BaseBoss {
 }
 
 
+
+// --- COMBOS & PERKS ---
+class PerkManager {
+    constructor(game) {
+        this.game = game;
+        this.activePerks = [];
+        this.availablePerks = [
+            { id: 'dashCooldown', name: 'Rapid Boots', desc: 'Dash cooldown reduced by 25%' },
+            { id: 'dashDuration', name: 'Extended Dash', desc: 'Dash duration increased by 50%' },
+            { id: 'timeDilation', name: 'Deep Focus', desc: 'Time slows down even more when still' },
+            { id: 'candyMagnet', name: 'Candy Magnet', desc: 'Candies drift towards you' },
+            { id: 'shield', name: 'Energy Shield', desc: 'Absorb 1 hit per wave' },
+            { id: 'baseCombo', name: 'Combo Starter', desc: 'Base combo multiplier is 1.5x' },
+            { id: 'bossDamage', name: 'Boss Buster', desc: 'Candies deal more damage to bosses' },
+            { id: 'invulnAfterDash', name: 'Phasing Dash', desc: 'Brief invulnerability after dashing' },
+            { id: 'comboDecaySlower', name: 'Momentum', desc: 'Combo bar decays 30% slower' }
+        ];
+        this.offeredPerks = [];
+    }
+
+    triggerDraft() {
+        this.game.state = 'UPGRADE';
+        this.offeredPerks = [];
+        // pick 3 random perks
+        const pool = [...this.availablePerks];
+        for (let i = 0; i < 3; i++) {
+            if (pool.length === 0) break;
+            const idx = Math.floor(Math.random() * pool.length);
+            this.offeredPerks.push(pool.splice(idx, 1)[0]);
+        }
+    }
+
+    applyPerk(perk) {
+        this.activePerks.push(perk);
+        switch (perk.id) {
+            case 'dashCooldown': this.game.player.dashCooldownMax *= 0.75; break;
+            case 'dashDuration': this.game.player.dashDurationMax *= 1.5; break;
+            case 'timeDilation': this.game.baseDilation = Math.max(0.02, this.game.baseDilation - 0.04); break;
+            case 'candyMagnet': this.game.perks.candyMagnet = true; break;
+            case 'shield': this.game.player.hasShield = true; this.game.player.shieldActive = true; break;
+            case 'baseCombo': this.game.perks.baseCombo = Math.max(this.game.perks.baseCombo, 1.5); break;
+            case 'bossDamage': this.game.perks.bossDamage += 10; break;
+            case 'invulnAfterDash': this.game.perks.invulnAfterDash = true; break;
+            case 'comboDecaySlower': this.game.perks.comboDecayMod *= 0.7; break;
+        }
+
+        // restore shield if perk active
+        if (this.game.player.hasShield) {
+            this.game.player.shieldActive = true;
+        }
+
+        this.game.state = 'PLAYING';
+    }
+
+    draw(ctx, width, height) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '36px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('WAVE CLEARED! CHOOSE AN UPGRADE', width / 2, 100);
+
+        const cardWidth = 200;
+        const cardHeight = 300;
+        const spacing = 40;
+        const startX = width / 2 - (3 * cardWidth + 2 * spacing) / 2;
+
+        for (let i = 0; i < this.offeredPerks.length; i++) {
+            const perk = this.offeredPerks[i];
+            const x = startX + i * (cardWidth + spacing);
+            const y = height / 2 - cardHeight / 2;
+
+            // Draw Card
+            ctx.fillStyle = '#222';
+            ctx.fillRect(x, y, cardWidth, cardHeight);
+            ctx.strokeStyle = '#f0c97d';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(x, y, cardWidth, cardHeight);
+
+            ctx.fillStyle = '#f0c97d';
+            ctx.font = '20px sans-serif';
+            ctx.fillText(perk.name, x + cardWidth / 2, y + 40);
+
+            ctx.fillStyle = '#ccc';
+            ctx.font = '16px sans-serif';
+            const words = perk.desc.split(' ');
+            let line = '';
+            let lineY = y + 100;
+            for (let w = 0; w < words.length; w++) {
+                const testLine = line + words[w] + ' ';
+                const metrics = ctx.measureText(testLine);
+                if (metrics.width > cardWidth - 20 && w > 0) {
+                    ctx.fillText(line, x + cardWidth / 2, lineY);
+                    line = words[w] + ' ';
+                    lineY += 24;
+                } else {
+                    line = testLine;
+                }
+            }
+            ctx.fillText(line, x + cardWidth / 2, lineY);
+
+            // Draw click instruction
+            ctx.fillStyle = '#fff';
+            ctx.font = '14px sans-serif';
+            ctx.fillText('Click to Select', x + cardWidth / 2, y + cardHeight - 20);
+        }
+    }
+
+    handleInput(pointer, width, height) {
+        const cardWidth = 200;
+        const cardHeight = 300;
+        const spacing = 40;
+        const startX = width / 2 - (3 * cardWidth + 2 * spacing) / 2;
+        const y = height / 2 - cardHeight / 2;
+
+        for (let i = 0; i < this.offeredPerks.length; i++) {
+            const x = startX + i * (cardWidth + spacing);
+            if (pointer.x >= x && pointer.x <= x + cardWidth &&
+                pointer.y >= y && pointer.y <= y + cardHeight) {
+                this.applyPerk(this.offeredPerks[i]);
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+class FieldPickup {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type; // 'freeze', 'comboMax'
+        this.radius = 12;
+        this.lifeTimer = 10;
+        this.wobbleOffset = Math.random() * Math.PI * 2;
+    }
+    update(dt) {
+        this.lifeTimer -= dt;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const wobble = Math.sin(Date.now() / 150 + this.wobbleOffset) * 4;
+
+        ctx.fillStyle = this.type === 'freeze' ? '#00ffff' : '#ff00ff';
+        if (this.lifeTimer < 3 && Math.floor(this.lifeTimer * 10) % 2 === 0) {
+            ctx.globalAlpha = 0.5; // Blink before disappearing
+        }
+
+        ctx.beginPath();
+        ctx.arc(0, wobble, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.type === 'freeze' ? 'FRZ' : 'MAX', 0, wobble + 3);
+
+        ctx.restore();
+    }
+}
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -1402,7 +1575,27 @@ class Game {
         this.background = new ParallaxBackground(this.width, this.height);
 
         this.score = 0;
-        this.timeScale = 1.0;
+
+        this.perkManager = new PerkManager(this);
+        this.perks = {
+            candyMagnet: false,
+            baseCombo: 1.0,
+            bossDamage: 20,
+            invulnAfterDash: false,
+            comboDecayMod: 1.0
+        };
+
+        this.wave = 1;
+        this.candiesToNextWave = 10;
+        this.candiesCollectedInWave = 0;
+
+        this.comboMulti = 1.0;
+        this.comboTimer = 0;
+        this.comboTimerMax = 3.0; // Seconds before combo drops
+
+        this.pickups = [];
+        this.globalFreezeTimer = 0;
+this.timeScale = 1.0;
         this.dilationTarget = 1.0;
         this.baseDilation = 0.1; // Slow down to 10% speed when still
 
@@ -1428,7 +1621,8 @@ class Game {
     bindEvents() {
         window.addEventListener('keydown', (e) => {
             if (e.code === 'Escape' || e.code === 'KeyP') {
-                if (this.state === 'PLAYING') {
+
+if (this.state === 'PLAYING') {
                     this.state = 'PAUSED';
                 } else if (this.state === 'PAUSED') {
                     this.state = 'PLAYING';
@@ -1438,7 +1632,13 @@ class Game {
         });
 
         this.canvas.addEventListener('pointerdown', (e) => {
-            if (this.state === 'TITLE') {
+            if (this.state === 'UPGRADE') {
+                this.inputManager.updatePointer(e);
+                if (this.perkManager.handleInput(this.inputManager.pointer, this.width, this.height)) {
+                    this.soundEngine.playCollect();
+                }
+                return;
+            }            else if (this.state === 'TITLE') {
                 this.state = 'PLAYING';
                 this.reset();
                 this.lastTime = performance.now();
@@ -1481,7 +1681,24 @@ class Game {
         this.vents.push(new SteamVent(this.width / 2 - 40, 420, 80, 20, 3, 1));
         this.vents.push(new SteamVent(150, 220, 60, 20, 4, 1.5));
 
-        this.spawnCandy();
+
+        this.wave = 1;
+        this.candiesToNextWave = 10;
+        this.candiesCollectedInWave = 0;
+        this.comboMulti = this.perks.baseCombo;
+        this.comboTimer = 0;
+        this.pickups = [];
+        this.globalFreezeTimer = 0;
+        this.perkManager.activePerks = [];
+        this.baseDilation = 0.1;
+        this.perks = {
+            candyMagnet: false,
+            baseCombo: 1.0,
+            bossDamage: 20,
+            invulnAfterDash: false,
+            comboDecayMod: 1.0
+        };
+this.spawnCandy();
     }
 
     spawnCandy() {
@@ -1499,7 +1716,101 @@ class Game {
     update(dt) {
         if (this.state !== 'PLAYING') return;
 
-        const input = this.inputManager.getMovementVector();
+
+        // Freeze logic
+        if (this.globalFreezeTimer > 0) {
+            this.globalFreezeTimer -= dt;
+            if (this.globalFreezeTimer > 0) {
+                // Keep player updating so they can move, but freeze everything else
+                const input = this.inputManager.getMovementVector();
+                const dashReq = this.inputManager.keys['Space'] || this.inputManager.keys['ShiftLeft'] || this.inputManager.keys['ShiftRight'] || this.inputManager.dashRequested;
+                this.player.update(dt, input, dashReq);
+
+                // Also allow candy collection while frozen
+                for (let i = this.candies.length - 1; i >= 0; i--) {
+                    const candy = this.candies[i];
+                    const dx = candy.x - this.player.x;
+                    const dy = candy.y - this.player.y;
+                    if (Math.hypot(dx, dy) < candy.radius + this.player.radius) {
+                        this.score += Math.floor(candy.value * this.comboMulti);
+                        this.comboMulti += 0.1;
+                        this.comboTimer = this.comboTimerMax;
+                        this.soundEngine.playCollect();
+                        this.candies.splice(i, 1);
+                        this.candiesCollectedInWave++;
+
+                        if (Math.random() < 0.05) {
+                            this.pickups.push(new FieldPickup(candy.x, candy.y, Math.random() > 0.5 ? 'freeze' : 'comboMax'));
+                        }
+
+                        if (this.activeBoss && this.activeBoss.state === 'FIGHT') {
+                            this.activeBoss.takeDamage(this.perks.bossDamage);
+                        }
+
+                        if (this.score > this.saveManager.data.highScore) {
+                            this.saveManager.data.highScore = this.score;
+                            this.saveManager.save();
+                        }
+
+                        if (this.candiesCollectedInWave >= this.candiesToNextWave) {
+                            this.wave++;
+                            this.candiesCollectedInWave = 0;
+                            this.candiesToNextWave = Math.floor(this.candiesToNextWave * 1.5);
+                            this.perkManager.triggerDraft();
+                        }
+                    }
+                }
+
+
+                // Still handle pickups
+                for (let i = this.pickups.length - 1; i >= 0; i--) {
+                    const p = this.pickups[i];
+                    p.update(dt);
+                    if (p.lifeTimer <= 0) {
+                        this.pickups.splice(i, 1);
+                        continue;
+                    }
+                    const dx = p.x - this.player.x;
+                    const dy = p.y - this.player.y;
+                    if (Math.hypot(dx, dy) < p.radius + this.player.radius) {
+                        if (p.type === 'freeze') {
+                            this.globalFreezeTimer = 3.0;
+                        } else if (p.type === 'comboMax') {
+                            this.comboMulti += 2.0;
+                            this.comboTimer = this.comboTimerMax;
+                        }
+                        this.soundEngine.playCollect();
+                        this.pickups.splice(i, 1);
+                    }
+                }
+
+                // Allow combo to decay even in freeze? No, let's freeze combo too
+                return;
+            }
+        }
+
+        // Combo decay
+        if (this.comboTimer > 0) {
+            this.comboTimer -= dt * this.perks.comboDecayMod * this.timeScale;
+            if (this.comboTimer <= 0) {
+                this.comboMulti = this.perks.baseCombo;
+            }
+        }
+
+        // Magnet perk
+        if (this.perks.candyMagnet) {
+
+for (const candy of this.candies) {
+                const dx = this.player.x - candy.x;
+                const dy = this.player.y - candy.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist < 150) {
+                    candy.x += (dx / dist) * 200 * dt;
+                    candy.y += (dy / dist) * 200 * dt;
+                }
+            }
+        }
+const input = this.inputManager.getMovementVector();
         const dashReq = this.inputManager.keys['Space'] || this.inputManager.keys['ShiftLeft'] || this.inputManager.keys['ShiftRight'] || this.inputManager.dashRequested;
         this.player.update(dt, input, dashReq);
 
@@ -1591,21 +1902,62 @@ class Game {
             const dx = candy.x - this.player.x;
             const dy = candy.y - this.player.y;
             if (Math.hypot(dx, dy) < candy.radius + this.player.radius) {
-                this.score += candy.value;
+                this.score += Math.floor(candy.value * this.comboMulti);
+
+                // Combo logic
+                this.comboMulti += 0.1;
+                this.comboTimer = this.comboTimerMax;
+
                 this.soundEngine.playCollect();
                 this.candies.splice(i, 1);
 
+                this.candiesCollectedInWave++;
+
+                // Random drop pickup
+                if (Math.random() < 0.05) {
+                    this.pickups.push(new FieldPickup(candy.x, candy.y, Math.random() > 0.5 ? 'freeze' : 'comboMax'));
+                }
+
                 if (this.activeBoss && this.activeBoss.state === 'FIGHT') {
-                    this.activeBoss.takeDamage(20);
+                    this.activeBoss.takeDamage(this.perks.bossDamage);
                 }
 
                 if (this.score > this.saveManager.data.highScore) {
                     this.saveManager.data.highScore = this.score;
                     this.saveManager.save();
                 }
+
+                // Wave completion check
+                if (this.candiesCollectedInWave >= this.candiesToNextWave) {
+                    this.wave++;
+                    this.candiesCollectedInWave = 0;
+                    this.candiesToNextWave = Math.floor(this.candiesToNextWave * 1.5);
+                    this.perkManager.triggerDraft();
+                }
+            }
+        }
+        for (let i = this.pickups.length - 1; i >= 0; i--) {
+            const p = this.pickups[i];
+            p.update(dt);
+            if (p.lifeTimer <= 0) {
+                this.pickups.splice(i, 1);
+                continue;
+            }
+            const dx = p.x - this.player.x;
+            const dy = p.y - this.player.y;
+            if (Math.hypot(dx, dy) < p.radius + this.player.radius) {
+                if (p.type === 'freeze') {
+                    this.globalFreezeTimer = 3.0; // 3 seconds freeze
+                } else if (p.type === 'comboMax') {
+                    this.comboMulti += 2.0;
+                    this.comboTimer = this.comboTimerMax;
+                }
+                this.soundEngine.playCollect();
+                this.pickups.splice(i, 1);
             }
         }
     }
+
 
     gameOver() {
         this.state = 'GAME_OVER';
@@ -1678,6 +2030,10 @@ class Game {
             candy.draw(this.ctx);
         }
 
+        for (const pickup of this.pickups) {
+            pickup.draw(this.ctx);
+        }
+
         for (const guard of this.guards) {
             guard.draw(this.ctx);
         }
@@ -1699,6 +2055,40 @@ class Game {
 
         if (this.state === 'PLAYING') {
             this.drawDashHUD(this.ctx);
+
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '24px sans-serif';
+            this.ctx.fillText(`Wave: ${this.wave}`, 20, 100);
+            this.ctx.fillText(`Combo: ${this.comboMulti.toFixed(1)}x`, 20, 130);
+
+            // Combo bar
+            if (this.comboTimer > 0) {
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                this.ctx.fillRect(20, 140, 100, 10);
+                this.ctx.fillStyle = '#ffeb3b';
+                this.ctx.fillRect(20, 140, 100 * (this.comboTimer / this.comboTimerMax), 10);
+            }
+
+            // Wave progress
+            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            this.ctx.fillRect(this.width / 2 - 100, 20, 200, 20);
+            this.ctx.fillStyle = '#4caf50';
+            this.ctx.fillRect(this.width / 2 - 100, 20, 200 * (this.candiesCollectedInWave / this.candiesToNextWave), 20);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '14px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`Wave ${this.wave} Progress`, this.width / 2, 35);
+            this.ctx.textAlign = 'left';
+
+            if (this.globalFreezeTimer > 0) {
+                this.ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+                this.ctx.fillStyle = '#0ff';
+                this.ctx.font = '24px monospace';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('TIME FROZEN', this.width / 2, 80);
+                this.ctx.textAlign = 'left';
+            }
         }
 
         // Time scale indicator
@@ -1721,6 +2111,10 @@ class Game {
             // Required link for validation
             this.ctx.font = '16px sans-serif';
             this.ctx.fillText('Back to Arcade: ../../index.html', this.width / 2, this.height - 40);
+        }
+
+        if (this.state === 'UPGRADE') {
+            this.perkManager.draw(this.ctx, this.width, this.height);
         }
 
         if (this.state === 'GAME_OVER') {
