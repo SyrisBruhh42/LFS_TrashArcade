@@ -869,7 +869,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD to move. Mouse/Arrows to aim and shoot. SPACE to sacrifice health for Overdrive. Touch controls available.",
     "createdAt": "2024-10-22",
     "accentColor": "#faf7bd",
-    "phase": "3",
+    "phase": "4",
     "path": "./games/066-crt-vector-overdrive/index.html"
   }
 ];
