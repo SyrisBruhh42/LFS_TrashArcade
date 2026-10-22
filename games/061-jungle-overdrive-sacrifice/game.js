@@ -2,6 +2,69 @@ const GAME_ID = "061";
 const SLUG = "061-jungle-overdrive-sacrifice";
 const SAVE_KEY = "arcade_game_061_061-jungle-overdrive-sacrifice_v1";
 
+// Phase 10: Additional aesthetic and balance constants
+const BALANCE_CFG = {
+    wave1TutActive: true,
+    bossHpBase: 250,
+    bossHpWaveScale: 50,
+    minSpawnTimer: 0.5,
+    maxSpawnTimer: 1.5,
+    spawnDecay: 0.05,
+    waveScaleFactor: 20,
+    waveSpawnBase: 5,
+    waveSpawnMult: 2.5
+};
+
+const AESTHETICS = {
+    tutorialBg: 'rgba(0, 0, 0, 0.6)',
+    tutorialText: '#ffffff',
+    tutorialFont: 'bold 22px Arial',
+    tutorialSubFont: '18px Arial',
+    bossWarningLight: '#ff0000',
+    bossWarningDark: '#ffffff',
+    bossWarningFont: 'bold 44px Arial',
+    upgradeFont: '24px Arial',
+    upgradeSelectedBg: 'rgba(255, 255, 255, 0.3)',
+    upgradeBg: 'rgba(0, 0, 0, 0.5)'
+};
+
+// Math and rendering helpers added for phase 10
+class Phase10Utils {
+    static getSpawnTimer(wave) {
+        return Math.max(BALANCE_CFG.minSpawnTimer, BALANCE_CFG.maxSpawnTimer - (wave * BALANCE_CFG.spawnDecay)) + Math.random();
+    }
+    static getBossHp(wave) {
+        return BALANCE_CFG.bossHpBase + (wave * BALANCE_CFG.bossHpWaveScale);
+    }
+    static getWaveScale(wave) {
+        return Math.min(1.0, wave / BALANCE_CFG.waveScaleFactor);
+    }
+    static getEnemiesToSpawn(wave) {
+        return Math.floor(BALANCE_CFG.waveSpawnBase + wave * BALANCE_CFG.waveSpawnMult);
+    }
+    static formatComboText(combo) {
+        return 'Combo: ' + combo + 'x !!!';
+    }
+}
+
+class GameLogger {
+    static logInit() {
+        console.log("Game Initialization started.");
+    }
+    static logWave(wave) {
+        console.log("Starting wave: " + wave);
+    }
+    static logBoss(bossName) {
+        console.log("Boss Spawned: " + bossName);
+    }
+    static logOverdrive() {
+        console.log("Overdrive Activated");
+    }
+    static logUpgrade(upgradeId) {
+        console.log("Upgrade acquired: " + upgradeId);
+    }
+}
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d', { alpha: false });
 let width, height;
@@ -822,8 +885,10 @@ class Boss {
 }
 
 class JungleBehemoth extends Boss {
-  constructor(x, y) {
+  constructor(x, y, wave = 1) {
     super(x, y);
+    this.health = 250 + (wave * 50);
+    this.maxHealth = 250 + (wave * 50);
     this.color = '#884400';
     this.attackTimer = 0;
     this.targetX = width - 150;
@@ -883,12 +948,12 @@ class JungleBehemoth extends Boss {
 }
 
 class OverdriveIdol extends Boss {
-  constructor(x, y) {
+  constructor(x, y, wave = 1) {
     super(x, y);
     this.color = '#aa00ff';
     this.attackTimer = 0;
-    this.health = 250;
-    this.maxHealth = 250;
+    this.health = 250 + (wave * 50);
+    this.maxHealth = 250 + (wave * 50);
     this.moveTimer = 0;
     this.targetY = y;
   }
@@ -1415,7 +1480,7 @@ class Game {
 
   startNextWave(initial = false) {
     if (!initial) this.currentWave++;
-    this.enemiesToSpawn = 5 + this.currentWave * 2;
+    this.enemiesToSpawn = Math.floor(5 + this.currentWave * 2.5);
     this.enemiesRemainingInWave = this.enemiesToSpawn;
     this.state = 'PLAYING';
     this.boss = null;
@@ -1442,14 +1507,14 @@ class Game {
 
   applyUpgrade(choice) {
     switch (choice.id) {
-        case 'hp': this.player.maxHealth += 50; this.player.health += 50; break;
+        case 'hp': this.player.maxHealth += 75; this.player.health += 75; break;
         case 'heal': this.player.health = this.player.maxHealth; break;
-        case 'dmg': this.playerStats.baseDmg += 1; break;
-        case 'od_dmg': this.playerStats.odDmgMult += 2; break;
-        case 'combo_time': this.playerStats.comboTimeMult += 0.5; break;
-        case 'dash_cd': this.playerStats.dashCdMult *= 0.8; break;
-        case 'range': this.playerStats.rangeMult += 0.3; break;
-        case 'od_cost': this.playerStats.odCost = Math.max(10, this.playerStats.odCost - 5); break;
+        case 'dmg': this.playerStats.baseDmg += 2; break;
+        case 'od_dmg': this.playerStats.odDmgMult += 3; break;
+        case 'combo_time': this.playerStats.comboTimeMult += 0.8; break;
+        case 'dash_cd': this.playerStats.dashCdMult *= 0.7; break;
+        case 'range': this.playerStats.rangeMult += 0.4; break;
+        case 'od_cost': this.playerStats.odCost = Math.max(5, this.playerStats.odCost - 8); break;
     }
   }
 
@@ -1671,9 +1736,9 @@ class Game {
           this.bossWarningTimer -= dt;
           if (this.bossWarningTimer <= 0) {
               if (this.bossIndex % 2 === 0) {
-                  this.boss = new JungleBehemoth(width + 100, height / 2);
+                  this.boss = new JungleBehemoth(width + 100, height / 2, this.currentWave);
               } else {
-                  this.boss = new OverdriveIdol(width + 100, height / 2);
+                  this.boss = new OverdriveIdol(width + 100, height / 2, this.currentWave);
               }
           }
       }
@@ -1693,24 +1758,25 @@ class Game {
         this.enemySpawnTimer -= dt;
         if (this.enemySpawnTimer <= 0 && this.enemiesToSpawn > 0) {
           this.enemiesToSpawn--;
-          let spawnType = Math.random();
+          let waveScale = Math.min(1.0, this.currentWave / 20);
+        let spawnType = Math.random();
         let spawnY = Math.random() * (height - 200) + 100; // Keep within playable area
         let newEnemy;
-        if (spawnType < 0.2) {
+        if (spawnType < 0.2 - waveScale*0.1) {
             newEnemy = new Enemy(width + 50, spawnY);
-        } else if (spawnType < 0.4) {
+        } else if (spawnType < 0.4 - waveScale*0.1) {
             newEnemy = new SwarmerEnemy(width + 50, spawnY);
-        } else if (spawnType < 0.6) {
+        } else if (spawnType < 0.6 - waveScale*0.1) {
             newEnemy = new BruiserEnemy(width + 50, spawnY);
-        } else if (spawnType < 0.8) {
+        } else if (spawnType < 0.8 - waveScale*0.05) {
             newEnemy = new SniperEnemy(width + 50, spawnY);
-        } else if (spawnType < 0.9) {
+        } else if (spawnType < 0.9 - waveScale*0.05) {
             newEnemy = new SplitterEnemy(width + 50, spawnY);
         } else {
             newEnemy = new SpawnerEnemy(width + 50, spawnY);
         }
         this.enemies.push(newEnemy);
-        this.enemySpawnTimer = 1.5 + Math.random(); // Varied interval
+        this.enemySpawnTimer = Math.max(0.5, 1.5 - (this.currentWave * 0.05)) + Math.random(); // Varied interval
         }
       }
 
@@ -1944,6 +2010,16 @@ class Game {
           ctx.font = '40px Arial';
           ctx.textAlign = 'center';
           ctx.fillText('WARNING: BOSS APPROACHING', width/2, height/4);
+      }
+
+      if (this.currentWave === 1) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillRect(0, height - 120, width, 120);
+          ctx.fillStyle = '#fff';
+          ctx.textAlign = 'center';
+          ctx.font = '20px Arial';
+          ctx.fillText("TUTORIAL: Tap on the beat to attack!", width/2, height - 80);
+          ctx.fillText("Hold Shift or two fingers to activate OVERDRIVE!", width/2, height - 50);
       }
 
       ctx.fillStyle = '#fff';
