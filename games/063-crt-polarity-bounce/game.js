@@ -1018,12 +1018,16 @@ class EnemyProjectile {
     }
 }
 
-function getRandomEnemy(x, y, isPos) {
+function getRandomEnemy(x, y, isPos, wave) {
     const r = Math.random();
-    if (r < 0.2) return new SwarmerEnemy(x, y, isPos);
-    if (r < 0.4) return new SniperEnemy(x, y, isPos);
-    if (r < 0.6) return new ShieldedBruiserEnemy(x, y, isPos);
-    if (r < 0.8) return new SplitterEnemy(x, y, isPos);
+    let swarmerW = 0.4, sniperW = 0.3, bruiserW = 0.15, splitterW = 0.1, hazardW = 0.05;
+    if (wave > 3) { bruiserW = 0.25; sniperW = 0.25; swarmerW = 0.2; }
+    if (wave > 7) { splitterW = 0.25; hazardW = 0.15; swarmerW = 0.15; bruiserW = 0.2; }
+
+    if (r < swarmerW) return new SwarmerEnemy(x, y, isPos);
+    if (r < swarmerW + sniperW) return new SniperEnemy(x, y, isPos);
+    if (r < swarmerW + sniperW + bruiserW) return new ShieldedBruiserEnemy(x, y, isPos);
+    if (r < swarmerW + sniperW + bruiserW + splitterW) return new SplitterEnemy(x, y, isPos);
     return new HazardEnemy(x, y, isPos);
 }
 
@@ -1444,6 +1448,9 @@ class Game {
         const clickedBack = pointerJustDown && this.pointerInBackToArcade();
 
         if (this.state === 'TITLE') {
+                this.playerTookDamage = false;
+                this.showTutorial = true;
+                this.tutorialTime = 0;
             if ((spaceDown && !this.spaceWasDown) || (pointerJustDown && !clickedBack)) {
                 this.reset();
                 this.state = 'PLAYING';
@@ -1529,6 +1536,11 @@ class Game {
         for(let n of this.nodes) n.update(dt);
         this.world.update(dt, this);
 
+        if (this.showTutorial && this.wave === 1) {
+            this.tutorialTime += dt;
+            if (this.tutorialTime > 15) this.showTutorial = false;
+        }
+
         // Enemy spawner logic
         let hasBoss = false;
         for (let e of this.enemies) {
@@ -1547,15 +1559,23 @@ class Game {
             this.enemyProjectiles = [];
 
             if (Math.random() > 0.5) {
-                this.enemies.push(new OrbitalBoss(ex, ey, isPos));
+                            let ob = new OrbitalBoss(ex, ey, isPos);
+            ob.maxHealth += this.wave * 2;
+            ob.health = ob.maxHealth;
+            this.enemies.push(ob);
+            if (this.vfx) this.vfx.addBossWarning(ex, ey, 3.0);
             } else {
-                this.enemies.push(new LaserBoss(ex, ey, isPos));
+                            let lb = new LaserBoss(ex, ey, isPos);
+            lb.maxHealth += this.wave * 2;
+            lb.health = lb.maxHealth;
+            this.enemies.push(lb);
+            if (this.vfx) this.vfx.addBossWarning(ex, ey, 3.0);
             }
         }
 
         if (!hasBoss) {
             this.enemySpawnTimer += dt;
-            const spawnInterval = Math.max(0.5, 3.0 - (this.wave * 0.15));
+            const spawnInterval = Math.max(0.4, 3.5 - (this.wave * 0.2));
 
             if (this.enemySpawnTimer > spawnInterval) {
                 this.enemySpawnTimer = 0;
@@ -1564,7 +1584,7 @@ class Game {
                 // Keep enemies away from edges when spawning
                 const ex = Math.random() * (this.width - 100) + 50;
                 const ey = Math.random() * (this.height - 100) + 50;
-                this.enemies.push(getRandomEnemy(ex, ey, isPos));
+                this.enemies.push(getRandomEnemy(ex, ey, isPos, this.wave));
             }
         }
 
@@ -1575,6 +1595,9 @@ class Game {
             const p = this.particles[i];
             p.update(dt);
             if (p.life <= 0) this.particles.splice(i, 1);
+        }
+        if (this.particles.length > 300) {
+            this.particles.splice(0, this.particles.length - 300);
         }
     }
 
@@ -1870,6 +1893,21 @@ class Game {
         }
 
         if (this.uiManager && this.state === 'PLAYING') {
+            if (this.showTutorial && this.wave === 1) {
+                this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                this.ctx.fillRect(this.width/2 - 250, 100, 500, 150);
+                this.ctx.strokeStyle = window.COLORS.pos;
+                this.ctx.strokeRect(this.width/2 - 250, 100, 500, 150);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '20px monospace';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('TUTORIAL:', this.width/2, 130);
+                this.ctx.font = '16px monospace';
+                this.ctx.fillStyle = '#ccc';
+                this.ctx.fillText('1. Press Space/Click to Switch Polarity', this.width/2, 160);
+                this.ctx.fillText('2. Match Polarity to Attract to Nodes', this.width/2, 190);
+                this.ctx.fillText('3. Match Enemy Polarity to Damage Them', this.width/2, 220);
+            }
             this.uiManager.draw(this.ctx);
         }
 
