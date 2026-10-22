@@ -174,6 +174,8 @@ class Game {
         };
         this.enemies = [];
         this.projectiles = [];
+        this.enemyProjectiles = [];
+        this.enemyHazards = [];
         this.enemySpawnTimer = 0;
         this.particles = [];
         this.gravityWell = {
@@ -191,6 +193,7 @@ class Game {
     }
 
     spawnParticle(x, y, color, speed, angle) {
+        angle = angle !== undefined ? angle : Math.random() * Math.PI * 2;
         this.particles.push({
             x: x,
             y: y,
@@ -210,14 +213,22 @@ class Game {
     spawnEnemy() {
         const angle = Math.random() * Math.PI * 2;
         const dist = this.arena.radius - 20;
-        this.enemies.push({
-            x: this.targetWidth/2 + Math.cos(angle) * dist,
-            y: this.targetHeight/2 + Math.sin(angle) * dist,
-            radius: 10,
-            vx: -Math.cos(angle) * 50,
-            vy: -Math.sin(angle) * 50,
-            hp: 1
-        });
+        const x = this.targetWidth/2 + Math.cos(angle) * dist;
+        const y = this.targetHeight/2 + Math.sin(angle) * dist;
+
+        let enemyType = Math.floor(Math.random() * 5);
+        let e;
+        switch(enemyType) {
+            case 0: e = new SwarmerEnemy(x, y); break;
+            case 1: e = new SniperEnemy(x, y); break;
+            case 2: e = new BruiserEnemy(x, y); break;
+            case 3: e = new SplitterEnemy(x, y); break;
+            case 4: e = new HazardEnemy(x, y); break;
+        }
+
+        e.vx = -Math.cos(angle) * e.speed;
+        e.vy = -Math.sin(angle) * e.speed;
+        this.enemies.push(e);
     }
 
     update(dt) {
@@ -325,30 +336,47 @@ class Game {
                 this.enemySpawnTimer = 1.5;
             }
 
+            // Update enemy projectiles
+            for(let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
+                let p = this.enemyProjectiles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.life -= dt;
+
+                if(Math.hypot(this.player.x - p.x, this.player.y - p.y) < this.player.radius + p.radius) {
+                    if (this.player.invulnerabilityTime <= 0) {
+                        this.gameOver();
+                    }
+                    this.enemyProjectiles.splice(i, 1);
+                    continue;
+                }
+
+                if(p.life <= 0) {
+                    this.enemyProjectiles.splice(i, 1);
+                }
+            }
+
+            // Update enemy hazards
+            for(let i = this.enemyHazards.length - 1; i >= 0; i--) {
+                let h = this.enemyHazards[i];
+                h.life -= dt;
+
+                if(Math.hypot(this.player.x - h.x, this.player.y - h.y) < this.player.radius + h.radius) {
+                    if (this.player.invulnerabilityTime <= 0) {
+                        this.gameOver();
+                    }
+                }
+
+                if(h.life <= 0) {
+                    this.enemyHazards.splice(i, 1);
+                }
+            }
+
             // Update enemies
             for(let i = this.enemies.length - 1; i >= 0; i--) {
                 let e = this.enemies[i];
 
-                // Gravity on enemies
-                const edx = this.gravityWell.x - e.x;
-                const edy = this.gravityWell.y - e.y;
-                const edist = Math.max(10, Math.hypot(edx, edy));
-                const egForce = this.gravityWell.strength / edist;
-
-                e.vx += (edx / edist) * egForce * dt;
-                e.vy += (edy / edist) * egForce * dt;
-
-                // Move towards player slightly
-                const toPx = this.player.x - e.x;
-                const toPy = this.player.y - e.y;
-                const toPdist = Math.hypot(toPx, toPy);
-                if(toPdist > 0) {
-                    e.vx += (toPx / toPdist) * 20 * dt;
-                    e.vy += (toPy / toPdist) * 20 * dt;
-                }
-
-                e.x += e.vx * dt;
-                e.y += e.vy * dt;
+                e.update(dt, this);
 
                 // Collision with arena
                 const epx = e.x - this.targetWidth/2;
@@ -370,12 +398,13 @@ class Game {
                     if(Math.hypot(p.x - e.x, p.y - e.y) < e.radius + 5) {
                         e.hp--;
                         this.projectiles.splice(j, 1);
-                        this.arena.radius = Math.min(this.arena.maxRadius, this.arena.radius + 5); // expand arena on kill
+                        this.arena.radius = Math.min(this.arena.maxRadius, this.arena.radius + 5); // expand arena on hit
                         break;
                     }
                 }
 
                 if(e.hp <= 0) {
+                    e.onDeath(this);
                     this.score += 100;
                     this.enemies.splice(i, 1);
                 }
@@ -474,12 +503,25 @@ class Game {
                 this.ctx.fill();
             }
 
-            // Draw Enemies
-            this.ctx.fillStyle = '#f05';
-            for(let e of this.enemies) {
+            // Draw Enemy Hazards
+            for(let h of this.enemyHazards) {
+                this.ctx.fillStyle = `rgba(255, 85, 0, ${0.2 + (h.life / h.maxLife) * 0.3})`;
                 this.ctx.beginPath();
-                this.ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
+                this.ctx.arc(h.x, h.y, h.radius, 0, Math.PI*2);
                 this.ctx.fill();
+            }
+
+            // Draw Enemy Projectiles
+            this.ctx.fillStyle = '#0ff';
+            for(let p of this.enemyProjectiles) {
+                this.ctx.beginPath();
+                this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2);
+                this.ctx.fill();
+            }
+
+            // Draw Enemies
+            for(let e of this.enemies) {
+                e.draw(this.ctx, this);
             }
 
             // Draw UI
