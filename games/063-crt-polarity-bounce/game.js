@@ -321,7 +321,7 @@ class InputManager {
     }
 }
 
-const COLORS = {
+window.COLORS = {
     bg: '#050510',
     pos: '#e382d8', // Positive polarity
     neg: '#00ffff', // Negative polarity
@@ -369,7 +369,7 @@ class GridSystem {
         this.height = h;
     }
     draw(ctx, time) {
-        ctx.strokeStyle = COLORS.grid;
+        ctx.strokeStyle = window.COLORS.grid;
         ctx.lineWidth = 1;
         ctx.beginPath();
         for (let x = (time * 10) % this.cellSize; x < this.width; x += this.cellSize) {
@@ -399,7 +399,7 @@ class MagneticNode {
         this.rotation += dt * 0.5;
     }
     draw(ctx) {
-        const color = this.isPos ? COLORS.pos : COLORS.neg;
+        const color = this.isPos ? window.COLORS.pos : window.COLORS.neg;
 
         ctx.save();
         ctx.translate(this.x, this.y);
@@ -466,7 +466,7 @@ class BaseEnemy {
         if (this.y > h - this.radius) { this.y = h - this.radius; this.vy *= -1; }
     }
     draw(ctx) {
-        const color = (this.flashTimer > 0) ? '#ffffff' : (this.isPos ? COLORS.pos : COLORS.neg);
+        const color = (this.flashTimer > 0) ? '#ffffff' : (this.isPos ? window.COLORS.pos : window.COLORS.neg);
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.save();
@@ -516,7 +516,7 @@ class BaseBoss extends BaseEnemy {
         ctx.strokeRect(x, y, barWidth, barHeight);
 
         const fillWidth = barWidth * (Math.max(0, this.health) / this.maxHealth);
-        ctx.fillStyle = this.isPos ? COLORS.pos : COLORS.neg;
+        ctx.fillStyle = this.isPos ? window.COLORS.pos : window.COLORS.neg;
         ctx.fillRect(x + 2, y + 2, fillWidth - 4, barHeight - 4);
 
         ctx.fillStyle = '#fff';
@@ -616,7 +616,7 @@ class OrbitalBoss extends BaseBoss {
             ctx.save();
             ctx.rotate(o.angle);
             ctx.translate(o.dist, 0);
-            ctx.fillStyle = o.isPos ? COLORS.pos : COLORS.neg;
+            ctx.fillStyle = o.isPos ? window.COLORS.pos : window.COLORS.neg;
             ctx.beginPath();
             ctx.arc(0, 0, 10, 0, Math.PI*2);
             ctx.fill();
@@ -709,7 +709,7 @@ class LaserBoss extends BaseBoss {
             ctx.moveTo(this.radius, 0);
             ctx.lineTo(2000, 0);
             ctx.lineWidth = l.duration > 1.0 ? 6 : (l.duration * 6);
-            ctx.strokeStyle = this.isPos ? COLORS.pos : COLORS.neg;
+            ctx.strokeStyle = this.isPos ? window.COLORS.pos : window.COLORS.neg;
             ctx.stroke();
             ctx.restore();
         }
@@ -823,7 +823,7 @@ class SniperEnemy extends BaseEnemy {
             ctx.beginPath();
             ctx.moveTo(this.radius, 0);
             ctx.lineTo(800, 0);
-            ctx.strokeStyle = this.isPos ? COLORS.pos : COLORS.neg;
+            ctx.strokeStyle = this.isPos ? window.COLORS.pos : window.COLORS.neg;
             ctx.setLineDash([5, 5]);
             ctx.stroke();
             ctx.restore();
@@ -1011,7 +1011,7 @@ class EnemyProjectile {
         this.life -= dt;
     }
     draw(ctx) {
-        ctx.fillStyle = this.isPos ? COLORS.pos : COLORS.neg;
+        ctx.fillStyle = this.isPos ? window.COLORS.pos : window.COLORS.neg;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fill();
@@ -1208,12 +1208,12 @@ class Player {
         if (this.trail.length > (this.isDashing ? 25 : 15)) this.trail.shift();
 
         if (this.isDashing && window.game) {
-            window.game.spawnParticles(this.x, this.y, this.isPos ? COLORS.pos : COLORS.neg, 1);
+            window.game.spawnParticles(this.x, this.y, this.isPos ? window.COLORS.pos : window.COLORS.neg, 1);
         }
     }
 
     draw(ctx) {
-        const color = this.isPos ? COLORS.pos : COLORS.neg;
+        const color = this.isPos ? window.COLORS.pos : window.COLORS.neg;
 
         // Invulnerability Blink
         if (this.isInvulnerable) {
@@ -1330,11 +1330,14 @@ class Game {
         this.particles = [];
 
         this.vfx = new VFXManager(this);
+        this.uiManager = new UIManager(this);
         this.comboManager = new ComboManager(this);
         this.upgradeManager = new UpgradeManager(this);
         this.pickups = [];
 
         this.score = 0;
+        this.waveClearedNoDamageLastRound = false;
+        this.playerTookDamage = false;
         this.health = 3;
         this.wave = 1;
         this.scoreForNextWave = 100;
@@ -1394,11 +1397,14 @@ class Game {
         this.enemyProjectiles = [];
         this.particles = [];
         this.vfx = new VFXManager(this);
+        this.uiManager = new UIManager(this);
         this.comboManager = new ComboManager(this);
         this.upgradeManager = new UpgradeManager(this);
         this.pickups = [];
 
         this.score = 0;
+        this.waveClearedNoDamageLastRound = false;
+        this.playerTookDamage = false;
         this.health = 3;
         this.wave = 1;
         this.scoreForNextWave = 100;
@@ -1406,12 +1412,14 @@ class Game {
     }
 
     spawnParticles(x, y, color, count) {
+        if (this.saveManager.data.options.particles === 'Low') count = Math.ceil(count / 3);
         for(let i = 0; i < count; i++) {
             this.particles.push(new Particle(x, y, color));
         }
     }
 
     spawnDirectionalParticles(x, y, color, count, dx, dy, spread) {
+        if (this.saveManager.data.options.particles === 'Low') count = Math.ceil(count / 3);
         for(let i = 0; i < count; i++) {
             let p = new Particle(x, y, color);
             const baseAngle = Math.atan2(dy, dx);
@@ -1426,6 +1434,11 @@ class Game {
     handleInput() {
         const spaceDown = this.input.isDown('Space');
         const pointerJustDown = this.input.consumeJustDown();
+        if (pointerJustDown) {
+            if (this.uiManager && this.uiManager.handleInput(this.input.pointer.x, this.input.pointer.y)) {
+                return;
+            }
+        }
         const rightJustDown = this.input.consumeRightJustDown();
         const shiftDown = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight');
         const clickedBack = pointerJustDown && this.pointerInBackToArcade();
@@ -1583,7 +1596,7 @@ class Game {
                     // Match polarity - absorb projectile for small score
                     this.score += 5;
                     this.sound.playShoot();
-                    this.spawnParticles(p.x, p.y, p.isPos ? COLORS.particlePos : COLORS.particleNeg, 5);
+                    this.spawnParticles(p.x, p.y, p.isPos ? window.COLORS.particlePos : window.COLORS.particleNeg, 5);
                 } else {
                     // Opposite polarity - damage
                     if (!this.player.isInvulnerable) {
@@ -1593,6 +1606,8 @@ class Game {
                             this.player.triggerInvulnerability();
                         } else {
                             this.health--;
+            this.playerTookDamage = true;
+            this.waveClearedNoDamageLastRound = false;
                         }
                         this.player.triggerRecoil(dx/Math.hypot(dx,dy), dy/Math.hypot(dx,dy), 500, true);
                         if (this.health <= 0) {
@@ -1657,7 +1672,7 @@ class Game {
                     else if (r < 0.8) this.pickups.push(new ComboPickup(e.x, e.y));
                     else this.pickups.push(new ShieldPickup(e.x, e.y));
                 }
-                this.spawnDirectionalParticles(e.x, e.y, e.isPos ? COLORS.particlePos : COLORS.particleNeg, 15 + e.maxHealth * 5, dx, dy, Math.PI / 2);
+                this.spawnDirectionalParticles(e.x, e.y, e.isPos ? window.COLORS.particlePos : window.COLORS.particleNeg, 15 + e.maxHealth * 5, dx, dy, Math.PI / 2);
 
                 if (e.type === 'splitter') {
                     for (let j = 0; j < 3; j++) {
@@ -1671,7 +1686,7 @@ class Game {
                 this.enemies.splice(index, 1);
             } else {
                 this.sound.playShoot();
-                this.spawnParticles(e.x, e.y, e.isPos ? COLORS.particlePos : COLORS.particleNeg, 5);
+                this.spawnParticles(e.x, e.y, e.isPos ? window.COLORS.particlePos : window.COLORS.particleNeg, 5);
                 e.vx = nx * 200;
                 e.vy = ny * 200;
             }
@@ -1683,7 +1698,9 @@ class Game {
 
             // Advance waves based on threshold
             if (this.score >= this.scoreForNextWave) {
-                this.wave++;
+                if (!this.playerTookDamage) this.waveClearedNoDamageLastRound = true;
+        this.playerTookDamage = false;
+        this.wave++;
                 this.scoreForNextWave += 100 * this.wave; // Increasing threshold
                 this.spawnParticles(this.width/2, this.height/2, '#ffffff', 50);
 
@@ -1705,6 +1722,8 @@ class Game {
                 this.player.triggerInvulnerability();
             } else {
                 this.health--;
+            this.playerTookDamage = true;
+            this.waveClearedNoDamageLastRound = false;
             }
             this.sound.playHit();
             this.spawnParticles(this.player.x, this.player.y, '#ff0000', 30);
@@ -1742,7 +1761,7 @@ class Game {
     }
 
     drawBackToArcade() {
-        this.ctx.fillStyle = COLORS.text;
+        this.ctx.fillStyle = window.COLORS.text;
         this.ctx.font = '20px monospace';
         this.ctx.textAlign = 'left';
         this.ctx.fillText('< Back to Arcade', 20, 30);
@@ -1760,7 +1779,7 @@ class Game {
             boss.drawHealthBar(this.ctx, this.width);
         }
 
-        this.ctx.fillStyle = COLORS.text;
+        this.ctx.fillStyle = window.COLORS.text;
         this.ctx.font = '20px monospace';
         this.ctx.textAlign = 'left';
         this.ctx.fillText(`Score: ${this.score}`, 10, 30);
@@ -1775,7 +1794,7 @@ class Game {
 
         // Top-center polarity status
         this.ctx.textAlign = 'center';
-        this.ctx.fillStyle = this.player.isPos ? COLORS.pos : COLORS.neg;
+        this.ctx.fillStyle = this.player.isPos ? window.COLORS.pos : window.COLORS.neg;
         this.ctx.fillText(`[ POLARITY: ${this.player.isPos ? 'POSITIVE' : 'NEGATIVE'} ]`, this.width / 2, 30);
     }
 
@@ -1790,7 +1809,7 @@ class Game {
         this.ctx.save();
         if (this.vfx) this.vfx.applyShake(this.ctx);
 
-        this.ctx.fillStyle = COLORS.bg;
+        this.ctx.fillStyle = window.COLORS.bg;
         this.ctx.fillRect(0, 0, this.width, this.height);
 
         this.world.drawBackground(this.ctx, this.totalTime, this.grid);
@@ -1812,7 +1831,7 @@ class Game {
         }
 
         if (this.state === 'TITLE') {
-            this.ctx.fillStyle = COLORS.text;
+            this.ctx.fillStyle = window.COLORS.text;
             this.ctx.font = '40px monospace';
             this.ctx.textAlign = 'center';
             this.ctx.fillText('CRT Polarity Bounce', this.width / 2, this.height / 2 - 60);
@@ -1826,7 +1845,7 @@ class Game {
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(0,0,0,0.6)';
             this.ctx.fillRect(0, 0, this.width, this.height);
-            this.ctx.fillStyle = COLORS.text;
+            this.ctx.fillStyle = window.COLORS.text;
             this.ctx.font = '50px monospace';
             this.ctx.textAlign = 'center';
             this.ctx.fillText('PAUSED', this.width / 2, this.height / 2);
@@ -1836,7 +1855,7 @@ class Game {
             this.ctx.fillStyle = 'rgba(0,0,0,0.8)';
             this.ctx.fillRect(0, 0, this.width, this.height);
 
-            this.ctx.fillStyle = COLORS.text;
+            this.ctx.fillStyle = window.COLORS.text;
             this.ctx.font = '50px monospace';
             this.ctx.textAlign = 'center';
             this.ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 30);
@@ -1850,6 +1869,14 @@ class Game {
             this.vfx.draw(this.ctx);
         }
 
+        if (this.uiManager && this.state === 'PLAYING') {
+            this.uiManager.draw(this.ctx);
+        }
+
+        if (this.state !== 'PLAYING') {
+            this.uiManager.draw(this.ctx);
+        }
+
         this.drawScanlines();
         this.ctx.restore();
     }
@@ -1859,6 +1886,7 @@ class Game {
         this.lastTime = time;
 
         if (this.vfx) this.vfx.update(rawDt);
+        if (this.uiManager) this.uiManager.update(rawDt);
 
         let dt = rawDt;
         if (this.vfx && this.vfx.hitStopDuration > 0) {

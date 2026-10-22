@@ -36,6 +36,7 @@ class VFXManager {
     }
 
     addScreenShake(intensity, duration) {
+        intensity *= (this.game && this.game.saveManager && this.game.saveManager.data.options.screenShake !== undefined ? this.game.saveManager.data.options.screenShake : 1.0);
         this.shakeIntensity = intensity;
         this.shakeDuration = duration;
     }
