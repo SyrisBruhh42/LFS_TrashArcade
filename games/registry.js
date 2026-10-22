@@ -829,5 +829,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#e382d8",
     "phase": "2",
     "path": "./games/063-crt-polarity-bounce/index.html"
+  },
+  {
+    "id": "064",
+    "slug": "064-candy-time-heist",
+    "title": "Candy Time Heist",
+    "genre": "Stealth/Line-of-Sight Heist",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Candy Factory Conveyor Line",
+    "description": "Steal candies from the factory conveyor belt while dodging guards. Stay completely still to activate time dilation.",
+    "controls": "WASD/Arrows/Mouse/Touch to move. Stop moving to dilate time.",
+    "createdAt": "2023-10-25",
+    "accentColor": "#f0c97d",
+    "phase": "1",
+    "path": "./games/064-candy-time-heist/index.html"
   }
 ];
