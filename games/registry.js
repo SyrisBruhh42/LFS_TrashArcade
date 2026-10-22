@@ -883,7 +883,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Mouse/Touch: Aim the tether angle. Hold Left Click / Touch: Extend the tether length.",
     "createdAt": "2026-10-25",
     "accentColor": "#468aa9",
-    "phase": "7",
+    "phase": "8",
     "path": "./games/067-candy-tether-defense/index.html"
   },
   {
