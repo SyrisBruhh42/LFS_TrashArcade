@@ -455,12 +455,268 @@ class Player extends Entity {
 
 }
 
+
 class Enemy extends Entity {
-  constructor(x, y) {
-    super(x, y, '#e74c3c');
+  constructor(x, y, color = '#e74c3c') {
+    super(x, y, color);
     this.hp = 1;
+    this.type = 'Enemy';
+    this.telegraph = false; // generic telegraph
+  }
+
+  takeTurn(engine) {
+    // Default AI: move towards player
+    let dx = engine.player.x - this.x;
+    let dy = engine.player.y - this.y;
+
+    let stepX = 0, stepY = 0;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      stepX = dx > 0 ? 1 : -1;
+    } else if (Math.abs(dy) > 0) {
+      stepY = dy > 0 ? 1 : -1;
+    }
+
+    const nx = this.x + stepX;
+    const ny = this.y + stepY;
+
+    if (!engine.isSolid(nx, ny) && !engine.getEnemyAt(nx, ny) && (nx !== engine.player.x || ny !== engine.player.y)) {
+      this.moveTo(nx, ny);
+    }
+  }
+
+  draw(ctx) {
+    // Override draw for generic fallback
+    super.draw(ctx);
   }
 }
+
+class Swarmer extends Enemy {
+  constructor(x, y) {
+    super(x, y, '#e74c3c');
+    this.type = 'Swarmer';
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -GRID_SIZE/2 + 4);
+    ctx.lineTo(GRID_SIZE/2 - 4, 0);
+    ctx.lineTo(0, GRID_SIZE/2 - 4);
+    ctx.lineTo(-GRID_SIZE/2 + 4, 0);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+class ShieldBruiser extends Enemy {
+  constructor(x, y) {
+    super(x, y, '#9b59b6');
+    this.hp = 2;
+    this.type = 'ShieldBruiser';
+    this.turnCounter = 0;
+  }
+
+  takeTurn(engine) {
+    this.turnCounter++;
+    if (this.turnCounter % 2 === 0) {
+      // Moves every 2 turns
+      super.takeTurn(engine);
+    }
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = this.color;
+    ctx.fillRect(-GRID_SIZE/2 + 8, -GRID_SIZE/2 + 8, GRID_SIZE - 16, GRID_SIZE - 16);
+    if (this.hp > 1) {
+      ctx.strokeStyle = '#2980b9';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.rect(-GRID_SIZE/2 + 4, -GRID_SIZE/2 + 4, GRID_SIZE - 8, GRID_SIZE - 8);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+class RangedSniper extends Enemy {
+  constructor(x, y) {
+    super(x, y, '#f1c40f');
+    this.type = 'RangedSniper';
+    this.telegraphing = false;
+    this.aimX = 0;
+    this.aimY = 0;
+  }
+
+  takeTurn(engine) {
+    if (this.telegraphing) {
+      // Fire instantly
+      this.telegraphing = false;
+      let currX = this.x + this.aimX;
+      let currY = this.y + this.aimY;
+      while (!engine.isSolid(currX, currY)) {
+        engine.spawnParticles(currX, currY, '#f1c40f'); // Draw laser path via particles
+        if (currX === engine.player.x && currY === engine.player.y && engine.player.invulnTimer <= 0) {
+           engine.spawnParticles(engine.player.x, engine.player.y, engine.player.color);
+           engine.gameOver();
+        }
+        currX += this.aimX;
+        currY += this.aimY;
+      }
+    } else {
+      // Check if aligned with player
+      let dx = engine.player.x - this.x;
+      let dy = engine.player.y - this.y;
+      if ((dx === 0 || dy === 0) && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
+        // Can see player, start telegraphing
+        this.telegraphing = true;
+        this.aimX = dx === 0 ? 0 : Math.sign(dx);
+        this.aimY = dy === 0 ? 0 : Math.sign(dy);
+      } else {
+        // Move towards player, or if too close move away?
+        // simple: just use super
+        super.takeTurn(engine);
+      }
+    }
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -GRID_SIZE/2 + 6);
+    ctx.lineTo(GRID_SIZE/2 - 6, GRID_SIZE/2 - 6);
+    ctx.lineTo(-GRID_SIZE/2 + 6, GRID_SIZE/2 - 6);
+    ctx.fill();
+
+    // Draw telegraph line
+    if (this.telegraphing) {
+       ctx.strokeStyle = 'rgba(241, 196, 15, 0.5)';
+       ctx.lineWidth = 2;
+       ctx.beginPath();
+       ctx.moveTo(0, 0);
+       ctx.lineTo(this.aimX * GRID_SIZE * 15, this.aimY * GRID_SIZE * 15);
+       ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+class Splitter extends Enemy {
+  constructor(x, y) {
+    super(x, y, '#2ecc71');
+    this.type = 'Splitter';
+  }
+
+  onDeath(engine) {
+    // spawn 2 swarmers if spaces available
+    const dirs = [{dx: 1, dy: 0}, {dx: -1, dy: 0}, {dx: 0, dy: 1}, {dx: 0, dy: -1}];
+    let spawned = 0;
+    for(let d of dirs) {
+      if(spawned >= 2) break;
+      const nx = this.x + d.dx;
+      const ny = this.y + d.dy;
+      if (!engine.isSolid(nx, ny) && !engine.getEnemyAt(nx, ny) && (nx !== engine.player.x || ny !== engine.player.y)) {
+         engine.enemies.push(new Swarmer(nx, ny));
+         spawned++;
+      }
+    }
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(-4, -4, 6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(4, 4, 6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+class AreaDenialHazard extends Enemy {
+  constructor(x, y) {
+    super(x, y, '#e67e22');
+    this.type = 'AreaDenialHazard';
+  }
+
+  takeTurn(engine) {
+    let oldX = this.x;
+    let oldY = this.y;
+    // Move away from player if close, else random
+    let dx = this.x - engine.player.x;
+    let dy = this.y - engine.player.y;
+    let stepX = 0, stepY = 0;
+    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        stepX = dx > 0 ? 1 : -1;
+      } else {
+        stepY = dy > 0 ? 1 : -1;
+      }
+    } else {
+       // Random move
+       const dirs = [{dx: 1, dy: 0}, {dx: -1, dy: 0}, {dx: 0, dy: 1}, {dx: 0, dy: -1}];
+       let d = dirs[Math.floor(Math.random() * dirs.length)];
+       stepX = d.dx;
+       stepY = d.dy;
+    }
+
+    const nx = this.x + stepX;
+    const ny = this.y + stepY;
+    if (!engine.isSolid(nx, ny) && !engine.getEnemyAt(nx, ny) && (nx !== engine.player.x || ny !== engine.player.y)) {
+      this.moveTo(nx, ny);
+      // Drop hazard pool where it was
+      engine.acidPools = engine.acidPools || [];
+      engine.acidPools.push({x: oldX, y: oldY, turns: 3});
+    }
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    const sides = 8;
+    for(let i=0; i<sides; i++) {
+       const ang = (i / sides) * Math.PI * 2;
+       const px = Math.cos(ang) * (GRID_SIZE/2 - 4);
+       const py = Math.sin(ang) * (GRID_SIZE/2 - 4);
+       if (i === 0) ctx.moveTo(px, py);
+       else ctx.lineTo(px, py);
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 
 const Engine = {
   state: 'TITLE',
@@ -548,6 +804,7 @@ const Engine = {
     this.dashTrails = [];
     this.conveyors = [];
     this.lasers = [];
+    this.acidPools = [];
 
     // Border walls
     for(let i=0; i<COLS; i++) {
@@ -559,8 +816,11 @@ const Engine = {
       this.walls.push({x: COLS-1, y: i});
     }
 
+
     // Spawn enemies
     const numEnemies = 2 + this.wave;
+    const enemyTypes = [Swarmer, ShieldBruiser, RangedSniper, Splitter, AreaDenialHazard];
+
     for(let i=0; i<numEnemies; i++) {
       let ex, ey;
       do {
@@ -570,8 +830,15 @@ const Engine = {
         this.isSolid(ex, ey) ||
         (Math.abs(ex - this.player.x) < 3 && Math.abs(ey - this.player.y) < 3)
       );
-      this.enemies.push(new Enemy(ex, ey));
+
+      // Pick random enemy type
+      let EType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+      // First wave mostly swarmers
+      if (this.wave === 1) EType = Swarmer;
+
+      this.enemies.push(new EType(ex, ey));
     }
+
 
     // Spawn Hazards
     const numHazards = Math.min(2 + Math.floor(this.wave / 2), 5);
@@ -805,6 +1072,20 @@ const Engine = {
       }
     }
 
+    // Process acid pools
+    if (this.acidPools) {
+       for (let i = this.acidPools.length - 1; i >= 0; i--) {
+          let p = this.acidPools[i];
+          if (this.player.x === p.x && this.player.y === p.y && this.player.invulnTimer <= 0) {
+             this.spawnParticles(this.player.x, this.player.y, this.player.color);
+             this.gameOver();
+             return;
+          }
+          p.turns--;
+          if (p.turns <= 0) this.acidPools.splice(i, 1);
+       }
+    }
+
     // Lasers fire
     for (let l of this.lasers) {
       l.turnCounter++;
@@ -847,24 +1128,9 @@ const Engine = {
     const echoPos = this.player.getEchoPos();
 
     this.enemies.forEach(e => {
-      // Simple AI: Move towards player or avoid echo
-      let dx = this.player.x - e.x;
-      let dy = this.player.y - e.y;
-
-      let stepX = 0, stepY = 0;
-
-      if (Math.abs(dx) > Math.abs(dy)) {
-        stepX = dx > 0 ? 1 : -1;
-      } else if (Math.abs(dy) > 0) {
-        stepY = dy > 0 ? 1 : -1;
-      }
-
-      const nx = e.x + stepX;
-      const ny = e.y + stepY;
-
-      if (!this.isSolid(nx, ny) && !this.getEnemyAt(nx, ny) && (nx !== this.player.x || ny !== this.player.y)) {
-        e.moveTo(nx, ny);
-      }
+       if (e.takeTurn) {
+         e.takeTurn(this);
+       }
     });
 
     this.turnState = 'ANIMATING';
@@ -887,26 +1153,33 @@ const Engine = {
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
-      // If enemy on echo, it dies
+      let eHit = false;
+      // If enemy on echo, it takes damage
       if (echoPos && e.x === echoPos.x && e.y === echoPos.y) {
-        this.spawnParticles(e.x, e.y, e.color);
-        SoundEngine.playDestroy();
-        this.enemies.splice(i, 1);
-        this.score += 100;
-        this.updateHUD();
+         eHit = true;
       }
       // If enemy on player
       else if (e.x === this.player.x && e.y === this.player.y) {
         if (this.player.invulnTimer > 0) {
-          // Invulnerable dash hit
-          this.spawnParticles(e.x, e.y, e.color);
-          SoundEngine.playDestroy();
-          this.enemies.splice(i, 1);
-          this.score += 100;
-          this.updateHUD();
+          eHit = true;
         } else {
           playerHit = true;
         }
+      }
+
+      if (eHit) {
+        e.hp--;
+        this.spawnParticles(e.x, e.y, e.color);
+        SoundEngine.playDestroy();
+        if (e.hp <= 0) {
+           if (e.onDeath) e.onDeath(this);
+           this.enemies.splice(i, 1);
+           this.score += 100;
+        } else {
+           // Push back slightly? Just take damage.
+           this.score += 10;
+        }
+        this.updateHUD();
       }
     }
 
@@ -1015,6 +1288,14 @@ const Engine = {
     }
     for(let y=0; y<this.canvas.height; y+=GRID_SIZE) {
       this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.canvas.width, y); this.ctx.stroke();
+    }
+
+    // Acid Pools
+    if (this.acidPools) {
+      for (let p of this.acidPools) {
+        this.ctx.fillStyle = 'rgba(230, 126, 34, 0.5)';
+        this.ctx.fillRect(p.x * GRID_SIZE, p.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+      }
     }
 
     // Hazards
