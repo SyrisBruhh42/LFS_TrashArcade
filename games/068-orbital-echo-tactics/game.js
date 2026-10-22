@@ -90,6 +90,7 @@ const Input = {
     mapTouch('btn-left', 'ArrowLeft');
     mapTouch('btn-right', 'ArrowRight');
     mapTouch('btn-wait', 'Space');
+    mapTouch('btn-dash', 'ShiftLeft');
   },
   isJustPressed: function(code) {
     if (this.justPressed[code]) {
@@ -152,11 +153,51 @@ class Entity {
   }
 }
 
+
+class DashTrail {
+  constructor(x, y, dx, dy, color) {
+    this.x = x;
+    this.y = y;
+    this.dx = dx;
+    this.dy = dy;
+    this.color = color;
+    this.life = 0.5;
+  }
+  update(dt) {
+    this.life -= dt;
+  }
+  draw(ctx) {
+    if (this.life <= 0) return;
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = this.life * 2;
+    // draw a streak
+    ctx.beginPath();
+    ctx.moveTo(this.x * GRID_SIZE + GRID_SIZE/2, this.y * GRID_SIZE + GRID_SIZE/2);
+    ctx.lineTo(this.x * GRID_SIZE + GRID_SIZE/2 - this.dx * GRID_SIZE * (1-this.life*2), this.y * GRID_SIZE + GRID_SIZE/2 - this.dy * GRID_SIZE * (1-this.life*2));
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = this.color;
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
+  }
+}
+
 class Player extends Entity {
   constructor(x, y) {
     super(x, y, '#cf7cd4');
     this.history = []; // Array of {x, y}
     this.historyLength = 4; // How far back the echo is
+
+    // Phase 2 features
+    this.dashCooldown = 0;
+    this.dashMaxCooldown = 3; // turns
+    this.overdriveActive = false;
+    this.facingX = 1;
+    this.facingY = 0;
+
+    // Animations
+    this.recoilTimer = 0;
+    this.thrustTimer = 0;
+    this.invulnTimer = 0;
   }
 
   recordMove(nx, ny) {
@@ -172,6 +213,75 @@ class Player extends Entity {
     }
     return null;
   }
+
+  update(dt) {
+    super.update(dt);
+    if (this.recoilTimer > 0) this.recoilTimer -= dt;
+    if (this.thrustTimer > 0) this.thrustTimer -= dt;
+    if (this.invulnTimer > 0) this.invulnTimer -= dt;
+  }
+
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cx = rx + GRID_SIZE / 2;
+    const cy = ry + GRID_SIZE / 2;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // Recoil shake
+    if (this.recoilTimer > 0) {
+      const shakeAmt = this.recoilTimer * 20;
+      ctx.translate((Math.random()-0.5)*shakeAmt, (Math.random()-0.5)*shakeAmt);
+    }
+
+    // Blink if invuln
+    if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 20) % 2 === 0) {
+      ctx.globalAlpha = 0.5;
+    }
+
+    // Rotate to facing
+    const angle = Math.atan2(this.facingY, this.facingX);
+    ctx.rotate(angle);
+
+    // Thruster trail
+    if (this.thrustTimer > 0) {
+      ctx.fillStyle = '#f39c12';
+      ctx.beginPath();
+      ctx.moveTo(-GRID_SIZE/2, -5);
+      ctx.lineTo(-GRID_SIZE/2 - 10 - Math.random()*10, 0);
+      ctx.lineTo(-GRID_SIZE/2, 5);
+      ctx.fill();
+    }
+
+    // Procedural multi-part sprite
+    ctx.fillStyle = this.color;
+
+    // Core body
+    ctx.fillRect(-GRID_SIZE/2 + 4, -GRID_SIZE/2 + 4, GRID_SIZE - 8, GRID_SIZE - 8);
+
+    // Nose cone / aim telegraph
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(GRID_SIZE/2 - 4, -8);
+    ctx.lineTo(GRID_SIZE/2 + 6, 0);
+    ctx.lineTo(GRID_SIZE/2 - 4, 8);
+    ctx.fill();
+
+    // Overdrive glow
+    if (this.overdriveActive) {
+      ctx.strokeStyle = '#3498db';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-GRID_SIZE/2 + 2, -GRID_SIZE/2 + 2, GRID_SIZE - 4, GRID_SIZE - 4);
+      ctx.beginPath();
+      ctx.arc(0, 0, GRID_SIZE/2 + 4, 0, Math.PI*2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
 }
 
 class Enemy extends Entity {
@@ -263,6 +373,7 @@ const Engine = {
     this.enemies = [];
     this.walls = [];
     this.particles = [];
+    this.dashTrails = [];
 
     // Border walls
     for(let i=0; i<COLS; i++) {
@@ -331,6 +442,19 @@ const Engine = {
   updateHUD: function() {
     document.getElementById('score-display').innerText = `Score: ${this.score}`;
     document.getElementById('wave-display').innerText = `Wave: ${this.wave}`;
+    const cdEl = document.getElementById('cooldown-display');
+    if (this.player && cdEl) {
+      if (this.player.overdriveActive) {
+        cdEl.innerText = 'Dash: ACTV';
+        cdEl.style.color = '#e74c3c';
+      } else if (this.player.dashCooldown > 0) {
+        cdEl.innerText = `Dash: ${this.player.dashCooldown}`;
+        cdEl.style.color = '#7f8c8d';
+      } else {
+        cdEl.innerText = 'Dash: RDY';
+        cdEl.style.color = '#3498db';
+      }
+    }
   },
 
   isSolid: function(x, y) {
@@ -359,35 +483,94 @@ const Engine = {
   processPlayerTurn: function() {
     let dx = 0; let dy = 0;
     let wait = false;
+    let dashToggle = false;
 
     if (Input.isJustPressed('ArrowUp') || Input.isJustPressed('KeyW')) dy = -1;
     else if (Input.isJustPressed('ArrowDown') || Input.isJustPressed('KeyS')) dy = 1;
     else if (Input.isJustPressed('ArrowLeft') || Input.isJustPressed('KeyA')) dx = -1;
     else if (Input.isJustPressed('ArrowRight') || Input.isJustPressed('KeyD')) dx = 1;
     else if (Input.isJustPressed('Space')) wait = true;
+    else if (Input.isJustPressed('ShiftLeft')) dashToggle = true;
+
+    if (dashToggle && this.player.dashCooldown <= 0) {
+      this.player.overdriveActive = !this.player.overdriveActive;
+      SoundEngine.playTone(600, 'sine', 0.1, 0.1);
+      this.updateHUD();
+      return; // Free action
+    }
 
     if (dx !== 0 || dy !== 0 || wait) {
-      const nx = this.player.x + dx;
-      const ny = this.player.y + dy;
+      if (dx !== 0 || dy !== 0) {
+         this.player.facingX = dx;
+         this.player.facingY = dy;
+      }
 
-      if (!this.isSolid(nx, ny) && !this.getEnemyAt(nx, ny)) {
+      if (this.player.overdriveActive && (dx !== 0 || dy !== 0)) {
+        // Execute Dash
+        this.player.overdriveActive = false;
+        this.player.dashCooldown = this.player.dashMaxCooldown;
+        this.player.thrustTimer = 0.3;
+        this.player.invulnTimer = 0.3;
+
+        let steps = 2;
+        let nx = this.player.x;
+        let ny = this.player.y;
+
+        for (let i = 0; i < steps; i++) {
+           let tx = nx + dx;
+           let ty = ny + dy;
+           if (!this.isSolid(tx, ty)) {
+             nx = tx;
+             ny = ty;
+
+             // Destroy enemies in path
+             const enemy = this.getEnemyAt(nx, ny);
+             if (enemy) {
+               this.spawnParticles(nx, ny, enemy.color);
+               SoundEngine.playDestroy();
+               this.enemies = this.enemies.filter(e => e !== enemy);
+               this.score += 100;
+             }
+           } else {
+             this.player.recoilTimer = 0.2;
+             SoundEngine.playHit();
+             break;
+           }
+        }
+
         this.player.moveTo(nx, ny);
         this.player.recordMove(nx, ny);
-        SoundEngine.playMove();
+        this.dashTrails.push(new DashTrail(this.player.x, this.player.y, dx, dy, '#3498db'));
+        SoundEngine.playTone(800, 'square', 0.2, 0.1);
 
-        // Echo move sound slightly delayed/different pitch handled in update if needed,
-        // for now just play together
-        if(this.player.getEchoPos()) SoundEngine.playEchoMove();
-
-        this.turnState = 'ANIMATING';
-        this.animTimer = 0.15; // Match entity move timer
-      } else if (wait) {
-        this.player.recordMove(this.player.x, this.player.y);
-        SoundEngine.playMove();
         this.turnState = 'ANIMATING';
         this.animTimer = 0.15;
+        this.updateHUD();
+
       } else {
-        SoundEngine.playHit(); // bump wall
+        // Normal Move
+        const nx = this.player.x + dx;
+        const ny = this.player.y + dy;
+
+        if (!wait && !this.isSolid(nx, ny) && !this.getEnemyAt(nx, ny)) {
+          this.player.moveTo(nx, ny);
+          this.player.recordMove(nx, ny);
+          this.player.thrustTimer = 0.15;
+          SoundEngine.playMove();
+
+          if(this.player.getEchoPos()) SoundEngine.playEchoMove();
+
+          this.turnState = 'ANIMATING';
+          this.animTimer = 0.15;
+        } else if (wait) {
+          this.player.recordMove(this.player.x, this.player.y);
+          SoundEngine.playMove();
+          this.turnState = 'ANIMATING';
+          this.animTimer = 0.15;
+        } else {
+          this.player.recoilTimer = 0.15;
+          SoundEngine.playHit();
+        }
       }
     }
   },
@@ -423,6 +606,14 @@ const Engine = {
   resolveTurn: function() {
     const echoPos = this.player.getEchoPos();
 
+    // Decrease cooldown
+    if (this.turnPhase === 'PLAYER_DONE' || !this.turnPhase) {
+       if (this.player.dashCooldown > 0) {
+           this.player.dashCooldown--;
+           this.updateHUD();
+       }
+    }
+
     // Check collisions
     let playerHit = false;
 
@@ -436,9 +627,18 @@ const Engine = {
         this.score += 100;
         this.updateHUD();
       }
-      // If enemy on player, player dies
+      // If enemy on player
       else if (e.x === this.player.x && e.y === this.player.y) {
-        playerHit = true;
+        if (this.player.invulnTimer > 0) {
+          // Invulnerable dash hit
+          this.spawnParticles(e.x, e.y, e.color);
+          SoundEngine.playDestroy();
+          this.enemies.splice(i, 1);
+          this.score += 100;
+          this.updateHUD();
+        } else {
+          playerHit = true;
+        }
       }
     }
 
@@ -491,6 +691,10 @@ const Engine = {
       p.y += p.vy * dt;
       p.life -= dt;
       if (p.life <= 0) this.particles.splice(i, 1);
+    }
+    for (let i = this.dashTrails.length - 1; i >= 0; i--) {
+      this.dashTrails[i].update(dt);
+      if (this.dashTrails[i].life <= 0) this.dashTrails.splice(i, 1);
     }
 
     if (this.turnState === 'PLAYER_TURN') {
@@ -561,6 +765,7 @@ const Engine = {
       this.player.draw(this.ctx);
     }
     this.enemies.forEach(e => e.draw(this.ctx));
+    this.dashTrails.forEach(t => t.draw(this.ctx));
 
     // Particles
     this.particles.forEach(p => {
