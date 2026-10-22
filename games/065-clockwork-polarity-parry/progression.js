@@ -30,7 +30,7 @@ class UpgradeManager {
 
         // Apply instant effects
         if (upgradeId === 'max_hp') {
-            player.maxHp = Math.floor(player.maxHp * 1.25);
+            player.maxHp = Math.floor(player.maxHp * 1.35); // Buffed HP upgrade
             player.hp = player.maxHp;
         }
     }
@@ -236,5 +236,67 @@ class ComboManager {
         ctx.fillRect(width - 120, 40, 100, 10);
         ctx.fillStyle = '#dda';
         ctx.fillRect(width - 120, 40, 100 * this.comboMeter, 10);
+    }
+}
+
+
+class RunStats {
+    constructor() {
+        this.enemiesKilled = 0;
+        this.bossesDefeated = 0;
+        this.damageTaken = 0;
+        this.parriesPerformed = 0;
+        this.perfectParries = 0;
+        this.pickupsCollected = 0;
+        this.highestCombo = 0;
+        this.upgradesTaken = [];
+        this.runTime = 0;
+    }
+
+    update(dt) {
+        this.runTime += dt;
+    }
+
+    recordKill() {
+        this.enemiesKilled++;
+    }
+
+    recordBossKill() {
+        this.bossesDefeated++;
+    }
+
+    recordDamageTaken(amount) {
+        this.damageTaken += amount;
+    }
+
+    recordParry(isPerfect) {
+        this.parriesPerformed++;
+        if (isPerfect) {
+            this.perfectParries++;
+        }
+    }
+
+    recordPickup() {
+        this.pickupsCollected++;
+    }
+
+    updateCombo(currentCombo) {
+        if (currentCombo > this.highestCombo) {
+            this.highestCombo = currentCombo;
+        }
+    }
+
+    recordUpgrade(id) {
+        this.upgradesTaken.push(id);
+    }
+
+    getSummary() {
+        return {
+            time: Math.floor(this.runTime) + "s",
+            kills: this.enemiesKilled,
+            bosses: this.bossesDefeated,
+            parries: `${this.perfectParries}/${this.parriesPerformed} Perfect`,
+            highestCombo: this.highestCombo.toFixed(1) + "x"
+        };
     }
 }
