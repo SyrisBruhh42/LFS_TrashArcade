@@ -801,5 +801,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#61d2b5",
     "phase": "6",
     "path": "./games/061-jungle-overdrive-sacrifice/index.html"
+  },
+  {
+    "id": "062",
+    "slug": "062-cyber-drill-samurai",
+    "title": "Cyber Drill Samurai",
+    "genre": "Subterranean Drilling/Mining Roguelite",
+    "coreMechanic": "Risk/Reward Tether or Tail Growth",
+    "setting": "Cyber Samurai Dojo",
+    "description": "Drill through the cyber-dojo underworld. Grow your risk-reward tether to multiply your score, but beware enemies that can sever it or destroy you.",
+    "controls": "WASD/Arrows/Touch to move/drill. Space/Action Button to consume your tether for a massive score payout and shockwave.",
+    "createdAt": "2026-10-22",
+    "accentColor": "#a0efb8",
+    "phase": "1",
+    "path": "./games/062-cyber-drill-samurai/index.html"
   }
 ];
