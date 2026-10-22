@@ -279,6 +279,7 @@ const GRID_SIZE = 40;
 const COLS = 15;
 const ROWS = 15;
 
+
 class Entity {
   constructor(x, y, color) {
     this.x = x;
@@ -352,6 +353,48 @@ class DashTrail {
   }
 }
 
+class Pickup extends Entity {
+  constructor(x, y, color) {
+    super(x, y, color);
+    this.wobble = 0;
+  }
+  update(dt) {
+    super.update(dt);
+    this.wobble += dt * 5;
+  }
+  draw(ctx) {
+    const rx = this.getRenderX();
+    const ry = this.getRenderY();
+    const cy = ry + Math.sin(this.wobble) * 3;
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(rx + GRID_SIZE/2, cy + GRID_SIZE/2, GRID_SIZE/4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
+  }
+}
+
+class ComboRestorer extends Pickup {
+  constructor(x, y) {
+    super(x, y, '#f39c12');
+  }
+  onPickup(engine) {
+    engine.comboDecayTimer = engine.maxComboDecay;
+    engine.spawnParticles(this.x, this.y, this.color);
+  }
+}
+
+class ExtraPointsPickup extends Pickup {
+  constructor(x, y) {
+    super(x, y, '#2ecc71');
+  }
+  onPickup(engine) {
+    engine.score += Math.floor(500 * engine.comboMultiplier);
+    engine.spawnParticles(this.x, this.y, this.color);
+  }
+}
+
 class Player extends Entity {
   constructor(x, y) {
     super(x, y, '#cf7cd4');
@@ -361,6 +404,9 @@ class Player extends Entity {
     // Phase 2 features
     this.dashCooldown = 0;
     this.dashMaxCooldown = 3; // turns
+    this.dashDamage = 2;
+    this.dashRange = 2;
+    this.dashInvulnDuration = 0.3;
     this.overdriveActive = false;
     this.facingX = 1;
     this.facingY = 0;
@@ -884,6 +930,64 @@ const Engine = {
   score: 0,
   wave: 1,
 
+  comboMultiplier: 1.0,
+  comboDecayTimer: 0,
+  maxComboDecay: 5.0,
+  comboMax: 3.0,
+  upgrades: [],
+  availableUpgrades: [
+    'Reduced Dash Cooldown',
+    'Increased Combo Duration',
+    'Dash Damage Plus One',
+    'Echo Length Plus One',
+    'Invuln After Dash Plus One Sec',
+    'Combo Multiplier Cap Plus One',
+    'Dash Range Plus One',
+    'Wave Start Bomb'
+  ],
+  pickups: [],
+
+
+
+
+  selectUpgrade: function(upgradeName) {
+    this.applyUpgrade(upgradeName);
+    document.getElementById('screen-upgrade').classList.add('hidden');
+    document.getElementById('hud').classList.remove('hidden');
+    this.state = 'PLAYING';
+    this.initLevel();
+    this.updateHUD();
+  },
+  applyUpgrade: function(upgradeName) {
+    this.upgrades.push(upgradeName);
+    switch(upgradeName) {
+      case 'Reduced Dash Cooldown':
+        this.player.dashMaxCooldown = Math.max(1, this.player.dashMaxCooldown - 1);
+        break;
+      case 'Increased Combo Duration':
+        this.maxComboDecay += 2.0;
+        break;
+      case 'Dash Damage Plus One':
+        this.player.dashDamage += 1;
+        break;
+      case 'Echo Length Plus One':
+        this.player.historyLength += 1;
+        break;
+      case 'Invuln After Dash Plus One Sec':
+        this.player.dashInvulnDuration += 1.0;
+        break;
+      case 'Combo Multiplier Cap Plus One':
+        this.comboMax += 1.0;
+        break;
+      case 'Dash Range Plus One':
+        this.player.dashRange += 1;
+        break;
+      case 'Wave Start Bomb':
+        // Wave Start Bomb will be triggered in initLevel
+        break;
+    }
+  },
+
   init: function() {
     this.canvas = document.getElementById('gameCanvas');
     this.ctx = this.canvas.getContext('2d');
@@ -949,6 +1053,12 @@ const Engine = {
 
     this.score = 0;
     this.wave = 1;
+    this.comboMultiplier = 1.0;
+    this.comboMax = 3.0;
+    this.maxComboDecay = 5.0;
+    this.comboDecayTimer = 5.0;
+    this.upgrades = [];
+
     this.initLevel();
     this.updateHUD();
     this.lastTime = performance.now();
@@ -965,6 +1075,7 @@ const Engine = {
     this.conveyors = [];
     this.lasers = [];
     this.acidPools = [];
+    this.pickups = [];
 
     // Border walls
     for(let i=0; i<COLS; i++) {
@@ -1042,6 +1153,33 @@ const Engine = {
         laser.turnCounter = Math.floor(Math.random() * 3); // Random phase
         this.lasers.push(laser);
       }
+    }
+
+    // Spawn Pickups
+    const numPickups = 1 + Math.floor(Math.random() * 2);
+    for(let i=0; i<numPickups; i++) {
+        let px, py;
+        do {
+          px = 1 + Math.floor(Math.random() * (COLS-2));
+          py = 1 + Math.floor(Math.random() * (ROWS-2));
+        } while (this.isSolid(px, py) || (px === this.player.x && py === this.player.y) || this.getEnemyAt(px, py));
+
+        if (Math.random() > 0.5) {
+           this.pickups.push(new ComboRestorer(px, py));
+        } else {
+           this.pickups.push(new ExtraPointsPickup(px, py));
+        }
+    }
+
+    // Apply Wave Start Bomb
+    if (this.upgrades.includes('Wave Start Bomb')) {
+        this.enemies.forEach(e => {
+           e.hp -= 2;
+           if (e.hp <= 0) {
+               if (e.onDeath) e.onDeath(this);
+           }
+        });
+        this.enemies = this.enemies.filter(e => e.hp > 0);
     }
 
     this.turnState = 'PLAYER_TURN'; // PLAYER_TURN, ANIMATING, ENEMY_TURN, RESOLVING
@@ -1157,9 +1295,10 @@ const Engine = {
         this.player.thrustTimer = 0.3;
         this.player.invulnTimer = 0.3;
 
-        let steps = 2;
+        let steps = this.player.dashRange;
         let nx = this.player.x;
         let ny = this.player.y;
+        this.player.invulnTimer = this.player.dashInvulnDuration;
 
         for (let i = 0; i < steps; i++) {
            let tx = nx + dx;
@@ -1171,13 +1310,16 @@ const Engine = {
              // Deal damage to enemies in path
              const enemy = this.getEnemyAt(nx, ny);
              if (enemy) {
-               enemy.hp -= 2; // Dash deals 2 damage
+               enemy.hp -= this.player.dashDamage;
                this.spawnParticles(nx, ny, enemy.color);
                if (enemy.hp <= 0) {
                  SoundEngine.playDestroy();
                  if (enemy.onDeath) enemy.onDeath(this);
                  this.enemies = this.enemies.filter(e => e !== enemy);
-                 this.score += enemy.isBoss ? 1000 : 100;
+                 let baseScore = enemy.isBoss ? 1000 : 100;
+                 this.score += Math.floor(baseScore * this.comboMultiplier);
+                 this.comboMultiplier = Math.min(this.comboMax, this.comboMultiplier + 0.1);
+                 this.comboDecayTimer = this.maxComboDecay;
                } else {
                  SoundEngine.playHit();
                }
@@ -1331,6 +1473,18 @@ const Engine = {
        }
     }
 
+    // Check Pickups
+    if (this.pickups) {
+        for (let i = this.pickups.length - 1; i >= 0; i--) {
+            let p = this.pickups[i];
+            if (p.x === this.player.x && p.y === this.player.y) {
+                p.onPickup(this);
+                this.pickups.splice(i, 1);
+                SoundEngine.playTone(1200, 'sine', 0.1, 0.1);
+            }
+        }
+    }
+
     // Check collisions
     let playerHit = false;
 
@@ -1357,10 +1511,13 @@ const Engine = {
         if (e.hp <= 0) {
            if (e.onDeath) e.onDeath(this);
            this.enemies.splice(i, 1);
-           this.score += e.isBoss ? 1000 : 100;
+           let baseScore = e.isBoss ? 1000 : 100;
+           this.score += Math.floor(baseScore * this.comboMultiplier);
+           this.comboMultiplier = Math.min(this.comboMax, this.comboMultiplier + 0.1);
+           this.comboDecayTimer = this.maxComboDecay;
         } else {
            // Push back slightly? Just take damage.
-           this.score += 10;
+           this.score += Math.floor(10 * this.comboMultiplier);
         }
         this.updateHUD();
       }
@@ -1374,9 +1531,33 @@ const Engine = {
 
     if (this.enemies.length === 0 && this.state !== 'GAME_OVER') {
       this.wave++;
-      this.score += 500;
-      this.initLevel();
-      this.updateHUD();
+      this.score += Math.floor(500 * this.comboMultiplier);
+
+      // Upgrade Phase
+      this.state = 'UPGRADE';
+      document.getElementById('screen-upgrade').classList.remove('hidden');
+      document.getElementById('hud').classList.add('hidden');
+
+      // Shuffle and pick 3 upgrades
+      let pool = [...this.availableUpgrades];
+      pool.sort(() => Math.random() - 0.5);
+
+      let u1 = pool[0];
+      let u2 = pool[1];
+      let u3 = pool[2];
+
+      let btn1 = document.getElementById('btn-upgrade-1');
+      let btn2 = document.getElementById('btn-upgrade-2');
+      let btn3 = document.getElementById('btn-upgrade-3');
+
+      btn1.innerText = u1;
+      btn2.innerText = u2;
+      btn3.innerText = u3;
+
+      btn1.onclick = () => { this.selectUpgrade(u1); };
+      btn2.onclick = () => { this.selectUpgrade(u2); };
+      btn3.onclick = () => { this.selectUpgrade(u3); };
+
     } else if (this.state !== 'GAME_OVER') {
       // Toggle turns
       if (this.turnPhase === 'PLAYER_DONE') {
@@ -1408,6 +1589,13 @@ const Engine = {
   },
 
   update: function(dt) {
+    if (this.comboMultiplier > 1.0) {
+       this.comboDecayTimer -= dt;
+       if (this.comboDecayTimer <= 0) {
+          this.comboMultiplier = 1.0;
+       }
+    }
+
     if (this.bossWarningTimer > 0) {
       this.bossWarningTimer -= dt;
     }
@@ -1416,6 +1604,7 @@ const Engine = {
     this.enemies.forEach(e => e.update(dt));
     this.conveyors.forEach(c => c.update(dt));
     this.lasers.forEach(l => l.update(dt));
+    if (this.pickups) this.pickups.forEach(p => p.update(dt));
 
     // Update particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -1487,6 +1676,7 @@ const Engine = {
     // Hazards
     this.conveyors.forEach(c => c.draw(this.ctx));
     this.lasers.forEach(l => l.draw(this.ctx));
+    if (this.pickups) this.pickups.forEach(p => p.draw(this.ctx));
 
     // Walls
     this.ctx.fillStyle = '#444';
@@ -1538,6 +1728,24 @@ const Engine = {
        this.ctx.font = '14px Courier New';
        this.ctx.textAlign = 'center';
        this.ctx.fillText(`${boss.type} - Phase ${boss.phase}`, this.canvas.width/2, barY + 15);
+       this.ctx.textAlign = 'left';
+    }
+
+    // Combo UI
+    if (this.comboMultiplier > 1.0) {
+       this.ctx.fillStyle = '#f39c12';
+       this.ctx.font = 'bold 16px Courier New';
+       this.ctx.textAlign = 'right';
+       this.ctx.fillText(`COMBO x${this.comboMultiplier.toFixed(1)}`, this.canvas.width - 20, 80);
+
+       // Decay Bar
+       const barW = 100;
+       const barH = 10;
+       const barX = this.canvas.width - 20 - barW;
+       const barY = 90;
+       this.ctx.strokeStyle = '#f39c12';
+       this.ctx.strokeRect(barX, barY, barW, barH);
+       this.ctx.fillRect(barX, barY, barW * (this.comboDecayTimer / this.maxComboDecay), barH);
        this.ctx.textAlign = 'left';
     }
 
