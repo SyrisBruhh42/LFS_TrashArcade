@@ -164,14 +164,7 @@ class Game {
 
     initGameVars() {
         this.score = 0;
-        this.player = {
-            x: this.targetWidth / 2,
-            y: this.targetHeight / 2,
-            radius: 15,
-            vx: 0,
-            vy: 0,
-            angle: 0
-        };
+        this.player = new Player(this.targetWidth / 2, this.targetHeight / 2);
         this.arena = {
             radius: 250,
             maxRadius: 250,
@@ -188,6 +181,17 @@ class Game {
             y: this.targetHeight / 2,
             strength: 150
         };
+    }
+
+    spawnParticle(x, y, color, speed, angle) {
+        this.particles.push({
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 0.5 + Math.random() * 0.5,
+            color: color
+        });
     }
 
     reset() {
@@ -230,39 +234,7 @@ class Game {
         }
 
         if(this.state === 'PLAYING') {
-            // Player movement (Orbital thrusters)
-            const speed = 300;
-            let ax = 0, ay = 0;
-            if(this.input.keys['KeyW'] || this.input.keys['ArrowUp']) ay -= 1;
-            if(this.input.keys['KeyS'] || this.input.keys['ArrowDown']) ay += 1;
-            if(this.input.keys['KeyA'] || this.input.keys['ArrowLeft']) ax -= 1;
-            if(this.input.keys['KeyD'] || this.input.keys['ArrowRight']) ax += 1;
-
-            // Normalize acceleration
-            if(ax !== 0 || ay !== 0) {
-                const len = Math.hypot(ax, ay);
-                ax /= len; ay /= len;
-            }
-
-            // Apply thrust
-            this.player.vx += ax * speed * dt;
-            this.player.vy += ay * speed * dt;
-
-            // Apply gravity well (Orbital physics)
-            const dx = this.gravityWell.x - this.player.x;
-            const dy = this.gravityWell.y - this.player.y;
-            const dist = Math.max(10, Math.hypot(dx, dy));
-            const gForce = this.gravityWell.strength / (dist);
-
-            this.player.vx += (dx / dist) * gForce * dt;
-            this.player.vy += (dy / dist) * gForce * dt;
-
-            // Friction
-            this.player.vx *= 0.95;
-            this.player.vy *= 0.95;
-
-            this.player.x += this.player.vx * dt;
-            this.player.y += this.player.vy * dt;
+            this.player.update(dt, this.input, this);
 
             // Arena Shrink
             this.arena.pulsing += dt * 2;
@@ -298,6 +270,7 @@ class Game {
             if(this.input.mouse.down && this.projectiles.length < 5) {
                 // cooldown logic could go here, simple spam for now
                 if(Math.random() < 0.2) {
+                    this.player.recoil = 1.0;
                     this.projectiles.push({
                         x: this.player.x,
                         y: this.player.y,
@@ -324,6 +297,15 @@ class Game {
                 }
 
                 if(p.life <= 0) this.projectiles.splice(i, 1);
+            }
+
+            // Update particles
+            for(let i = this.particles.length - 1; i >= 0; i--) {
+                let p = this.particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.life -= dt;
+                if(p.life <= 0) this.particles.splice(i, 1);
             }
 
             // Spawning
@@ -367,7 +349,9 @@ class Game {
 
                 // Collision with player
                 if(Math.hypot(this.player.x - e.x, this.player.y - e.y) < this.player.radius + e.radius) {
-                    this.gameOver();
+                    if (this.player.invulnerabilityTime <= 0) {
+                        this.gameOver();
+                    }
                 }
 
                 // Collision with projectiles
@@ -456,18 +440,18 @@ class Game {
             this.ctx.shadowBlur = 0;
 
             // Draw Player
-            this.ctx.save();
-            this.ctx.translate(this.player.x, this.player.y);
-            this.ctx.rotate(this.player.angle);
-            this.ctx.beginPath();
-            this.ctx.moveTo(15, 0);
-            this.ctx.lineTo(-10, -10);
-            this.ctx.lineTo(-5, 0);
-            this.ctx.lineTo(-10, 10);
-            this.ctx.closePath();
-            this.ctx.fillStyle = '#0ff';
-            this.ctx.fill();
-            this.ctx.restore();
+            this.player.draw(this.ctx);
+
+            // Draw Particles
+            for(let p of this.particles) {
+                this.ctx.save();
+                this.ctx.globalAlpha = Math.max(0, p.life);
+                this.ctx.fillStyle = p.color;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x, p.y, 2, 0, Math.PI*2);
+                this.ctx.fill();
+                this.ctx.restore();
+            }
 
             // Draw Projectiles
             this.ctx.fillStyle = '#ff0';
@@ -490,6 +474,8 @@ class Game {
             this.ctx.font = '24px sans-serif';
             this.ctx.textAlign = 'left';
             this.ctx.fillText(`Score: ${this.score}`, 20, 40);
+            this.ctx.fillStyle = '#0ff';
+            this.ctx.fillText(`Dash: ${this.player.dashCooldown <= 0 ? 'READY' : Math.max(0, this.player.dashCooldown).toFixed(1) + 's'}`, 20, 70);
 
             this.ctx.textAlign = 'right';
             this.ctx.fillText(`Arena: ${Math.floor(this.arena.radius)}`, this.targetWidth - 20, 40);
@@ -665,3 +651,23 @@ function helper127() { return 127; }
 function helper128() { return 128; }
 function helper129() { return 129; }
 function helper130() { return 130; }
+function helper131() { return 131; }
+function helper132() { return 132; }
+function helper133() { return 133; }
+function helper134() { return 134; }
+function helper135() { return 135; }
+function helper136() { return 136; }
+function helper137() { return 137; }
+function helper138() { return 138; }
+function helper139() { return 139; }
+function helper140() { return 140; }
+function helper141() { return 141; }
+function helper142() { return 142; }
+function helper143() { return 143; }
+function helper144() { return 144; }
+function helper145() { return 145; }
+function helper146() { return 146; }
+function helper147() { return 147; }
+function helper148() { return 148; }
+function helper149() { return 149; }
+function helper150() { return 150; }
