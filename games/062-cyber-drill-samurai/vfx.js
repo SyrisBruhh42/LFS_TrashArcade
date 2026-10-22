@@ -56,11 +56,22 @@ class VFXManager {
 
     addShake(duration, intensity) {
         this.shakeTimer = duration;
-        this.shakeIntensity = intensity;
+        let mult = 1;
+        if (window.engine && window.engine.uiManager) {
+           const opt = window.engine.uiManager.options.screenShake;
+           if (opt === 'Off') mult = 0;
+           else if (opt === '50%') mult = 0.5;
+        }
+        this.shakeTimer = duration;
+        this.shakeIntensity = intensity * mult;
     }
 
     spawnDirectionalParticles(x, y, color, count, dx, dy, speed, spread) {
-        for (let i = 0; i < count; i++) {
+        let spawnCount = count;
+        if (window.engine && window.engine.uiManager) {
+           if (window.engine.uiManager.options.particleDensity === 'Low') spawnCount = Math.ceil(count / 3);
+        }
+        for (let i = 0; i < spawnCount; i++) {
             const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * spread;
             const curSpeed = speed * (0.5 + Math.random() * 0.5);
             this.particles.push(new AdvancedParticle(x, y, color, Math.cos(angle) * curSpeed, Math.sin(angle) * curSpeed));
@@ -68,7 +79,11 @@ class VFXManager {
     }
 
     spawnExplosion(x, y, color, count) {
-        for (let i = 0; i < count; i++) {
+        let spawnCount = count;
+        if (window.engine && window.engine.uiManager) {
+           if (window.engine.uiManager.options.particleDensity === 'Low') spawnCount = Math.ceil(count / 3);
+        }
+        for (let i = 0; i < spawnCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 50 + Math.random() * 150;
             this.particles.push(new AdvancedParticle(x, y, color, Math.cos(angle) * speed, Math.sin(angle) * speed));

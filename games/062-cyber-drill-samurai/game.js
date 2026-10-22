@@ -128,6 +128,8 @@ class SoundEngine {
   }
 
   _playSynthTone(freq, type, duration, vol, destination) {
+    if (window.engine && window.engine.uiManager && window.engine.uiManager.options.masterMute) return;
+    vol = vol * (window.engine && window.engine.uiManager ? window.engine.uiManager.options.musicVolume : 1);
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = type;
@@ -145,6 +147,8 @@ class SoundEngine {
   }
 
   _playDrum(startFreq, endFreq, duration, vol) {
+    if (window.engine && window.engine.uiManager && window.engine.uiManager.options.masterMute) return;
+    vol = vol * (window.engine && window.engine.uiManager ? window.engine.uiManager.options.musicVolume : 1);
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'sine';
@@ -163,6 +167,8 @@ class SoundEngine {
   }
 
   _playNoise(duration, vol, filterFreq) {
+    if (window.engine && window.engine.uiManager && window.engine.uiManager.options.masterMute) return;
+    vol = vol * (window.engine && window.engine.uiManager ? window.engine.uiManager.options.musicVolume : 1);
     const bufferSize = this.ctx.sampleRate * duration;
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -195,6 +201,8 @@ class SoundEngine {
 
   // Generalized helper for SFX
   playToneEx(freq, type, duration, vol=1, slideFreq=null) {
+    if (window.engine && window.engine.uiManager && window.engine.uiManager.options.masterMute) return;
+    vol = vol * (window.engine && window.engine.uiManager ? window.engine.uiManager.options.sfxVolume : 1);
     if (!this.ctx || this.ctx.state !== 'running') return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -261,13 +269,36 @@ class InputManager {
       this.pointer.x = x;
       this.pointer.y = y;
 
-      if (x > canvas.width * 0.75) {
+      const touchMode = window.engine && window.engine.uiManager ? window.engine.uiManager.options.touchMode : 'Auto';
+      const hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+      if (touchMode === 'Off' || (touchMode === 'Auto' && !hasTouch && e.pointerType !== 'touch')) {
+        return;
+      }
+
+      const handedness = window.engine && window.engine.uiManager ? window.engine.uiManager.options.handedness : 'Right';
+
+      let isActionZone = false;
+      let isDashZone = false;
+      let isJoystickZone = false;
+
+      if (handedness === 'Right') {
+         isActionZone = x > canvas.width * 0.75;
+         isDashZone = x > canvas.width * 0.5 && x <= canvas.width * 0.75;
+         isJoystickZone = x <= canvas.width * 0.5;
+      } else {
+         // Left handed: Joystick on right, Action/Dash on left
+         isActionZone = x < canvas.width * 0.25;
+         isDashZone = x >= canvas.width * 0.25 && x < canvas.width * 0.5;
+         isJoystickZone = x >= canvas.width * 0.5;
+      }
+
+      if (isActionZone) {
         this.actionPressed = true;
         this.actionJustPressed = true;
-      } else if (x > canvas.width * 0.5) {
+      } else if (isDashZone) {
         this.dashPressed = true;
         this.dashJustPressed = true;
-      } else {
+      } else if (isJoystickZone) {
         this.joystick.active = true;
         this.joystick.startX = x;
         this.joystick.startY = y;
@@ -635,6 +666,10 @@ class Engine {
     if (typeof UpgradeManager !== 'undefined') {
       this.upgradeManager = new UpgradeManager(this);
     }
+    if (typeof UIManager !== "undefined") {
+      this.uiManager = new UIManager(this);
+      this.uiManager.applyOptions();
+    }
     this.comboMultiplier = 1;
     this.comboTimer = 0;
     this.comboMaxTimer = 5;
@@ -666,9 +701,18 @@ class Engine {
       const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
       const y = (e.clientY - rect.top) * (this.canvas.height / rect.height);
 
+      if (this.state === 'OPTIONS') {
+        if (this.uiManager) this.uiManager.handleInput(x, y);
+        return;
+      }
       if (this.state === 'TITLE') {
-        if (this.soundEngine) this.soundEngine.playUISelect();
-        this.startGame();
+        if (x > this.width/2 - 75 && x < this.width/2 + 75 && y > this.height/2 + 50 && y < this.height/2 + 90) {
+          if (this.soundEngine) this.soundEngine.playUISelect();
+          this.state = 'OPTIONS';
+        } else {
+          if (this.soundEngine) this.soundEngine.playUISelect();
+          this.startGame();
+        }
       }
       else if (this.state === 'GAME_OVER') {
         if (this.soundEngine) this.soundEngine.playUISelect();
@@ -796,6 +840,7 @@ class Engine {
   }
 
   update(dt) {
+    if (this.uiManager) this.uiManager.update(dt);
     if (this.state !== 'PLAYING') return;
 
     // Update dynamic BGM state
@@ -1192,6 +1237,11 @@ class Engine {
       this.ctx.font = '20px Courier New';
       this.ctx.fillStyle = '#c5c6c7';
       this.ctx.fillText('Press SPACE or Tap to Start', this.width/2, this.height/2);
+      this.ctx.fillStyle = '#3a9bdc';
+      this.ctx.fillRect(this.width/2 - 75, this.height/2 + 50, 150, 40);
+      this.ctx.fillStyle = '#fff';
+      this.ctx.fillText('OPTIONS', this.width/2, this.height/2 + 75);
+      if (this.uiManager) this.uiManager.drawMilestones(this.ctx, this.width/2, this.height/2 + 120);
 
       this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, this.height/2 + 50);
 
@@ -1308,7 +1358,10 @@ class Engine {
     }
 
     // Draw touch controls if active
-    if (this.inputManager.joystick.active) {
+    const touchMode = this.uiManager ? this.uiManager.options.touchMode : 'Auto';
+    const hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    const showTouch = touchMode === 'Always' || (touchMode === 'Auto' && hasTouch);
+    if (this.inputManager.joystick.active && showTouch) {
       this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
       this.ctx.beginPath();
       this.ctx.arc(this.inputManager.joystick.startX, this.inputManager.joystick.startY, 50, 0, Math.PI*2);
@@ -1330,6 +1383,7 @@ class Engine {
       this.ctx.fillStyle = '#c5c6c7';
       this.ctx.fillText(`Final Score: ${this.score}`, this.width/2, this.height/2 + 40);
       this.ctx.fillText('Press SPACE or Tap to Restart', this.width/2, this.height/2 + 80);
+      if (this.uiManager) this.uiManager.drawMilestones(this.ctx, this.width/2, this.height/2 + 120);
     } else if (this.state === 'UPGRADE') {
       if (this.upgradeManager) {
         this.upgradeManager.draw(this.ctx);
@@ -1348,6 +1402,9 @@ class Engine {
       this.ctx.fillRect(this.width/2 - 100, this.height/2 + 50, 200, 40);
       this.ctx.fillStyle = '#fff';
       this.ctx.fillText('Back to Arcade', this.width/2, this.height/2 + 75);
+    }
+    if (this.uiManager) {
+      this.uiManager.draw(this.ctx);
     }
   }
 
