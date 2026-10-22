@@ -10,7 +10,8 @@ const STATES = {
     PLAYING: 1,
     GAME_OVER: 2,
     PAUSED: 3,
-    UPGRADE: 4
+    UPGRADE: 4,
+    SETTINGS: 5
 };
 
 // --- CORE UTILITIES ---
@@ -23,7 +24,15 @@ class SaveManager {
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
             options: {
-                masterMute: false
+                masterMute: false,
+                sfxVolume: 1.0,
+                musicVolume: 1.0,
+                screenShake: 1.0,
+                particleDensity: 'High',
+                highContrast: false,
+                showFPS: false,
+                touchMode: 'Auto',
+                touchSwap: false
             }
         };
         this.load();
@@ -35,7 +44,17 @@ class SaveManager {
             if (saved) {
                 const parsed = JSON.parse(saved);
                 this.data = { ...this.data, ...parsed };
-                if (!this.data.options) this.data.options = { masterMute: false };
+                if (!this.data.options) this.data.options = {
+                    masterMute: false,
+                    sfxVolume: 1.0,
+                    musicVolume: 1.0,
+                    screenShake: 1.0,
+                    particleDensity: 'High',
+                    highContrast: false,
+                    showFPS: false,
+                    touchMode: 'Auto',
+                    touchSwap: false
+                };
             }
         } catch (e) {
             console.warn("Could not load save data:", e);
@@ -78,7 +97,7 @@ class SoundEngine {
         this.isPlaying = false;
     }
 
-    init() {
+    init(saveManager) {
         if (this.initialized) return;
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -92,10 +111,12 @@ class SoundEngine {
             this.musicGain.connect(this.masterGain);
             this.masterGain.connect(this.ctx.destination);
 
-            this.masterGain.gain.value = this.muted ? 0 : 0.8;
-            this.musicGain.gain.value = 0.4;
-            this.sfxGain.gain.value = 0.7;
+            const opts = saveManager ? saveManager.data.options : { masterMute: false, sfxVolume: 1.0, musicVolume: 1.0 };
+            this.masterGain.gain.value = opts.masterMute ? 0 : 0.8;
+            this.musicGain.gain.value = opts.musicVolume * 0.4;
+            this.sfxGain.gain.value = opts.sfxVolume * 0.7;
             this.initialized = true;
+            this.saveManager = saveManager;
 
             if (this.ctx.state === 'suspended') {
                 this.ctx.resume();
@@ -105,6 +126,14 @@ class SoundEngine {
         } catch (e) {
             console.warn("Audio Context failed to initialize", e);
         }
+    }
+
+    updateVolumes() {
+        if (!this.initialized || !this.saveManager) return;
+        const opts = this.saveManager.data.options;
+        this.masterGain.gain.value = opts.masterMute ? 0 : 0.8;
+        this.musicGain.gain.value = opts.musicVolume * 0.4;
+        this.sfxGain.gain.value = opts.sfxVolume * 0.7;
     }
 
     setMute(isMuted) {
@@ -371,6 +400,7 @@ class InputManager {
         this.keys = {};
         this.mouse = { x: 0, y: 0, isDown: false, justPressed: false };
         this.touch = { x: 0, y: 0, isDown: false, justPressed: false };
+        this.touches = [];
 
         window.addEventListener('keydown', (e) => this.keys[e.code] = true);
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);
@@ -413,12 +443,19 @@ class InputManager {
     }
 
     updateTouch(e) {
+        this.touches = [];
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        for (let i = 0; i < e.touches.length; i++) {
+            this.touches.push({
+                x: (e.touches[i].clientX - rect.left) * scaleX,
+                y: (e.touches[i].clientY - rect.top) * scaleY
+            });
+        }
         if (e.touches.length > 0) {
-            const rect = this.canvas.getBoundingClientRect();
-            const scaleX = this.canvas.width / rect.width;
-            const scaleY = this.canvas.height / rect.height;
-            this.touch.x = (e.touches[0].clientX - rect.left) * scaleX;
-            this.touch.y = (e.touches[0].clientY - rect.top) * scaleY;
+            this.touch.x = this.touches[0].x;
+            this.touch.y = this.touches[0].y;
         }
     }
 
@@ -432,6 +469,11 @@ class InputManager {
     isPointerJustPressed() { return this.mouse.justPressed || this.touch.justPressed; }
     getPointerX() { return this.touch.isDown ? this.touch.x : this.mouse.x; }
     getPointerY() { return this.touch.isDown ? this.touch.y : this.mouse.y; }
+
+    // Support for simulated touch extend button
+    isExtending() {
+        return this.isPointerDown();
+    }
 }
 
 // --- ENTITIES ---
@@ -568,7 +610,32 @@ class Tower {
             if (p.life <= 0) this.thrustParticles.splice(i, 1);
         }
 
-        this.isExtending = input.isPointerDown();
+        this.isExtending = false;
+        if (this.game && this.game.saveManager) {
+            const opts = this.game.saveManager.data.options;
+            const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+            if (opts.touchMode === 'Always' || (opts.touchMode === 'Auto' && isTouch)) {
+                if (input.touches && input.touches.length > 0) {
+                    const halfWidth = this.game.width / 2;
+                    for (let t of input.touches) {
+                        if (opts.touchSwap) {
+                            if (t.x < halfWidth) this.isExtending = true;
+                        } else {
+                            if (t.x > halfWidth) this.isExtending = true;
+                        }
+                    }
+                } else if (input.mouse.isDown) {
+                    const px = input.mouse.x;
+                    const halfWidth = this.game.width / 2;
+                    if (opts.touchSwap) this.isExtending = px < halfWidth;
+                    else this.isExtending = px > halfWidth;
+                }
+            } else {
+                this.isExtending = input.isPointerDown();
+            }
+        } else {
+            this.isExtending = input.isPointerDown();
+        }
         if (this.isExtending) {
             this.tetherCurrentLength += 300 * dt;
             if (this.tetherCurrentLength > this.tetherMaxLength) {
@@ -1469,6 +1536,7 @@ class VFXManager {
     }
 
     emitExplosion(x, y, color, count=15) {
+        if (this.options && this.options.particleDensity === 'Low') count = Math.ceil(count / 2);
         for(let i=0; i<count; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 50 + Math.random() * 150;
@@ -1479,6 +1547,7 @@ class VFXManager {
     }
 
     emitDirectional(x, y, vx, vy, color, count=10, spread=0.5) {
+        if (this.options && this.options.particleDensity === 'Low') count = Math.ceil(count / 2);
         const baseAngle = Math.atan2(vy, vx);
         const baseSpeed = Math.hypot(vx, vy) * 0.5;
         for(let i=0; i<count; i++) {
@@ -1498,7 +1567,8 @@ class VFXManager {
         this.trails.push(new Trail(x, y, color, radius));
     }
 
-    update(dt) {
+    update(dt, options) {
+        this.options = options;
         // Hitstop handles game pausing, vfx themselves still animate rawDt if desired,
         // but here we just update shake and collections
         if (this.hitStopTimer > 0) {
@@ -1536,6 +1606,166 @@ class VFXManager {
     }
 }
 
+
+class UIManager {
+    constructor() {
+        this.pendingReset = false;
+        this.resetTimer = 0;
+    }
+
+    updateSettings(input, saveManager, dt) {
+        if (this.resetTimer > 0) {
+            this.resetTimer -= dt;
+            if (this.resetTimer <= 0) this.pendingReset = false;
+        }
+
+        if (input.isPointerJustPressed()) {
+            const px = input.getPointerX();
+            const py = input.getPointerY();
+            const startY = 100;
+            const spacing = 35;
+
+            // Check back button
+            if (px > 30 && px < 130 && py > 30 && py < 70) {
+                // Returns to title/pause handled in game
+                return true;
+            }
+
+            for (let i = 0; i < 9; i++) {
+                const y = startY + i * spacing;
+                if (py > y - 15 && py < y + 15) {
+                    if (px > 400 && px < 430) {
+                        this.toggleOption(saveManager, i, -1);
+                    } else if (px > 570 && px < 600) {
+                        this.toggleOption(saveManager, i, 1);
+                    }
+                }
+            }
+
+            // Export Save
+            if (px > 250 && px < 380 && py > 500 && py < 540) {
+                const data = btoa(JSON.stringify(saveManager.data));
+                prompt('Copy Save Data', data);
+            }
+
+            // Import Save
+            if (px > 420 && px < 550 && py > 500 && py < 540) {
+                let d = prompt('Paste Save Data');
+                if (d) {
+                    try {
+                        saveManager.data = JSON.parse(atob(d));
+                        saveManager.save();
+                    } catch(e) { console.error('Invalid save data'); }
+                }
+            }
+
+            // Reset
+            if (px > 330 && px < 470 && py > 560 && py < 600) {
+                if (this.pendingReset) {
+                    localStorage.removeItem(SAVE_KEY);
+                    location.reload();
+                } else {
+                    this.pendingReset = true;
+                    this.resetTimer = 3.0; // 3 seconds to confirm
+                }
+            }
+        }
+        return false;
+    }
+
+    toggleOption(saveManager, index, dir) {
+        const opts = saveManager.data.options;
+        switch(index) {
+            case 0: opts.masterMute = !opts.masterMute; break;
+            case 1: opts.sfxVolume = Math.max(0, Math.min(1.0, opts.sfxVolume + dir * 0.1)); break;
+            case 2: opts.musicVolume = Math.max(0, Math.min(1.0, opts.musicVolume + dir * 0.1)); break;
+            case 3:
+                const shakeModes = [0.0, 0.5, 1.0];
+                let sIdx = shakeModes.indexOf(opts.screenShake);
+                if (sIdx === -1) sIdx = 2;
+                sIdx = (sIdx + dir + 3) % 3;
+                opts.screenShake = shakeModes[sIdx];
+                break;
+            case 4: opts.particleDensity = opts.particleDensity === 'High' ? 'Low' : 'High'; break;
+            case 5: opts.highContrast = !opts.highContrast; break;
+            case 6: opts.showFPS = !opts.showFPS; break;
+            case 7:
+                const touchModes = ['Auto', 'Always', 'Off'];
+                let tIdx = touchModes.indexOf(opts.touchMode);
+                if (tIdx === -1) tIdx = 0;
+                tIdx = (tIdx + dir + 3) % 3;
+                opts.touchMode = touchModes[tIdx];
+                break;
+            case 8: opts.touchSwap = !opts.touchSwap; break;
+        }
+        saveManager.save();
+        if (window.game && window.game.sound && window.game.sound.updateVolumes) {
+            window.game.sound.updateVolumes();
+        }
+    }
+
+    drawSettings(ctx, width, height, saveManager) {
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '36px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('SETTINGS', width/2, 60);
+
+        ctx.font = '20px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText('< BACK', 40, 50);
+
+        const opts = saveManager.data.options;
+        const labels = [
+            `Master Mute: ${opts.masterMute ? 'ON' : 'OFF'}`,
+            `SFX Volume: ${Math.round(opts.sfxVolume * 100)}%`,
+            `Music Volume: ${Math.round(opts.musicVolume * 100)}%`,
+            `Screen Shake: ${opts.screenShake * 100}%`,
+            `Particles: ${opts.particleDensity}`,
+            `High Contrast: ${opts.highContrast ? 'ON' : 'OFF'}`,
+            `Show FPS: ${opts.showFPS ? 'ON' : 'OFF'}`,
+            `Touch Mode: ${opts.touchMode}`,
+            `Touch Swap: ${opts.touchSwap ? 'L-Hand' : 'R-Hand'}`
+        ];
+
+        const startY = 100;
+        const spacing = 35;
+
+        for (let i = 0; i < labels.length; i++) {
+            const y = startY + i * spacing;
+            ctx.textAlign = 'right';
+            ctx.fillText(labels[i], 380, y);
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#468aa9';
+            ctx.fillRect(400, y - 20, 30, 30);
+            ctx.fillStyle = '#fff';
+            ctx.fillText('<', 415, y);
+
+            ctx.fillStyle = '#468aa9';
+            ctx.fillRect(570, y - 20, 30, 30);
+            ctx.fillStyle = '#fff';
+            ctx.fillText('>', 585, y);
+        }
+
+        // Action Buttons
+        ctx.fillStyle = '#468aa9';
+        ctx.fillRect(250, 500, 130, 40);
+        ctx.fillRect(420, 500, 130, 40);
+
+        ctx.fillStyle = this.pendingReset ? '#ff4444' : '#666';
+        ctx.fillRect(330, 560, 140, 40);
+
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText('Export Save', 315, 525);
+        ctx.fillText('Import Save', 485, 525);
+        ctx.fillText(this.pendingReset ? 'Confirm?' : 'Reset Data', 400, 585);
+        ctx.textAlign = 'left';
+    }
+}
+
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -1548,6 +1778,9 @@ class Game {
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
         this.vfx = new VFXManager();
+        this.ui = new UIManager();
+        this.fps = 0;
+        this.playTime = 0;
 
 
         this.state = STATES.TITLE;
@@ -1617,6 +1850,13 @@ class Game {
     }
 
 
+    unlockMilestone(id) {
+        if (!this.saveManager.data.unlockedMilestones.includes(id)) {
+            this.saveManager.data.unlockedMilestones.push(id);
+            this.saveManager.save();
+        }
+    }
+
     resetGame() {
         this.sound.stopMusic();
         this.sound.startMusic();
@@ -1657,7 +1897,10 @@ class Game {
         if (rawDt > 0.1) rawDt = 0.1;
 
         // Update VFX always with rawDt so it animates during hitstop
-        this.vfx.update(rawDt);
+        this.vfx.update(rawDt, this.saveManager.data.options);
+
+        this.fps = Math.round(1 / (rawDt || 0.01));
+        this.playTime += rawDt;
 
         let gameDt = rawDt;
         if (this.vfx.hitStopTimer > 0) {
@@ -1667,17 +1910,24 @@ class Game {
         this.update(gameDt);
         this.draw();
 
+        if (this.playTime >= 120) this.unlockMilestone('TimePlayed2Min');
+
         this.input.update(); // clear justPressed flags
         requestAnimationFrame((t) => this.loop(t));
     }
     update(dt) {
         if (this.input.isPointerJustPressed() || this.input.keys['Space']) {
-            this.sound.init();
+            this.sound.init(this.saveManager);
         }
 
         this.env.update(dt);
 
         switch (this.state) {
+            case STATES.SETTINGS:
+                if (this.ui.updateSettings(this.input, this.saveManager, dt)) {
+                    this.state = this.score > 0 && this.tower.health > 0 ? STATES.PAUSED : STATES.TITLE;
+                }
+                break;
             case STATES.UPGRADE:
                 if (this.input.isPointerJustPressed()) {
                     const px = this.input.pointer.x;
@@ -1704,6 +1954,14 @@ class Game {
                 }
                 break;
             case STATES.TITLE:
+                if (this.input.isPointerJustPressed()) {
+                    const px = this.input.getPointerX();
+                    const py = this.input.getPointerY();
+                    if (px > this.width/2 - 60 && px < this.width/2 + 60 && py > this.height/2 + 90 && py < this.height/2 + 130) {
+                        this.state = STATES.SETTINGS;
+                        break;
+                    }
+                }
                 if (this.input.isPointerJustPressed() || this.input.keys['Space']) {
                     this.resetGame();
                     this.state = STATES.PLAYING;
@@ -1712,6 +1970,11 @@ class Game {
                 break;
 
             case STATES.PLAYING:
+                if (this.wave >= 5) this.unlockMilestone('Wave5Cleared');
+                if (this.score >= 10000) this.unlockMilestone('Score10k');
+                if (this.combo >= 15) this.unlockMilestone('Combo15x');
+                if (this.waveKills >= 100) this.unlockMilestone('TotalKills100');
+
                 if (this.input.keys['Escape']) {
                     this.input.keys['Escape'] = false;
                     this.state = STATES.PAUSED;
@@ -1773,7 +2036,7 @@ class Game {
                                 this.tower.applyRecoil(p.x - this.tower.x, p.y - this.tower.y, 20);
                                 this.sound.playHit();
                                 this.vfx.emitExplosion(this.tower.x, this.tower.y, '#ff8800', 10);
-                                this.vfx.addScreenShake(5, 0.1);
+                                this.vfx.addScreenShake(5 * this.saveManager.data.options.screenShake, 0.1);
                                 this.vfx.addPopup(this.tower.x, this.tower.y - 20, `-${p.damage}`, '#ff0000');
                             }
                             p.active = false;
@@ -1808,6 +2071,7 @@ class Game {
 
                 if (this.activeBoss && !this.activeBoss.active) {
                     // Boss defeated
+                    this.unlockMilestone('Boss1Defeated');
                     this.activeBoss = null;
                     this.bossActive = false;
                     this.score += 500 * (1 + this.combo * 0.1); // Bonus for killing boss
@@ -1880,7 +2144,7 @@ class Game {
                             this.tower.applyRecoil(e.x - this.tower.x, e.y - this.tower.y, 20);
                             this.sound.playHit();
                             this.vfx.emitExplosion(this.tower.x, this.tower.y, '#ff0000', 20);
-                            this.vfx.addScreenShake(10, 0.2);
+                            this.vfx.addScreenShake(10 * this.saveManager.data.options.screenShake, 0.2);
                             this.vfx.addHitStop(0.1);
                             this.vfx.addPopup(this.tower.x, this.tower.y - 20, `-${e.damage}`, '#ff0000', true);
                             e.active = false;
@@ -1932,7 +2196,7 @@ class Game {
                             const dmgStr = Math.floor(10 * this.tower.damageMultiplier);
                             this.vfx.addPopup(e.x, e.y - 10, `${dmgStr}`, '#ffffff', dmgStr > 20);
                             this.vfx.addHitStop(0.05);
-                            this.vfx.addScreenShake(5, 0.1);
+                            this.vfx.addScreenShake(5 * this.saveManager.data.options.screenShake, 0.1);
                         } else {
                             this.sound.playHit();
                             this.vfx.emitDirectional(e.x, e.y, head.x - e.x, head.y - e.y, '#888888', 5);
@@ -2103,6 +2367,11 @@ class Game {
             case STATES.PLAYING:
                 this.drawPlaying();
                 break;
+            case STATES.SETTINGS:
+                if (this.ui.updateSettings(this.input, this.saveManager, dt)) {
+                    this.state = this.score > 0 && this.tower.health > 0 ? STATES.PAUSED : STATES.TITLE;
+                }
+                break;
             case STATES.UPGRADE:
                 this.drawPlaying();
                 this.drawUpgrade();
@@ -2115,6 +2384,17 @@ class Game {
                 this.drawPlaying(); // draw background
                 this.drawGameOver();
                 break;
+            case STATES.SETTINGS:
+                this.drawPlaying();
+                this.ui.drawSettings(this.ctx, this.width, this.height, this.saveManager);
+                break;
+        }
+
+        if (this.saveManager.data.options.showFPS) {
+            this.ctx.fillStyle = '#0f0';
+            this.ctx.font = '16px monospace';
+            this.ctx.textAlign = 'left';
+            this.ctx.fillText(`FPS: ${this.fps}`, 10, 20);
         }
     }
 
@@ -2123,6 +2403,10 @@ class Game {
         this.vfx.applyShake(this.ctx);
 
         this.env.drawBackground(this.ctx);
+        if (this.saveManager.data.options.highContrast) {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        }
 
         this.tower.draw(this.ctx, this.input);
         for (let p of this.projectiles) {
@@ -2214,6 +2498,29 @@ class Game {
 
         this.ctx.font = '16px monospace';
         this.ctx.fillText("Back to Arcade (../../index.html)", 70, 30);
+
+        this.ctx.fillStyle = '#468aa9';
+        this.ctx.fillRect(this.width/2 - 60, this.height/2 + 90, 120, 40);
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '20px monospace';
+        this.ctx.fillText("Settings", this.width/2, this.height/2 + 115);
+
+        this.drawMilestones();
+    }
+
+    drawMilestones() {
+        const milestones = this.saveManager.data.unlockedMilestones;
+        if (milestones.length === 0) return;
+
+        this.ctx.font = '14px monospace';
+        this.ctx.textAlign = 'right';
+        for (let i = 0; i < milestones.length; i++) {
+            this.ctx.fillStyle = '#ffaa00';
+            this.ctx.fillRect(this.width - 160, 20 + i * 25, 140, 20);
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillText(milestones[i], this.width - 30, 35 + i * 25);
+        }
+        this.ctx.textAlign = 'left';
     }
 
     drawPaused() {
@@ -2286,6 +2593,8 @@ class Game {
         this.ctx.font = '24px monospace';
         this.ctx.fillText(`Final Score: ${this.score}`, this.width/2, this.height/2);
         this.ctx.fillText("Click to Restart", this.width/2, this.height/2 + 60);
+
+        this.drawMilestones();
     }
 }
 
