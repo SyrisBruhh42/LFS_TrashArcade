@@ -1121,9 +1121,14 @@ class Game {
         this.enemyProjectiles = [];
         this.particles = [];
 
+        this.comboManager = new ComboManager(this);
+        this.upgradeManager = new UpgradeManager(this);
+        this.pickups = [];
+
         this.score = 0;
         this.health = 3;
         this.wave = 1;
+        this.scoreForNextWave = 100;
         this.enemySpawnTimer = 0;
 
         this.lastTime = performance.now();
@@ -1179,9 +1184,14 @@ class Game {
         this.enemies = [];
         this.enemyProjectiles = [];
         this.particles = [];
+        this.comboManager = new ComboManager(this);
+        this.upgradeManager = new UpgradeManager(this);
+        this.pickups = [];
+
         this.score = 0;
         this.health = 3;
         this.wave = 1;
+        this.scoreForNextWave = 100;
         this.enemySpawnTimer = 0;
     }
 
@@ -1217,6 +1227,17 @@ class Game {
             if ((spaceDown && !this.spaceWasDown) || pointerJustDown) {
                 this.state = 'TITLE';
             }
+        } else if (this.state === 'UPGRADE') {
+            if (pointerJustDown) {
+                // Pass scaled pointer coords to upgrade manager
+                const rect = this.canvas.getBoundingClientRect();
+                let mx = this.input.pointers.size > 0 ? Array.from(this.input.pointers.values())[0].x : this.input.mouseX;
+                let my = this.input.pointers.size > 0 ? Array.from(this.input.pointers.values())[0].y : this.input.mouseY;
+                const clickX = (mx - rect.left) * (this.width / rect.width);
+                const clickY = (my - rect.top) * (this.height / rect.height);
+
+                this.upgradeManager.handleClick(clickX, clickY, this.width, this.height);
+            }
         } else if (this.state === 'PLAYING') {
             if (this.input.isDown('Escape')) {
                 this.state = 'PAUSED';
@@ -1238,7 +1259,27 @@ class Game {
     update(dt) {
         this.handleInput();
 
+        if (this.state === 'UPGRADE') return;
         if (this.state !== 'PLAYING') return;
+
+        this.comboManager.update(dt);
+
+        for (let i = this.pickups.length - 1; i >= 0; i--) {
+            let p = this.pickups[i];
+            p.update(dt);
+            if (p.life <= 0) {
+                this.pickups.splice(i, 1);
+                continue;
+            }
+
+            // Player collision
+            const dx = p.x - this.player.x;
+            const dy = p.y - this.player.y;
+            if (dx*dx + dy*dy < (p.radius + this.player.radius)**2) {
+                p.apply(this);
+                this.pickups.splice(i, 1);
+            }
+        }
 
         this.player.update(dt, this.input, this.width, this.height, this.nodes);
         for(let n of this.nodes) n.update(dt);
@@ -1316,7 +1357,12 @@ class Game {
                     // Opposite polarity - damage
                     if (!this.player.isInvulnerable) {
                         this.sound.playHit();
-                        this.health--;
+                        if (this.player.shields > 0) {
+                            this.player.shields--;
+                            this.player.triggerInvulnerability();
+                        } else {
+                            this.health--;
+                        }
                         this.player.triggerRecoil(dx/Math.hypot(dx,dy), dy/Math.hypot(dx,dy), 500, true);
                         if (this.health <= 0) {
                             this.state = 'GAME_OVER';
@@ -1351,10 +1397,20 @@ class Game {
 
         if (this.player.isPos === e.isPos) {
             // Success: Matching Polarity - Damage Enemy
-            e.takeDamage(1);
+            let dmg = 1 + (this.player.bonusDamage || 0);
+            e.takeDamage(dmg);
             if (e.health <= 0) {
-                this.score += (e.maxHealth * 10);
+                this.comboManager.addHit();
+                this.score += Math.floor(e.maxHealth * 10 * this.comboManager.multiplier);
                 this.sound.playShoot();
+
+                // Random pickup spawn chance
+                if (Math.random() < 0.2) {
+                    const r = Math.random();
+                    if (r < 0.5) this.pickups.push(new HealthPickup(e.x, e.y));
+                    else if (r < 0.8) this.pickups.push(new ComboPickup(e.x, e.y));
+                    else this.pickups.push(new ShieldPickup(e.x, e.y));
+                }
                 this.spawnParticles(e.x, e.y, e.isPos ? COLORS.particlePos : COLORS.particleNeg, 15 + e.maxHealth * 5);
 
                 if (e.type === 'splitter') {
@@ -1379,14 +1435,26 @@ class Game {
             this.player.vy = -ny * this.player.speed * 0.8;
             this.player.triggerRecoil(-nx, -ny, 300, false);
 
-            // Advance waves
-            if (this.score % 100 === 0) {
+            // Advance waves based on threshold
+            if (this.score >= this.scoreForNextWave) {
                 this.wave++;
+                this.scoreForNextWave += 100 * this.wave; // Increasing threshold
                 this.spawnParticles(this.width/2, this.height/2, '#ffffff', 50);
+
+                // Clear active projectiles for safety
+                this.enemyProjectiles = [];
+
+                this.state = 'UPGRADE';
+                this.upgradeManager.generateDraft();
             }
         } else {
             // Failure: Opposite Polarity - Take Damage
-            this.health--;
+            if (this.player.shields > 0) {
+                this.player.shields--;
+                this.player.triggerInvulnerability();
+            } else {
+                this.health--;
+            }
             this.sound.playHit();
             this.spawnParticles(this.player.x, this.player.y, '#ff0000', 30);
 
@@ -1475,12 +1543,18 @@ class Game {
         for (let n of this.nodes) n.draw(this.ctx);
         this.world.drawHazards(this.ctx);
 
-        if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+        if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER' || this.state === 'UPGRADE') {
+            for (let p of this.pickups) p.draw(this.ctx);
             for (let e of this.enemies) e.draw(this.ctx);
-        for (let p of this.enemyProjectiles) p.draw(this.ctx);
+            for (let p of this.enemyProjectiles) p.draw(this.ctx);
             if (this.health > 0) this.player.draw(this.ctx);
             for (let p of this.particles) p.draw(this.ctx);
             this.drawHUD();
+            this.comboManager.draw(this.ctx, this.width, this.height);
+
+            if (this.state === 'UPGRADE') {
+                this.upgradeManager.draw(this.ctx, this.width, this.height);
+            }
         }
 
         if (this.state === 'TITLE') {
