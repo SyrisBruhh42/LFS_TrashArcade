@@ -58,6 +58,29 @@ class UIManager {
         });
     }
 
+    drawTutorialHint(ctx, width, height, wave, playerX, playerY) {
+        if (wave !== 1) return;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(width / 2 - 250, 40, 500, 100);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('--- TUTORIAL ---', width / 2, 60);
+        ctx.fillText('WASD/Arrows to Move | Space/Click to Parry/Slash', width / 2, 85);
+        ctx.fillText('Shift/Right-Click/Double-Tap to Switch Polarity', width / 2, 110);
+
+        // Polarity hint near player
+        ctx.font = '14px monospace';
+        ctx.fillStyle = '#ff0';
+        ctx.fillText('Match polarity to absorb!', playerX, playerY - 40);
+        ctx.fillText('Opposite polarity to slash!', playerX, playerY - 20);
+        ctx.restore();
+    }
+
+
     handleInput(input) {
         const opts = this.game.saveManager.data.options;
         if (!opts.touchControls) opts.touchControls = 'Auto';

@@ -864,15 +864,30 @@ class Game {
         const polarity = Math.random() > 0.5 ? 'POSITIVE' : 'NEGATIVE';
 
         const rand = Math.random();
-        if (rand < 0.2) {
+
+        let swarmerWeight = Math.max(0.05, 0.2 - this.wave * 0.01);
+        let sniperWeight = 0.2;
+        let bruiserWeight = Math.min(0.3, 0.2 + this.wave * 0.01);
+        let splitterWeight = Math.min(0.2, 0.2 + this.wave * 0.005);
+        let hazardWeight = Math.min(0.2, 0.1 + this.wave * 0.01);
+
+        let totalWeight = swarmerWeight + sniperWeight + bruiserWeight + splitterWeight + hazardWeight;
+
+        swarmerWeight /= totalWeight;
+        sniperWeight /= totalWeight;
+        bruiserWeight /= totalWeight;
+        splitterWeight /= totalWeight;
+        hazardWeight /= totalWeight;
+
+        if (rand < swarmerWeight) {
             this.enemies.push(new Swarmer(x, y, polarity));
-        } else if (rand < 0.4) {
+        } else if (rand < swarmerWeight + sniperWeight) {
             this.enemies.push(new RangedSniper(x, y, polarity));
-        } else if (rand < 0.6) {
+        } else if (rand < swarmerWeight + sniperWeight + bruiserWeight) {
             this.enemies.push(new ShieldedBruiser(x, y, polarity));
-        } else if (rand < 0.8) {
+        } else if (rand < swarmerWeight + sniperWeight + bruiserWeight + splitterWeight) {
             this.enemies.push(new Splitter(x, y, polarity, 1));
-        } else if (rand < 0.9) {
+        } else if (rand < 1.0) {
             this.enemies.push(new AreaDenialHazard(x, y, polarity));
         } else {
             this.enemies.push(new Enemy(x, y, polarity));
@@ -936,6 +951,13 @@ class Game {
         }
 
         this.vfxManager.draw(this.ctx);
+
+        if (this.state === 'PLAYING') {
+            if (this.uiManager && this.uiManager.drawTutorialHint) {
+                this.uiManager.drawTutorialHint(this.ctx, this.width, this.height, this.wave, this.player.x, this.player.y);
+            }
+        }
+
         this.comboManager.draw(this.ctx, this.width);
 
         if (this.saveManager && this.saveManager.data && this.saveManager.data.options && this.saveManager.data.options.fpsCounter) {
@@ -997,9 +1019,9 @@ class Game {
                 // Spawn Boss
                 const polarity = Math.random() > 0.5 ? 'POSITIVE' : 'NEGATIVE';
                 if (this.wave % 10 === 0) {
-                    this.bossActive = new BossFluxCore(this.width/2, 100, polarity);
+                    this.bossActive = new BossFluxCore(this.width/2, 100 + this.wave * 15, polarity);
                 } else {
-                    this.bossActive = new BossWarden(this.width/2, 100, polarity);
+                    this.bossActive = new BossWarden(this.width/2, 100 + this.wave * 10, polarity);
                 }
                 this.enemies.push(this.bossActive);
             }
@@ -1010,7 +1032,7 @@ class Game {
             if (this.spawnTimer <= 0) {
                 this.spawnEnemy();
                 this.spawnTimer = this.spawnRate;
-                this.spawnRate = Math.max(0.5, this.spawnRate - 0.05); // Ramp up difficulty
+                this.spawnRate = Math.max(0.3, this.spawnRate * 0.95); // Scale spawn rate down exponentially
                 this.enemiesDefeated++;
 
                 if (this.enemiesDefeated > 0 && this.enemiesDefeated % 20 === 0) {
@@ -1335,6 +1357,13 @@ class Game {
         }
 
         this.vfxManager.draw(this.ctx);
+
+        if (this.state === 'PLAYING') {
+            if (this.uiManager && this.uiManager.drawTutorialHint) {
+                this.uiManager.drawTutorialHint(this.ctx, this.width, this.height, this.wave, this.player.x, this.player.y);
+            }
+        }
+
         this.comboManager.draw(this.ctx, this.width);
 
         if (this.state === 'PAUSED') {
