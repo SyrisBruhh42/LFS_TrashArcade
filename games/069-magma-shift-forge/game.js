@@ -181,6 +181,13 @@ class Game {
             y: this.targetHeight / 2,
             strength: 150
         };
+
+        if (typeof BackgroundParallax !== 'undefined') {
+            this.parallax = new BackgroundParallax(this.targetWidth, this.targetHeight);
+        }
+        if (typeof EnvironmentHazards !== 'undefined') {
+            this.hazards = new EnvironmentHazards(this.targetWidth, this.targetHeight);
+        }
     }
 
     spawnParticle(x, y, color, speed, angle) {
@@ -234,6 +241,9 @@ class Game {
         }
 
         if(this.state === 'PLAYING') {
+            if (this.parallax) this.parallax.update(dt, this.player);
+            if (this.hazards) this.hazards.update(dt, this);
+
             this.player.update(dt, this.input, this);
 
             // Arena Shrink
@@ -419,6 +429,9 @@ class Game {
         }
 
         if(this.state === 'PLAYING') {
+            if (this.parallax) this.parallax.draw(this.ctx);
+            if (this.hazards) this.hazards.draw(this.ctx);
+
             // Draw Arena
             const currentArenaRadius = this.arena.radius + Math.sin(this.arena.pulsing) * 10;
             this.ctx.beginPath();
