@@ -178,6 +178,10 @@ class Game {
         this.enemyHazards = [];
         this.enemySpawnTimer = 0;
         this.particles = [];
+        this.pickups = [];
+        if (typeof ProgressionManager !== 'undefined') {
+            this.progression = new ProgressionManager();
+        }
         this.gravityWell = {
             x: this.targetWidth / 2,
             y: this.targetHeight / 2,
@@ -259,6 +263,34 @@ class Game {
             return;
         }
 
+        if(this.state === 'DRAFT') {
+            if(this.input.mouse.down) {
+                // Draft UI is 3 boxes centered.
+                // Each box is 150x200, gap is 20. Total width = 150*3 + 40 = 490
+                const boxW = 150, boxH = 200, gap = 20;
+                const startX = this.targetWidth/2 - (boxW*3 + gap*2)/2;
+                const startY = this.targetHeight/2 - boxH/2;
+
+                const unscaledMouseX = this.input.mouse.x / this.scale;
+                const unscaledMouseY = this.input.mouse.y / this.scale;
+
+                if (unscaledMouseY >= startY && unscaledMouseY <= startY + boxH) {
+                    for(let i=0; i<3; i++) {
+                        let bx = startX + i * (boxW + gap);
+                        if (unscaledMouseX >= bx && unscaledMouseX <= bx + boxW) {
+                            if (this.progression && this.progression.draftChoices[i]) {
+                                this.progression.applyUpgrade(this.progression.draftChoices[i], this);
+                                this.state = 'PLAYING';
+                                this.input.mouse.down = false;
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
         if(this.state === 'PLAYING') {
             if (this.parallax) this.parallax.update(dt, this.player);
             if (this.hazards) this.hazards.update(dt, this);
@@ -311,17 +343,48 @@ class Game {
 
             this.player.angle = Math.atan2(unscaledMouseY - this.player.y, unscaledMouseX - this.player.x);
 
-            if(this.input.mouse.down && this.projectiles.length < 5) {
-                // cooldown logic could go here, simple spam for now
-                if(Math.random() < 0.2) {
+            if (this.player.fireTimer > 0) this.player.fireTimer -= dt;
+
+            if(this.input.mouse.down && this.projectiles.length < 30) {
+                if(this.player.fireTimer <= 0) {
+                    this.player.fireTimer = this.player.fireCooldown;
                     this.player.recoil = 1.0;
-                    this.projectiles.push({
-                        x: this.player.x,
-                        y: this.player.y,
-                        vx: Math.cos(this.player.angle) * 500,
-                        vy: Math.sin(this.player.angle) * 500,
-                        life: 1
-                    });
+
+                    const spread = 0.15;
+                    const multishot = this.player.multishot;
+                    const startAngle = this.player.angle - (spread * (multishot - 1)) / 2;
+
+                    for (let i = 0; i < multishot; i++) {
+                        const angle = startAngle + i * spread;
+                        this.projectiles.push({
+                            x: this.player.x,
+                            y: this.player.y,
+                            vx: Math.cos(angle) * 500,
+                            vy: Math.sin(angle) * 500,
+                            life: 1,
+                            pierce: this.player.pierce
+                        });
+                    }
+                }
+            }
+
+            // Update Pickups
+            if (this.progression) this.progression.update(dt);
+            if (this.pickups) {
+                for (let i = this.pickups.length - 1; i >= 0; i--) {
+                    let p = this.pickups[i];
+                    p.update(dt, this.player);
+                    if (Math.hypot(this.player.x - p.x, this.player.y - p.y) < this.player.radius + p.radius) {
+                        if (p.type === 'health') {
+                            // Magma Shift Forge doesn't have an explicit health system for player yet, but let's say it gives score/shields
+                            this.score += 50 * (this.progression ? this.progression.getComboMultiplier() : 1);
+                        } else {
+                            this.score += 100 * (this.progression ? this.progression.getComboMultiplier() : 1);
+                        }
+                        this.pickups.splice(i, 1);
+                    } else if (p.life <= 0) {
+                        this.pickups.splice(i, 1);
+                    }
                 }
             }
 
@@ -433,8 +496,11 @@ class Game {
                 for(let j = this.projectiles.length - 1; j >= 0; j--) {
                     let p = this.projectiles[j];
                     if(Math.hypot(p.x - e.x, p.y - e.y) < e.radius + 5) {
-                        e.hp--;
-                        this.projectiles.splice(j, 1);
+                        e.hp -= this.player.damage;
+                        p.pierce--;
+                        if (p.pierce <= 0) {
+                            this.projectiles.splice(j, 1);
+                        }
                         this.arena.radius = Math.min(this.arena.maxRadius, this.arena.radius + 5); // expand arena on hit
                         break;
                     }
@@ -446,12 +512,23 @@ class Game {
 
                 if(e.hp <= 0) {
                     e.onDeath(this);
+                    if (this.progression) this.progression.incrementCombo();
+                    if (Math.random() < 0.3) {
+                        this.pickups.push(new Pickup(e.x, e.y));
+                    }
+
                     if (e.isBoss) {
                         this.score += 500;
                         this.bossActive = false;
                         this.nextBossScore = this.score + 500;
+
+                        if (this.progression) {
+                            this.progression.wave++;
+                            this.progression.generateDraftChoices();
+                            this.state = 'DRAFT';
+                        }
                     } else {
-                        this.score += 100;
+                        this.score += 100 * (this.progression ? this.progression.getComboMultiplier() : 1);
                     }
                     this.enemies.splice(i, 1);
                 }
@@ -571,6 +648,12 @@ class Game {
                 e.draw(this.ctx, this);
             }
 
+            if (this.pickups) {
+                for (let p of this.pickups) {
+                    p.draw(this.ctx);
+                }
+            }
+
             for (let e of this.enemies) {
                 if (e.isBoss) {
                     e.drawHealth(this.ctx, this);
@@ -589,6 +672,50 @@ class Game {
 
             this.ctx.textAlign = 'right';
             this.ctx.fillText(`Arena: ${Math.floor(this.arena.radius)}`, this.targetWidth - 20, 40);
+
+            if (this.progression) {
+                this.ctx.fillStyle = '#ffaa00';
+                this.ctx.fillText(`Wave: ${this.progression.wave}`, this.targetWidth - 20, 70);
+                if (this.progression.combo > 0) {
+                    this.ctx.fillStyle = '#ff00ff';
+                    this.ctx.fillText(`Combo: ${this.progression.combo}x (${this.progression.getComboMultiplier().toFixed(1)}x Score)`, this.targetWidth - 20, 100);
+                    // Combo Bar
+                    this.ctx.fillRect(this.targetWidth - 220, 110, 200 * (this.progression.comboTimer / this.progression.comboMaxTime), 10);
+                }
+            }
+        }
+
+        if (this.state === 'DRAFT') {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            this.ctx.fillRect(0, 0, this.targetWidth, this.targetHeight);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '36px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`WAVE ${this.progression.wave - 1} CLEARED`, this.targetWidth/2, this.targetHeight/2 - 150);
+            this.ctx.font = '24px sans-serif';
+            this.ctx.fillText('Select an Upgrade:', this.targetWidth/2, this.targetHeight/2 - 110);
+
+            const boxW = 150, boxH = 200, gap = 20;
+            const startX = this.targetWidth/2 - (boxW*3 + gap*2)/2;
+            const startY = this.targetHeight/2 - boxH/2;
+
+            for(let i=0; i<3; i++) {
+                let bx = startX + i * (boxW + gap);
+                this.ctx.fillStyle = '#222';
+                this.ctx.fillRect(bx, startY, boxW, boxH);
+                this.ctx.strokeStyle = '#0ff';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(bx, startY, boxW, boxH);
+
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '16px sans-serif';
+                this.ctx.textAlign = 'center';
+                let upgradeName = this.progression.draftChoices[i];
+                let words = upgradeName.split(' ');
+                for (let w = 0; w < words.length; w++) {
+                    this.ctx.fillText(words[w], bx + boxW/2, startY + 80 + w * 25);
+                }
+            }
         }
     }
 
