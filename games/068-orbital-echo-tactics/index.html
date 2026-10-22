@@ -109,6 +109,29 @@
   .touch-btn:active {
     background: rgba(207, 124, 212, 0.3);
   }
+  .upgrade-card {
+    background: rgba(17, 17, 17, 0.9);
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    padding: 20px;
+    margin: 10px;
+    border-radius: 10px;
+    width: 250px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .upgrade-card:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 15px var(--accent);
+    background: rgba(34, 34, 34, 0.9);
+  }
+  #upgrade-container {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 </style>
 </head>
 <body>
@@ -143,6 +166,16 @@
     <h2>PAUSED</h2>
     <button id="btn-resume">Resume</button>
     <a href="../../index.html" style="text-decoration:none;"><button>Back to Arcade</button></a>
+  </div>
+
+  <div id="screen-upgrade" class="overlay hidden">
+    <h2>SYSTEM UPGRADE AVAILABLE</h2>
+    <p>Select an enhancement for your next cycle:</p>
+    <div id="upgrade-container">
+      <div id="btn-upgrade-1" class="upgrade-card">Upgrade 1</div>
+      <div id="btn-upgrade-2" class="upgrade-card">Upgrade 2</div>
+      <div id="btn-upgrade-3" class="upgrade-card">Upgrade 3</div>
+    </div>
   </div>
 
   <div id="screen-gameover" class="overlay hidden">
