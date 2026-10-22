@@ -510,6 +510,115 @@ class Enemy {
     }
 }
 
+class BossEnemy extends Enemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.isBoss = true;
+        this.maxHealth = 1000;
+        this.health = 1000;
+        this.radius = 30;
+        this.speed = 30;
+        this.damage = 20;
+        this.phase = 1; // 1 = >50%, 2 = <50%
+        this.bossName = "Boss";
+        this.active = true;
+    }
+
+    update(dt) {
+        super.update(dt);
+        if (this.phase === 1 && this.health <= this.maxHealth * 0.5) {
+            this.phase = 2;
+            this.onPhaseChange();
+        }
+    }
+
+    onPhaseChange() {
+        // Override in subclasses
+    }
+}
+
+class GummyWormBoss extends BossEnemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.bossName = "Colossal Gummy Worm";
+        this.maxHealth = 2500;
+        this.health = 2500;
+        this.speed = 40;
+        this.radius = 40;
+        this.trapTimer = 0;
+    }
+
+    update(dt) {
+        super.update(dt);
+        if (this.phase === 2) {
+            this.trapTimer += dt;
+            if (this.trapTimer > 2.0) {
+                this.trapTimer = 0;
+                this.dropTrap = true;
+            }
+        }
+    }
+
+    onPhaseChange() {
+        this.speed = 80;
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.phase === 1 ? '#ff00aa' : '#ff0000';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+    }
+}
+
+class LollipopCrusherBoss extends BossEnemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.bossName = "Lollipop Crusher";
+        this.maxHealth = 4000;
+        this.health = 4000;
+        this.speed = 20;
+        this.radius = 50;
+        this.shootTimer = 0;
+    }
+
+    update(dt) {
+        super.update(dt);
+        if (this.phase === 2) {
+            this.shootTimer += dt;
+            if (this.shootTimer > 1.5) {
+                this.shootTimer = 0;
+                this.shoot = true;
+            }
+        }
+    }
+
+    onPhaseChange() {
+        this.speed = 10;
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.phase === 1 ? '#00ffff' : '#0000ff';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(this.x - this.radius, this.y);
+        ctx.lineTo(this.x + this.radius, this.y);
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+    }
+}
+
 // --- MAIN ENGINE ---
 
 
@@ -982,6 +1091,10 @@ class Game {
         this.projectiles = [];
         this.score = 0;
         this.wave = 1;
+        this.nextBossScore = 500;
+        this.bossActive = false;
+        this.bossWarningTimer = 0;
+        this.activeBoss = null;
 
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
@@ -1034,6 +1147,10 @@ class Game {
         this.projectiles = [];
         this.score = 0;
         this.wave = 1;
+        this.nextBossScore = 500;
+        this.bossActive = false;
+        this.bossWarningTimer = 0;
+        this.activeBoss = null;
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
         this.env = new EnvironmentManager(this.width, this.height);
@@ -1106,13 +1223,36 @@ class Game {
 
                 this.tower.update(dt, this.input, this);
 
-                // Spawn enemies
-                this.enemySpawnTimer += dt;
-                if (this.enemySpawnTimer >= this.enemySpawnRate) {
-                    this.enemySpawnTimer = 0;
-                    this.spawnEnemy();
-                    // slowly increase difficulty
-                    this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.05);
+                if (this.score >= this.nextBossScore && !this.bossActive && !this.activeBoss) {
+                    this.bossActive = true;
+                    this.bossWarningTimer = 3.0;
+                }
+
+                if (this.bossActive && this.bossWarningTimer > 0) {
+                    this.bossWarningTimer -= dt;
+                    if (this.bossWarningTimer <= 0) {
+                        this.spawnBoss();
+                    }
+                }
+
+                if (this.activeBoss && !this.activeBoss.active) {
+                    // Boss defeated
+                    this.activeBoss = null;
+                    this.bossActive = false;
+                    this.score += 500; // Bonus for killing boss
+                    this.nextBossScore = this.score + 500;
+                    // Heal tower a bit
+                    this.tower.health = Math.min(this.tower.maxHealth, this.tower.health + 50);
+                }
+
+                // Only spawn normal enemies if no boss is active or warning
+                if (!this.bossActive) {
+                    this.enemySpawnTimer += dt;
+                    if (this.enemySpawnTimer >= this.enemySpawnRate) {
+                        this.enemySpawnTimer = 0;
+                        this.spawnEnemy();
+                        this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.05);
+                    }
                 }
 
                 // Update enemies & collisions
@@ -1135,6 +1275,29 @@ class Game {
                 for (let i = this.enemies.length - 1; i >= 0; i--) {
                     let e = this.enemies[i];
                     e.update(dt);
+
+                    // Bespoke Boss Attack Patterns
+                    if (e.isBoss) {
+                        if (e.bossName === "Colossal Gummy Worm" && e.dropTrap) {
+                            e.dropTrap = false;
+                            // Drop 3 traps in a triangle around it
+                            this.env.traps.push(new CaramelTrap(e.x - 30, e.y - 30, 40, 40));
+                            this.env.traps.push(new CaramelTrap(e.x + 30, e.y - 30, 40, 40));
+                            this.env.traps.push(new CaramelTrap(e.x, e.y + 30, 40, 40));
+                        }
+                        if (e.bossName === "Lollipop Crusher" && e.shoot) {
+                            e.shoot = false;
+                            // Shoot barrage of 8 projectiles in all directions
+                            for (let i = 0; i < 8; i++) {
+                                const a = (Math.PI * 2 / 8) * i;
+                                const vx = Math.cos(a) * 120;
+                                const vy = Math.sin(a) * 120;
+                                this.projectiles.push(new EnemyProjectile(e.x, e.y, vx, vy, e.damage));
+                            }
+                            // Also spawn a small swarmer
+                            this.enemies.push(new SwarmerEnemy(e.x, e.y, this.tower));
+                        }
+                    }
 
                     // Check collision with tower
                     const distToTower = Math.hypot(e.x - this.tower.x, e.y - this.tower.y);
@@ -1257,6 +1420,21 @@ class Game {
         return (p.x - (v.x + t * (w.x - v.x)))**2 + (p.y - (v.y + t * (w.y - v.y)))**2;
     }
 
+
+    spawnBoss() {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.max(this.width, this.height) * 0.7;
+        const x = this.tower.x + Math.cos(angle) * dist;
+        const y = this.tower.y + Math.sin(angle) * dist;
+
+        if (Math.random() > 0.5) {
+            this.activeBoss = new GummyWormBoss(x, y, this.tower);
+        } else {
+            this.activeBoss = new LollipopCrusherBoss(x, y, this.tower);
+        }
+        this.enemies.push(this.activeBoss);
+    }
+
     spawnEnemy() {
         const angle = Math.random() * Math.PI * 2;
         const dist = Math.max(this.width, this.height) * 0.7; // spawn outside screen
@@ -1323,6 +1501,34 @@ class Game {
         this.ctx.font = '24px monospace';
         this.ctx.textAlign = 'left';
         this.ctx.fillText(`Score: ${this.score}`, 20, 40);
+
+        if (this.bossActive && this.bossWarningTimer > 0) {
+            this.ctx.fillStyle = (Math.floor(this.bossWarningTimer * 5) % 2 === 0) ? '#ff0000' : '#ffff00';
+            this.ctx.font = 'bold 48px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText("WARNING: BOSS APPROACHING", this.width / 2, this.height / 2 - 100);
+            this.ctx.textAlign = 'left';
+        }
+
+        if (this.activeBoss) {
+            const barWidth = 400;
+            const barHeight = 20;
+            const x = (this.width - barWidth) / 2;
+            const y = 20;
+
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(x - 2, y - 2, barWidth + 4, barHeight + 4);
+
+            const hpRatio = Math.max(0, this.activeBoss.health / this.activeBoss.maxHealth);
+            this.ctx.fillStyle = '#f00';
+            this.ctx.fillRect(x, y, barWidth * hpRatio, barHeight);
+
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '16px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(this.activeBoss.bossName, this.width / 2, y + 15);
+            this.ctx.textAlign = 'left';
+        }
         this.ctx.fillText(`High: ${this.saveManager.data.highScore}`, 20, 70);
 
         // Dash cooldown HUD
