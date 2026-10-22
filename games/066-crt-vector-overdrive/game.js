@@ -322,6 +322,18 @@ class Player {
         this.overdriveTimer = 0;
         this.vx = 0;
         this.vy = 0;
+
+        // Base stats dict for upgrade modifications
+        this.stats = {
+            speed: CONSTANTS.PLAYER_SPEED,
+            maxHealth: CONSTANTS.MAX_HEALTH,
+            fireRate: CONSTANTS.PLAYER_FIRE_RATE,
+            projectileSpeed: CONSTANTS.PROJECTILE_SPEED,
+            projectileSize: 2,
+            damageMultiplier: 1.0,
+            dashCooldown: CONSTANTS.DASH_COOLDOWN,
+            dashSpeed: CONSTANTS.DASH_SPEED
+        };
         this.invulnTimer = 0;
         this.dashTimer = 0;
         this.dashCooldownTimer = 0;
@@ -338,15 +350,15 @@ class Player {
 
         if (this.game.input.isDashPressed() && this.dashCooldownTimer <= 0 && this.dashTimer <= 0 && (move.x !== 0 || move.y !== 0)) {
             this.dashTimer = CONSTANTS.DASH_DURATION;
-            this.dashCooldownTimer = CONSTANTS.DASH_COOLDOWN;
+            this.dashCooldownTimer = this.stats.dashCooldown;
             this.dashVector = {x: move.x, y: move.y};
             this.game.sound.dash && this.game.sound.dash();
         }
 
         if (this.dashTimer > 0) {
             this.dashTimer -= dt;
-            this.vx = this.dashVector.x * CONSTANTS.DASH_SPEED;
-            this.vy = this.dashVector.y * CONSTANTS.DASH_SPEED;
+            this.vx = this.dashVector.x * this.stats.dashSpeed;
+            this.vy = this.dashVector.y * this.stats.dashSpeed;
             // spawn afterimage
             if (Math.random() < 0.5) {
                 const aim = this.game.input.getAimVector(this.x, this.y, this.game.scaleX, this.game.scaleY);
@@ -355,8 +367,8 @@ class Player {
             }
         } else {
             // Apply tight momentum tuning
-            const targetVx = move.x * CONSTANTS.PLAYER_SPEED;
-            const targetVy = move.y * CONSTANTS.PLAYER_SPEED;
+            const targetVx = move.x * this.stats.speed;
+            const targetVy = move.y * this.stats.speed;
             this.vx += (targetVx - this.vx) * 15 * dt;
             this.vy += (targetVy - this.vy) * 15 * dt;
         }
@@ -400,7 +412,7 @@ class Player {
         const aim = this.game.input.getAimVector(this.x, this.y, this.game.scaleX, this.game.scaleY);
 
         if (aim) {
-            const currentFireRate = this.inOverdrive ? CONSTANTS.OVERDRIVE_FIRE_RATE : CONSTANTS.PLAYER_FIRE_RATE;
+            const currentFireRate = this.inOverdrive ? CONSTANTS.OVERDRIVE_FIRE_RATE : this.stats.fireRate;
             if (this.fireTimer <= 0) {
                 this.fireTimer = currentFireRate;
 
@@ -415,7 +427,7 @@ class Player {
                     this.game.sound.shootOverdrive();
                 } else {
                     // Single shot
-                    this.game.projectiles.push(new Projectile(this.x, this.y, aim.x, aim.y, false));
+                    this.game.projectiles.push(new Projectile(this.x, this.y, aim.x, aim.y, false, this.stats));
                     this.game.sound.shoot();
                 }
 
@@ -500,13 +512,15 @@ class Player {
 }
 
 class Projectile {
-    constructor(x, y, vx, vy, isOverdrive) {
+    constructor(x, y, vx, vy, isOverdrive, stats) {
         this.x = x;
         this.y = y;
-        this.vx = vx * CONSTANTS.PROJECTILE_SPEED;
-        this.vy = vy * CONSTANTS.PROJECTILE_SPEED;
+        const spd = stats ? stats.projectileSpeed : CONSTANTS.PROJECTILE_SPEED;
+        this.vx = vx * spd;
+        this.vy = vy * spd;
+        this.damageMultiplier = stats ? stats.damageMultiplier : 1.0;
         this.isOverdrive = isOverdrive;
-        this.radius = isOverdrive ? 4 : 2;
+        this.radius = (isOverdrive ? 4 : (stats ? stats.projectileSize : 2));
         this.active = true;
     }
     update(dt) {
@@ -565,7 +579,14 @@ class Enemy {
         this.hp -= amount;
         if (this.hp <= 0) {
             this.active = false;
-            this.game.score += CONSTANTS.SCORE_PER_ENEMY;
+            this.game.score += CONSTANTS.SCORE_PER_ENEMY * (this.game.comboMultiplier || 1.0);
+
+            // Drop pickups
+            const dropChance = Math.random();
+            if (dropChance < 0.1) this.game.pickups.push(new Pickup(this.x, this.y, 'health'));
+            else if (dropChance < 0.3) this.game.pickups.push(new Pickup(this.x, this.y, 'energy'));
+            else if (dropChance < 0.6) this.game.pickups.push(new Pickup(this.x, this.y, 'score'));
+
             this.game.sound.explosion();
             this.game.spawnParticles(this.x, this.y, this.color, 10);
         }
@@ -1374,6 +1395,213 @@ class Particle {
 
 // --- MAIN GAME ---
 
+class UpgradeManager {
+    constructor(game) {
+        this.game = game;
+        this.active = false;
+        this.draft = [];
+        this.perkPool = [
+            { id: 'dmg_up', name: 'Weapon Calibrator', desc: '+25% Damage', apply: (p) => p.stats.damageMultiplier += 0.25 },
+            { id: 'fire_rate', name: 'Coolant Flush', desc: '+20% Fire Rate', apply: (p) => p.stats.fireRate *= 0.8 },
+            { id: 'speed_up', name: 'Overclocked Thrusters', desc: '+15% Move Speed', apply: (p) => p.stats.speed *= 1.15 },
+            { id: 'hp_up', name: 'Titanium Hull', desc: '+25 Max HP', apply: (p) => { p.stats.maxHealth += 25; p.health += 25; } },
+            { id: 'dash_cd', name: 'Capacitor Bank', desc: '-30% Dash Cooldown', apply: (p) => p.stats.dashCooldown *= 0.7 },
+            { id: 'dash_speed', name: 'Vector Injector', desc: '+20% Dash Speed', apply: (p) => p.stats.dashSpeed *= 1.2 },
+            { id: 'proj_size', name: 'Heavy Munitions', desc: '+50% Projectile Size', apply: (p) => p.stats.projectileSize *= 1.5 },
+            { id: 'magnet', name: 'Polarized Hull', desc: 'Increased Pickup Range', apply: (p) => p.magnetRange = (p.magnetRange || 50) * 2 }
+        ];
+
+        // Touch interaction
+        this.selectedIndex = -1;
+    }
+
+    generateDraft() {
+        this.active = true;
+        this.game.state = 'UPGRADE';
+        this.draft = [];
+        let pool = [...this.perkPool];
+        for (let i = 0; i < 3; i++) {
+            if (pool.length === 0) break;
+            const idx = Math.floor(Math.random() * pool.length);
+            this.draft.push(pool.splice(idx, 1)[0]);
+        }
+    }
+
+    update(dt) {
+        // Upgrade selection logic
+        const input = this.game.input;
+
+        if (input.keys['Digit1']) this.selectUpgrade(0);
+        else if (input.keys['Digit2']) this.selectUpgrade(1);
+        else if (input.keys['Digit3']) this.selectUpgrade(2);
+
+        if (input.mouse.down && !this.wasMouseDown) {
+            const rect = this.game.canvas.getBoundingClientRect();
+            const mouseX = input.mouse.x / this.game.scaleX;
+            const mouseY = input.mouse.y / this.game.scaleY;
+
+            const cardW = 200;
+            const cardH = 300;
+            const spacing = 40;
+            const startX = CONSTANTS.CANVAS_BASE_W / 2 - cardW * 1.5 - spacing;
+            const startY = CONSTANTS.CANVAS_BASE_H / 2 - cardH / 2;
+
+            for (let i = 0; i < this.draft.length; i++) {
+                const cx = startX + i * (cardW + spacing);
+                if (mouseX > cx && mouseX < cx + cardW && mouseY > startY && mouseY < startY + cardH) {
+                    this.selectUpgrade(i);
+                    break;
+                }
+            }
+        }
+        this.wasMouseDown = input.mouse.down;
+    }
+
+    selectUpgrade(index) {
+        if (index >= 0 && index < this.draft.length) {
+            this.draft[index].apply(this.game.player);
+            this.active = false;
+            this.game.state = 'PLAYING';
+        }
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(0, 0, CONSTANTS.CANVAS_BASE_W, CONSTANTS.CANVAS_BASE_H);
+
+        ctx.fillStyle = COLORS.text;
+        ctx.font = '30px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('WAVE CLEARED. SELECT UPGRADE:', CONSTANTS.CANVAS_BASE_W / 2, 100);
+
+        const cardW = 200;
+        const cardH = 280;
+        const spacing = 40;
+
+        const totalW = this.draft.length * cardW + (this.draft.length - 1) * spacing;
+        const startX = (CONSTANTS.CANVAS_BASE_W - totalW) / 2;
+        const startY = 180;
+
+        for (let i = 0; i < this.draft.length; i++) {
+            const perk = this.draft[i];
+            const cx = startX + i * (cardW + spacing);
+
+            ctx.strokeStyle = COLORS.text;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(cx, startY, cardW, cardH);
+
+            ctx.fillStyle = 'rgba(0, 255, 204, 0.1)';
+            ctx.fillRect(cx, startY, cardW, cardH);
+
+            ctx.fillStyle = COLORS.text;
+            ctx.font = '20px monospace';
+            ctx.fillText(perk.name, cx + cardW / 2, startY + 40);
+
+            ctx.font = '14px monospace';
+            // Simple text wrapping (could be improved)
+            const words = perk.desc.split(' ');
+            let line = '';
+            let y = startY + 100;
+            for (let w of words) {
+                if (ctx.measureText(line + w + ' ').width > cardW - 20) {
+                    ctx.fillText(line, cx + cardW / 2, y);
+                    line = w + ' ';
+                    y += 20;
+                } else {
+                    line += w + ' ';
+                }
+            }
+            ctx.fillText(line, cx + cardW / 2, y);
+
+            ctx.fillStyle = COLORS.player;
+            ctx.fillText(`Press ${i+1}`, cx + cardW / 2, startY + cardH - 20);
+        }
+    }
+}
+
+class Pickup {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type; // 'health', 'energy', 'score'
+        this.radius = 8;
+        this.lifeTime = 10.0;
+        this.active = true;
+        this.bobAnim = Math.random() * Math.PI * 2;
+    }
+
+    update(dt, game) {
+        this.lifeTime -= dt;
+        if (this.lifeTime <= 0) this.active = false;
+
+        this.bobAnim += dt * 3;
+
+        if (game.player && this.active) {
+            const dx = game.player.x - this.x;
+            const dy = game.player.y - this.y;
+            const dist = Math.hypot(dx, dy);
+
+            const magnetRange = game.player.magnetRange || 50;
+
+            if (dist < magnetRange) {
+                // Magnetize towards player
+                const pullSpeed = 400 * dt;
+                this.x += (dx / dist) * pullSpeed;
+                this.y += (dy / dist) * pullSpeed;
+            }
+
+            if (dist < game.player.radius + this.radius) {
+                this.active = false;
+                if (this.type === 'health') {
+                    game.player.health = Math.min(game.player.stats.maxHealth, game.player.health + 10);
+                    game.spawnParticles(this.x, this.y, COLORS.health, 10);
+                } else if (this.type === 'energy') {
+                     // small heal/energy bump
+                     game.player.health = Math.min(game.player.stats.maxHealth, game.player.health + 2);
+                     game.spawnParticles(this.x, this.y, COLORS.overdrive, 5);
+                } else if (this.type === 'score') {
+                    game.score += 50 * game.comboMultiplier;
+                    game.comboTimer = 3.0; // Refresh combo
+                    game.comboMultiplier = Math.min(10.0, game.comboMultiplier + 0.1);
+                    game.spawnParticles(this.x, this.y, COLORS.text, 5);
+                }
+                game.sound.hit(); // Using hit as placeholder for pickup
+            }
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y + Math.sin(this.bobAnim) * 5);
+        ctx.rotate(this.bobAnim * 0.5);
+
+        if (this.lifeTime < 2.0 && Math.floor(this.lifeTime * 10) % 2 === 0) {
+            // Blink before despawning
+        } else {
+            ctx.lineWidth = 2;
+            if (this.type === 'health') {
+                ctx.strokeStyle = COLORS.health;
+                ctx.beginPath();
+                ctx.moveTo(-5, 0); ctx.lineTo(5, 0);
+                ctx.moveTo(0, -5); ctx.lineTo(0, 5);
+                ctx.stroke();
+            } else if (this.type === 'energy') {
+                ctx.strokeStyle = COLORS.overdrive;
+                ctx.beginPath();
+                ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                ctx.stroke();
+            } else {
+                ctx.strokeStyle = COLORS.text;
+                ctx.beginPath();
+                ctx.moveTo(0, -5); ctx.lineTo(4, 4); ctx.lineTo(-4, 4); ctx.closePath();
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+    }
+}
+
+
 class Boss {
     constructor(game, type) {
         this.game = game;
@@ -1418,7 +1646,10 @@ class Boss {
             this.game.sound.play('explosion');
             this.game.spawnParticles(this.x, this.y, this.color, 150);
             this.game.boss = null;
-            this.game.score += 5000;
+            this.game.score += 5000 * (this.game.comboMultiplier || 1.0);
+            for(let i=0; i<10; i++) {
+                this.game.pickups.push(new Pickup(this.x + (Math.random()-0.5)*100, this.y + (Math.random()-0.5)*100, 'score'));
+            }
 
             // Clear enemies for breather
             this.game.enemies = [];
@@ -1580,11 +1811,19 @@ class Game {
         this.particles = [];
         this.vectorGrid = new VectorGrid(this);
         this.envManager = new EnvironmentManager(this);
+        this.upgradeManager = new UpgradeManager(this);
+        this.pickups = [];
+        this.comboMultiplier = 1.0;
+        this.comboTimer = 0;
 
         this.score = 0;
         this.wave = 1;
         this.nextBossWave = 5;
         this.enemySpawnTimer = 0;
+        this.pickups = [];
+        this.comboMultiplier = 1.0;
+        this.comboTimer = 0;
+        this.upgradeManager.active = false;
 
         this.setupResizeObserver();
         this.bindEvents();
@@ -1643,6 +1882,10 @@ class Game {
         this.wave = 1;
         this.nextBossWave = 5;
         this.enemySpawnTimer = 0;
+        this.pickups = [];
+        this.comboMultiplier = 1.0;
+        this.comboTimer = 0;
+        this.upgradeManager.active = false;
     }
 
     spawnParticles(x, y, color, count) {
@@ -1684,7 +1927,11 @@ class Game {
                     if (this.state === 'TITLE' || this.state === 'GAME_OVER') {
                         this.resetGame();
                         this.state = 'PLAYING';
-                    } else if (this.state === 'PAUSED') {
+                    } else if (this.state === 'UPGRADE') {
+            this.upgradeManager.draw(this.ctx);
+        }
+
+        if (this.state === 'PAUSED') {
                         this.state = 'PLAYING';
                     }
                 }
@@ -1695,7 +1942,19 @@ class Game {
             return;
         }
 
+        if (this.state === 'UPGRADE') {
+            this.upgradeManager.update(dt);
+            return;
+        }
         if (this.state !== 'PLAYING') return;
+
+        // Combo decay
+        if (this.comboTimer > 0) {
+            this.comboTimer -= dt;
+            if (this.comboTimer <= 0) {
+                this.comboMultiplier = 1.0;
+            }
+        }
 
         if (this.input.keys['Escape'] || this.input.keys['KeyP']) {
             if (!this.wasEscapePressed) {
@@ -1726,13 +1985,19 @@ class Game {
         this.envManager.update(dt);
         this.particles = this.particles.filter(p => p.active);
 
+        this.pickups.forEach(p => p.update(dt, this));
+        this.pickups = this.pickups.filter(p => p.active);
+
         // Collisions: Projectile vs Enemy
         for(let p of this.projectiles) {
             for(let e of this.enemies) {
                 if (p.active && e.active) {
                     if (distance(p.x, p.y, e.x, e.y) < p.radius + e.radius) {
                         p.active = false;
-                        e.takeDamage(1);
+                        e.takeDamage(1 * (p.damageMultiplier || 1.0));
+                        this.comboTimer = 3.0; // Refresh on hit
+                        this.comboMultiplier = Math.min(10.0, this.comboMultiplier + 0.01);
+
                         this.sound.hit();
                     }
                 }
@@ -1740,7 +2005,9 @@ class Game {
             if (this.boss && this.boss.state === 'ACTIVE' && p.active) {
                 if (distance(p.x, p.y, this.boss.x, this.boss.y) < p.radius + this.boss.width/2) {
                     p.active = false;
-                    this.boss.takeDamage(100);
+                    this.boss.takeDamage(100 * (p.damageMultiplier || 1.0));
+                    this.comboTimer = 3.0;
+                    this.comboMultiplier = Math.min(10.0, this.comboMultiplier + 0.05);
                 }
             }
         }
@@ -1751,8 +2018,18 @@ class Game {
             if (this.wave === this.nextBossWave) {
                 this.boss = new Boss(this, this.nextBossWave % 10 === 0 ? 2 : 1);
                 this.nextBossWave += 5;
+            } else {
+                // Wave cleared, trigger draft
+                this.upgradeManager.generateDraft();
             }
         }
+
+        // Ensure boss death triggers draft implicitly via next update loop when boss becomes null
+        if (this.boss && this.boss.hp <= 0 && this.boss.state !== 'WARNING') {
+            this.boss = null;
+            this.upgradeManager.generateDraft();
+        }
+
 
         if (this.boss) {
             this.boss.update(dt);
@@ -1774,9 +2051,9 @@ class Game {
                 this.enemySpawnTimer = rate;
 
             // Health regen over time naturally very slow to encourage overdrive use but keep player alive
-            if (Math.random() < 0.2 && this.player.health < CONSTANTS.MAX_HEALTH) {
+            if (Math.random() < 0.2 && this.player.health < this.player.stats.maxHealth) {
                 this.player.health += 2;
-                if (this.player.health > CONSTANTS.MAX_HEALTH) this.player.health = CONSTANTS.MAX_HEALTH;
+                if (this.player.health > this.player.stats.maxHealth) this.player.health = this.player.stats.maxHealth;
             }
         }
         }
@@ -1805,9 +2082,17 @@ class Game {
         ctx.fillText(`DASH: ${Math.max(0, this.player.dashCooldownTimer).toFixed(1)}s`, 20, 150);
         ctx.fillText(`HI: ${this.saveManager.data.highScore}`, 20, 60);
 
+        // Combo UI
+        if (this.comboTimer > 0) {
+            ctx.fillStyle = COLORS.overdrive;
+            ctx.font = '18px monospace';
+            ctx.fillText(`COMBO x${this.comboMultiplier.toFixed(1)}`, CONSTANTS.CANVAS_BASE_W - 150, 30);
+            ctx.fillRect(CONSTANTS.CANVAS_BASE_W - 150, 40, 130 * (this.comboTimer / 3.0), 5);
+        }
+
         // Health bar
         const maxW = 200;
-        const hW = (this.player.health / CONSTANTS.MAX_HEALTH) * maxW;
+        const hW = (this.player.health / this.player.stats.maxHealth) * maxW;
         ctx.fillStyle = COLORS.health;
         ctx.fillRect(20, 80, hW, 15);
         ctx.strokeStyle = COLORS.text;
@@ -1859,6 +2144,7 @@ class Game {
         }
 
         this.particles.forEach(p => p.draw(this.ctx));
+        this.pickups.forEach(p => p.draw(this.ctx));
         this.hazards.forEach(h => h.draw(this.ctx));
         this.enemies.forEach(e => e.draw(this.ctx));
         if (this.boss) this.boss.draw(this.ctx);
@@ -1869,6 +2155,10 @@ class Game {
         if (this.player) {
             this.player.draw(this.ctx);
             this.drawHUD(this.ctx);
+        }
+
+        if (this.state === 'UPGRADE') {
+            this.upgradeManager.draw(this.ctx);
         }
 
         if (this.state === 'PAUSED') {
