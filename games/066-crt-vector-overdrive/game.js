@@ -53,7 +53,8 @@ class SaveManager {
             options: {
                 masterMute: false,
                 sfxVol: 1,
-                musicVol: 1
+                musicVol: 1,
+                shakeIntensity: 1
             }
         };
         this.load();
@@ -66,7 +67,10 @@ class SaveManager {
                 this.data = { ...this.data, ...parsed };
                 // Ensure options exists
                 if (!this.data.options) {
-                    this.data.options = { masterMute: false, sfxVol: 1, musicVol: 1 };
+                    this.data.options = { masterMute: false, sfxVol: 1, musicVol: 1, shakeIntensity: 1 };
+                }
+                if (this.data.options.shakeIntensity === undefined) {
+                    this.data.options.shakeIntensity = 1;
                 }
             }
         } catch (e) {
@@ -360,7 +364,7 @@ class Player {
             this.vx = this.dashVector.x * this.stats.dashSpeed;
             this.vy = this.dashVector.y * this.stats.dashSpeed;
             // spawn afterimage
-            if (Math.random() < 0.5) {
+            if (Math.random() < 0.8) {
                 const aim = this.game.input.getAimVector(this.x, this.y, this.game.scaleX, this.game.scaleY);
                 let angle = aim ? Math.atan2(aim.y, aim.x) : Math.atan2(this.vy, this.vx);
                 this.afterimages.push(new Afterimage(this.x, this.y, angle, this.radius, 0.3, this.inOverdrive ? COLORS.overdrive : COLORS.player));
@@ -371,6 +375,24 @@ class Player {
             const targetVy = move.y * this.stats.speed;
             this.vx += (targetVx - this.vx) * 15 * dt;
             this.vy += (targetVy - this.vy) * 15 * dt;
+        }
+
+        if (move.x !== 0 || move.y !== 0) {
+            const moveAngle = Math.atan2(move.y, move.x);
+            if (Math.random() < 0.3) {
+                this.game.spawnDirectionalParticles(this.x, this.y, this.inOverdrive ? COLORS.overdrive : COLORS.player, 1, moveAngle + Math.PI, 0.5, 0.5);
+            }
+            if (this.inOverdrive && Math.random() < 0.2) {
+                const aim = this.game.input.getAimVector(this.x, this.y, this.game.scaleX, this.game.scaleY);
+                let angle = aim ? Math.atan2(aim.y, aim.x) : Math.atan2(this.vy, this.vx);
+                this.afterimages.push(new Afterimage(this.x, this.y, angle, this.radius, 0.2, COLORS.overdrive));
+            }
+            if (!this.inOverdrive && Math.random() < 0.05) {
+                // Occasional trail even outside overdrive for extra juice
+                const aim = this.game.input.getAimVector(this.x, this.y, this.game.scaleX, this.game.scaleY);
+                let angle = aim ? Math.atan2(aim.y, aim.x) : Math.atan2(this.vy, this.vx);
+                this.afterimages.push(new Afterimage(this.x, this.y, angle, this.radius, 0.1, COLORS.player));
+            }
         }
 
         this.x += this.vx * dt;
@@ -1362,14 +1384,14 @@ class LaserFence {
 }
 
 class Particle {
-    constructor(x, y, color) {
+    constructor(x, y, color, angle = null, spread = Math.PI * 2, speedMult = 1.0) {
         this.x = x;
         this.y = y;
         this.color = color;
-        const angle = Math.random() * Math.PI * 2;
-        const speed = randomRange(50, 150);
-        this.vx = Math.cos(angle) * speed;
-        this.vy = Math.sin(angle) * speed;
+        const finalAngle = angle !== null ? angle + (Math.random() - 0.5) * spread : Math.random() * Math.PI * 2;
+        const speed = randomRange(50, 150) * speedMult;
+        this.vx = Math.cos(finalAngle) * speed;
+        this.vy = Math.sin(finalAngle) * speed;
         this.life = randomRange(0.2, 0.6);
         this.maxLife = this.life;
         this.radius = randomRange(1, 3);
@@ -1394,6 +1416,39 @@ class Particle {
 
 
 // --- MAIN GAME ---
+
+class FloatingText {
+    constructor(x, y, text, color, isCritical) {
+        this.x = x;
+        this.y = y;
+        this.text = text;
+        this.color = color;
+        this.life = 0.8;
+        this.maxLife = 0.8;
+        this.vy = -50;
+        this.scale = isCritical ? 2.0 : 1.0;
+        this.active = true;
+    }
+    update(dt) {
+        this.y += this.vy * dt;
+        this.life -= dt;
+        if (this.scale > 1.0) {
+            this.scale -= dt * 2;
+            if (this.scale < 1.0) this.scale = 1.0;
+        }
+        if (this.life <= 0) this.active = false;
+    }
+    draw(ctx) {
+        const alpha = Math.max(0, this.life / this.maxLife);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = this.color;
+        ctx.font = `${Math.floor(14 * this.scale)}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.restore();
+    }
+}
 
 class UpgradeManager {
     constructor(game) {
@@ -1825,6 +1880,12 @@ class Game {
         this.comboTimer = 0;
         this.upgradeManager.active = false;
 
+        this.shakeTimer = 0;
+        this.shakeIntensity = 0;
+        this.shakeAngle = null;
+        this.hitStopTimer = 0;
+        this.floatingTexts = [];
+
         this.setupResizeObserver();
         this.bindEvents();
     }
@@ -1886,12 +1947,38 @@ class Game {
         this.comboMultiplier = 1.0;
         this.comboTimer = 0;
         this.upgradeManager.active = false;
+
+        this.shakeTimer = 0;
+        this.shakeIntensity = 0;
+        this.shakeAngle = null;
+        this.hitStopTimer = 0;
+        this.floatingTexts = [];
     }
 
     spawnParticles(x, y, color, count) {
         for(let i = 0; i < count; i++) {
             this.particles.push(new Particle(x, y, color));
         }
+    }
+
+    spawnDirectionalParticles(x, y, color, count, angle, spread, speedMult) {
+        for(let i = 0; i < count; i++) {
+            this.particles.push(new Particle(x, y, color, angle, spread, speedMult));
+        }
+    }
+
+    triggerShake(intensity, duration, angle = null) {
+        if (duration > this.shakeTimer) {
+            this.shakeTimer = duration;
+        }
+        if (intensity > this.shakeIntensity) {
+            this.shakeIntensity = intensity;
+        }
+        this.shakeAngle = angle;
+    }
+
+    addFloatingText(x, y, text, color, isCritical = false) {
+        this.floatingTexts.push(new FloatingText(x, y, text, color, isCritical));
     }
 
     gameOver() {
@@ -1948,6 +2035,18 @@ class Game {
         }
         if (this.state !== 'PLAYING') return;
 
+        this.floatingTexts.forEach(f => f.update(dt));
+        this.floatingTexts = this.floatingTexts.filter(f => f.active);
+
+        if (this.hitStopTimer > 0) {
+            this.hitStopTimer -= dt;
+            return;
+        }
+
+        if (this.shakeTimer > 0) {
+            this.shakeTimer -= dt;
+        }
+
         // Combo decay
         if (this.comboTimer > 0) {
             this.comboTimer -= dt;
@@ -1994,9 +2093,20 @@ class Game {
                 if (p.active && e.active) {
                     if (distance(p.x, p.y, e.x, e.y) < p.radius + e.radius) {
                         p.active = false;
+                        const dmg = Math.floor(100 * (p.damageMultiplier || 1.0));
                         e.takeDamage(1 * (p.damageMultiplier || 1.0));
                         this.comboTimer = 3.0; // Refresh on hit
                         this.comboMultiplier = Math.min(10.0, this.comboMultiplier + 0.01);
+
+                        const hitAngle = Math.atan2(e.y - p.y, e.x - p.x);
+                        const isCrit = p.isOverdrive || (Math.random() < 0.1);
+                        this.addFloatingText(e.x, e.y - 10, `${dmg}${isCrit ? '!' : ''}`, isCrit ? '#ffaa00' : '#ffffff', isCrit);
+                        this.spawnDirectionalParticles(e.x, e.y, e.color || COLORS.enemy, isCrit ? 15 : 5, hitAngle, Math.PI / 2, isCrit ? 1.5 : 1.0);
+
+                        if (isCrit) {
+                            this.triggerShake(5, 0.1, hitAngle);
+                            if (this.hitStopTimer < 0.03) this.hitStopTimer = 0.03;
+                        }
 
                         this.sound.hit();
                     }
@@ -2005,9 +2115,18 @@ class Game {
             if (this.boss && this.boss.state === 'ACTIVE' && p.active) {
                 if (distance(p.x, p.y, this.boss.x, this.boss.y) < p.radius + this.boss.width/2) {
                     p.active = false;
+                    const dmg = Math.floor(1000 * (p.damageMultiplier || 1.0));
                     this.boss.takeDamage(100 * (p.damageMultiplier || 1.0));
                     this.comboTimer = 3.0;
                     this.comboMultiplier = Math.min(10.0, this.comboMultiplier + 0.05);
+
+                    const hitAngle = Math.atan2(this.boss.y - p.y, this.boss.x - p.x);
+                    const isCrit = p.isOverdrive;
+                    this.addFloatingText(this.boss.x, this.boss.y - 20, `${dmg}${isCrit ? '!' : ''}`, isCrit ? '#ffaa00' : '#ffffff', isCrit);
+                    this.spawnDirectionalParticles(p.x, p.y, this.boss.color, isCrit ? 30 : 10, hitAngle, Math.PI / 2, isCrit ? 2.0 : 1.0);
+
+                    this.triggerShake(isCrit ? 10 : 3, 0.1, hitAngle);
+                    if (isCrit && this.hitStopTimer < 0.05) this.hitStopTimer = 0.05;
                 }
             }
         }
@@ -2110,6 +2229,22 @@ class Game {
 
     draw() {
         // We assume context is scaled by resize observer
+        this.ctx.save();
+        let shakeDx = 0;
+        let shakeDy = 0;
+        if (this.shakeTimer > 0) {
+            const intensity = this.shakeIntensity * (this.saveManager.data.options.shakeIntensity !== undefined ? this.saveManager.data.options.shakeIntensity : 1.0);
+            if (this.shakeAngle !== null) {
+                const r = (Math.random() - 0.5) * intensity;
+                shakeDx = Math.cos(this.shakeAngle) * r;
+                shakeDy = Math.sin(this.shakeAngle) * r;
+            } else {
+                shakeDx = (Math.random() - 0.5) * intensity;
+                shakeDy = (Math.random() - 0.5) * intensity;
+            }
+            this.ctx.translate(shakeDx, shakeDy);
+        }
+
         this.ctx.fillStyle = COLORS.bg;
         this.ctx.fillRect(0, 0, CONSTANTS.CANVAS_BASE_W, CONSTANTS.CANVAS_BASE_H);
 
@@ -2185,6 +2320,9 @@ class Game {
             this.ctx.fillText("Click or Press SPACE to Restart", CONSTANTS.CANVAS_BASE_W/2, CONSTANTS.CANVAS_BASE_H/1.5);
             this.ctx.fillText("Back to Arcade", CONSTANTS.CANVAS_BASE_W/2, CONSTANTS.CANVAS_BASE_H - 50);
         }
+
+        this.floatingTexts.forEach(f => f.draw(this.ctx));
+        this.ctx.restore();
     }
 }
 
