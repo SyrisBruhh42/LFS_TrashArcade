@@ -232,6 +232,7 @@ class Tower {
     }
 
     update(dt, input, game) {
+        this.game = game;
         const pointerX = input.getPointerX();
         const pointerY = input.getPointerY();
 
@@ -463,6 +464,7 @@ class EnemyProjectile {
         this.active = true;
     }
     update(dt) {
+
         this.x += this.vx * dt;
         this.y += this.vy * dt;
     }
@@ -1114,6 +1116,180 @@ class Pickup {
     }
 }
 
+
+class Particle {
+    constructor(x, y, vx, vy, life, color, size) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.life = life;
+        this.maxLife = life;
+        this.color = color;
+        this.size = size;
+        this.active = true;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt;
+        if (this.life <= 0) this.active = false;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class DamagePopup {
+    constructor(x, y, text, color, isCrit=false) {
+        this.x = x;
+        this.y = y;
+        this.text = text;
+        this.color = color;
+        this.life = 1.0;
+        this.maxLife = 1.0;
+        this.vy = -30;
+        this.isCrit = isCrit;
+        this.active = true;
+    }
+    update(dt) {
+        this.y += this.vy * dt;
+        this.life -= dt;
+        if (this.life <= 0) this.active = false;
+    }
+    draw(ctx) {
+        const progress = 1.0 - (this.life / this.maxLife);
+        const scale = this.isCrit ? (1.0 + Math.sin(progress * Math.PI) * 0.5) : 1.0;
+        ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+        ctx.fillStyle = this.color;
+        ctx.font = `bold ${Math.floor(20 * scale)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class Trail {
+    constructor(x, y, color, radius) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.radius = radius;
+        this.life = 0.3;
+        this.maxLife = 0.3;
+        this.active = true;
+    }
+    update(dt) {
+        this.life -= dt;
+        if (this.life <= 0) this.active = false;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * (this.life / this.maxLife), 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class VFXManager {
+    constructor() {
+        this.particles = [];
+        this.popups = [];
+        this.trails = [];
+        this.shakeX = 0;
+        this.shakeY = 0;
+        this.shakeTimer = 0;
+        this.shakeIntensity = 0;
+        this.hitStopTimer = 0;
+    }
+
+    addHitStop(duration) {
+        if (this.hitStopTimer < duration) {
+            this.hitStopTimer = duration;
+        }
+    }
+
+    addScreenShake(intensity, duration) {
+        // Respect intensity options if added later
+        this.shakeIntensity = intensity;
+        this.shakeTimer = duration;
+    }
+
+    emitExplosion(x, y, color, count=15) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 50 + Math.random() * 150;
+            const life = 0.3 + Math.random() * 0.4;
+            const size = 2 + Math.random() * 4;
+            this.particles.push(new Particle(x, y, Math.cos(angle)*speed, Math.sin(angle)*speed, life, color, size));
+        }
+    }
+
+    emitDirectional(x, y, vx, vy, color, count=10, spread=0.5) {
+        const baseAngle = Math.atan2(vy, vx);
+        const baseSpeed = Math.hypot(vx, vy) * 0.5;
+        for(let i=0; i<count; i++) {
+            const angle = baseAngle + (Math.random() - 0.5) * spread;
+            const speed = baseSpeed + Math.random() * 50;
+            const life = 0.2 + Math.random() * 0.3;
+            const size = 2 + Math.random() * 3;
+            this.particles.push(new Particle(x, y, Math.cos(angle)*speed, Math.sin(angle)*speed, life, color, size));
+        }
+    }
+
+    addPopup(x, y, text, color, isCrit=false) {
+        this.popups.push(new DamagePopup(x, y, text, color, isCrit));
+    }
+
+    addTrail(x, y, color, radius) {
+        this.trails.push(new Trail(x, y, color, radius));
+    }
+
+    update(dt) {
+        // Hitstop handles game pausing, vfx themselves still animate rawDt if desired,
+        // but here we just update shake and collections
+        if (this.hitStopTimer > 0) {
+            this.hitStopTimer -= dt;
+        }
+        if (this.shakeTimer > 0) {
+            this.shakeTimer -= dt;
+            this.shakeX = (Math.random() - 0.5) * 2 * this.shakeIntensity;
+            this.shakeY = (Math.random() - 0.5) * 2 * this.shakeIntensity;
+        } else {
+            this.shakeX = 0;
+            this.shakeY = 0;
+        }
+
+        this.particles.forEach(p => p.update(dt));
+        this.particles = this.particles.filter(p => p.active);
+
+        this.popups.forEach(p => p.update(dt));
+        this.popups = this.popups.filter(p => p.active);
+
+        this.trails.forEach(t => t.update(dt));
+        this.trails = this.trails.filter(t => t.active);
+    }
+
+    draw(ctx) {
+        this.trails.forEach(t => t.draw(ctx));
+        this.particles.forEach(p => p.draw(ctx));
+        this.popups.forEach(p => p.draw(ctx));
+    }
+
+    applyShake(ctx) {
+        if (this.shakeTimer > 0) {
+            ctx.translate(this.shakeX, this.shakeY);
+        }
+    }
+}
+
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -1121,9 +1297,12 @@ class Game {
         this.width = 800;
         this.height = 600;
 
+
         this.input = new InputManager(canvas);
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
+        this.vfx = new VFXManager();
+
 
         this.state = STATES.TITLE;
         this.lastTime = 0;
@@ -1191,7 +1370,9 @@ class Game {
         resize();
     }
 
+
     resetGame() {
+        this.vfx = new VFXManager();
         this.tower = new Tower(this.width / 2, this.height / 2);
         this.enemies = [];
         this.projectiles = [];
@@ -1219,26 +1400,34 @@ class Game {
         requestAnimationFrame((t) => this.loop(t));
     }
 
+
     loop(now) {
         let rawDt = (now - this.lastTime) / 1000;
         this.lastTime = now;
 
-        // Cap dt to prevent huge leaps
-        let dt = Math.min(rawDt, 0.1);
+        // Cap dt to prevent massive jumps when tab is inactive
+        if (rawDt > 0.1) rawDt = 0.1;
 
-        this.env.update(dt);
+        // Update VFX always with rawDt so it animates during hitstop
+        this.vfx.update(rawDt);
 
-        this.update(dt);
+        let gameDt = rawDt;
+        if (this.vfx.hitStopTimer > 0) {
+            gameDt = 0; // Freeze game logic
+        }
+
+        this.update(gameDt);
         this.draw();
 
         this.input.update(); // clear justPressed flags
         requestAnimationFrame((t) => this.loop(t));
     }
-
     update(dt) {
         if (this.input.isPointerJustPressed() || this.input.keys['Space']) {
             this.sound.init();
         }
+
+        this.env.update(dt);
 
         switch (this.state) {
             case STATES.UPGRADE:
@@ -1333,6 +1522,9 @@ class Game {
                                 this.tower.health -= p.damage;
                                 this.tower.applyRecoil(p.x - this.tower.x, p.y - this.tower.y, 20);
                                 this.sound.playHit();
+                                this.vfx.emitExplosion(this.tower.x, this.tower.y, '#ff8800', 10);
+                                this.vfx.addScreenShake(5, 0.1);
+                                this.vfx.addPopup(this.tower.x, this.tower.y - 20, `-${p.damage}`, '#ff0000');
                             }
                             p.active = false;
                         }
@@ -1437,6 +1629,10 @@ class Game {
                             this.tower.health -= e.damage;
                             this.tower.applyRecoil(e.x - this.tower.x, e.y - this.tower.y, 20);
                             this.sound.playHit();
+                            this.vfx.emitExplosion(this.tower.x, this.tower.y, '#ff0000', 20);
+                            this.vfx.addScreenShake(10, 0.2);
+                            this.vfx.addHitStop(0.1);
+                            this.vfx.addPopup(this.tower.x, this.tower.y - 20, `-${e.damage}`, '#ff0000', true);
                             e.active = false;
                         } else if (this.tower.isDashing) {
                             e.health = 0;
@@ -1450,6 +1646,8 @@ class Game {
                                 this.pickups.push(new Pickup(e.x, e.y, types[Math.floor(Math.random() * types.length)]));
                             }
                             this.sound.playExplosion();
+                            this.vfx.emitExplosion(e.x, e.y, '#ffff00', 15);
+                            this.vfx.addPopup(e.x, e.y, "KILL", '#ffff00');
                             this.tower.applyRecoil(this.tower.x - e.x, this.tower.y - e.y, 5); // tiny bounce back
                         }
                     }
@@ -1479,8 +1677,14 @@ class Game {
                                 this.pickups.push(new Pickup(e.x, e.y, types[Math.floor(Math.random() * types.length)]));
                             }
                             this.sound.playExplosion();
+                            this.vfx.emitExplosion(e.x, e.y, '#ffffff', 20);
+                            const dmgStr = Math.floor(10 * this.tower.damageMultiplier);
+                            this.vfx.addPopup(e.x, e.y - 10, `${dmgStr}`, '#ffffff', dmgStr > 20);
+                            this.vfx.addHitStop(0.05);
+                            this.vfx.addScreenShake(5, 0.1);
                         } else {
                             this.sound.playHit();
+                            this.vfx.emitDirectional(e.x, e.y, head.x - e.x, head.y - e.y, '#888888', 5);
                         }
                     }
 
@@ -1509,6 +1713,8 @@ class Game {
                                 this.pickups.push(new Pickup(e.x, e.y, types[Math.floor(Math.random() * types.length)]));
                             }
                             this.sound.playExplosion();
+                            this.vfx.emitExplosion(e.x, e.y, '#aaaaaa', 10);
+                            this.vfx.addPopup(e.x, e.y - 10, "5", '#aaaaaa');
                          }
                     }
 
@@ -1657,6 +1863,9 @@ class Game {
     }
 
     drawPlaying() {
+        this.ctx.save();
+        this.vfx.applyShake(this.ctx);
+
         this.env.drawBackground(this.ctx);
 
         this.tower.draw(this.ctx, this.input);
@@ -1670,6 +1879,7 @@ class Game {
             p.draw(this.ctx);
         }
 
+        this.vfx.draw(this.ctx);
         this.env.drawForeground(this.ctx);
 
         // HUD
@@ -1731,6 +1941,8 @@ class Game {
             this.ctx.fillStyle = cdRatio >= 1 ? '#0ff' : '#888';
             this.ctx.fillRect(20, 120, 150 * cdRatio, 15);
         }
+
+        this.ctx.restore(); // from screenshake
     }
 
     drawTitle() {
