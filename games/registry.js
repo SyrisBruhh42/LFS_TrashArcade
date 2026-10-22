@@ -871,5 +871,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#faf7bd",
     "phase": "4",
     "path": "./games/066-crt-vector-overdrive/index.html"
+  },
+  {
+    "id": "067",
+    "slug": "067-candy-tether-defense",
+    "title": "Candy Tether Defense",
+    "genre": "Wave-Defense Tower Micro-Strategy",
+    "coreMechanic": "Risk/Reward Tether or Tail Growth",
+    "setting": "Candy Factory Conveyor Line",
+    "description": "Defend the candy tower by spinning a tether. A longer tether deals more damage but swings slower.",
+    "controls": "Mouse/Touch: Aim the tether angle. Hold Left Click / Touch: Extend the tether length.",
+    "createdAt": "2026-10-25",
+    "accentColor": "#468aa9",
+    "phase": "1",
+    "path": "./games/067-candy-tether-defense/index.html"
   }
 ];
