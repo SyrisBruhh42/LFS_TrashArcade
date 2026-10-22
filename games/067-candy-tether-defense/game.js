@@ -59,6 +59,23 @@ class SoundEngine {
         this.musicGain = null;
         this.initialized = false;
         this.muted = false;
+
+        // Music state
+        this.musicOsc1 = null;
+        this.musicOsc2 = null;
+        this.musicOsc3 = null;
+        this.musicLfo = null;
+        this.musicFilter = null;
+        this.percussionInterval = null;
+        this.arpInterval = null;
+        this.arpStep = 0;
+
+        this.baseTempo = 120;
+        this.currentTempo = 120;
+
+        this.isBossWave = false;
+        this.isLowHp = false;
+        this.isPlaying = false;
     }
 
     init() {
@@ -76,11 +93,15 @@ class SoundEngine {
             this.masterGain.connect(this.ctx.destination);
 
             this.masterGain.gain.value = this.muted ? 0 : 0.8;
+            this.musicGain.gain.value = 0.4;
+            this.sfxGain.gain.value = 0.7;
             this.initialized = true;
 
             if (this.ctx.state === 'suspended') {
                 this.ctx.resume();
             }
+
+            this.startMusic();
         } catch (e) {
             console.warn("Audio Context failed to initialize", e);
         }
@@ -93,12 +114,200 @@ class SoundEngine {
         }
     }
 
-    playTone(freq, type, duration, vol = 1) {
+    updateMusicState(isBossWave, isLowHp) {
+        if (this.isBossWave === isBossWave && this.isLowHp === isLowHp) return;
+        this.isBossWave = isBossWave;
+        this.isLowHp = isLowHp;
+
+        if (this.isLowHp) {
+            this.currentTempo = this.baseTempo * 1.5;
+        } else if (this.isBossWave) {
+            this.currentTempo = this.baseTempo * 1.25;
+        } else {
+            this.currentTempo = this.baseTempo;
+        }
+
+        if (this.musicFilter) {
+            if (this.isBossWave) {
+                this.musicFilter.frequency.setTargetAtTime(3000, this.ctx.currentTime, 0.5);
+                this.musicFilter.Q.setTargetAtTime(10, this.ctx.currentTime, 0.5);
+            } else if (this.isLowHp) {
+                this.musicFilter.frequency.setTargetAtTime(500, this.ctx.currentTime, 0.5);
+                this.musicFilter.Q.setTargetAtTime(15, this.ctx.currentTime, 0.5);
+            } else {
+                this.musicFilter.frequency.setTargetAtTime(1200, this.ctx.currentTime, 0.5);
+                this.musicFilter.Q.setTargetAtTime(2, this.ctx.currentTime, 0.5);
+            }
+        }
+    }
+
+    stopMusic() {
+        if (!this.isPlaying) return;
+        this.isPlaying = false;
+        if (this.musicOsc1) { try { this.musicOsc1.stop(); } catch(e){} this.musicOsc1.disconnect(); this.musicOsc1 = null; }
+        if (this.musicOsc2) { try { this.musicOsc2.stop(); } catch(e){} this.musicOsc2.disconnect(); this.musicOsc2 = null; }
+        if (this.musicOsc3) { try { this.musicOsc3.stop(); } catch(e){} this.musicOsc3.disconnect(); this.musicOsc3 = null; }
+        if (this.musicLfo) { try { this.musicLfo.stop(); } catch(e){} this.musicLfo.disconnect(); this.musicLfo = null; }
+        if (this.percussionInterval) { clearTimeout(this.percussionInterval); this.percussionInterval = null; }
+        if (this.arpInterval) { clearTimeout(this.arpInterval); this.arpInterval = null; }
+    }
+
+    startMusic() {
+        if (!this.initialized || !this.ctx || this.isPlaying) return;
+        this.isPlaying = true;
+
+        // Drone
+        this.musicOsc1 = this.ctx.createOscillator();
+        this.musicOsc1.type = 'sawtooth';
+        this.musicOsc1.frequency.value = 55; // A1
+
+        this.musicOsc2 = this.ctx.createOscillator();
+        this.musicOsc2.type = 'square';
+        this.musicOsc2.frequency.value = 55.5;
+
+        this.musicFilter = this.ctx.createBiquadFilter();
+        this.musicFilter.type = 'lowpass';
+        this.musicFilter.frequency.value = 1200;
+        this.musicFilter.Q.value = 2;
+
+        this.musicLfo = this.ctx.createOscillator();
+        this.musicLfo.type = 'sine';
+        this.musicLfo.frequency.value = 0.5;
+        const lfoGain = this.ctx.createGain();
+        lfoGain.gain.value = 400;
+
+        this.musicLfo.connect(lfoGain);
+        lfoGain.connect(this.musicFilter.frequency);
+
+        const droneGain = this.ctx.createGain();
+        droneGain.gain.value = 0.2;
+
+        this.musicOsc1.connect(this.musicFilter);
+        this.musicOsc2.connect(this.musicFilter);
+        this.musicFilter.connect(droneGain);
+        droneGain.connect(this.musicGain);
+
+        this.musicOsc1.start();
+        this.musicOsc2.start();
+        this.musicLfo.start();
+
+        // Arpeggiator
+        const arpNotes = [110, 130.81, 164.81, 196, 220, 261.63, 329.63]; // A Minor Pentatonic
+        const playArpNote = () => {
+            if (!this.isPlaying) return;
+            const noteFreq = arpNotes[this.arpStep % arpNotes.length];
+            this.arpStep++;
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = this.isBossWave ? 'square' : 'triangle';
+
+            // Random octave jumping in boss wave
+            let mult = 1;
+            if (this.isBossWave && Math.random() > 0.7) mult = 2;
+
+            osc.frequency.setValueAtTime(noteFreq * mult, this.ctx.currentTime);
+
+            gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+
+            osc.connect(gain);
+            gain.connect(this.musicGain);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.2);
+
+            const interval = (60 / this.currentTempo) * 1000 / 2; // 8th notes
+            this.arpInterval = setTimeout(playArpNote, interval);
+        };
+
+        // Percussion loop
+        let beat = 0;
+        const playPercussion = () => {
+            if (!this.isPlaying) return;
+            const interval = (60 / this.currentTempo) * 1000 / 4; // 16th notes
+
+            if (beat % 4 === 0) {
+                // Kick
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
+                gain.gain.setValueAtTime(0.6, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
+                osc.connect(gain);
+                gain.connect(this.musicGain);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.5);
+            }
+            if (beat % 8 === 4) {
+                // Snare / Noise
+                const bufferSize = this.ctx.sampleRate * 0.2;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.value = 1000;
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.musicGain);
+                noise.start();
+            }
+            if (beat % 2 === 0) {
+                // Hi-hat
+                const bufferSize = this.ctx.sampleRate * 0.05;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 8000;
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.musicGain);
+                noise.start();
+            }
+
+            beat++;
+            this.percussionInterval = setTimeout(playPercussion, interval);
+        };
+
+        playArpNote();
+        playPercussion();
+    }
+
+    playTone(freq, type, duration, vol = 1, slideFreq = null) {
         if (!this.initialized || !this.ctx || this.muted) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = type;
+
         osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        if (slideFreq) {
+            osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+        }
 
         gain.gain.setValueAtTime(vol, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
@@ -110,13 +319,50 @@ class SoundEngine {
         osc.stop(this.ctx.currentTime + duration);
     }
 
-    playShoot() { this.playTone(800, 'square', 0.1, 0.3); }
-    playHit() { this.playTone(300, 'sawtooth', 0.1, 0.4); }
-    playExplosion() { this.playTone(100, 'square', 0.3, 0.5); }
-    playStart() { this.playTone(600, 'sine', 0.4, 0.5); }
-    playUpgrade() { this.playTone(500, 'square', 0.2, 0.5); this.playTone(700, 'sine', 0.4, 0.5); }
-    playOver() { this.playTone(200, 'sawtooth', 0.6, 0.5); }
-    playDash() { this.playTone(400, 'triangle', 0.2, 0.4); }
+    playNoise(duration, vol) {
+        if (!this.initialized || !this.ctx || this.muted) return;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 1000;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.sfxGain);
+        noise.start();
+    }
+
+    playShoot() { this.playTone(800, 'square', 0.1, 0.3, 400); }
+    playHit() { this.playTone(300, 'sawtooth', 0.1, 0.4, 100); this.playNoise(0.1, 0.4); }
+    playExplosion() { this.playTone(100, 'square', 0.3, 0.5, 20); this.playNoise(0.3, 0.8); }
+    playStart() { this.playTone(600, 'sine', 0.4, 0.5, 1200); }
+    playUpgrade() { this.playTone(500, 'square', 0.2, 0.5, 1000); setTimeout(() => this.playTone(700, 'sine', 0.4, 0.5, 1400), 200); }
+    playOver() { this.playTone(200, 'sawtooth', 0.6, 0.5, 50); this.playTone(150, 'square', 0.8, 0.5, 20); }
+    playDash() { this.playTone(400, 'triangle', 0.2, 0.4, 800); }
+
+    // New SFX
+    playPickupHealth() { this.playTone(800, 'sine', 0.2, 0.4, 1200); this.playTone(1200, 'sine', 0.2, 0.4, 1600); }
+    playPickupCombo() { this.playTone(600, 'square', 0.1, 0.3, 800); this.playTone(800, 'square', 0.1, 0.3, 1000); this.playTone(1000, 'square', 0.1, 0.3, 1200); }
+    playPickupScore() { this.playTone(1200, 'sine', 0.1, 0.4); }
+    playUIButtonHover() { this.playTone(400, 'sine', 0.05, 0.2); }
+    playUIButtonClick() { this.playTone(600, 'square', 0.1, 0.3, 800); }
+    playTetherExtend() { this.playTone(200, 'sawtooth', 0.1, 0.2, 400); }
+    playBossSpawn() { this.playTone(100, 'sawtooth', 1.0, 0.6, 50); this.playNoise(1.0, 0.8); }
+    playShieldHit() { this.playTone(1000, 'sine', 0.1, 0.3, 800); this.playNoise(0.1, 0.2); }
+    playTrapDrop() { this.playTone(300, 'triangle', 0.2, 0.4, 100); }
+    playEnemyShoot() { this.playTone(600, 'sawtooth', 0.1, 0.2, 300); }
 }
 
 class InputManager {
@@ -1372,6 +1618,8 @@ class Game {
 
 
     resetGame() {
+        this.sound.stopMusic();
+        this.sound.startMusic();
         this.vfx = new VFXManager();
         this.tower = new Tower(this.width / 2, this.height / 2);
         this.enemies = [];
@@ -1443,7 +1691,7 @@ class Game {
                         if (px > bx && px < bx + bw && py > startY && py < startY + bh) {
                             // Select Perk
                             this.draftChoices[i].action();
-                            this.sound.playStart();
+                            this.sound.playUIButtonClick();
                             // Next wave
                             this.wave += 1;
                             this.waveKills = 0;
@@ -1468,6 +1716,8 @@ class Game {
                     this.input.keys['Escape'] = false;
                     this.state = STATES.PAUSED;
                 }
+
+                this.sound.updateMusicState(this.activeBoss !== null, this.tower.health < this.tower.maxHealth * 0.3);
 
                 this.env.applyHazards(this.tower, this.enemies, dt);
                 // Combo decay
@@ -1497,14 +1747,14 @@ class Game {
                         p.active = false;
                         if (p.type === 'health') {
                             this.tower.health = Math.min(this.tower.maxHealth, this.tower.health + 20);
-                            this.sound.playStart();
+                            this.sound.playPickupHealth();
                         } else if (p.type === 'combo') {
                             this.combo += 1;
                             this.comboTimer = this.comboMaxTime;
-                            this.sound.playDash();
+                            this.sound.playPickupCombo();
                         } else if (p.type === 'score') {
                             this.score += 50 * (1 + this.combo * 0.1);
-                            this.sound.playShoot();
+                            this.sound.playPickupScore();
                         }
                     }
                 }
@@ -1657,6 +1907,7 @@ class Game {
                     if (distToTether < e.radius + tetherHead.radius) {
                         if (e.shieldHealth > 0) {
                             e.shieldHealth -= 10 * this.tower.damageMultiplier;
+                            this.sound.playShieldHit();
                             if (e.shieldHealth < 0) {
                                 e.health += e.shieldHealth;
                                 e.shieldHealth = 0;
@@ -1695,6 +1946,7 @@ class Game {
                          // Line hits do less damage
                          if (e.shieldHealth > 0) {
                              e.shieldHealth -= 20 * dt;
+                             this.sound.playShieldHit();
                              if (e.shieldHealth < 0) {
                                  e.health += e.shieldHealth;
                                  e.shieldHealth = 0;
@@ -1721,6 +1973,7 @@ class Game {
                     if (e.dropTrap) {
                         e.dropTrap = false;
                         this.env.traps.push(new CaramelTrap(e.x - 20, e.y - 20, 40, 40));
+                        this.sound.playTrapDrop();
                     }
                     if (e.shoot) {
                         e.shoot = false;
@@ -1729,6 +1982,7 @@ class Game {
                         const dist = Math.hypot(dx, dy);
                         if (dist > 0) {
                             this.projectiles.push(new EnemyProjectile(e.x, e.y, (dx/dist)*150, (dy/dist)*150, e.damage));
+                            this.sound.playEnemyShoot();
                         }
                     }
 
@@ -1744,6 +1998,7 @@ class Game {
 
                 if (this.tower.health <= 0) {
                     this.state = STATES.GAME_OVER;
+                    this.sound.stopMusic();
                     this.sound.playOver();
                     this.saveManager.data.totalGamesPlayed++;
                     this.saveManager.data.totalScoreAccumulated += this.score;
@@ -1787,6 +2042,7 @@ class Game {
 
         if (Math.random() > 0.5) {
             this.activeBoss = new GummyWormBoss(x, y, this.tower);
+            this.sound.playBossSpawn();
         } else {
             this.activeBoss = new LollipopCrusherBoss(x, y, this.tower);
         }
