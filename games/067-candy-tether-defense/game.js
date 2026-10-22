@@ -487,6 +487,224 @@ class Enemy {
 
 // --- MAIN ENGINE ---
 
+class CandyCover {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 25 + Math.random() * 15;
+        this.maxHealth = 100;
+        this.health = 100;
+        this.active = true;
+        this.color = ['#ff99cc', '#99ccff', '#ccff99'][Math.floor(Math.random() * 3)];
+    }
+
+    takeDamage(amount, dt, game) {
+        this.health -= amount * dt;
+        if (this.health <= 0) {
+            this.active = false;
+            game.sound.playExplosion(); // Crunch sound
+        }
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw cracks based on health
+        const damageRatio = 1 - (this.health / this.maxHealth);
+        if (damageRatio > 0.3) {
+            ctx.beginPath();
+            ctx.moveTo(this.x - this.radius * 0.5, this.y);
+            ctx.lineTo(this.x + this.radius * 0.5, this.y + this.radius * 0.5);
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+    }
+}
+
+class CaramelTrap {
+    constructor(x, y, w, h) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.active = true;
+        this.time = Math.random() * 10;
+    }
+
+    apply(entity, dt) {
+        if (!this.active) return;
+        // Simple AABB collision for the trap area
+        if (entity.x > this.x && entity.x < this.x + this.w &&
+            entity.y > this.y && entity.y < this.y + this.h) {
+            // Apply slow down
+            entity.vx *= 0.5;
+            entity.vy *= 0.5;
+        }
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.fillStyle = 'rgba(210, 105, 30, 0.4)'; // Caramel color
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+
+        // Bubbles
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        const numBubbles = Math.floor((this.w * this.h) / 1000);
+        for (let i = 0; i < numBubbles; i++) {
+            const bx = this.x + ((i * 37 + this.time * 20) % this.w);
+            const by = this.y + ((i * 13 + this.time * 15) % this.h);
+            ctx.beginPath();
+            ctx.arc(bx, by, 3 + (i % 3), 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    update(dt) {
+        this.time += dt;
+    }
+}
+
+class EnvironmentManager {
+    constructor(width, height) {
+        this.width = width;
+        this.height = height;
+        this.time = 0;
+
+        // Conveyor belt speed (global hazard affecting everything)
+        this.conveyorSpeed = 30; // pixels per second moving down
+
+        // Stage hazards
+        this.covers = [];
+        this.traps = [];
+
+        this.generateHazards();
+    }
+
+    generateHazards() {
+        // Create some destructible candy covers
+        for (let i = 0; i < 5; i++) {
+            this.covers.push(new CandyCover(
+                100 + Math.random() * (this.width - 200),
+                100 + Math.random() * (this.height - 200)
+            ));
+        }
+
+        // Create some sticky caramel traps
+        for (let i = 0; i < 3; i++) {
+            this.traps.push(new CaramelTrap(
+                Math.random() * (this.width - 150),
+                Math.random() * (this.height - 150),
+                100 + Math.random() * 100,
+                100 + Math.random() * 100
+            ));
+        }
+    }
+
+    update(dt) {
+        this.time += dt;
+        for (let t of this.traps) {
+            t.update(dt);
+        }
+    }
+
+    applyHazards(tower, enemies, dt) {
+        // Apply conveyor belt
+        tower.y += this.conveyorSpeed * dt;
+        for (let e of enemies) {
+            e.y += this.conveyorSpeed * dt;
+
+            // Enemies try to avoid covers? Or just collide.
+            // Simplified: Caramel traps affect enemies too
+            for (let t of this.traps) {
+                t.apply(e, dt);
+            }
+        }
+
+        // Caramel traps affect tower
+        for (let t of this.traps) {
+            t.apply(tower, dt);
+        }
+    }
+
+    drawBackground(ctx) {
+        // Layer 1: Deep background (Factory walls)
+        ctx.fillStyle = '#2a1a3a';
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        ctx.fillStyle = '#1f132b';
+        const p1Offset = (this.time * 10) % 100;
+        for (let i = -100; i < this.height; i += 100) {
+            ctx.fillRect(0, i + p1Offset, this.width, 20);
+        }
+
+        // Layer 2: Middle background (Gears/Machinery)
+        ctx.strokeStyle = '#3d2554';
+        ctx.lineWidth = 5;
+        const p2Offset = (this.time * 20) % 150;
+        for (let i = -150; i < this.width + 150; i += 150) {
+            ctx.beginPath();
+            ctx.arc(i, this.height/2 + Math.sin(i + this.time)*50, 40, this.time, this.time + Math.PI*2);
+            ctx.stroke();
+            // Gear teeth
+            for(let j=0; j<8; j++) {
+                let a = this.time + (j/8)*Math.PI*2;
+                ctx.beginPath();
+                ctx.moveTo(i + Math.cos(a)*40, this.height/2 + Math.sin(i + this.time)*50 + Math.sin(a)*40);
+                ctx.lineTo(i + Math.cos(a)*50, this.height/2 + Math.sin(i + this.time)*50 + Math.sin(a)*50);
+                ctx.stroke();
+            }
+        }
+
+        // Layer 3: The Conveyor Belt (Play area surface)
+        ctx.fillStyle = '#333';
+        ctx.fillRect(50, 0, this.width - 100, this.height);
+
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 2;
+        const beltOffset = (this.time * this.conveyorSpeed) % 40;
+        for (let i = -40; i < this.height; i += 40) {
+            ctx.beginPath();
+            ctx.moveTo(50, i + beltOffset);
+            ctx.lineTo(this.width - 50, i + beltOffset);
+            ctx.stroke();
+        }
+
+        // Belt edges
+        ctx.fillStyle = '#555';
+        ctx.fillRect(30, 0, 20, this.height);
+        ctx.fillRect(this.width - 50, 0, 20, this.height);
+
+        // Edge rollers
+        ctx.fillStyle = '#777';
+        const rollerOffset = (this.time * this.conveyorSpeed) % 60;
+        for (let i = -60; i < this.height; i += 60) {
+            ctx.fillRect(35, i + rollerOffset, 10, 30);
+            ctx.fillRect(this.width - 45, i + rollerOffset, 10, 30);
+        }
+
+        // Draw traps
+        for (let t of this.traps) {
+            t.draw(ctx);
+        }
+    }
+
+    drawForeground(ctx) {
+        // Draw covers on top of the belt
+        for (let c of this.covers) {
+            c.draw(ctx);
+        }
+    }
+}
+
+
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -508,6 +726,8 @@ class Game {
 
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
+
+        this.env = new EnvironmentManager(this.width, this.height);
 
         // Resize handling
         this.setupResize();
@@ -556,6 +776,7 @@ class Game {
         this.wave = 1;
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
+        this.env = new EnvironmentManager(this.width, this.height);
     }
 
     start() {
@@ -569,6 +790,8 @@ class Game {
 
         // Cap dt to prevent huge leaps
         let dt = Math.min(rawDt, 0.1);
+
+        this.env.update(dt);
 
         this.update(dt);
         this.draw();
@@ -597,6 +820,8 @@ class Game {
                     this.state = STATES.PAUSED;
                 }
 
+                this.env.applyHazards(this.tower, this.enemies, dt);
+
                 this.tower.update(dt, this.input, this);
 
                 // Spawn enemies
@@ -610,6 +835,20 @@ class Game {
 
                 // Update enemies & collisions
                 const tetherHead = this.tower.getTetherHeadPos();
+
+                for (let i = this.env.covers.length - 1; i >= 0; i--) {
+                    let c = this.env.covers[i];
+                    if (!c.active) {
+                        this.env.covers.splice(i, 1);
+                        continue;
+                    }
+                    const distToTether = Math.hypot(c.x - tetherHead.x, c.y - tetherHead.y);
+                    if (distToTether < c.radius + tetherHead.radius) {
+                        c.takeDamage(10 * this.tower.damageMultiplier, dt, this);
+                        // Recoil on hitting cover
+                        this.tower.applyRecoil(c.x - tetherHead.x, c.y - tetherHead.y, 0.5);
+                    }
+                }
 
                 for (let i = this.enemies.length - 1; i >= 0; i--) {
                     let e = this.enemies[i];
@@ -733,20 +972,14 @@ class Game {
     }
 
     drawPlaying() {
-        // Draw grid or background if needed
-        this.ctx.strokeStyle = '#222';
-        this.ctx.lineWidth = 1;
-        for (let i = 0; i < this.width; i+= 50) {
-            this.ctx.beginPath(); this.ctx.moveTo(i, 0); this.ctx.lineTo(i, this.height); this.ctx.stroke();
-        }
-        for (let i = 0; i < this.height; i+= 50) {
-            this.ctx.beginPath(); this.ctx.moveTo(0, i); this.ctx.lineTo(this.width, i); this.ctx.stroke();
-        }
+        this.env.drawBackground(this.ctx);
 
         this.tower.draw(this.ctx, this.input);
         for (let e of this.enemies) {
             e.draw(this.ctx);
         }
+
+        this.env.drawForeground(this.ctx);
 
         // HUD
         this.ctx.fillStyle = '#fff';
