@@ -1121,6 +1121,259 @@ class SteamVent {
     }
 }
 
+
+
+class BossWeapon {
+    constructor(x, y, vx, vy, type) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.type = type;
+        this.radius = 8;
+        this.active = true;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = this.type === 'laser' ? '#ff00ff' : '#00ffff';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class BaseBoss {
+    constructor(x, y, maxHp) {
+        this.x = x;
+        this.y = y;
+        this.maxHp = maxHp;
+        this.hp = this.maxHp;
+        this.phase = 1;
+        this.radius = 40;
+        this.state = 'WARNING';
+        this.warningTimer = 3; // 3 seconds of warning
+        this.timer = 0;
+        this.projectiles = [];
+        this.color = '#ff0000';
+        this.name = "BOSS";
+    }
+
+    update(dt, timeScale, player, game) {
+        if (this.state === 'WARNING') {
+            this.warningTimer -= dt * timeScale;
+            if (this.warningTimer <= 0) {
+                this.state = 'FIGHT';
+            }
+            return;
+        }
+
+        if (this.state === 'FIGHT') {
+            this.timer += dt * timeScale;
+
+            if (this.hp <= this.maxHp * 0.5 && this.phase === 1) {
+                this.phase = 2;
+                this.onPhaseTransition(game);
+            }
+
+            this.behavior(dt, timeScale, player, game);
+
+            for (let i = this.projectiles.length - 1; i >= 0; i--) {
+                const proj = this.projectiles[i];
+                proj.update(dt * timeScale);
+
+                // Remove if off screen
+                if (proj.x < -100 || proj.x > game.width + 100 || proj.y < -100 || proj.y > game.height + 100) {
+                    this.projectiles.splice(i, 1);
+                    continue;
+                }
+
+                // Check collision with player
+                const dx = proj.x - player.x;
+                const dy = proj.y - player.y;
+                if (Math.hypot(dx, dy) < proj.radius + player.radius && !player.invulnerable) {
+                    game.gameOver();
+                }
+            }
+
+            const dx = this.x - player.x;
+            const dy = this.y - player.y;
+            if (Math.hypot(dx, dy) < this.radius + player.radius && !player.invulnerable) {
+                game.gameOver();
+            }
+        }
+    }
+
+    onPhaseTransition(game) {
+        // override
+    }
+
+    behavior(dt, timeScale, player, game) {
+        // override
+    }
+
+    takeDamage(amount) {
+        this.hp -= amount;
+        if (this.hp <= 0) {
+            this.state = 'DEFEATED';
+        }
+    }
+
+    draw(ctx, width, height) {
+        if (this.state === 'WARNING') {
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+            ctx.fillRect(0, height / 2 - 50, width, 100);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 36px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`WARNING: ${this.name} INBOUND`, width / 2, height / 2 + 10);
+            ctx.restore();
+        }
+
+        if (this.state === 'FIGHT') {
+            for (const proj of this.projectiles) {
+                proj.draw(ctx);
+            }
+
+            ctx.save();
+            ctx.translate(this.x, this.y);
+
+            // Draw Boss body
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw Boss core (changes in phase 2)
+            ctx.fillStyle = this.phase === 1 ? '#000' : '#fff';
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+
+            // Draw Boss Health Bar
+            ctx.save();
+            const barWidth = width * 0.6;
+            const barHeight = 20;
+            const hpRatio = Math.max(0, this.hp / this.maxHp);
+            ctx.translate((width - barWidth) / 2, 20);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(0, 0, barWidth, barHeight);
+
+            ctx.fillStyle = this.phase === 1 ? '#ff4444' : '#ff0000';
+            ctx.fillRect(0, 0, barWidth * hpRatio, barHeight);
+
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, barWidth, barHeight);
+
+            ctx.fillStyle = '#fff';
+            ctx.font = '14px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(this.name, barWidth / 2, 15);
+            ctx.restore();
+        }
+    }
+}
+
+class OverseerBoss extends BaseBoss {
+    constructor(x, y) {
+        super(x, y, 300);
+        this.color = '#8800ff';
+        this.name = "THE OVERSEER";
+        this.attackTimer = 0;
+        this.moveAngle = 0;
+    }
+
+    onPhaseTransition(game) {
+        game.soundEngine.playAlert();
+        this.radius = 50;
+        this.color = '#aa00ff';
+    }
+
+    behavior(dt, timeScale, player, game) {
+        // Hover at the top of the screen
+        const targetX = game.width / 2 + Math.sin(this.moveAngle) * 200;
+        const targetY = 100 + Math.sin(this.moveAngle * 2) * 50;
+
+        this.x += (targetX - this.x) * dt * 2 * timeScale;
+        this.y += (targetY - this.y) * dt * 2 * timeScale;
+
+        this.moveAngle += dt * timeScale * (this.phase === 1 ? 1 : 2);
+
+        this.attackTimer -= dt * timeScale;
+        if (this.attackTimer <= 0) {
+            this.attackTimer = this.phase === 1 ? 1.5 : 0.8;
+
+            // Fast attack pattern that encourages player to stay still
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            const dirX = dx / dist;
+            const dirY = dy / dist;
+
+            const speed = this.phase === 1 ? 250 : 350;
+            this.projectiles.push(new BossWeapon(this.x, this.y, dirX * speed, dirY * speed, 'laser'));
+
+            if (this.phase === 2) {
+                // Shoot a spread in phase 2
+                const spreadAngle = 0.3;
+                const cosSpread = Math.cos(spreadAngle);
+                const sinSpread = Math.sin(spreadAngle);
+
+                const dirX1 = dirX * cosSpread - dirY * sinSpread;
+                const dirY1 = dirX * sinSpread + dirY * cosSpread;
+                this.projectiles.push(new BossWeapon(this.x, this.y, dirX1 * speed, dirY1 * speed, 'laser'));
+
+                const dirX2 = dirX * cosSpread + dirY * sinSpread;
+                const dirY2 = -dirX * sinSpread + dirY * cosSpread;
+                this.projectiles.push(new BossWeapon(this.x, this.y, dirX2 * speed, dirY2 * speed, 'laser'));
+            }
+        }
+    }
+}
+
+class ConveyorColossus extends BaseBoss {
+    constructor(x, y) {
+        super(x, y, 400);
+        this.color = '#ff5500';
+        this.name = "CONVEYOR COLOSSUS";
+        this.attackTimer = 0;
+        this.wallBounce = 1;
+    }
+
+    onPhaseTransition(game) {
+        game.soundEngine.playAlert();
+        this.radius = 60;
+    }
+
+    behavior(dt, timeScale, player, game) {
+        // Moves left and right across the belts area
+        this.x += 100 * this.wallBounce * dt * timeScale * (this.phase === 1 ? 1 : 1.5);
+        this.y += (300 - this.y) * dt * timeScale;
+
+        if (this.x > game.width - this.radius || this.x < this.radius) {
+            this.wallBounce *= -1;
+        }
+
+        this.attackTimer -= dt * timeScale;
+        if (this.attackTimer <= 0) {
+            this.attackTimer = this.phase === 1 ? 1.0 : 0.5;
+
+            // Drops bombs that fall slowly but spread, requiring precise stillness to avoid
+            this.projectiles.push(new BossWeapon(this.x, this.y + this.radius, (Math.random() - 0.5) * 100, 150 + Math.random() * 50, 'bomb'));
+        }
+    }
+}
+
+
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -1139,7 +1392,13 @@ class Game {
         this.guards = [];
         this.candies = [];
         this.belts = [];
+        this.activeBoss = null;
+        this.bossesDefeated = 0;
+        this.nextBossScore = 500;
         this.vents = [];
+        this.activeBoss = null;
+        this.bossesDefeated = 0;
+        this.nextBossScore = 500;
         this.background = new ParallaxBackground(this.width, this.height);
 
         this.score = 0;
@@ -1262,6 +1521,25 @@ class Game {
             }
         }
 
+        // Boss spawn logic
+        if (this.score >= this.nextBossScore && !this.activeBoss) {
+            this.nextBossScore += 500 + this.bossesDefeated * 200;
+            this.activeBoss = this.bossesDefeated % 2 === 0 ? new OverseerBoss(this.width / 2, -100) : new ConveyorColossus(this.width / 2, -100);
+        }
+
+        if (this.activeBoss) {
+            this.activeBoss.update(dt, this.timeScale, this.player, this);
+            if (this.activeBoss.state === 'DEFEATED') {
+                this.activeBoss = null;
+                this.bossesDefeated++;
+                // Clear all guards for a clean slate
+                this.guards = [];
+                // Add some base guards back
+                this.guards.push(new Guard(200, 250, [{x: 200, y: 250}, {x: this.width - 200, y: 250}]));
+                this.score += 200; // Bonus for defeating boss
+            }
+        }
+
         for (const belt of this.belts) {
             belt.update(dt, this.timeScale);
         }
@@ -1316,6 +1594,10 @@ class Game {
                 this.score += candy.value;
                 this.soundEngine.playCollect();
                 this.candies.splice(i, 1);
+
+                if (this.activeBoss && this.activeBoss.state === 'FIGHT') {
+                    this.activeBoss.takeDamage(20);
+                }
 
                 if (this.score > this.saveManager.data.highScore) {
                     this.saveManager.data.highScore = this.score;
@@ -1398,6 +1680,10 @@ class Game {
 
         for (const guard of this.guards) {
             guard.draw(this.ctx);
+        }
+
+        if (this.activeBoss) {
+            this.activeBoss.draw(this.ctx, this.width, this.height);
         }
 
         if (this.player) {
