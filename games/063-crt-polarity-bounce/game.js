@@ -231,49 +231,362 @@ class MagneticNode {
     }
 }
 
-class Enemy {
+class BaseEnemy {
     constructor(x, y, isPos) {
         this.x = x;
         this.y = y;
         this.isPos = isPos;
         this.radius = 15;
-        this.vx = (Math.random() - 0.5) * 150;
-        this.vy = (Math.random() - 0.5) * 150;
         this.time = Math.random() * 10;
-        this.wobble = Math.random() * Math.PI * 2;
+        this.type = 'base';
+        this.vx = 0;
+        this.vy = 0;
+        this.maxHealth = 1;
+        this.health = 1;
+        this.flashTimer = 0;
     }
-    update(dt, w, h) {
+    takeDamage(amount) {
+        this.health -= amount;
+        this.flashTimer = 0.1;
+    }
+    update(dt, w, h, game) {
+        const player = game ? game.player : null;
         this.time += dt;
-        this.wobble += dt * 2;
-
-        this.x += (this.vx + Math.sin(this.wobble) * 20) * dt;
-        this.y += (this.vy + Math.cos(this.wobble) * 20) * dt;
-
-        // Screen bounds collision
+        if (this.flashTimer > 0) this.flashTimer -= dt;
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.enforceBounds(w, h);
+    }
+    enforceBounds(w, h) {
         if (this.x < this.radius) { this.x = this.radius; this.vx *= -1; }
         if (this.x > w - this.radius) { this.x = w - this.radius; this.vx *= -1; }
         if (this.y < this.radius) { this.y = this.radius; this.vy *= -1; }
         if (this.y > h - this.radius) { this.y = h - this.radius; this.vy *= -1; }
     }
     draw(ctx) {
-        const color = this.isPos ? COLORS.pos : COLORS.neg;
+        const color = (this.flashTimer > 0) ? '#ffffff' : (this.isPos ? COLORS.pos : COLORS.neg);
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.rotate(this.time * 2);
+        this.drawGeometry(ctx);
+        ctx.restore();
+    }
+    drawGeometry(ctx) {
+        // Override
+    }
+}
+
+class SwarmerEnemy extends BaseEnemy {
+    constructor(x, y, isPos) {
+        super(x, y, isPos);
+        this.type = 'swarmer';
+        this.radius = 12;
+        this.speed = 120;
+        this.wobble = Math.random() * Math.PI * 2;
+    }
+    update(dt, w, h, game) {
+        const player = game ? game.player : null;
+        this.time += dt;
+        this.wobble += dt * 5;
+        if (this.flashTimer > 0) this.flashTimer -= dt;
+
+        if (player) {
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            const targetVx = (dx / dist) * this.speed;
+            const targetVy = (dy / dist) * this.speed;
+
+            this.vx += (targetVx - this.vx) * dt * 2;
+            this.vy += (targetVy - this.vy) * dt * 2;
+        }
+
+        this.x += (this.vx + Math.sin(this.wobble) * 10) * dt;
+        this.y += (this.vy + Math.cos(this.wobble) * 10) * dt;
+        this.enforceBounds(w, h);
+    }
+    drawGeometry(ctx) {
+        ctx.rotate(Math.atan2(this.vy, this.vx));
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(-this.radius, this.radius * 0.8);
+        ctx.lineTo(-this.radius * 0.5, 0);
+        ctx.lineTo(-this.radius, -this.radius * 0.8);
+        ctx.closePath();
+        ctx.stroke();
+    }
+}
+
+class SniperEnemy extends BaseEnemy {
+    constructor(x, y, isPos) {
+        super(x, y, isPos);
+        this.type = 'sniper';
+        this.radius = 16;
+        this.state = 'idle'; // idle, aiming, firing
+        this.stateTimer = 2.0 + Math.random();
+        this.targetAngle = 0;
+        this.telegraphIntensity = 0;
+    }
+    update(dt, w, h, game) {
+        const player = game ? game.player : null;
+        super.update(dt, w, h, player);
+        this.stateTimer -= dt;
+
+        if (this.state === 'idle') {
+            this.vx *= 0.95;
+            this.vy *= 0.95;
+            if (this.stateTimer <= 0) {
+                this.state = 'aiming';
+                this.stateTimer = 1.5;
+                if (player) this.targetAngle = Math.atan2(player.y - this.y, player.x - this.x);
+            }
+        } else if (this.state === 'aiming') {
+            this.telegraphIntensity = 1.0 - (this.stateTimer / 1.5);
+            if (player) {
+                // track slowly
+                const angleToPlayer = Math.atan2(player.y - this.y, player.x - this.x);
+                let diff = angleToPlayer - this.targetAngle;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                this.targetAngle += diff * dt * 2;
+            }
+            if (this.stateTimer <= 0) {
+                this.state = 'firing';
+                this.stateTimer = 0.5;
+                if (game && game.sound) game.sound.playShoot();
+
+                // Fire projectile
+                const speed = 400;
+                const px = this.x + Math.cos(this.targetAngle) * this.radius;
+                const py = this.y + Math.sin(this.targetAngle) * this.radius;
+                if(game) game.enemyProjectiles.push(new EnemyProjectile(px, py, Math.cos(this.targetAngle)*speed, Math.sin(this.targetAngle)*speed, this.isPos));
+
+                // Recoil
+                this.vx = -Math.cos(this.targetAngle) * 200;
+                this.vy = -Math.sin(this.targetAngle) * 200;
+            }
+        } else if (this.state === 'firing') {
+            this.telegraphIntensity = 0;
+            if (this.stateTimer <= 0) {
+                this.state = 'idle';
+                this.stateTimer = 2.0;
+            }
+        }
+    }
+    drawGeometry(ctx) {
+        ctx.rotate(this.targetAngle || this.time);
+
+        if (this.state === 'aiming') {
+            ctx.save();
+            ctx.globalAlpha = this.telegraphIntensity;
+            ctx.beginPath();
+            ctx.moveTo(this.radius, 0);
+            ctx.lineTo(800, 0);
+            ctx.strokeStyle = this.isPos ? COLORS.pos : COLORS.neg;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(-this.radius, this.radius);
+        ctx.lineTo(-this.radius * 0.5, 0);
+        ctx.lineTo(-this.radius, -this.radius);
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.4, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+}
+
+class ShieldedBruiserEnemy extends BaseEnemy {
+    constructor(x, y, isPos) {
+        super(x, y, isPos);
+        this.type = 'bruiser';
+        this.radius = 24;
+        this.maxHealth = 3;
+        this.health = 3;
+        this.vx = (Math.random() - 0.5) * 80;
+        this.vy = (Math.random() - 0.5) * 80;
+    }
+    update(dt, w, h, game) {
+        const player = game ? game.player : null;
+        super.update(dt, w, h, player);
+        if (player) {
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            if (dist < 200) {
+                this.vx += (dx / dist) * dt * 50;
+                this.vy += (dy / dist) * dt * 50;
+            }
+        }
+    }
+    drawGeometry(ctx) {
+        ctx.rotate(this.time * 0.5);
         ctx.beginPath();
         ctx.rect(-this.radius, -this.radius, this.radius * 2, this.radius * 2);
         ctx.stroke();
 
-        // Inner detail
-        ctx.beginPath();
-        ctx.arc(0, 0, this.radius * 0.5, 0, Math.PI * 2);
-        ctx.stroke();
+        // Draw shield layers based on health
+        for (let i = 1; i < this.health; i++) {
+            const offset = i * 4;
+            ctx.beginPath();
+            ctx.rect(-this.radius - offset, -this.radius - offset, (this.radius + offset) * 2, (this.radius + offset) * 2);
+            ctx.stroke();
+        }
 
-        ctx.restore();
+        ctx.beginPath();
+        ctx.moveTo(-this.radius, -this.radius);
+        ctx.lineTo(this.radius, this.radius);
+        ctx.moveTo(this.radius, -this.radius);
+        ctx.lineTo(-this.radius, this.radius);
+        ctx.stroke();
     }
 }
+
+class SplitterEnemy extends BaseEnemy {
+    constructor(x, y, isPos) {
+        super(x, y, isPos);
+        this.type = 'splitter';
+        this.radius = 20;
+        this.vx = (Math.random() - 0.5) * 100;
+        this.vy = (Math.random() - 0.5) * 100;
+        this.rotSpeed = (Math.random() > 0.5 ? 1 : -1) * 2;
+    }
+    update(dt, w, h, game) {
+        const player = game ? game.player : null;
+        super.update(dt, w, h, player);
+    }
+    drawGeometry(ctx) {
+        ctx.rotate(this.time * this.rotSpeed);
+
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+            ctx.lineTo(Math.cos(i * Math.PI / 2) * this.radius, Math.sin(i * Math.PI / 2) * this.radius);
+            ctx.lineTo(Math.cos(i * Math.PI / 2 + Math.PI / 4) * this.radius * 0.4, Math.sin(i * Math.PI / 2 + Math.PI / 4) * this.radius * 0.4);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.3, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+}
+
+class HazardEnemy extends BaseEnemy {
+    constructor(x, y, isPos) {
+        super(x, y, isPos);
+        this.type = 'hazard';
+        this.radius = 18;
+        this.pulseTime = 0;
+        this.vx = (Math.random() - 0.5) * 50;
+        this.vy = (Math.random() - 0.5) * 50;
+        this.state = 'idle';
+        this.stateTimer = 2.0;
+    }
+    update(dt, w, h, game) {
+        const player = game ? game.player : null;
+        super.update(dt, w, h, player);
+        this.stateTimer -= dt;
+
+        if (this.state === 'idle') {
+            if (this.stateTimer <= 0) {
+                this.state = 'charging';
+                this.stateTimer = 1.0;
+            }
+        } else if (this.state === 'charging') {
+            this.pulseTime += dt * 5;
+            if (this.stateTimer <= 0) {
+                this.state = 'active';
+                this.stateTimer = 2.0;
+            }
+        } else if (this.state === 'active') {
+            this.pulseTime += dt * 10;
+            if (this.stateTimer <= 0) {
+                this.state = 'idle';
+                this.stateTimer = 2.0;
+            }
+
+            // Apply repulsive force to player
+            if (player) {
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                const dist = Math.hypot(dx, dy) || 1;
+                if (dist < 150) {
+                    const force = (150 - dist) * 10;
+                    player.vx += (dx / dist) * force * dt;
+                    player.vy += (dy / dist) * force * dt;
+                }
+            }
+        }
+    }
+    drawGeometry(ctx) {
+        ctx.rotate(this.time);
+
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            ctx.lineTo(Math.cos(i * Math.PI / 3) * this.radius, Math.sin(i * Math.PI / 3) * this.radius);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        if (this.state === 'charging' || this.state === 'active') {
+            const maxRadius = this.state === 'charging' ? 80 : 150;
+            const currentRadius = this.radius + (Math.sin(this.pulseTime) * 0.5 + 0.5) * (maxRadius - this.radius);
+
+            ctx.beginPath();
+            ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
+            ctx.setLineDash([5, 10]);
+            ctx.globalAlpha = this.state === 'active' ? 0.5 : 0.2;
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1.0;
+        }
+
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+class EnemyProjectile {
+    constructor(x, y, vx, vy, isPos) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.isPos = isPos;
+        this.radius = 4;
+        this.life = 3.0;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.isPos ? COLORS.pos : COLORS.neg;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function getRandomEnemy(x, y, isPos) {
+    const r = Math.random();
+    if (r < 0.2) return new SwarmerEnemy(x, y, isPos);
+    if (r < 0.4) return new SniperEnemy(x, y, isPos);
+    if (r < 0.6) return new ShieldedBruiserEnemy(x, y, isPos);
+    if (r < 0.8) return new SplitterEnemy(x, y, isPos);
+    return new HazardEnemy(x, y, isPos);
+}
+
 
 class Player {
     constructor(x, y) {
@@ -568,6 +881,8 @@ class Game {
         this.player = null;
         this.nodes = [];
         this.enemies = [];
+        this.enemyProjectiles = [];
+        this.enemyProjectiles = [];
         this.particles = [];
 
         this.score = 0;
@@ -626,6 +941,7 @@ class Game {
         this.nodes.push(new MagneticNode(this.width - paddingX, this.height - paddingY, true));
 
         this.enemies = [];
+        this.enemyProjectiles = [];
         this.particles = [];
         this.score = 0;
         this.health = 3;
@@ -703,7 +1019,7 @@ class Game {
             // Keep enemies away from edges when spawning
             const ex = Math.random() * (this.width - 100) + 50;
             const ey = Math.random() * (this.height - 100) + 50;
-            this.enemies.push(new Enemy(ex, ey, isPos));
+            this.enemies.push(getRandomEnemy(ex, ey, isPos));
         }
 
         this.updateEnemies(dt);
@@ -717,9 +1033,43 @@ class Game {
     }
 
     updateEnemies(dt) {
+        // Update projectiles
+        for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
+            const p = this.enemyProjectiles[i];
+            p.update(dt);
+            if (p.life <= 0) {
+                this.enemyProjectiles.splice(i, 1);
+                continue;
+            }
+
+            // Check collision with player
+            const dx = p.x - this.player.x;
+            const dy = p.y - this.player.y;
+            if (dx*dx + dy*dy < (p.radius + this.player.radius)**2) {
+                if (this.player.isPos === p.isPos) {
+                    // Match polarity - absorb projectile for small score
+                    this.score += 5;
+                    this.sound.playShoot();
+                    this.spawnParticles(p.x, p.y, p.isPos ? COLORS.particlePos : COLORS.particleNeg, 5);
+                } else {
+                    // Opposite polarity - damage
+                    if (!this.player.isInvulnerable) {
+                        this.sound.playHit();
+                        this.health--;
+                        this.player.triggerRecoil(dx/Math.hypot(dx,dy), dy/Math.hypot(dx,dy), 500, true);
+                        if (this.health <= 0) {
+                            this.state = 'GAME_OVER';
+                            if (this.score > this.highScore) this.highScore = this.score;
+                        }
+                    }
+                }
+                this.enemyProjectiles.splice(i, 1);
+            }
+        }
+
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
-            e.update(dt, this.width, this.height);
+            e.update(dt, this.width, this.height, this);
 
             // Player collision resolution
             const dx = e.x - this.player.x;
@@ -739,11 +1089,29 @@ class Game {
         const ny = dy / dist;
 
         if (this.player.isPos === e.isPos) {
-            // Success: Matching Polarity - Destroy Enemy
-            this.score += 10;
-            this.sound.playShoot();
-            this.spawnParticles(e.x, e.y, e.isPos ? COLORS.particlePos : COLORS.particleNeg, 15);
-            this.enemies.splice(index, 1);
+            // Success: Matching Polarity - Damage Enemy
+            e.takeDamage(1);
+            if (e.health <= 0) {
+                this.score += (e.maxHealth * 10);
+                this.sound.playShoot();
+                this.spawnParticles(e.x, e.y, e.isPos ? COLORS.particlePos : COLORS.particleNeg, 15 + e.maxHealth * 5);
+
+                if (e.type === 'splitter') {
+                    for (let j = 0; j < 3; j++) {
+                        const child = new SwarmerEnemy(e.x, e.y, e.isPos);
+                        child.vx = (Math.random() - 0.5) * 200;
+                        child.vy = (Math.random() - 0.5) * 200;
+                        this.enemies.push(child);
+                    }
+                }
+
+                this.enemies.splice(index, 1);
+            } else {
+                this.sound.playShoot();
+                this.spawnParticles(e.x, e.y, e.isPos ? COLORS.particlePos : COLORS.particleNeg, 5);
+                e.vx = nx * 200;
+                e.vy = ny * 200;
+            }
 
             // Ricochet player slightly
             this.player.vx = -nx * this.player.speed * 0.8;
@@ -837,6 +1205,7 @@ class Game {
 
         if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
             for (let e of this.enemies) e.draw(this.ctx);
+        for (let p of this.enemyProjectiles) p.draw(this.ctx);
             if (this.health > 0) this.player.draw(this.ctx);
             for (let p of this.particles) p.draw(this.ctx);
             this.drawHUD();
