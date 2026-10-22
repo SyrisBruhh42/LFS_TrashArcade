@@ -913,5 +913,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#935491",
     "phase": "5",
     "path": "./games/069-magma-shift-forge/index.html"
+  },
+  {
+    "id": "070",
+    "slug": "070-manor-polarity-chain",
+    "title": "Manor Polarity Chain",
+    "genre": "Alchemy/Chain-Reaction Puzzle Action",
+    "coreMechanic": "Polarity/Magnetism Switching",
+    "setting": "Haunted Victorian Manor",
+    "description": "Switch polarities to create explosive chain reactions in a haunted victorian manor.",
+    "controls": "Arrow keys or WASD to move, Space to switch polarity. Touch support included.",
+    "createdAt": "2024-10-23",
+    "accentColor": "#5544e7",
+    "phase": "1",
+    "path": "./games/070-manor-polarity-chain/index.html"
   }
 ];
