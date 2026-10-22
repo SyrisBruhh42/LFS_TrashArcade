@@ -15,6 +15,9 @@ class VFXManager {
     }
 
     addScreenShake(intensity, duration) {
+        if (window.game && window.game.saveManager && window.game.saveManager.data.options && typeof window.game.saveManager.data.options.screenShake !== 'undefined') {
+            intensity *= window.game.saveManager.data.options.screenShake;
+        }
         // Respects options - to be implemented in phase 9, currently active
         // But the prompt says "respecting Options intensity", let's check options if available.
         this.shakeIntensity = intensity;
@@ -35,6 +38,7 @@ class VFXManager {
     }
 
     emitExplosion(x, y, color, count) {
+        if (window.game && window.game.saveManager && window.game.saveManager.data.options && window.game.saveManager.data.options.particleDensity === 'Low') count = Math.ceil(count / 2);
         for (let i = 0; i < count; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = Math.random() * 150 + 50;
@@ -49,6 +53,7 @@ class VFXManager {
     }
 
     emitDirectional(x, y, dx, dy, color, count, spread = 0.5) {
+        if (window.game && window.game.saveManager && window.game.saveManager.data.options && window.game.saveManager.data.options.particleDensity === 'Low') count = Math.ceil(count / 2);
         const baseAngle = Math.atan2(dy, dx);
         for (let i = 0; i < count; i++) {
             const angle = baseAngle + (Math.random() - 0.5) * spread;

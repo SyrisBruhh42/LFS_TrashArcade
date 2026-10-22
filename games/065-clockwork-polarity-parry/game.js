@@ -7,6 +7,12 @@ const POLARITY_COLORS = {
     POSITIVE: '#d45d5d', // Red/Copper
     NEGATIVE: '#5d9ed4'  // Blue/Steel
 };
+function getPolarityColor(polarity) {
+    if (window.game && window.game.saveManager && window.game.saveManager.data.options && window.game.saveManager.data.options.highContrast) {
+        return polarity === 'POSITIVE' ? '#ffaa00' : '#00aaff'; // More distinct
+    }
+    return POLARITY_COLORS[polarity];
+}
 
 class SaveManager {
     constructor() {
@@ -350,6 +356,7 @@ class InputManager {
             y: t.clientY - rect.top,
             id: t.identifier
         }));
+        this.handleTouchControls(e);
     }
     handleDoubleTap(e) {
         const now = Date.now();
@@ -359,11 +366,50 @@ class InputManager {
         }
         this.lastSwitchTime = now;
     }
+        handleTouchControls(e) {
+        if (!window.game || !window.game.saveManager) return;
+        const opts = window.game.saveManager.data.options;
+        const mode = opts.touchControls || 'Auto';
+
+        this.touchActions = { up: false, down: false, left: false, right: false, parry: false, switchPolarity: false, dash: false };
+
+        if (mode === 'Off') return;
+
+        const handedness = opts.touchHandedness || 'Right';
+
+        if (window.game.state === 'PLAYING') {
+            for (let t of this.touches) {
+                const isLeftHalf = t.x < window.game.width / 2;
+                const isMovementTouch = (handedness === 'Right' && isLeftHalf) || (handedness === 'Left' && !isLeftHalf);
+
+                if (isMovementTouch) {
+                    const centerX = handedness === 'Right' ? window.game.width / 4 : window.game.width * 3/4;
+                    const centerY = window.game.height * 3/4;
+                    const dx = t.x - centerX;
+                    const dy = t.y - centerY;
+                    const deadzone = 30;
+
+                    if (Math.abs(dx) > deadzone || Math.abs(dy) > deadzone) {
+                        if (Math.abs(dx) > Math.abs(dy)) {
+                            if (dx < 0) this.touchActions.left = true;
+                            else this.touchActions.right = true;
+                        } else {
+                            if (dy < 0) this.touchActions.up = true;
+                            else this.touchActions.down = true;
+                        }
+                    }
+                } else {
+                    this.touchActions.parry = true;
+                }
+            }
+        }
+    }
+
     updateActions() {
-        this.actions.up = this.keys['KeyW'] || this.keys['ArrowUp'];
-        this.actions.down = this.keys['KeyS'] || this.keys['ArrowDown'];
-        this.actions.left = this.keys['KeyA'] || this.keys['ArrowLeft'];
-        this.actions.right = this.keys['KeyD'] || this.keys['ArrowRight'];
+        this.actions.up = this.keys['KeyW'] || this.keys['ArrowUp'] || this.touchActions?.up;
+        this.actions.down = this.keys['KeyS'] || this.keys['ArrowDown'] || this.touchActions?.down;
+        this.actions.left = this.keys['KeyA'] || this.keys['ArrowLeft'] || this.touchActions?.left;
+        this.actions.right = this.keys['KeyD'] || this.keys['ArrowRight'] || this.touchActions?.right;
 
         this.actions.parry = this.keys['Space'] || this.mouse.down || this.touches.length > 0;
         this.actions.switchPolarity = this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.mouse.rightDown || this.actions.switchPolarity;
@@ -727,6 +773,8 @@ class Game {
 
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER, UPGRADE
         this.lastTime = 0;
+        window.game = this;
+        this.uiManager = new UIManager(this);
 
         this.width = 800;
         this.height = 600;
@@ -831,9 +879,24 @@ class Game {
         }
     }
     update(dt) {
+        if (this.state === 'SETTINGS') {
+            this.uiManager.handleInput(this.inputManager);
+            return;
+        }
         if (this.state === 'TITLE') {
             if (this.inputManager.actions.parry) {
-                this.startGame();
+                let px = this.inputManager.mouse.x / this.scale;
+                let py = this.inputManager.mouse.y / this.scale;
+                if (this.inputManager.touchActive && this.inputManager.touches.length > 0) {
+                     px = this.inputManager.touches[0].x / this.scale;
+                     py = this.inputManager.touches[0].y / this.scale;
+                }
+                const clickedBack = (px > 20 && px < 160 && py > 20 && py < 50);
+                const clickedSettings = (px > this.width - 160 && px < this.width - 20 && py > 20 && py < 50);
+
+                if (!clickedBack && !clickedSettings) {
+                    this.startGame();
+                }
                 this.inputManager.actions.parry = false;
             }
             // Title screen back to arcade logic
@@ -848,6 +911,11 @@ class Game {
                 // Back button rect
                 if (px > 20 && px < 160 && py > 20 && py < 50) {
                      window.location.href = '../../index.html';
+                }
+                if (px > this.width - 160 && px < this.width - 20 && py > 20 && py < 50) {
+                     this.state = 'SETTINGS';
+                     this.inputManager.mouse.down = false;
+                     if (this.inputManager.touches.length > 0) this.inputManager.touchActive = false;
                 }
             }
             return;
@@ -869,6 +937,14 @@ class Game {
 
         this.vfxManager.draw(this.ctx);
         this.comboManager.draw(this.ctx, this.width);
+
+        if (this.saveManager && this.saveManager.data && this.saveManager.data.options && this.saveManager.data.options.fpsCounter) {
+            this.ctx.fillStyle = '#0f0';
+            this.ctx.font = '16px monospace';
+            this.ctx.textAlign = 'right';
+            const fps = this.lastTime > 0 ? Math.round(1000 / (performance.now() - this.lastTime)) : 60;
+            this.ctx.fillText("FPS: " + fps, this.width - 10, 20);
+        }
 
         if (this.state === 'PAUSED') {
             if (this.inputManager.actions.parry || this.inputManager.actions.back) {
@@ -950,6 +1026,7 @@ class Game {
         }
 
         if (this.bossActive && !this.bossActive.active) {
+            if (this.uiManager) this.uiManager.unlockBossMilestone();
             if (this.vfxManager && this.bossActive) { this.vfxManager.addPopup(this.bossActive.x, this.bossActive.y, "+500", "#ff0"); }
             this.bossActive = null;
             this.score += 500 * this.comboManager.multiplier;
@@ -1097,6 +1174,10 @@ class Game {
 
         if (this.player.health <= 0) {
             this.state = 'GAME_OVER';
+                this.saveManager.data.totalGamesPlayed++;
+                this.saveManager.data.totalScoreAccumulated += this.score;
+                this.uiManager.checkMilestones();
+                this.saveManager.save();
             if (this.score > this.saveManager.data.highScore) {
                 this.saveManager.data.highScore = this.score;
             }
@@ -1106,6 +1187,10 @@ class Game {
         }
     }
     draw() {
+        if (this.state === 'SETTINGS') {
+            this.uiManager.drawSettings(this.ctx, this.width, this.height);
+            return;
+        }
         // Clear
         this.ctx.fillStyle = '#2a2029'; // Base bg color
         this.ctx.fillRect(0, 0, this.width, this.height);
@@ -1151,6 +1236,14 @@ class Game {
             this.ctx.font = '14px monospace';
             this.ctx.textAlign = 'left';
             this.ctx.fillText('< Back to Arcade', 25, 40);
+
+            this.ctx.fillStyle = '#443';
+            this.ctx.fillRect(this.width - 160, 20, 140, 30);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('Settings', this.width - 90, 40);
+
+            this.uiManager.drawMilestones(this.ctx, this.width / 2, this.height - 180);
             return;
         }
 
@@ -1279,6 +1372,7 @@ class Game {
 
             this.ctx.font = '16px monospace';
             this.ctx.fillText('Press SPACE/CLICK to Restart', this.width/2, this.height/2 + 90);
+            this.uiManager.drawMilestones(this.ctx, this.width / 2, this.height - 180);
         }
     }
     loop(now) {
