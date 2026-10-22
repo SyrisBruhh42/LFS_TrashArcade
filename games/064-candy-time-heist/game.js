@@ -1515,14 +1515,7 @@ class BaseBoss {
 
     draw(ctx, width, height) {
         if (this.state === 'WARNING') {
-            ctx.save();
-            ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
-            ctx.fillRect(0, height / 2 - 50, width, 100);
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 36px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText(`WARNING: ${this.name} INBOUND`, width / 2, height / 2 + 10);
-            ctx.restore();
+            // Drawn by game to avoid layering issues
         }
 
         if (this.state === 'FIGHT') {
@@ -1574,7 +1567,7 @@ class BaseBoss {
 
 class OverseerBoss extends BaseBoss {
     constructor(x, y) {
-        super(x, y, 300);
+        super(x, y, 300 + (window.game ? window.game.bossesDefeated * 100 : 0));
         this.color = '#8800ff';
         this.name = "THE OVERSEER";
         this.attackTimer = 0;
@@ -1634,7 +1627,7 @@ class OverseerBoss extends BaseBoss {
 
 class ConveyorColossus extends BaseBoss {
     constructor(x, y) {
-        super(x, y, 400);
+        super(x, y, 400 + (window.game ? window.game.bossesDefeated * 100 : 0));
         this.color = '#ff5500';
         this.name = "CONVEYOR COLOSSUS";
         this.attackTimer = 0;
@@ -2012,6 +2005,84 @@ class VFXManager {
 }
 
 class Game {
+    setupWaveGuards(wave) {
+        this.guards = [];
+        this.guards.push(new Guard(200, 250, [{x: 200, y: 250}, {x: this.width - 200, y: 250}]));
+        if (wave >= 2) {
+            this.guards.push(new Guard(this.width / 2, 350, [{x: this.width / 2, y: 100}, {x: this.width / 2, y: 500}]));
+        }
+        if (wave >= 3) {
+            this.guards.push(new SwarmerGuard(150, 400, [{x: 150, y: 400}, {x: 150, y: 550}]));
+        }
+        if (wave >= 4) {
+            this.guards.push(new SniperGuard(this.width - 150, 150, [{x: this.width - 150, y: 150}, {x: this.width - 150, y: 50}]));
+        }
+        if (wave >= 5) {
+            this.guards.push(new ShieldedBruiserGuard(400, 350, [{x: 400, y: 350}, {x: 600, y: 350}]));
+        }
+        if (wave >= 6) {
+            this.guards.push(new SplitterGuard(300, 150, [{x: 300, y: 150}, {x: 500, y: 150}]));
+        }
+        if (wave >= 7) {
+            this.guards.push(new HazardGuard(this.width / 2, this.height - 100, [{x: 200, y: this.height - 100}, {x: this.width - 200, y: this.height - 100}]));
+        }
+        for (let i = 8; i <= wave; i++) {
+            const types = [Guard, SwarmerGuard, SniperGuard, ShieldedBruiserGuard, SplitterGuard, HazardGuard];
+            const Type = types[Math.floor(Math.random() * types.length)];
+            const startX = 100 + Math.random() * (this.width - 200);
+            const startY = 100 + Math.random() * (this.height - 200);
+            const endX = 100 + Math.random() * (this.width - 200);
+            const endY = 100 + Math.random() * (this.height - 200);
+            this.guards.push(new Type(startX, startY, [{x: startX, y: startY}, {x: endX, y: endY}]));
+        }
+    }
+
+    drawWaveIncoming(ctx, width, height) {
+        if (this.waveTransitionTimer > 0) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, height / 2 - 40, width, 80);
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 32px sans-serif';
+            ctx.fillText('WAVE ' + this.wave, width / 2, height / 2 + 10);
+            ctx.restore();
+            this.waveTransitionTimer -= 1/60;
+        }
+    }
+
+    drawBossIncoming(ctx, width, height) {
+        if (this.activeBoss && this.activeBoss.state === 'WARNING') {
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+            ctx.fillRect(0, height / 2 - 50, width, 100);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 36px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('WARNING: ' + this.activeBoss.name + ' INBOUND', width / 2, height / 2 + 10);
+            ctx.restore();
+        }
+    }
+
+    drawTutorialOverlay(ctx, width, height) {
+        if (this.state !== 'PLAYING') return;
+        if (this.wave === 1 && this.score === 0 && !this.tutorialDismissed) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 36px sans-serif';
+            ctx.fillText('TUTORIAL', width / 2, height / 2 - 40);
+            ctx.font = '20px sans-serif';
+            ctx.fillText('Steal candies on the belts. Avoid the guards.', width / 2, height / 2 + 10);
+            ctx.fillText('STAY STILL to activate time dilation!', width / 2, height / 2 + 40);
+            ctx.font = 'italic 16px sans-serif';
+            ctx.fillText('Press any movement key or click to start...', width / 2, height / 2 + 80);
+            ctx.restore();
+        }
+    }
+
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
@@ -2051,6 +2122,8 @@ class Game {
         };
 
         this.wave = 1;
+        this.tutorialDismissed = false;
+        this.waveTransitionTimer = 2.0;
         this.candiesToNextWave = 10;
         this.candiesCollectedInWave = 0;
 
@@ -2181,12 +2254,7 @@ if (this.state === 'PLAYING') {
         this.belts.push(new ConveyorBelt(100, 100, this.width - 200, 100, 50, 0));
         this.belts.push(new ConveyorBelt(100, 300, this.width - 200, 100, -50, 0));
 
-        this.guards.push(new Guard(200, 250, [{x: 200, y: 250}, {x: this.width - 200, y: 250}]));
-        this.guards.push(new SwarmerGuard(150, 400, [{x: 150, y: 400}, {x: 150, y: 550}]));
-        this.guards.push(new SniperGuard(this.width - 150, 150, [{x: this.width - 150, y: 150}, {x: this.width - 150, y: 50}]));
-        this.guards.push(new ShieldedBruiserGuard(400, 350, [{x: 400, y: 350}, {x: 600, y: 350}]));
-        this.guards.push(new SplitterGuard(300, 150, [{x: 300, y: 150}, {x: 500, y: 150}]));
-        this.guards.push(new HazardGuard(this.width / 2, this.height - 100, [{x: 200, y: this.height - 100}, {x: this.width - 200, y: this.height - 100}]));
+        this.setupWaveGuards(1);
 
         this.vents = [];
         this.vents.push(new SteamVent(this.width / 2 - 40, 420, 80, 20, 3, 1));
@@ -2238,7 +2306,15 @@ this.spawnCandy();
 
         if (this.state !== 'PLAYING') return;
 
-
+        if (this.wave === 1 && this.score === 0 && !this.tutorialDismissed) {
+            const input = this.inputManager.getMovementVector();
+            const dashReq = this.inputManager.keys['Space'] || this.inputManager.keys['ShiftLeft'] || this.inputManager.keys['ShiftRight'] || this.inputManager.dashRequested;
+            if (input.x !== 0 || input.y !== 0 || dashReq || this.inputManager.pointer.isDown) {
+                this.tutorialDismissed = true;
+            } else {
+                return; // Freeze gameplay until dismissed
+            }
+        }
 
         // Freeze logic
         if (this.globalFreezeTimer > 0) {
@@ -2282,6 +2358,8 @@ this.spawnCandy();
                             this.wave++;
                             this.candiesCollectedInWave = 0;
                             this.candiesToNextWave = Math.floor(this.candiesToNextWave * 1.5);
+                            this.waveTransitionTimer = 2.0;
+                            this.setupWaveGuards(this.wave);
                             this.perkManager.triggerDraft();
                         }
                     }
@@ -2386,8 +2464,8 @@ const input = this.inputManager.getMovementVector();
                 this.bossesDefeated++;
                 // Clear all guards for a clean slate
                 this.guards = [];
-                // Add some base guards back
-                this.guards.push(new Guard(200, 250, [{x: 200, y: 250}, {x: this.width - 200, y: 250}]));
+                // Add base guards back
+                this.setupWaveGuards(this.wave);
                 this.score += 200; // Bonus for defeating boss
             }
         }
@@ -2478,6 +2556,8 @@ const input = this.inputManager.getMovementVector();
                     this.wave++;
                     this.candiesCollectedInWave = 0;
                     this.candiesToNextWave = Math.floor(this.candiesToNextWave * 1.5);
+                    this.waveTransitionTimer = 2.0;
+                    this.setupWaveGuards(this.wave);
                     this.perkManager.triggerDraft();
                 }
             }
@@ -2606,6 +2686,11 @@ const input = this.inputManager.getMovementVector();
         }
 
         this.vfx.draw(this.ctx);
+        if (this.waveTransitionTimer > 0) {
+            this.drawWaveIncoming(this.ctx, this.width, this.height);
+        }
+        this.drawBossIncoming(this.ctx, this.width, this.height);
+        this.drawTutorialOverlay(this.ctx, this.width, this.height);
         this.ctx.restore();
 
         // UI
