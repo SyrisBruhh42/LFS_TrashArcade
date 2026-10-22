@@ -623,7 +623,21 @@ class Game {
         else { x = -30; y = Math.random() * this.height; }
 
         const polarity = Math.random() > 0.5 ? 'POSITIVE' : 'NEGATIVE';
-        this.enemies.push(new Enemy(x, y, polarity));
+
+        const rand = Math.random();
+        if (rand < 0.2) {
+            this.enemies.push(new Swarmer(x, y, polarity));
+        } else if (rand < 0.4) {
+            this.enemies.push(new RangedSniper(x, y, polarity));
+        } else if (rand < 0.6) {
+            this.enemies.push(new ShieldedBruiser(x, y, polarity));
+        } else if (rand < 0.8) {
+            this.enemies.push(new Splitter(x, y, polarity, 1));
+        } else if (rand < 0.9) {
+            this.enemies.push(new AreaDenialHazard(x, y, polarity));
+        } else {
+            this.enemies.push(new Enemy(x, y, polarity));
+        }
     }
     update(dt) {
         if (this.state === 'TITLE') {
@@ -695,7 +709,7 @@ class Game {
         // Collisions
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
-            e.update(dt, this.player);
+            e.update(dt, this.player, this.environment);
 
             // Check parry (tightened bounds for Phase 2)
             if (this.player.parryActive) {
@@ -716,9 +730,22 @@ class Game {
                             // Opposite polarity attracts/destroys (Wait, brief says "Switch polarities to parry... and repel")
                             // Let's say: Same polarity = Repel/Destroy (Magnetism logic)
                             // Opposite polarity = Absorbs/Damages
-                            e.active = false;
-                            this.score += 100;
-                            this.soundEngine.playHit();
+                            if (e.type === 'BRUISER' && e.shieldActive) {
+                                e.shieldActive = false;
+                                e.state = 'STUNNED';
+                                e.chargeTimer = 2.0;
+                                this.score += 50;
+                                this.soundEngine.playHit();
+                            } else {
+                                e.active = false;
+                                this.score += 100;
+                                this.soundEngine.playHit();
+                                if (e.type === 'SPLITTER' && e.size === 1) {
+                                    // Spawn smaller splitters
+                                    this.enemies.push(new Splitter(e.x - 10, e.y - 10, e.polarity, 0));
+                                    this.enemies.push(new Splitter(e.x + 10, e.y + 10, e.polarity, 0));
+                                }
+                            }
                         } else {
                             // Parrying with wrong polarity - maybe bounces off but no score, or hurts?
                             // Let's just say it bounces off but stays active for now, or just destroys with no score.
@@ -738,18 +765,65 @@ class Game {
             // Check body collision
             if (e.active) {
                 const dist = Math.hypot(this.player.x - e.x, this.player.y - e.y);
+                // Area Denial Hazard logic
+                if (e.type === 'HAZARD' && e.state !== 'IDLE') {
+                    if (dist < this.player.radius + e.pulseRadius) {
+                        if (this.player.invulnTimer <= 0) {
+                            this.player.health--;
+                            this.player.invulnTimer = 1.0;
+                            this.soundEngine.playHit();
+                        }
+                    }
+                }
                 if (dist < this.player.radius + e.radius) {
                     if (this.player.invulnTimer <= 0) {
                         this.player.health--;
                         this.player.invulnTimer = 1.0;
                         this.soundEngine.playHit();
-                        e.active = false; // Destroy enemy on hit
+                        if (e.type !== 'BRUISER') {
+                            e.active = false; // Destroy enemy on hit unless bruiser
+                        }
                     }
                 }
             }
         }
 
         this.enemies = this.enemies.filter(e => e.active);
+
+        // Projectile collisions
+        for (let p of this.environment.projectiles) {
+            if (!p.active) continue;
+
+            // check parry on projectiles
+            if (this.player.parryActive) {
+                const dx = p.x - this.player.x;
+                const dy = p.y - this.player.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist < this.player.radius * 3) {
+                    const angleToProj = Math.atan2(dy, dx);
+                    let angleDiff = angleToProj - this.player.slashAngle;
+                    while (angleDiff <= -Math.PI) angleDiff += Math.PI * 2;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+                    if (Math.abs(angleDiff) < Math.PI/3) {
+                        p.active = false;
+                        this.score += 25;
+                        this.soundEngine.playHit();
+                        continue;
+                    }
+                }
+            }
+
+            const dist = Math.hypot(this.player.x - p.x, this.player.y - p.y);
+            if (dist < this.player.radius + p.radius) {
+                if (this.player.invulnTimer <= 0) {
+                    this.player.health--;
+                    this.player.invulnTimer = 1.0;
+                    this.soundEngine.playHit();
+                    p.active = false;
+                }
+            }
+        }
 
         if (this.player.health <= 0) {
             this.state = 'GAME_OVER';
