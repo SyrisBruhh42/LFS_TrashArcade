@@ -51,15 +51,14 @@ class Player {
             this.invulnerabilityTime = 0.2;
 
             // Spawn dash particles
-            for(let i=0; i<10; i++) {
-                game.spawnParticle(this.x, this.y, '#0ff', 200, this.angle + (Math.random()-0.5));
-            }
+            game.vfx.emitParticles(this.x, this.y, '#0ff', 200, 10, this.angle, Math.PI/4);
         }
 
         let currentSpeed = speed;
         if(this.dashTimer > 0) {
             currentSpeed = speed * 3;
-            game.spawnParticle(this.x, this.y, '#0ff', 50, this.angle + Math.PI + (Math.random()-0.5)*0.5);
+            game.vfx.emitParticles(this.x, this.y, '#0ff', 50, 2, this.angle + Math.PI, 0.5);
+            game.vfx.addAfterimage(this.x, this.y, this.angle, this.thrustIntensity, '#0ff', 0.3);
         }
 
         this.vx += ax * currentSpeed * dt;
