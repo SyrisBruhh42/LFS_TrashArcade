@@ -391,6 +391,9 @@ class OrbitalBoss extends BaseBoss {
                 this.isPos
             ));
         }
+        if (game.vfx) {
+            game.vfx.addScreenShake(5, 0.1);
+        }
     }
 
     drawGeometry(ctx) {
@@ -1002,6 +1005,10 @@ class Player {
         // Maintain trail positions
         this.trail.push({x: this.x, y: this.y});
         if (this.trail.length > (this.isDashing ? 25 : 15)) this.trail.shift();
+
+        if (this.isDashing && window.game) {
+            window.game.spawnParticles(this.x, this.y, this.isPos ? COLORS.pos : COLORS.neg, 1);
+        }
     }
 
     draw(ctx) {
@@ -1121,6 +1128,7 @@ class Game {
         this.enemyProjectiles = [];
         this.particles = [];
 
+        this.vfx = new VFXManager(this);
         this.comboManager = new ComboManager(this);
         this.upgradeManager = new UpgradeManager(this);
         this.pickups = [];
@@ -1184,6 +1192,7 @@ class Game {
         this.enemies = [];
         this.enemyProjectiles = [];
         this.particles = [];
+        this.vfx = new VFXManager(this);
         this.comboManager = new ComboManager(this);
         this.upgradeManager = new UpgradeManager(this);
         this.pickups = [];
@@ -1198,6 +1207,18 @@ class Game {
     spawnParticles(x, y, color, count) {
         for(let i = 0; i < count; i++) {
             this.particles.push(new Particle(x, y, color));
+        }
+    }
+
+    spawnDirectionalParticles(x, y, color, count, dx, dy, spread) {
+        for(let i = 0; i < count; i++) {
+            let p = new Particle(x, y, color);
+            const baseAngle = Math.atan2(dy, dx);
+            const angle = baseAngle + (Math.random() - 0.5) * spread;
+            const speed = Math.random() * 300 + 100;
+            p.vx = Math.cos(angle) * speed;
+            p.vy = Math.sin(angle) * speed;
+            this.particles.push(p);
         }
     }
 
@@ -1367,6 +1388,10 @@ class Game {
                         if (this.health <= 0) {
                             this.state = 'GAME_OVER';
                             if (this.score > this.highScore) this.highScore = this.score;
+                            if (this.vfx) {
+                                this.vfx.addHitStop(0.5);
+                                this.vfx.addScreenShake(20, 0.5);
+                            }
                         }
                     }
                 }
@@ -1401,8 +1426,19 @@ class Game {
             e.takeDamage(dmg);
             if (e.health <= 0) {
                 this.comboManager.addHit();
-                this.score += Math.floor(e.maxHealth * 10 * this.comboManager.multiplier);
+                const gainedScore = Math.floor(e.maxHealth * 10 * this.comboManager.multiplier);
+                this.score += gainedScore;
                 this.sound.playShoot();
+
+                if (this.vfx) {
+                    const isBoss = e.type === 'boss';
+                    this.vfx.addHitStop(isBoss ? 0.3 : 0.05);
+                    this.vfx.addScreenShake(isBoss ? 15 : 5, isBoss ? 0.4 : 0.15);
+                    this.vfx.addFloatingText(`+${gainedScore}`, e.x, e.y, '#ffff00');
+                    if (this.comboManager.comboCount > 2) {
+                        this.vfx.addFloatingText(`${this.comboManager.comboCount}x COMBO!`, e.x, e.y - 20, '#ff8800');
+                    }
+                }
 
                 // Random pickup spawn chance
                 if (Math.random() < 0.2) {
@@ -1411,7 +1447,7 @@ class Game {
                     else if (r < 0.8) this.pickups.push(new ComboPickup(e.x, e.y));
                     else this.pickups.push(new ShieldPickup(e.x, e.y));
                 }
-                this.spawnParticles(e.x, e.y, e.isPos ? COLORS.particlePos : COLORS.particleNeg, 15 + e.maxHealth * 5);
+                this.spawnDirectionalParticles(e.x, e.y, e.isPos ? COLORS.particlePos : COLORS.particleNeg, 15 + e.maxHealth * 5, dx, dy, Math.PI / 2);
 
                 if (e.type === 'splitter') {
                     for (let j = 0; j < 3; j++) {
@@ -1449,6 +1485,11 @@ class Game {
             }
         } else {
             // Failure: Opposite Polarity - Take Damage
+            if (this.vfx) {
+                this.vfx.addHitStop(0.1);
+                this.vfx.addScreenShake(10, 0.2);
+            }
+
             if (this.player.shields > 0) {
                 this.player.shields--;
                 this.player.triggerInvulnerability();
@@ -1536,6 +1577,9 @@ class Game {
     }
 
     draw() {
+        this.ctx.save();
+        if (this.vfx) this.vfx.applyShake(this.ctx);
+
         this.ctx.fillStyle = COLORS.bg;
         this.ctx.fillRect(0, 0, this.width, this.height);
 
@@ -1592,13 +1636,26 @@ class Game {
             this.ctx.fillText(`Press SPACE or TAP to restart`, this.width / 2, this.height / 2 + 80);
         }
 
+        if (this.vfx && (this.state === 'PLAYING' || this.state === 'GAME_OVER')) {
+            this.vfx.draw(this.ctx);
+        }
+
         this.drawScanlines();
+        this.ctx.restore();
     }
 
     loop(time) {
-        const dt = Math.min((time - this.lastTime) / 1000, 0.1);
+        const rawDt = Math.min((time - this.lastTime) / 1000, 0.1);
         this.lastTime = time;
-        this.totalTime += dt;
+
+        if (this.vfx) this.vfx.update(rawDt);
+
+        let dt = rawDt;
+        if (this.vfx && this.vfx.hitStopDuration > 0) {
+            dt = 0; // Freeze game logic
+        } else {
+            this.totalTime += dt;
+        }
 
         this.update(dt);
         this.draw();
