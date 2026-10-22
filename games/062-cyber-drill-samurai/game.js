@@ -445,7 +445,9 @@ class Engine {
     this.enemies = [];
     this.enemyProjectiles = [];
     this.particles = [];
-    this.hazards = []; // Interactive stage hazards
+    this.hazards = [];
+    this.bosses = [];
+    this.waveCounter = 0; // Interactive stage hazards
     if (typeof ParallaxBackground !== 'undefined') {
         this.background = new ParallaxBackground(this.width, this.height);
     }
@@ -567,7 +569,10 @@ class Engine {
     this.enemyProjectiles = [];
     this.particles = [];
     this.hazards = [];
+    this.bosses = [];
+    this.waveCounter = 0;
     this.tether = [{x: this.player.x, y: this.player.y}];
+    this.nextBossDepth = 500;
     this.tetherLength = 0;
     this.maxTetherLength = 10; // capacity starts low
     this.score = 0;
@@ -660,12 +665,26 @@ class Engine {
       this.player.y = oldY;
     }
 
+
     // --- Camera & Generation ---
     this.depth = Math.max(this.depth, this.player.y);
     const targetCameraY = this.player.y - this.height * 0.4;
     if (targetCameraY > this.cameraY) {
       this.cameraY += (targetCameraY - this.cameraY) * 5 * dt;
     }
+
+    // Boss spawn logic
+    if (this.depth > this.nextBossDepth) {
+        this.nextBossDepth += 500;
+        this.waveCounter++;
+        const bossY = this.player.y + 400;
+        if (this.waveCounter % 2 === 1) {
+            this.bosses.push(new TetherSeverBoss(this.width / 2, bossY));
+        } else {
+            this.bosses.push(new GroundPoundBoss(this.width / 2, bossY));
+        }
+    }
+
 
     // Generate new rows ahead
     if (this.cameraY + this.height + 200 > this.maxDepthReached) {
@@ -692,12 +711,14 @@ class Engine {
       this.soundEngine.playExplosion();
       this.shockwaveActive = true;
       this.shockwaveRadius = 0;
+
       // Massive score payout
       const payout = this.tetherLength * this.multiplier * 50;
       this.score += payout;
       // Reset tether
       this.tether = [{x: this.player.x, y: this.player.y}];
       this.maxTetherLength = 10;
+
     }
 
     if (this.shockwaveActive) {
@@ -705,6 +726,7 @@ class Engine {
       if (this.shockwaveRadius > 400) {
         this.shockwaveActive = false;
       }
+
       // Kill enemies in radius
       this.enemies.forEach(e => {
         if (e.active) {
@@ -720,6 +742,19 @@ class Engine {
           }
         }
       });
+
+      // Damage bosses
+      this.bosses.forEach(b => {
+        if (b.active) {
+          const dist = Math.hypot(b.x - this.player.x, b.y - this.player.y);
+          if (dist < this.shockwaveRadius + b.r) {
+            if (typeof b.takeDamage === 'function') {
+                b.takeDamage(50, this);
+            }
+          }
+        }
+      });
+
     }
 
     // --- Update Enemies ---
@@ -777,6 +812,30 @@ class Engine {
       }
     }
 
+
+    // --- Update Bosses ---
+    for (let i = this.bosses.length - 1; i >= 0; i--) {
+      const b = this.bosses[i];
+      b.update(dt, this.player.x, this.player.y, this);
+      if (!b.active) {
+        this.bosses.splice(i, 1);
+        continue;
+      }
+
+      // Collision with player
+      if (b.state !== 'SPAWNING') {
+          const distToPlayer = Math.hypot(b.x - this.player.x, b.y - this.player.y);
+          if (distToPlayer < b.r + this.player.r) {
+            if (this.player.isDashing) {
+              b.takeDamage(10, this);
+              this.soundEngine.playHit();
+            } else if (this.player.invulnTimer <= 0) {
+              this.gameOver();
+            }
+          }
+      }
+    }
+
     // --- Update Enemy Projectiles ---
     if (this.enemyProjectiles) {
         this.enemyProjectiles.forEach(p => {
@@ -787,13 +846,34 @@ class Engine {
                 p.active = false;
             }
 
+
             // Collision with player
             if (this.player && this.player.invulnTimer <= 0) {
                 const distToPlayer = Math.hypot(p.x - this.player.x, p.y - this.player.y);
                 if (distToPlayer < p.r + this.player.r) {
-                    this.gameOver();
+                    if (this.player.isDashing) {
+                        p.active = false;
+                    } else {
+                        this.gameOver();
+                    }
+                }
+
+                if (p.isSevering && this.tether.length > 5 && !this.shockwaveActive) {
+                    for (let i = 5; i < this.tether.length; i += 3) {
+                      const pt = this.tether[i];
+                      const distToPt = Math.hypot(p.x - pt.x, p.y - pt.y);
+                      if (distToPt < p.r + 5) {
+                        this.soundEngine.playHit();
+                        this.tether = this.tether.slice(0, i);
+                        this.maxTetherLength = Math.max(10, i);
+                        this.spawnParticles(pt.x, pt.y, '#a0efb8', 20);
+                        p.active = false;
+                        break;
+                      }
+                    }
                 }
             }
+
         });
         this.enemyProjectiles = this.enemyProjectiles.filter(p => p.active);
     }
@@ -887,9 +967,12 @@ class Engine {
       this.ctx.stroke();
     }
 
+
     this.particles.forEach(p => p.draw(this.ctx, this.cameraY));
     if (this.player) this.player.draw(this.ctx, this.cameraY);
     this.enemies.forEach(e => e.draw(this.ctx, this.cameraY));
+    this.bosses.forEach(b => b.draw(this.ctx, this.cameraY));
+
 
     if (this.enemyProjectiles) {
         this.enemyProjectiles.forEach(p => {
