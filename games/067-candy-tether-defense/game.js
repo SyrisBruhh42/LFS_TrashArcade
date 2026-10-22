@@ -114,6 +114,7 @@ class SoundEngine {
     playExplosion() { this.playTone(100, 'square', 0.3, 0.5); }
     playStart() { this.playTone(600, 'sine', 0.4, 0.5); }
     playOver() { this.playTone(200, 'sawtooth', 0.6, 0.5); }
+    playDash() { this.playTone(400, 'triangle', 0.2, 0.4); }
 }
 
 class InputManager {
@@ -128,11 +129,20 @@ class InputManager {
 
         canvas.addEventListener('mousedown', (e) => {
             this.updateMouse(e);
-            this.mouse.isDown = true;
-            this.mouse.justPressed = true;
+            if (e.button === 0) {
+                this.mouse.isDown = true;
+                this.mouse.justPressed = true;
+            } else if (e.button === 2) {
+                this.mouse.rightDown = true;
+                this.mouse.rightJustPressed = true;
+            }
         });
         canvas.addEventListener('mousemove', (e) => this.updateMouse(e));
-        window.addEventListener('mouseup', () => this.mouse.isDown = false);
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 0) this.mouse.isDown = false;
+            else if (e.button === 2) this.mouse.rightDown = false;
+        });
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
 
         canvas.addEventListener('touchstart', (e) => {
             this.updateTouch(e);
@@ -166,6 +176,7 @@ class InputManager {
 
     update() {
         this.mouse.justPressed = false;
+        this.mouse.rightJustPressed = false;
         this.touch.justPressed = false;
     }
 
@@ -181,27 +192,134 @@ class Tower {
     constructor(x, y) {
         this.x = x;
         this.y = y;
+        this.vx = 0;
+        this.vy = 0;
         this.radius = 40;
         this.maxHealth = 100;
         this.health = 100;
+
         this.tetherAngle = 0;
         this.tetherBaseLength = 60;
         this.tetherMaxLength = 300;
         this.tetherCurrentLength = this.tetherBaseLength;
         this.isExtending = false;
+        this.baseAngularVelocity = Math.PI * 1.5;
 
-        // Weapon stats
-        this.baseAngularVelocity = Math.PI * 1.5; // rad/sec
+        // Dash & Movement
+        this.dashCooldown = 3.0;
+        this.dashTimer = 0;
+        this.isDashing = false;
+        this.dashDuration = 0.2;
+        this.dashActiveTimer = 0;
+
+        this.invulnTimer = 0;
+        this.recoilX = 0;
+        this.recoilY = 0;
+
+        this.thrustParticles = [];
+    }
+
+    applyRecoil(dx, dy, amount) {
+        let dist = Math.hypot(dx, dy);
+        if(dist > 0) {
+            this.recoilX += -(dx/dist) * amount;
+            this.recoilY += -(dy/dist) * amount;
+            this.vx += -(dx/dist) * (amount * 5);
+            this.vy += -(dy/dist) * (amount * 5);
+        }
     }
 
     update(dt, input, game) {
-        // Calculate target angle based on pointer
         const pointerX = input.getPointerX();
         const pointerY = input.getPointerY();
 
-        // Input decides extension
-        this.isExtending = input.isPointerDown();
+        // Recoil recovery
+        this.recoilX += (0 - this.recoilX) * 10 * dt;
+        this.recoilY += (0 - this.recoilY) * 10 * dt;
+        if (this.invulnTimer > 0) this.invulnTimer -= dt;
 
+        // Dash cooldown
+        if (this.dashTimer > 0) this.dashTimer -= dt;
+
+        // Movement
+        let ax = 0, ay = 0;
+        const speed = 1500;
+        if (input.keys['KeyW'] || input.keys['ArrowUp']) ay -= speed;
+        if (input.keys['KeyS'] || input.keys['ArrowDown']) ay += speed;
+        if (input.keys['KeyA'] || input.keys['ArrowLeft']) ax -= speed;
+        if (input.keys['KeyD'] || input.keys['ArrowRight']) ax += speed;
+
+        if (this.dashActiveTimer > 0) {
+            this.dashActiveTimer -= dt;
+            ax = 0; ay = 0; // maintain momentum during dash
+        } else {
+            this.isDashing = false;
+        }
+
+        // Trigger Dash
+        if ((input.keys['ShiftLeft'] || input.keys['ShiftRight'] || input.mouse.rightJustPressed) && this.dashTimer <= 0) {
+            this.dashTimer = this.dashCooldown;
+            this.dashActiveTimer = this.dashDuration;
+            this.isDashing = true;
+            this.invulnTimer = 0.5; // IFrames
+            game.sound.playDash();
+
+            // Dash impulse
+            let len = Math.hypot(ax, ay);
+            if (len > 0) {
+                this.vx += (ax/len) * 1000;
+                this.vy += (ay/len) * 1000;
+            } else {
+                // dash towards mouse
+                let dx = pointerX - this.x;
+                let dy = pointerY - this.y;
+                let mlen = Math.hypot(dx, dy);
+                if (mlen > 0) {
+                    this.vx += (dx/mlen) * 1000;
+                    this.vy += (dy/mlen) * 1000;
+                }
+            }
+        }
+
+        this.vx += ax * dt;
+        this.vy += ay * dt;
+
+        // Friction
+        const friction = this.isDashing ? 0.96 : 0.82;
+        this.vx *= Math.pow(friction, dt * 60);
+        this.vy *= Math.pow(friction, dt * 60);
+
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        // Bounds check
+        if (this.x < this.radius) { this.x = this.radius; this.vx *= -0.5; }
+        if (this.x > game.width - this.radius) { this.x = game.width - this.radius; this.vx *= -0.5; }
+        if (this.y < this.radius) { this.y = this.radius; this.vy *= -0.5; }
+        if (this.y > game.height - this.radius) { this.y = game.height - this.radius; this.vy *= -0.5; }
+
+        // Spawn thrust particles
+        if (Math.hypot(this.vx, this.vy) > 20) {
+            this.thrustParticles.push({
+                x: this.x - (this.vx * 0.05) + (Math.random()-0.5)*15,
+                y: this.y - (this.vy * 0.05) + (Math.random()-0.5)*15,
+                vx: -this.vx * 0.2 + (Math.random()-0.5)*30,
+                vy: -this.vy * 0.2 + (Math.random()-0.5)*30,
+                life: 0.5,
+                maxLife: 0.5
+            });
+        }
+
+        // Update particles
+        for (let i = this.thrustParticles.length - 1; i >= 0; i--) {
+            let p = this.thrustParticles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+            if (p.life <= 0) this.thrustParticles.splice(i, 1);
+        }
+
+        this.isExtending = input.isPointerDown();
         if (this.isExtending) {
             this.tetherCurrentLength += 300 * dt;
             if (this.tetherCurrentLength > this.tetherMaxLength) {
@@ -214,29 +332,59 @@ class Tower {
             }
         }
 
-        // Calculate dynamic angular velocity (longer = slower)
         const lengthFactor = (this.tetherCurrentLength - this.tetherBaseLength) / (this.tetherMaxLength - this.tetherBaseLength);
-        const currentSpeed = this.baseAngularVelocity * (1 - lengthFactor * 0.7); // min speed is 30%
-
+        let currentSpeed = this.baseAngularVelocity * (1 - lengthFactor * 0.7);
+        if (this.isDashing) currentSpeed *= 3.0; // spin faster during dash
         this.tetherAngle += currentSpeed * dt;
 
-        // Damage multiplier
-        this.damageMultiplier = 1 + lengthFactor * 2; // Up to 3x damage
+        this.damageMultiplier = 1 + lengthFactor * 2;
     }
 
-    draw(ctx) {
+    draw(ctx, input) {
+        // Draw thrust particles
+        for (let p of this.thrustParticles) {
+            const alpha = Math.max(0, p.life / p.maxLife);
+            ctx.fillStyle = `rgba(255, 165, 0, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 4 * alpha, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Invuln blink
+        if (this.invulnTimer > 0 && Math.floor(performance.now() / 50) % 2 === 0) {
+            ctx.globalAlpha = 0.5;
+        }
+
+        let drawX = this.x + this.recoilX;
+        let drawY = this.y + this.recoilY;
+
+        // Draw Aim Telegraph
+        if (input) {
+            const pointerX = input.getPointerX();
+            const pointerY = input.getPointerY();
+            const aimAngle = Math.atan2(pointerY - drawY, pointerX - drawX);
+            ctx.beginPath();
+            ctx.moveTo(drawX, drawY);
+            ctx.lineTo(drawX + Math.cos(aimAngle) * this.tetherMaxLength, drawY + Math.sin(aimAngle) * this.tetherMaxLength);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.setLineDash([5, 10]);
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
         // Draw tether
-        const endX = this.x + Math.cos(this.tetherAngle) * this.tetherCurrentLength;
-        const endY = this.y + Math.sin(this.tetherAngle) * this.tetherCurrentLength;
+        const endX = drawX + Math.cos(this.tetherAngle) * this.tetherCurrentLength;
+        const endY = drawY + Math.sin(this.tetherAngle) * this.tetherCurrentLength;
 
         ctx.beginPath();
-        ctx.moveTo(this.x, this.y);
+        ctx.moveTo(drawX, drawY);
         ctx.lineTo(endX, endY);
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = this.isDashing ? '#0ff' : '#fff';
+        ctx.lineWidth = this.isDashing ? 6 : 4;
         ctx.stroke();
 
-        // Tether Head (The ball)
+        // Tether Head
         ctx.beginPath();
         ctx.arc(endX, endY, 15, 0, Math.PI * 2);
         ctx.fillStyle = ACCENT_COLOR;
@@ -245,22 +393,52 @@ class Tower {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Tower Base (Candy Processor)
+        // procedural multi-part tower sprite
+        // Base plate
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.arc(drawX, drawY, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = '#ff6b6b';
         ctx.fill();
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 3;
         ctx.stroke();
+
+        // Inner gear (rotates opposite to tether)
+        ctx.save();
+        ctx.translate(drawX, drawY);
+        ctx.rotate(-this.tetherAngle * 2);
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            const r1 = 15;
+            const r2 = 25;
+            ctx.lineTo(Math.cos(angle - 0.2) * r1, Math.sin(angle - 0.2) * r1);
+            ctx.lineTo(Math.cos(angle) * r2, Math.sin(angle) * r2);
+            ctx.lineTo(Math.cos(angle + 0.2) * r1, Math.sin(angle + 0.2) * r1);
+        }
+        ctx.closePath();
+        ctx.fillStyle = '#444';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+
+        // Core eye
+        ctx.beginPath();
+        ctx.arc(drawX, drawY, 8, 0, Math.PI * 2);
+        ctx.fillStyle = this.isDashing ? '#0ff' : (this.invulnTimer > 0 ? '#fff' : '#222');
+        ctx.fill();
+
+        ctx.globalAlpha = 1.0;
 
         // Health Bar
         const barWidth = 60;
         const barHeight = 8;
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 20, barWidth, barHeight);
+        ctx.fillRect(drawX - barWidth/2, drawY - this.radius - 20, barWidth, barHeight);
         ctx.fillStyle = '#0f0';
-        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 20, barWidth * (this.health/this.maxHealth), barHeight);
+        ctx.fillRect(drawX - barWidth/2, drawY - this.radius - 20, barWidth * (this.health/this.maxHealth), barHeight);
     }
 
     getTetherHeadPos() {
@@ -440,15 +618,26 @@ class Game {
                     // Check collision with tower
                     const distToTower = Math.hypot(e.x - this.tower.x, e.y - this.tower.y);
                     if (distToTower < e.radius + this.tower.radius) {
-                        this.tower.health -= e.damage;
-                        this.sound.playHit();
-                        e.active = false;
+                        if (this.tower.invulnTimer <= 0) {
+                            this.tower.health -= e.damage;
+                            this.tower.applyRecoil(e.x - this.tower.x, e.y - this.tower.y, 20);
+                            this.sound.playHit();
+                            e.active = false;
+                        } else if (this.tower.isDashing) {
+                            e.health = 0;
+                            e.active = false;
+                            this.score += 15;
+                            this.sound.playExplosion();
+                            this.tower.applyRecoil(this.tower.x - e.x, this.tower.y - e.y, 5); // tiny bounce back
+                        }
                     }
 
                     // Check collision with tether head
                     const distToTether = Math.hypot(e.x - tetherHead.x, e.y - tetherHead.y);
                     if (distToTether < e.radius + tetherHead.radius) {
                         e.health -= 10 * this.tower.damageMultiplier;
+                        // apply some recoil to the tower from the tether hit
+                        this.tower.applyRecoil(e.x - tetherHead.x, e.y - tetherHead.y, 2);
                         if (e.health <= 0) {
                             e.active = false;
                             this.score += Math.floor(10 * this.tower.damageMultiplier);
@@ -554,7 +743,7 @@ class Game {
             this.ctx.beginPath(); this.ctx.moveTo(0, i); this.ctx.lineTo(this.width, i); this.ctx.stroke();
         }
 
-        this.tower.draw(this.ctx);
+        this.tower.draw(this.ctx, this.input);
         for (let e of this.enemies) {
             e.draw(this.ctx);
         }
@@ -565,6 +754,18 @@ class Game {
         this.ctx.textAlign = 'left';
         this.ctx.fillText(`Score: ${this.score}`, 20, 40);
         this.ctx.fillText(`High: ${this.saveManager.data.highScore}`, 20, 70);
+
+        // Dash cooldown HUD
+        if (this.tower) {
+            const cdRatio = 1 - Math.max(0, this.tower.dashTimer) / this.tower.dashCooldown;
+            this.ctx.font = '16px monospace';
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText(`Dash (Shift/R-Click):`, 20, 110);
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(20, 120, 150, 15);
+            this.ctx.fillStyle = cdRatio >= 1 ? '#0ff' : '#888';
+            this.ctx.fillRect(20, 120, 150 * cdRatio, 15);
+        }
     }
 
     drawTitle() {
@@ -575,7 +776,7 @@ class Game {
 
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '24px monospace';
-        this.ctx.fillText("Hold Mouse/Touch to extend tether", this.width/2, this.height/2);
+        this.ctx.fillText("WASD: Move | Click: Extend Tether | Shift/R-Click: Dash", this.width/2, this.height/2);
         this.ctx.fillText("Click to Start", this.width/2, this.height/2 + 60);
 
         this.ctx.font = '16px monospace';
