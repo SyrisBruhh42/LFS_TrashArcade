@@ -163,38 +163,66 @@ class BeatTracker {
 }
 
 class Particle {
-  constructor(x, y, vx, vy, life, color) {
+  constructor(x, y, vx, vy, life, color, size = 4, friction = 1.0, gravity = 0) {
     this.x = x; this.y = y; this.vx = vx; this.vy = vy;
     this.life = life; this.maxLife = life; this.color = color;
+    this.size = size;
+    this.friction = friction;
+    this.gravity = gravity;
+    this.angle = Math.random() * Math.PI * 2;
+    this.rotSpeed = (Math.random() - 0.5) * 10;
   }
   update(dt) {
+    this.vx *= Math.pow(this.friction, dt * 60);
+    this.vy *= Math.pow(this.friction, dt * 60);
+    this.vy += this.gravity * dt;
     this.x += this.vx * dt;
     this.y += this.vy * dt;
+    this.angle += this.rotSpeed * dt;
     this.life -= dt;
   }
   draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
     ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
     ctx.fillStyle = this.color;
-    ctx.fillRect(this.x - 2, this.y - 2, 4, 4);
-    ctx.globalAlpha = 1;
+    let s = this.size * Math.max(0, this.life / this.maxLife);
+    ctx.fillRect(-s/2, -s/2, s, s);
+    ctx.restore();
   }
 }
 
 class FloatingText {
-  constructor(x, y, text, life, color) {
-    this.x = x; this.y = y; this.text = text;
+  constructor(x, y, text, life, color, isCombo = false) {
+    this.x = x; this.startY = y; this.y = y; this.text = text;
     this.life = life; this.maxLife = life; this.color = color;
+    this.isCombo = isCombo;
+    this.vx = (Math.random() - 0.5) * 40;
   }
   update(dt) {
-    this.y -= 50 * dt;
     this.life -= dt;
+    let progress = 1.0 - Math.max(0, this.life / this.maxLife);
+    // Smooth easing out
+    let ease = 1 - Math.pow(1 - progress, 3);
+    this.y = this.startY - ease * (this.isCombo ? 80 : 50);
+    this.x += this.vx * dt;
   }
   draw(ctx) {
+    let scale = this.isCombo ? 1.5 + Math.sin(this.life * 10) * 0.2 : 1;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.scale(scale, scale);
     ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
     ctx.fillStyle = this.color;
-    ctx.font = '20px Arial';
-    ctx.fillText(this.text, this.x, this.y);
-    ctx.globalAlpha = 1;
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(this.text, 0, 0);
+    // Stroke for extra visibility
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#000';
+    ctx.strokeText(this.text, 0, 0);
+    ctx.restore();
   }
 }
 class Enemy {
@@ -677,8 +705,50 @@ class Player {
       this.overdriveDuration -= dt;
       if (this.overdriveDuration <= 0) this.overdriveActive = false;
     }
+
+    // Thruster particles
+    if (window.game && Math.random() < 0.3) {
+        let speed = this.isDashing ? 800 : 300;
+        window.game.particles.push(new Particle(
+            this.x - 20, this.y,
+            -speed + (Math.random() - 0.5)*100, (Math.random() - 0.5)*100,
+            0.2 + Math.random()*0.2,
+            this.isDashing ? '#00ffff' : '#ff5500',
+            Math.random()*6 + 2,
+            0.9,
+            0
+        ));
+    }
   }
   draw(ctx, pointerX, pointerY) {
+    // Motion trails
+    if (this.isDashing || this.overdriveActive) {
+       if (!this.trails) this.trails = [];
+       this.trails.push({x: this.x, y: this.y, life: 0.2});
+    }
+    if (this.trails) {
+       for (let i = this.trails.length - 1; i >= 0; i--) {
+           let t = this.trails[i];
+           t.life -= 0.016; // approx dt
+           if (t.life <= 0) {
+               this.trails.splice(i, 1);
+               continue;
+           }
+           ctx.save();
+           ctx.translate(t.x, t.y);
+           ctx.globalAlpha = (t.life / 0.2) * 0.5;
+           ctx.fillStyle = this.overdriveActive ? '#ffaa00' : '#00ffff';
+           ctx.beginPath();
+           ctx.moveTo(-15, -20);
+           ctx.lineTo(25, 0);
+           ctx.lineTo(-15, 20);
+           ctx.lineTo(-5, 0);
+           ctx.closePath();
+           ctx.fill();
+           ctx.restore();
+       }
+    }
+
     if (this.invulnTimer > 0 && Math.floor(this.animTime * 20) % 2 === 0) {
        // Blink
        ctx.globalAlpha = 0.5;
@@ -943,6 +1013,11 @@ class Game {
     this.bossIndex = 0;
     this.nextBossScore = 1000;
 
+    // Phase 7 VFX
+    this.hitStopTimer = 0;
+    this.shakeIntensity = 0;
+    this.playerTrails = [];
+
     // Wave & Combo system
     this.currentWave = 1;
     this.enemiesToSpawn = 10;
@@ -1131,6 +1206,10 @@ class Game {
         }
       }
 
+      if (this.shakeIntensity > 0) {
+          this.shakeIntensity -= 100 * dt;
+          if (this.shakeIntensity < 0) this.shakeIntensity = 0;
+      }
       this.bgOffset = (this.bgOffset + 50 * dt) % 100;
 
       // Update Pickups
@@ -1286,9 +1365,23 @@ class Game {
           this.combo++;
           this.comboTimer = this.maxComboTimer * this.playerStats.comboTimeMult;
 
-          for (let i = 0; i < 5; i++) {
-             this.particles.push(new Particle(closest.x, closest.y, Math.random()*200-100, Math.random()*200-100, 0.5, '#fff'));
+          // Directional hit particles
+          let hitAngle = Math.atan2(closest.y - this.player.y, closest.x - this.player.x);
+          for (let i = 0; i < 15; i++) {
+             let a = hitAngle + (Math.random() - 0.5);
+             let speed = Math.random() * 400 + 100;
+             this.particles.push(new Particle(
+                 closest.x, closest.y,
+                 Math.cos(a)*speed, Math.sin(a)*speed,
+                 0.4 + Math.random()*0.3,
+                 this.player.overdriveActive ? '#ffaa00' : '#fff',
+                 Math.random()*6 + 4,
+                 0.92,
+                 200
+             ));
           }
+          this.hitStopTimer = 0.05;
+          this.shakeIntensity = 10;
 
           if (closest.health <= 0) {
             if (Math.random() < 0.2) this.pickups.push(new Pickup(closest.x, closest.y, Math.random() < 0.3 ? 'HEALTH' : 'SCORE'));
@@ -1298,8 +1391,25 @@ class Game {
                 this.score += Math.floor(baseScore * (1 + this.combo * 0.1));
                 this.boss = null;
                 this.bossIndex++;
-                this.texts.push(new FloatingText(closest.x, closest.y, "BOSS DEFEATED!", 2, '#0f0'));
-                this.texts.push(new FloatingText(closest.x, closest.y - 20, acc > 0.8 ? "PERFECT!" : "Good", 1, '#0f0'));
+                this.texts.push(new FloatingText(closest.x, closest.y, "BOSS DEFEATED!", 2, '#0f0', true));
+                this.texts.push(new FloatingText(closest.x, closest.y - 20, acc > 0.8 ? "PERFECT!" : "Good", 1, '#0f0', true));
+
+                // Huge explosion
+                for (let i = 0; i < 100; i++) {
+                    let a = Math.random() * Math.PI * 2;
+                    let speed = Math.random() * 800 + 200;
+                    this.particles.push(new Particle(
+                        closest.x, closest.y,
+                        Math.cos(a)*speed, Math.sin(a)*speed,
+                        1.0 + Math.random(),
+                        Math.random() < 0.5 ? '#ff0000' : '#ffaa00',
+                        Math.random() * 15 + 5,
+                        0.90,
+                        0
+                    ));
+                }
+                this.hitStopTimer = 0.5;
+                this.shakeIntensity = 50;
             } else {
                 let baseScore = 100 * (this.player.overdriveActive ? 2 : 1);
                 this.score += Math.floor(baseScore * (1 + this.combo * 0.1));
@@ -1318,6 +1428,20 @@ class Game {
 
                 this.enemies = this.enemies.filter(e => e !== closest);
                 this.texts.push(new FloatingText(closest.x, closest.y - 20, acc > 0.8 ? "PERFECT!" : "Good", 1, '#0f0'));
+                // Enemy death explosion
+                for (let i = 0; i < 20; i++) {
+                    let a = Math.random() * Math.PI * 2;
+                    let speed = Math.random() * 300 + 50;
+                    this.particles.push(new Particle(
+                        closest.x, closest.y,
+                        Math.cos(a)*speed, Math.sin(a)*speed,
+                        0.5 + Math.random()*0.5,
+                        closest.color || '#fff',
+                        Math.random() * 8 + 3,
+                        0.95,
+                        0
+                    ));
+                }
             }
           }
         } else {
@@ -1330,6 +1454,11 @@ class Game {
   }
 
   draw(ctx) {
+    ctx.save();
+    if (this.shakeIntensity > 0) {
+       ctx.translate((Math.random()-0.5)*this.shakeIntensity, (Math.random()-0.5)*this.shakeIntensity);
+    }
+
     ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, width, height);
 
@@ -1453,11 +1582,22 @@ class Game {
       ctx.font = '16px Arial';
       ctx.fillText('Back to Arcade: ../../index.html', width/2, height - 30);
     }
+    ctx.restore();
   }
 
   loop(t) {
     let dt = Math.min((t - this.lastTime) / 1000, 0.1);
     this.lastTime = t;
+
+    if (this.hitStopTimer > 0) {
+       this.hitStopTimer -= dt;
+       // We freeze game logic, but we still draw
+       if (!document.hidden) {
+           this.draw(ctx);
+       }
+       requestAnimationFrame(t2 => this.loop(t2));
+       return;
+    }
 
     // Auto-pause on blur check (simple check)
     if (!document.hidden) {
