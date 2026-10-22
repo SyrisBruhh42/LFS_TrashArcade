@@ -111,12 +111,12 @@ class InputManager {
         this.canvas = canvas;
         this.soundEngine = soundEngine;
         this.keys = {};
-        this.mouse = { x: 0, y: 0, down: false, rightDown: false };
+        this.mouse = { x: 0, y: 0, down: false, rightDown: false, middleDown: false };
         this.touchActive = false;
         this.touches = [];
         this.actions = {
             up: false, down: false, left: false, right: false,
-            parry: false, switchPolarity: false, back: false
+            parry: false, switchPolarity: false, back: false, dash: false
         };
         this.lastSwitchTime = 0;
         this.bindEvents();
@@ -140,6 +140,7 @@ class InputManager {
         });
         this.canvas.addEventListener('mousedown', e => {
             if (e.button === 0) this.mouse.down = true;
+            if (e.button === 1) this.mouse.middleDown = true;
             if (e.button === 2) this.mouse.rightDown = true;
             this.soundEngine.init();
             this.soundEngine.resume();
@@ -147,6 +148,7 @@ class InputManager {
         });
         this.canvas.addEventListener('mouseup', e => {
             if (e.button === 0) this.mouse.down = false;
+        this.actions.dash = false;
             if (e.button === 2) this.mouse.rightDown = false;
             this.updateActions();
         });
@@ -203,6 +205,7 @@ class InputManager {
         this.actions.switchPolarity = this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.mouse.rightDown || this.actions.switchPolarity;
 
         this.actions.back = this.keys['Escape'];
+        this.actions.dash = this.keys['KeyE'] || this.keys['KeyQ'] || this.mouse.middleDown || this.actions.dash;
 
         // Touch analog stick emulation
         if (this.touchActive && this.touches.length > 0) {
@@ -224,6 +227,7 @@ class InputManager {
         this.actions.switchPolarity = false;
         this.actions.back = false;
         this.mouse.down = false;
+        this.actions.dash = false;
         this.mouse.rightDown = false;
     }
 }
@@ -248,6 +252,18 @@ class Player {
 
         this.health = 3;
         this.invulnTimer = 0;
+
+        this.dashActive = false;
+        this.dashTimer = 0;
+        this.dashDuration = 0.2;
+        this.dashCooldown = 0;
+        this.dashMaxCooldown = 1.0;
+        this.dashSpeedMultiplier = 3.0;
+
+        // Visuals
+        this.particles = [];
+        this.recoil = 0;
+        this.thrustAnim = 0;
     }
     update(dt, input, width, height, soundEngine) {
         if (this.invulnTimer > 0) this.invulnTimer -= dt;
@@ -265,11 +281,83 @@ class Player {
             dy /= len;
         }
 
-        this.vx = dx * this.speed;
-        this.vy = dy * this.speed;
+        // Dash Logic
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+
+        if (input.actions.dash && this.dashCooldown <= 0 && (dx !== 0 || dy !== 0)) {
+            this.dashActive = true;
+            this.dashTimer = this.dashDuration;
+            this.dashCooldown = this.dashMaxCooldown;
+            soundEngine.playSwitch(); // Re-using sound
+            input.actions.dash = false;
+        }
+
+        if (this.dashActive) {
+            this.dashTimer -= dt;
+            if (this.dashTimer <= 0) {
+                this.dashActive = false;
+            }
+            this.vx = dx * this.speed * this.dashSpeedMultiplier;
+            this.vy = dy * this.speed * this.dashSpeedMultiplier;
+
+            // Invulnerability during dash
+            this.invulnTimer = 0.1;
+        } else {
+            this.vx = dx * this.speed;
+            this.vy = dy * this.speed;
+        }
 
         this.x += this.vx * dt;
         this.y += this.vy * dt;
+
+        // Recoil logic
+        if (this.recoil > 0) {
+            this.x -= Math.cos(this.slashAngle) * this.recoil * dt * 500;
+            this.y -= Math.sin(this.slashAngle) * this.recoil * dt * 500;
+            this.recoil -= dt * 5;
+        }
+
+        // Thrust animation
+        if (len > 0) {
+            this.thrustAnim += dt * 10;
+        } else {
+            this.thrustAnim = 0;
+        }
+
+        // Particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+        if (this.dashActive) {
+            if (Math.random() < 0.8) {
+                this.particles.push({
+                    x: this.x + (Math.random() - 0.5) * 10,
+                    y: this.y + (Math.random() - 0.5) * 10,
+                    vx: -this.vx * 0.3 + (Math.random() - 0.5) * 100,
+                    vy: -this.vy * 0.3 + (Math.random() - 0.5) * 100,
+                    life: 0.3 + Math.random() * 0.3,
+                    color: this.polarity === 'POSITIVE' ? '#f44' : '#44f',
+                    size: 2 + Math.random() * 3
+                });
+            }
+            // Dash phantom trail
+            if (Math.random() < 0.3) {
+                this.particles.push({
+                    x: this.x,
+                    y: this.y,
+                    vx: 0,
+                    vy: 0,
+                    life: 0.2,
+                    color: POLARITY_COLORS[this.polarity],
+                    size: this.radius,
+                    isPhantom: true
+                });
+            }
+        }
 
         // Bounds
         this.x = Math.max(this.radius, Math.min(width - this.radius, this.x));
@@ -298,6 +386,7 @@ class Player {
             this.parryCooldown = this.parryMaxCooldown;
             soundEngine.playParry();
             input.actions.parry = false;
+            this.recoil = 0.5; // Recoil on parry/slash
 
             // Aim parry based on input/mouse
             if (input.touchActive && input.touches.length > 0) {
@@ -324,32 +413,81 @@ class Player {
             ctx.globalAlpha = 0.5;
         }
 
-        // Body
+        // Particles
+        this.particles.forEach(p => {
+            ctx.save();
+            ctx.translate(p.x - this.x, p.y - this.y);
+
+            if (p.isPhantom) {
+                ctx.globalAlpha = p.life / 0.2 * 0.5;
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i * Math.PI) / 3;
+                    if (i === 0) ctx.moveTo(Math.cos(angle) * p.size, Math.sin(angle) * p.size);
+                    else ctx.lineTo(Math.cos(angle) * p.size, Math.sin(angle) * p.size);
+                }
+                ctx.closePath();
+                ctx.fillStyle = p.color;
+                ctx.fill();
+            } else {
+                ctx.globalAlpha = p.life / 0.6;
+                ctx.fillStyle = p.color || '#fff';
+                ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+            }
+            ctx.restore();
+        });
+
+        // Procedural Vector Sprite
+        ctx.rotate(this.slashAngle); // Rotate player body towards aim
+
+        // Thruster
+        if (this.thrustAnim > 0) {
+            ctx.beginPath();
+            const thrusterLength = 10 + Math.sin(this.thrustAnim) * 5;
+            ctx.moveTo(-this.radius, -5);
+            ctx.lineTo(-this.radius - thrusterLength, 0);
+            ctx.lineTo(-this.radius, 5);
+            ctx.fillStyle = '#f88';
+            ctx.fill();
+        }
+
+        // Main Body (Hexagon/Gear shape)
         ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        for (let i = 0; i < 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            if (i === 0) ctx.moveTo(Math.cos(angle) * this.radius, Math.sin(angle) * this.radius);
+            else ctx.lineTo(Math.cos(angle) * this.radius, Math.sin(angle) * this.radius);
+        }
+        ctx.closePath();
         ctx.fillStyle = POLARITY_COLORS[this.polarity];
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#fff';
         ctx.stroke();
 
-        // Direction Indicator
+        // Eye / Aim Telegraph
         ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(this.radius, 0);
-        ctx.stroke();
+        ctx.arc(this.radius * 0.5, 0, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+
+        // Inner Core
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = '#111';
+        ctx.fill();
 
         // Parry Arc
         if (this.parryActive) {
             ctx.beginPath();
-            ctx.arc(0, 0, this.radius * 2.5, this.slashAngle - Math.PI/3, this.slashAngle + Math.PI/3);
+            ctx.arc(0, 0, this.radius * 2.5, -Math.PI/3, Math.PI/3);
             ctx.lineWidth = 4;
             ctx.strokeStyle = POLARITY_COLORS[this.polarity];
             ctx.stroke();
 
             // Inner glow
             ctx.beginPath();
-            ctx.arc(0, 0, this.radius * 2, this.slashAngle - Math.PI/3, this.slashAngle + Math.PI/3);
+            ctx.arc(0, 0, this.radius * 2, -Math.PI/3, Math.PI/3);
             ctx.lineWidth = 2;
             ctx.strokeStyle = '#fff';
             ctx.stroke();
@@ -557,7 +695,7 @@ class Game {
             const e = this.enemies[i];
             e.update(dt, this.player);
 
-            // Check parry
+            // Check parry (tightened bounds for Phase 2)
             if (this.player.parryActive) {
                 const dx = e.x - this.player.x;
                 const dy = e.y - this.player.y;
@@ -647,7 +785,7 @@ class Game {
             this.ctx.fillText('Press SPACE, CLICK, or TAP to Start', this.width/2, this.height/2);
 
             this.ctx.font = '16px monospace';
-            this.ctx.fillText('WASD/Arrows to Move | Space/Click to Parry | Shift/Right-Click to Switch Polarity', this.width/2, this.height/2 + 50);
+            this.ctx.fillText('WASD/Move | Space/L-Click/Tap to Parry | Shift/R-Click/Dbl-Tap to Switch Polarity | E/Q/M-Click to Dash', this.width/2, this.height/2 + 50);
 
             // Draw Back to Arcade button
             this.ctx.fillStyle = '#443';
@@ -677,6 +815,24 @@ class Game {
         this.ctx.fillStyle = POLARITY_COLORS[this.player.polarity];
         this.ctx.font = '24px monospace';
         this.ctx.fillText('POLARITY: ' + this.player.polarity, this.width/2, 30);
+
+        // Dash Cooldown HUD
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '16px monospace';
+        this.ctx.fillText('DASH', this.width/2, this.height - 40);
+
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(this.width/2 - 50, this.height - 30, 100, 10);
+
+        if (this.player.dashCooldown <= 0) {
+            this.ctx.fillStyle = '#0f0';
+            this.ctx.fillRect(this.width/2 - 50, this.height - 30, 100, 10);
+        } else {
+            const fillWidth = (1 - (this.player.dashCooldown / this.player.dashMaxCooldown)) * 100;
+            this.ctx.fillStyle = '#f88';
+            this.ctx.fillRect(this.width/2 - 50, this.height - 30, fillWidth, 10);
+        }
 
         if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
