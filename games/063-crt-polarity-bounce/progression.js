@@ -175,12 +175,12 @@ class UpgradeManager {
     constructor(game) {
         this.game = game;
         this.perks = [
-            { id: 'health_up', name: 'Max Health +1', desc: 'Increases health by 1.', apply: (g) => g.health++ },
+            { id: 'health_up', name: 'Max Health +1', desc: 'Increases health by 1.', apply: (g) => { g.maxHealth = (g.maxHealth || 3) + 1; g.health = g.maxHealth; } },
             { id: 'speed_up', name: 'Move Speed +10%', desc: 'Move faster across the grid.', apply: (g) => g.player.speed *= 1.1 },
             { id: 'magnet_up', name: 'Magnet Range +20%', desc: 'Attract/repel from further away.', apply: (g) => g.nodes.forEach(n => n.radius *= 1.2) },
             { id: 'combo_time', name: 'Combo Decay Slower', desc: 'Combo bar decays slower.', apply: (g) => g.comboManager.decayRate *= 0.8 },
             { id: 'dash_cooldown', name: 'Dash Cooldown -0.2s', desc: 'Dash recharge time reduced.', apply: (g) => g.player.dashCooldownMax = Math.max(0.5, g.player.dashCooldownMax - 0.2) },
-            { id: 'shield', name: 'Shield Stack', desc: 'Gain 1 temporary shield hit.', apply: (g) => { if(!g.player.shields) g.player.shields=0; g.player.shields++; } },
+            { id: 'shield', name: 'Shield Stack', desc: 'Gain 1 temporary shield hit.', apply: (g) => { if(!g.player.shields) g.player.shields=0; g.player.shields += (g.wave > 5 ? 2 : 1); } },
             { id: 'damage_up', name: 'Ricochet Damage +1', desc: 'Deal more damage on bounce.', apply: (g) => { if(!g.player.bonusDamage) g.player.bonusDamage=0; g.player.bonusDamage++; } },
             { id: 'blast_radius', name: 'Explosion Radius +20%', desc: 'Bigger explosions on enemy kill.', apply: (g) => { if(!g.player.blastBonus) g.player.blastBonus=1; g.player.blastBonus *= 1.2; } }
         ];
