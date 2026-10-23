@@ -1,6 +1,6 @@
 
 const SAVE_KEY = 'arcade_game_077_077-origami-heist-shift_v1';
-const STATES = { TITLE: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3 };
+const STATES = { TITLE: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, UPGRADE_DRAFT: 4 };
 
 class SaveManager {
     constructor() {
@@ -357,6 +357,8 @@ class Game {
         this.input = new InputManager(this.canvas);
 
         this.world = new WorldManager(this.baseWidth, this.baseHeight);
+        this.upgradeManager = new UpgradeManager();
+        this.comboManager = new ComboManager();
 
         this.state = STATES.TITLE;
         this.lastTime = performance.now();
@@ -416,6 +418,8 @@ class Game {
         this.currentBoss = null;
         this.bossMilestone = 50;
         this.bossCount = 0;
+        this.treasureBasePoints = 10;
+        this.comboManager.reset();
         this.world.reset();
         this.spawnTreasure();
         this.spawnTreasure();
@@ -504,9 +508,13 @@ class Game {
                 if (this.currentBoss.hp <= 0) {
                     this.bossMode = false;
                     this.currentBoss = null;
-                    this.score += 20;
+                    this.score += Math.floor(20 * this.comboManager.combo);
                     this.arenaRadius = 380;
                     this.sound.playPickup();
+
+                    this.upgradeManager.generateChoices();
+                    this.state = STATES.UPGRADE_DRAFT;
+
                     this.guards = [
                         new StandardGuard(200, 200, [{x: 200, y: 200}, {x: 600, y: 200}, {x: 600, y: 400}, {x: 200, y: 400}]),
                         new Spawner(400, 400)
@@ -536,8 +544,12 @@ class Game {
                     if (this.bossMode && this.currentBoss) {
                         if (this.currentBoss.active) this.currentBoss.takeDamage(1);
                     } else {
-                        this.score += 10;
+                        this.comboManager.addCombo(1.0);
+                        this.score += Math.floor(this.treasureBasePoints * this.comboManager.combo);
                         this.arenaRadius = Math.min(380, this.arenaRadius + 20); // Reward: expand arena
+                    }
+                    if (Math.random() < 0.3) {
+                        this.comboManager.spawnToken(this.baseWidth/2 + (Math.random()-0.5)*200, this.baseHeight/2 + (Math.random()-0.5)*200);
                     }
                     this.spawnTreasure();
                 }
@@ -551,11 +563,32 @@ class Game {
                 this.input.keys['Escape'] = false;
                 this.input.keys['KeyP'] = false;
             }
+        } else if (this.state === STATES.UPGRADE_DRAFT) {
+            if (this.input.isDown('Digit1')) {
+                this.upgradeManager.applyUpgrade(0, this);
+                this.state = STATES.PLAYING;
+                this.sound.playClick();
+                this.input.keys['Digit1'] = false;
+            } else if (this.input.isDown('Digit2')) {
+                this.upgradeManager.applyUpgrade(1, this);
+                this.state = STATES.PLAYING;
+                this.sound.playClick();
+                this.input.keys['Digit2'] = false;
+            } else if (this.input.isDown('Digit3')) {
+                this.upgradeManager.applyUpgrade(2, this);
+                this.state = STATES.PLAYING;
+                this.sound.playClick();
+                this.input.keys['Digit3'] = false;
+            }
         } else if (this.state === STATES.GAME_OVER) {
             if (this.input.mouse.justDown || this.input.isDown('Space') || this.input.isDown('Enter')) {
                 this.sound.playClick();
                 this.state = STATES.TITLE;
             }
+        }
+
+        if (this.state === STATES.PLAYING) {
+            this.comboManager.update(dt, this);
         }
     }
 
@@ -618,6 +651,8 @@ class Game {
             this.ctx.font = '24px sans-serif';
             this.ctx.textAlign = 'left';
             this.ctx.fillText('Score: ' + this.score, 20, 40);
+
+            this.comboManager.draw(this.ctx, this.baseWidth, this.baseHeight);
 
             if (this.bossMode && this.currentBoss) {
                 if (this.currentBoss.warningTimer > 0) {
@@ -696,6 +731,8 @@ class Game {
             this.ctx.fillText(`Score: ${this.score}`, this.baseWidth/2, 320);
             this.ctx.font = '24px sans-serif';
             this.ctx.fillText('Click or Press SPACE to Restart', this.baseWidth/2, 400);
+        } else if (this.state === STATES.UPGRADE_DRAFT) {
+            this.upgradeManager.draw(this.ctx, this.baseWidth, this.baseHeight);
         }
     }
 }
