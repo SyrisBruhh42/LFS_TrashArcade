@@ -955,5 +955,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#f84f55",
     "phase": "6",
     "path": "./games/072-jungle-recoil-ruins/index.html"
+  },
+  {
+    "id": "073",
+    "slug": "073-trench-shift-blitz",
+    "title": "Trench Shift Blitz",
+    "genre": "Tactical Grid/Turn-Based Blitz",
+    "coreMechanic": "Shrinking Arena / Shifting Geometry",
+    "setting": "Deep Ocean Trench",
+    "description": "Navigate the deep ocean trench in a shifting, shrinking grid to collect bioluminescent orbs.",
+    "controls": "WASD/Arrows or Swipe to move. Bump into enemies to attack.",
+    "createdAt": "2024-05-24",
+    "accentColor": "#b67083",
+    "phase": "1",
+    "path": "./games/073-trench-shift-blitz/index.html"
   }
 ];
