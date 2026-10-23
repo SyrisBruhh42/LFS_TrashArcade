@@ -516,17 +516,20 @@ class Bullet {
     }
 }
 
-class Enemy {
+class BaseEnemy {
     constructor(x, y, type) {
         this.pos = new Vector2(x, y);
         this.type = type;
-        this.radius = type === 'big' ? 18 : 10;
-        this.hp = type === 'big' ? 30 : 10;
-        this.maxHp = this.hp;
-        this.speed = type === 'big' ? 40 : 80;
-        this.color = type === 'big' ? '#ffaa00' : '#ff0055';
+        this.radius = 10;
+        this.hp = 10;
+        this.maxHp = 10;
+        this.speed = 80;
+        this.color = '#ff0055';
         this.active = true;
-        this.value = type === 'big' ? 50 : 10;
+        this.value = 10;
+        this.state = 'move';
+        this.stateTimer = 0;
+        this.createdAt = Date.now();
     }
     update(dt, game) {
         let target = game.core.pos;
@@ -538,6 +541,12 @@ class Enemy {
             this.active = false;
         }
     }
+    takeDamage(amount) {
+        this.hp -= amount;
+    }
+    die(game) {
+        // override if needed
+    }
     draw(ctx) {
         ctx.save();
         ctx.translate(this.pos.x, this.pos.y);
@@ -546,29 +555,249 @@ class Enemy {
         ctx.lineWidth = 2;
         ctx.shadowColor = this.color;
         ctx.shadowBlur = 5;
-        ctx.beginPath();
-        if (this.type === 'big') {
-            ctx.rect(-this.radius, -this.radius, this.radius*2, this.radius*2);
-        } else {
-            ctx.moveTo(0, -this.radius);
-            ctx.lineTo(this.radius, this.radius);
-            ctx.lineTo(-this.radius, this.radius);
-            ctx.closePath();
-        }
+        this.drawGeometry(ctx);
         ctx.fill();
         ctx.stroke();
 
-        // HP bar
+        this.drawTelegraph(ctx);
+        this.drawHP(ctx);
+
+        ctx.restore();
+    }
+    drawGeometry(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(0, -this.radius);
+        ctx.lineTo(this.radius, this.radius);
+        ctx.lineTo(-this.radius, this.radius);
+        ctx.closePath();
+    }
+    drawTelegraph(ctx) {}
+    drawHP(ctx) {
         if (this.hp < this.maxHp) {
             ctx.fillStyle = 'red';
             ctx.fillRect(-this.radius, -this.radius - 8, this.radius * 2, 4);
             ctx.fillStyle = 'green';
             ctx.fillRect(-this.radius, -this.radius - 8, (this.radius * 2) * (this.hp / this.maxHp), 4);
         }
-
-        ctx.restore();
     }
 }
+
+class SwarmerEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y, 'swarmer');
+        this.radius = 8;
+        this.hp = 5;
+        this.maxHp = 5;
+        this.speed = 120;
+        this.color = '#ff00aa';
+        this.value = 5;
+        this.sinOffset = Math.random() * Math.PI * 2;
+    }
+    update(dt, game) {
+        let target = game.core.pos;
+        let dist = this.pos.dist(target);
+
+        let dir = target.sub(this.pos).norm();
+        let perp = new Vector2(-dir.y, dir.x);
+        let wobble = Math.sin((Date.now() / 1000) * 10 + this.sinOffset) * 50;
+
+        let finalVel = dir.mul(this.speed).add(perp.mul(wobble));
+        this.pos = this.pos.add(finalVel.mul(dt));
+
+        if (dist < this.radius + game.core.radius) {
+            game.core.takeDamage(this.hp);
+            this.active = false;
+        }
+    }
+    drawGeometry(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(0, -this.radius);
+        ctx.lineTo(this.radius, this.radius / 2);
+        ctx.lineTo(0, this.radius);
+        ctx.lineTo(-this.radius, this.radius / 2);
+        ctx.closePath();
+    }
+}
+
+class SniperEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y, 'sniper');
+        this.radius = 12;
+        this.hp = 15;
+        this.maxHp = 15;
+        this.speed = 50;
+        this.color = '#00ffaa';
+        this.value = 20;
+        this.range = 250;
+        this.state = 'approach';
+    }
+    update(dt, game) {
+        let target = game.core.pos;
+        let dist = this.pos.dist(target);
+        let dir = target.sub(this.pos).norm();
+
+        if (this.state === 'approach') {
+            this.pos = this.pos.add(dir.mul(this.speed * dt));
+            if (dist < this.range) {
+                this.state = 'aim';
+                this.stateTimer = 1.5;
+            }
+        } else if (this.state === 'aim') {
+            this.stateTimer -= dt;
+            if (this.stateTimer <= 0) {
+                this.state = 'shoot';
+                this.stateTimer = 0.5;
+                game.spawnBullet(this.pos.copy(), dir, false, this.color);
+                game.sound.playTone(600, 'square', 0.1, 0.5);
+            }
+        } else if (this.state === 'shoot') {
+            this.stateTimer -= dt;
+            if (this.stateTimer <= 0) {
+                this.state = 'retreat';
+                this.stateTimer = 2.0;
+            }
+        } else if (this.state === 'retreat') {
+            this.stateTimer -= dt;
+            this.pos = this.pos.add(dir.mul(-this.speed * 0.5 * dt));
+            if (this.stateTimer <= 0) {
+                this.state = 'approach';
+            }
+        }
+    }
+    drawGeometry(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(0, this.radius);
+        ctx.lineTo(-this.radius, 0);
+        ctx.lineTo(0, -this.radius);
+        ctx.closePath();
+    }
+    drawTelegraph(ctx) {
+        if (this.state === 'aim') {
+            let game = window.game;
+            let dir = game.core.pos.sub(this.pos).norm();
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(dir.x * this.range, dir.y * this.range);
+            ctx.strokeStyle = `rgba(0, 255, 170, ${(1.5 - this.stateTimer)/1.5})`;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
+class BruiserEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y, 'bruiser');
+        this.radius = 20;
+        this.hp = 30;
+        this.maxHp = 30;
+        this.shieldHp = 30;
+        this.maxShieldHp = 30;
+        this.speed = 35;
+        this.color = '#ffaa00';
+        this.value = 30;
+    }
+    update(dt, game) {
+        super.update(dt, game);
+        if (this.shieldHp < this.maxShieldHp) {
+            this.shieldHp += dt * 2;
+        }
+    }
+    takeDamage(amount) {
+        if (this.shieldHp > 0) {
+            this.shieldHp -= amount;
+            if (this.shieldHp < 0) {
+                this.hp += this.shieldHp;
+                this.shieldHp = 0;
+            }
+        } else {
+            this.hp -= amount;
+        }
+    }
+    drawGeometry(ctx) {
+        ctx.beginPath();
+        ctx.rect(-this.radius, -this.radius, this.radius*2, this.radius*2);
+    }
+    drawHP(ctx) {
+        super.drawHP(ctx);
+        // Draw shield bar above HP
+        if (this.shieldHp > 0) {
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.3)';
+            ctx.fillRect(-this.radius, -this.radius - 14, this.radius * 2, 4);
+            ctx.fillStyle = '#00ffff';
+            ctx.fillRect(-this.radius, -this.radius - 14, (this.radius * 2) * (this.shieldHp / this.maxShieldHp), 4);
+        }
+    }
+}
+
+class SplitterEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y, 'splitter');
+        this.radius = 16;
+        this.hp = 20;
+        this.maxHp = 20;
+        this.speed = 60;
+        this.color = '#aa00ff';
+        this.value = 15;
+    }
+    die(game) {
+        game.enemies.push(new SwarmerEnemy(this.pos.x - 10, this.pos.y));
+        game.enemies.push(new SwarmerEnemy(this.pos.x + 10, this.pos.y));
+    }
+    drawGeometry(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(0, -this.radius);
+        ctx.lineTo(this.radius, 0);
+        ctx.lineTo(0, this.radius);
+        ctx.lineTo(-this.radius, 0);
+        ctx.closePath();
+        // Inner line to show split
+        ctx.moveTo(0, -this.radius);
+        ctx.lineTo(0, this.radius);
+    }
+}
+
+class HazardEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y, 'hazard');
+        this.radius = 14;
+        this.hp = 25;
+        this.maxHp = 25;
+        this.speed = 40;
+        this.color = '#ff4400';
+        this.value = 25;
+        this.pulse = 0;
+    }
+    update(dt, game) {
+        super.update(dt, game);
+        this.pulse += dt * 5;
+    }
+    die(game) {
+        for(let i=0; i<8; i++) {
+            let angle = (i/8) * Math.PI * 2;
+            let dir = new Vector2(Math.cos(angle), Math.sin(angle));
+            game.spawnBullet(this.pos.copy(), dir, false, this.color);
+        }
+        game.sound.playTone(400, 'sawtooth', 0.2, 0.4);
+    }
+    drawGeometry(ctx) {
+        let r = this.radius + Math.sin(this.pulse) * 3;
+        ctx.beginPath();
+        for(let i=0; i<6; i++) {
+            let angle = (i/6) * Math.PI * 2;
+            let px = Math.cos(angle) * r;
+            let py = Math.sin(angle) * r;
+            if(i===0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+    }
+}
+
 
 class Core {
     constructor(x, y) {
@@ -800,7 +1029,16 @@ class Game {
             else { ex = -20; ey = Math.random() * this.height; }
 
             let type = Math.random() > 0.8 ? 'big' : 'normal';
-            this.enemies.push(new Enemy(ex, ey, type));
+
+            let r = Math.random();
+            let enemy;
+            if (r < 0.3) enemy = new SwarmerEnemy(ex, ey);
+            else if (r < 0.5) enemy = new SniperEnemy(ex, ey);
+            else if (r < 0.7) enemy = new BruiserEnemy(ex, ey);
+            else if (r < 0.9) enemy = new SplitterEnemy(ex, ey);
+            else enemy = new HazardEnemy(ex, ey);
+            this.enemies.push(enemy);
+
 
             this.spawnTimer = Math.max(0.5, 2.0 - this.wave * 0.1);
         }
@@ -817,11 +1055,12 @@ class Game {
                     let e = this.enemies[j];
                     if (!e.active) continue;
                     if (b.pos.dist(e.pos) < b.radius + e.radius) {
-                        e.hp -= 10;
+                        e.takeDamage(10);
                         b.active = false;
                         this.spawnParticles(b.pos.x, b.pos.y, '#ffffff', 5);
                         this.sound.hit();
                         if (e.hp <= 0) {
+                            e.die(this);
                             e.active = false;
                             this.score += e.value;
                             this.spawnParticles(e.pos.x, e.pos.y, e.color, 15);
