@@ -967,7 +967,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows or Swipe to move. Bump into enemies to attack.",
     "createdAt": "2024-05-24",
     "accentColor": "#b67083",
-    "phase": "1",
+    "phase": "2",
     "path": "./games/073-trench-shift-blitz/index.html"
   }
 ];
