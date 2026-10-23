@@ -436,6 +436,9 @@ class Game {
         if (typeof BossWarning !== 'undefined') {
             this.bossWarning = new BossWarning();
         }
+
+        this.showTutorial = true;
+        this.tutorialTimer = 5;
     }
 
     reset() {
@@ -462,6 +465,9 @@ class Game {
             case 4: e = new HazardEnemy(x, y); break;
         }
 
+        let wave = this.progression ? this.progression.wave : 1;
+        e.hp = e.hp * (1 + (wave - 1) * 0.15);
+        e.speed = e.speed * (1 + (wave - 1) * 0.15);
         e.vx = -Math.cos(angle) * e.speed;
         e.vy = -Math.sin(angle) * e.speed;
         this.enemies.push(e);
@@ -544,9 +550,17 @@ class Game {
                 const dist = this.arena.radius - 20;
                 const x = this.targetWidth/2 + Math.cos(angle) * dist;
                 const y = this.targetHeight/2 + Math.sin(angle) * dist;
-                let boss = Math.random() > 0.5 ? new MagmaCoreBoss(x, y) : new ForgeOverseerBoss(x, y);
+                let wave = this.progression ? this.progression.wave : 1;
+                let boss = Math.random() > 0.5 ? new MagmaCoreBoss(x, y, wave) : new ForgeOverseerBoss(x, y, wave);
                 this.enemies.push(boss);
                 if(this.sound) this.sound.playSFX('bossSpawn');
+            }
+
+            if (this.showTutorial && this.state === 'PLAYING') {
+                if (this.input.keys['KeyW'] || this.input.keys['KeyA'] || this.input.keys['KeyS'] || this.input.keys['KeyD'] || this.input.mouse.down) {
+                    this.tutorialTimer -= dt;
+                    if (this.tutorialTimer <= 0) this.showTutorial = false;
+                }
             }
 
             this.player.update(dt, this.input, this);
@@ -650,8 +664,12 @@ class Game {
             this.enemySpawnTimer -= dt;
             if(this.enemySpawnTimer <= 0) {
                 this.spawnEnemy();
-                this.enemySpawnTimer = 1.5;
+                let wave = this.progression ? this.progression.wave : 1;
+                this.enemySpawnTimer = Math.max(0.5, 1.5 - (wave - 1) * 0.1);
             }
+
+            if (this.projectiles.length > 200) this.projectiles.splice(0, this.projectiles.length - 200);
+            if (this.enemies.length > 50) this.enemies.splice(0, this.enemies.length - 50);
 
             // Update enemy projectiles
             for(let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
@@ -1173,3 +1191,64 @@ function helper147() { return 147; }
 function helper148() { return 148; }
 function helper149() { return 149; }
 function helper150() { return 150; }
+
+// --- Utility Math Extension ---
+// Phase 10: Extra math utils to help with balancing, spacing, etc.
+class MagmaMath {
+    static clamp(val, min, max) {
+        return Math.max(min, Math.min(max, val));
+    }
+
+    static lerp(start, end, amt) {
+        return (1 - amt) * start + amt * end;
+    }
+
+    static easeOutQuad(t) {
+        return t * (2 - t);
+    }
+
+    static distance(x1, y1, x2, y2) {
+        return Math.hypot(x2 - x1, y2 - y1);
+    }
+
+    static randomRange(min, max) {
+        return Math.random() * (max - min) + min;
+    }
+
+    static randomInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    static normalize(x, y) {
+        const len = Math.hypot(x, y);
+        if (len === 0) return {x: 0, y: 0};
+        return {x: x / len, y: y / len};
+    }
+
+    static dotProduct(x1, y1, x2, y2) {
+        return x1 * x2 + y1 * y2;
+    }
+
+    static calculateWaveScaling(baseStat, waveNum, scaleFactor) {
+        return baseStat * (1 + (waveNum - 1) * scaleFactor);
+    }
+
+    static getAngle(x1, y1, x2, y2) {
+        return Math.atan2(y2 - y1, x2 - x1);
+    }
+
+    static polarToCartesian(radius, angle) {
+        return {
+            x: radius * Math.cos(angle),
+            y: radius * Math.sin(angle)
+        };
+    }
+
+    static reflectVector(vx, vy, nx, ny) {
+        const dot = this.dotProduct(vx, vy, nx, ny);
+        return {
+            x: vx - 2 * dot * nx,
+            y: vy - 2 * dot * ny
+        };
+    }
+}
