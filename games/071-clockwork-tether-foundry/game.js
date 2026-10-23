@@ -1,3 +1,49 @@
+
+class Vector2 {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+    }
+    add(v) {
+        return new Vector2(this.x + v.x, this.y + v.y);
+    }
+    sub(v) {
+        return new Vector2(this.x - v.x, this.y - v.y);
+    }
+    mult(n) {
+        return new Vector2(this.x * n, this.y * n);
+    }
+    div(n) {
+        return new Vector2(this.x / n, this.y / n);
+    }
+    mag() {
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+    }
+    magSq() {
+        return this.x * this.x + this.y * this.y;
+    }
+    normalize() {
+        const m = this.mag();
+        if (m !== 0) {
+            return this.div(m);
+        }
+        return new Vector2(0, 0);
+    }
+    dot(v) {
+        return this.x * v.x + this.y * v.y;
+    }
+    cross(v) {
+        return this.x * v.y - this.y * v.x;
+    }
+    dist(v) {
+        const dx = this.x - v.x;
+        const dy = this.y - v.y;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+    copy() {
+        return new Vector2(this.x, this.y);
+    }
+}
 class SaveManager {
     constructor() {
         this.saveKey = 'arcade_game_071_071-clockwork-tether-foundry_v1';
@@ -86,6 +132,7 @@ class SoundEngine {
     playScore() { this.playTone(1200, 'sine', 0.2, 0.4); }
     playHurt() { this.playTone(150, 'square', 0.3, 0.5); }
     playTetherGrow() { this.playTone(600, 'triangle', 0.05, 0.1); }
+    playDash() { this.playTone(300, 'square', 0.2, 0.5); }
 }
 
 class InputManager {
@@ -93,11 +140,12 @@ class InputManager {
         this.canvas = canvas;
         this.keys = {};
         this.prevKeys = {};
-        this.mouse = { x: 0, y: 0, down: false, justDown: false };
+        this.mouse = { x: 0, y: 0, down: false, justDown: false, rightDown: false, rightJustDown: false };
         this.touch = { active: false, x: 0, y: 0 };
         this.initListeners();
     }
     initListeners() {
+        this.canvas.addEventListener('contextmenu', e => e.preventDefault());
         window.addEventListener('keydown', e => {
             this.keys[e.code] = true;
         });
@@ -106,14 +154,23 @@ class InputManager {
         });
         this.canvas.addEventListener('mousedown', e => {
             this.updateMousePos(e);
-            this.mouse.down = true;
-            this.mouse.justDown = true;
+            if (e.button === 2) {
+                this.mouse.rightDown = true;
+                this.mouse.rightJustDown = true;
+            } else {
+                this.mouse.down = true;
+                this.mouse.justDown = true;
+            }
         });
         this.canvas.addEventListener('mousemove', e => {
             this.updateMousePos(e);
         });
         this.canvas.addEventListener('mouseup', e => {
-            this.mouse.down = false;
+            if (e.button === 2) {
+                this.mouse.rightDown = false;
+            } else {
+                this.mouse.down = false;
+            }
         });
         this.canvas.addEventListener('touchstart', e => {
             e.preventDefault();
@@ -147,6 +204,7 @@ class InputManager {
     update() {
         this.prevKeys = { ...this.keys };
         this.mouse.justDown = false;
+        this.mouse.rightJustDown = false;
     }
     isKeyDown(code) { return !!this.keys[code]; }
     isKeyJustPressed(code) { return !!this.keys[code] && !this.prevKeys[code]; }
@@ -169,8 +227,22 @@ class Player {
         this.tail = [];
         this.tailMaxLength = 10;
         this.scoreMultiplier = 1;
+
+        this.dashCooldown = 0;
+        this.dashActive = 0;
+        this.dashDuration = 0.2;
+        this.dashCooldownMax = 1.5;
+        this.dashVelocity = 1500;
+        this.invulnerableTimer = 0;
     }
     update(dt, game) {
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+        if (this.dashActive > 0) {
+            this.dashActive -= dt;
+            this.invulnerableTimer = 0.1;
+        }
+        if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
+
         // Tail tracking
         this.tail.push({x: this.x, y: this.y});
         if (this.tail.length > this.tailMaxLength) {
@@ -197,7 +269,9 @@ class Player {
             this.angularVel -= gravityForce * dt;
 
             // Dampening
-            this.angularVel *= 0.999;
+            if (this.dashActive <= 0) {
+                this.angularVel *= 0.999;
+            }
 
             this.angle += this.angularVel * dt;
 
@@ -217,8 +291,10 @@ class Player {
             this.vy += this.gravity * dt;
 
             // Air resistance
-            this.vx *= 0.99;
-            this.vy *= 0.99;
+            if (this.dashActive <= 0) {
+                this.vx *= 0.99;
+                this.vy *= 0.99;
+            }
 
             this.x += this.vx * dt;
             this.y += this.vy * dt;
@@ -271,6 +347,24 @@ class Player {
         this.tetherPoint = null;
     }
 
+    triggerDash(targetX, targetY, game) {
+        if (this.dashCooldown <= 0) {
+            this.dashCooldown = this.dashCooldownMax;
+            this.dashActive = this.dashDuration;
+
+            if (this.tethered && this.tetherPoint) {
+                this.angularVel += (this.angularVel >= 0 ? 1 : -1) * (this.dashVelocity / this.tetherLength);
+            } else {
+                const dx = targetX - this.x;
+                const dy = targetY - this.y;
+                const angle = Math.atan2(dy, dx);
+                this.vx = Math.cos(angle) * this.dashVelocity;
+                this.vy = Math.sin(angle) * this.dashVelocity;
+            }
+            game.sound.playDash();
+        }
+    }
+
     draw(ctx) {
         // Draw tether
         if (this.tethered && this.tetherPoint) {
@@ -304,15 +398,38 @@ class Player {
         // Draw player body (steampunk gear-like)
         ctx.save();
         ctx.translate(this.x, this.y);
+
+        let visualAngle = 0;
         if (this.tethered) {
-            ctx.rotate(this.angle);
+            visualAngle = this.angle;
         } else {
-            ctx.rotate(Math.atan2(this.vy, this.vx));
+            visualAngle = Math.atan2(this.vy, this.vx);
         }
+        ctx.rotate(visualAngle);
+
+        if (this.invulnerableTimer > 0 && Math.floor(Date.now() / 50) % 2 === 0) {
+            ctx.globalAlpha = 0.5;
+        }
+
+        // Thrust flame if dashing
+        if (this.dashActive > 0) {
+            ctx.beginPath();
+            ctx.moveTo(-this.radius, 0);
+            ctx.lineTo(-this.radius - 20 - Math.random() * 10, -5);
+            ctx.lineTo(-this.radius - 10, 0);
+            ctx.lineTo(-this.radius - 20 - Math.random() * 10, 5);
+            ctx.closePath();
+            ctx.fillStyle = '#ffaa00';
+            ctx.fill();
+        }
+
+        // Recoil effect
+        const recoilOffset = (this.dashActive > 0) ? -5 : 0;
+        ctx.translate(recoilOffset, 0);
 
         ctx.beginPath();
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = (this.dashCooldown > 0 && this.dashActive <= 0) ? '#aaa' : '#fff';
         ctx.fill();
         ctx.strokeStyle = '#555';
         ctx.lineWidth = 2;
@@ -323,6 +440,8 @@ class Player {
         ctx.arc(0, 0, this.radius / 2, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
         ctx.fill();
+
+        ctx.globalAlpha = 1.0;
         ctx.restore();
     }
 }
@@ -449,7 +568,7 @@ class Engine {
 
     bindEvents() {
         window.addEventListener('keydown', e => {
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight'].includes(e.code)) {
                 e.preventDefault();
             }
             if (e.code === 'Escape' || e.code === 'KeyP') {
@@ -563,6 +682,13 @@ class Engine {
                 }
             }
 
+            // Tactical Dash input
+            if (this.input.mouse.rightJustDown || this.input.isKeyJustPressed('ShiftLeft') || this.input.isKeyJustPressed('ShiftRight')) {
+                let tx = this.input.mouse.x || this.width/2;
+                let ty = this.input.mouse.y || this.height/2;
+                this.player.triggerDash(tx, ty, this);
+            }
+
             // if input released, drop tether
             if (!this.input.isKeyDown('Space') && !this.input.mouse.down && this.player.tethered) {
                  this.player.releaseTether();
@@ -576,7 +702,9 @@ class Engine {
                 // Check collision
                 const dist = Math.hypot(this.player.x - hz.x, this.player.y - hz.y);
                 if (dist < this.player.radius + hz.radius) {
-                    this.die();
+                    if (this.player.invulnerableTimer <= 0) {
+                        this.die();
+                    }
                 }
             }
 
@@ -620,9 +748,36 @@ class Engine {
     }
 
     drawPlaying() {
+        // Aim telegraph line
+        if (this.player && !this.player.tethered && this.player.dashCooldown <= 0) {
+            let tx = this.input.mouse.x || this.width/2;
+            let ty = this.input.mouse.y || this.height/2;
+            this.ctx.beginPath();
+            this.ctx.moveTo(this.player.x, this.player.y);
+            this.ctx.lineTo(tx, ty);
+            this.ctx.strokeStyle = 'rgba(255, 170, 0, 0.3)';
+            this.ctx.lineWidth = 1;
+            this.ctx.setLineDash([5, 5]);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+        }
+
         for (const gp of this.grapplePoints) gp.draw(this.ctx);
         for (const hz of this.hazards) hz.draw(this.ctx);
         if (this.player) this.player.draw(this.ctx);
+
+        // Dash Cooldown HUD
+        if (this.player) {
+            this.ctx.fillStyle = '#333';
+            this.ctx.fillRect(this.width/2 - 50, this.height - 30, 100, 10);
+            this.ctx.fillStyle = (this.player.dashCooldown > 0) ? '#ff5555' : '#55ff55';
+            const dashRatio = Math.max(0, 1 - (this.player.dashCooldown / this.player.dashCooldownMax));
+            this.ctx.fillRect(this.width/2 - 50, this.height - 30, 100 * dashRatio, 10);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '12px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('OVERDRIVE (Right-Click/Shift)', this.width/2, this.height - 10);
+        }
 
         // HUD
         this.ctx.fillStyle = '#fff';
