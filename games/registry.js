@@ -953,7 +953,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to aim, Space/Click to fire/move. Touch to aim and fire.",
     "createdAt": "2023-10-23",
     "accentColor": "#f84f55",
-    "phase": "1",
+    "phase": "2",
     "path": "./games/072-jungle-recoil-ruins/index.html"
   }
 ];
