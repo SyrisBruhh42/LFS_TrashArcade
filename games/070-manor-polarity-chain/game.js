@@ -25,22 +25,22 @@ class InputManager {
         this.canvas.addEventListener('mousedown', () => { this.mouse.down = true; });
         this.canvas.addEventListener('mouseup', () => { this.mouse.down = false; });
 
-        this.canvas.addEventListener('touchstart', e => {
-            e.preventDefault();
-            this.updateTouches(e);
-            this.mouse.down = true;
-        }, { passive: false });
+        this.hasTouch = false;
+        this.joystickActive = false;
+        this.joyX = 0; this.joyY = 0;
+        this.touchBtnDown = false;
 
-        this.canvas.addEventListener('touchmove', e => {
+        const touchHandler = (e) => {
             e.preventDefault();
+            this.hasTouch = true;
             this.updateTouches(e);
-        }, { passive: false });
+            this.mouse.down = this.touches.length > 0;
+        };
 
-        this.canvas.addEventListener('touchend', e => {
-            e.preventDefault();
-            this.updateTouches(e);
-            if(this.touches.length === 0) this.mouse.down = false;
-        }, { passive: false });
+        this.canvas.addEventListener('touchstart', touchHandler, { passive: false });
+        this.canvas.addEventListener('touchmove', touchHandler, { passive: false });
+        this.canvas.addEventListener('touchend', touchHandler, { passive: false });
+        this.canvas.addEventListener('touchcancel', touchHandler, { passive: false });
     }
 
     updateTouches(e) {
@@ -49,6 +49,33 @@ class InputManager {
             x: t.clientX - rect.left,
             y: t.clientY - rect.top
         }));
+    }
+
+    updateTouchInputs(options, canvasWidth, canvasHeight) {
+        this.joystickActive = false;
+        this.joyX = 0; this.joyY = 0;
+        this.touchBtnDown = false;
+        if (options.touchControls === 'Off') return;
+
+        let cx = options.leftHanded ? canvasWidth - 100 : 100;
+        let cy = canvasHeight - 100;
+        let bx = options.leftHanded ? 100 : canvasWidth - 100;
+        let by = canvasHeight - 100;
+
+        for (let t of this.touches) {
+            let dx = t.x - cx; let dy = t.y - cy;
+            if (dx*dx + dy*dy < 100*100) {
+                this.joystickActive = true;
+                let len = Math.sqrt(dx*dx + dy*dy);
+                if (len > 30) { dx = dx/len*30; dy = dy/len*30; }
+                this.joyX = dx; this.joyY = dy;
+            }
+
+            let bdx = t.x - bx; let bdy = t.y - by;
+            if (bdx*bdx + bdy*bdy < 70*70) {
+                this.touchBtnDown = true;
+            }
+        }
     }
 }
 
@@ -60,7 +87,11 @@ class SaveManager {
             totalGamesPlayed: 0,
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
-            options: { shakeIntensity: 1.0 }
+            options: {
+                shakeIntensity: 1.0, particleDensity: 'High', highContrast: false,
+                showFPS: false, touchControls: 'Auto', leftHanded: false,
+                masterMute: false, sfxVolume: 1.0, musicVolume: 1.0
+            }
         };
         this.load();
     }
@@ -69,7 +100,11 @@ class SaveManager {
         try {
             const stored = localStorage.getItem(SAVE_KEY);
             if (stored) {
-                this.data = { ...this.data, ...JSON.parse(stored) };
+                const parsed = JSON.parse(stored);
+                this.data = { ...this.data, ...parsed };
+                if (parsed.options) {
+                    this.data.options = { ...{ shakeIntensity: 1.0, particleDensity: 'High', highContrast: false, showFPS: false, touchControls: 'Auto', leftHanded: false, masterMute: false, sfxVolume: 1.0, musicVolume: 1.0 }, ...parsed.options };
+                }
             }
         } catch (e) {
             console.warn("SaveManager load failed", e);
@@ -135,6 +170,13 @@ class SoundEngine {
         if (this.ctx && this.ctx.state === 'suspended') {
             this.ctx.resume();
         }
+    }
+
+    updateVolumes(opts) {
+        if (!this.ctx) return;
+        this.masterGain.gain.value = opts.masterMute ? 0 : 0.5;
+        this.sfxGain.gain.value = opts.sfxVolume * 0.8;
+        this.musicGain.gain.value = opts.musicVolume * 0.4;
     }
 
     startBGM() {
@@ -756,6 +798,8 @@ class Player {
         }
 
         // Movement input
+        game.input.updateTouchInputs(game.saveManager.data.options, game.canvas.width, game.canvas.height);
+
         let moveX = 0;
         let moveY = 0;
 
@@ -763,6 +807,11 @@ class Player {
         if (game.input.keys['ArrowRight'] || game.input.keys['KeyD']) moveX += 1;
         if (game.input.keys['ArrowUp'] || game.input.keys['KeyW']) moveY -= 1;
         if (game.input.keys['ArrowDown'] || game.input.keys['KeyS']) moveY += 1;
+
+        if (game.input.joystickActive && (moveX === 0 && moveY === 0)) {
+            moveX = game.input.joyX / 30;
+            moveY = game.input.joyY / 30;
+        }
 
         // Normalize movement
         if (moveX !== 0 || moveY !== 0) {
@@ -801,7 +850,7 @@ class Player {
             this.switchCooldown -= dt;
         }
 
-        if (game.input.keys['Space'] && this.switchCooldown <= 0) {
+        if ((game.input.keys['Space'] || game.input.touchBtnDown) && this.switchCooldown <= 0) {
             this.polarity *= -1;
             this.switchCooldown = 0.5;
             game.sound.playSwitch();
@@ -1126,6 +1175,7 @@ class Game {
 
         this.bgManager = new BackgroundManager();
         this.hazardManager = new HazardManager();
+        this.ui = new UIManager(this);
 
         this.state = 'TITLE';
         this.lastTime = 0;
@@ -1293,11 +1343,22 @@ class Game {
         this.orbs.push(newEnemy);
     }
 
+    checkMilestones() {
+        const sm = this.saveManager.data;
+        const unlocks = sm.unlockedMilestones;
+        if (this.progression.comboMultiplier >= 2 && !unlocks.includes('First Chain')) unlocks.push('First Chain');
+        if (this.wave >= 5 && !unlocks.includes('Wave 5')) unlocks.push('Wave 5');
+        if (this.score >= 1000 && !unlocks.includes('High Scorer')) unlocks.push('High Scorer');
+        if (this.progression.comboMultiplier >= 10 && !unlocks.includes('Combo Master')) unlocks.push('Combo Master');
+        if (sm.totalScoreAccumulated >= 5000 && !unlocks.includes('Survivor')) unlocks.push('Survivor');
+    }
+
     createExplosion(x, y, radius, color) {
         this.explosions.push(new Explosion(x, y, radius, color));
         this.sound.playExplosion();
         if (this.vfx) {
-            this.vfx.addParticles(x, y, 20, color, 150);
+            let mult = this.saveManager.data.options.particleDensity === 'Low' ? 0.3 : 1.0;
+            this.vfx.addParticles(x, y, Math.floor(20 * mult), color, 150);
             this.vfx.addShake(8, 0.3);
             this.vfx.triggerHitStop(0.05);
         }
@@ -1357,6 +1418,8 @@ class Game {
         this.player.update(dt, this);
         this.hazardManager.update(dt, this);
 
+        this.checkMilestones();
+
         // Boss Logic
         if (this.score >= this.nextBossScore && !this.bossManager.activeBoss && this.bossManager.warningTimer <= 0) {
             this.bossManager.warningTimer = 3;
@@ -1365,6 +1428,13 @@ class Game {
         }
 
         this.bossManager.update(dt, this);
+        if (this.bossManager.activeBoss && !this.bossManager.activeBoss.active) {
+            this.score += 500;
+            this.nextBossScore += 1000;
+            this.bossManager.activeBoss = null;
+            const sm = this.saveManager.data;
+            if (!sm.unlockedMilestones.includes('Boss Slayer')) sm.unlockedMilestones.push('Boss Slayer');
+        }
 
         // Spawner
         if (!this.bossManager.activeBoss && this.bossManager.warningTimer <= 0) {
@@ -1531,6 +1601,11 @@ class Game {
         }
         this.bgManager.draw(this.ctx, this.canvas, px, py);
 
+        if (this.saveManager.data.options.highContrast) {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+        }
+
         if (this.state === 'TITLE') {
             this.drawTitle();
         } else if (this.state === 'PLAYING') {
@@ -1543,6 +1618,15 @@ class Game {
             this.drawGameOver();
         }
         this.ctx.restore();
+
+        if (this.saveManager.data.options.showFPS) {
+            this.ctx.fillStyle = '#0f0';
+            this.ctx.font = '16px monospace';
+            this.ctx.textAlign = 'right';
+            this.ctx.textBaseline = 'top';
+            let fps = this.lastTime ? Math.round(1 / ((performance.now() - this.lastTime) / 1000 + 0.001)) : 0;
+            this.ctx.fillText(`FPS: ${fps}`, this.canvas.width - 20, 20);
+        }
     }
 
     drawPlaying() {
@@ -1567,6 +1651,31 @@ class Game {
             this.ctx.fillStyle = this.player.dashCooldown <= 0 ? '#00ff00' : '#ffff00';
             this.ctx.fillRect(20, 50, 100 * Math.max(0, 1 - (this.player.dashCooldown / this.player.maxDashCooldown)), 10);
         }
+        this.drawTouchUI();
+    }
+
+    drawTouchUI() {
+        if (!this.input) return;
+        const opt = this.saveManager.data.options;
+        if (opt.touchControls === 'Off') return;
+        if (opt.touchControls === 'Auto' && !this.input.hasTouch) return;
+
+        let cx = opt.leftHanded ? this.canvas.width - 100 : 100;
+        let cy = this.canvas.height - 100;
+        this.ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        this.ctx.beginPath(); this.ctx.arc(cx, cy, 60, 0, Math.PI*2); this.ctx.stroke();
+
+        if (this.input.joystickActive) {
+            this.ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            this.ctx.beginPath(); this.ctx.arc(cx + this.input.joyX, cy + this.input.joyY, 30, 0, Math.PI*2); this.ctx.fill();
+        }
+
+        let bx = opt.leftHanded ? 100 : this.canvas.width - 100;
+        let by = this.canvas.height - 100;
+        this.ctx.fillStyle = this.input.touchBtnDown ? 'rgba(0,255,0,0.6)' : 'rgba(0,255,0,0.3)';
+        this.ctx.beginPath(); this.ctx.arc(bx, by, 50, 0, Math.PI*2); this.ctx.fill();
+        this.ctx.fillStyle = '#fff'; this.ctx.font = '16px monospace'; this.ctx.textAlign = 'center'; this.ctx.textBaseline='middle';
+        this.ctx.fillText('SWITCH', bx, by);
     }
 
     drawTitle() {
@@ -1579,6 +1688,17 @@ class Game {
         this.ctx.font = '24px monospace';
         this.ctx.fillText('Press ENTER or CLICK to start', this.canvas.width/2, this.canvas.height/2 + 20);
         this.ctx.fillText('Use Arrows/WASD to move, Space to switch polarity', this.canvas.width/2, this.canvas.height/2 + 60);
+
+        if (this.saveManager && this.saveManager.data && this.saveManager.data.unlockedMilestones) {
+            let unlocks = this.saveManager.data.unlockedMilestones;
+            this.ctx.font = '16px monospace';
+            this.ctx.fillStyle = '#ffaa00';
+            this.ctx.fillText(`Milestones: ${unlocks.length}/6`, this.canvas.width/2, this.canvas.height/2 + 110);
+            if(unlocks.length > 0) {
+                this.ctx.font = '12px monospace';
+                this.ctx.fillText(unlocks.join(', '), this.canvas.width/2, this.canvas.height/2 + 130);
+            }
+        }
 
         // Back to Arcade link (Required)
         this.ctx.font = '16px monospace';
@@ -1618,6 +1738,17 @@ class Game {
 
         this.ctx.font = '20px monospace';
         this.ctx.fillText('Press ENTER or CLICK to restart', this.canvas.width/2, this.canvas.height/2 + 100);
+
+        if (this.saveManager && this.saveManager.data && this.saveManager.data.unlockedMilestones) {
+            let unlocks = this.saveManager.data.unlockedMilestones;
+            this.ctx.font = '16px monospace';
+            this.ctx.fillStyle = '#ffaa00';
+            this.ctx.fillText(`Milestones: ${unlocks.length}/6`, this.canvas.width/2, this.canvas.height/2 + 130);
+            if(unlocks.length > 0) {
+                this.ctx.font = '12px monospace';
+                this.ctx.fillText(unlocks.join(', '), this.canvas.width/2, this.canvas.height/2 + 150);
+            }
+        }
     }
 
     loop(timestamp) {
