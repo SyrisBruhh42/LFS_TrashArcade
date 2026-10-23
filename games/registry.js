@@ -1011,5 +1011,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#8b5ecb",
     "phase": "2",
     "path": "./games/076-blood-oath-overdrive/index.html"
+  },
+  {
+    "id": "077",
+    "slug": "077-origami-heist-shift",
+    "title": "Origami Heist Shift",
+    "genre": "Stealth/Line-of-Sight Heist",
+    "coreMechanic": "Shrinking Arena / Shifting Geometry",
+    "setting": "Paper Craft Diorama",
+    "description": "Steal origami treasures in a paper craft diorama while the arena shrinks and guards patrol with line-of-sight cones.",
+    "controls": "WASD/Arrows to move. Touch to drag. Avoid guard sight cones. Collect items.",
+    "createdAt": "2024-05-18",
+    "accentColor": "#cc846d",
+    "phase": "1",
+    "path": "./games/077-origami-heist-shift/index.html"
   }
 ];
