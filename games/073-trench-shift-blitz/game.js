@@ -207,6 +207,7 @@ class SoundEngine {
 class GridEntity {
     constructor(x, y, color) {
         this.gridPos = new Vector2(x, y);
+        this.visualPos = new Vector2(x, y);
         this.color = color;
         this.hp = 1;
         this.maxHp = 1;
@@ -215,9 +216,14 @@ class GridEntity {
         this.isHazard = false;
     }
 
+    update(dt) {
+        this.visualPos.x += (this.gridPos.x - this.visualPos.x) * 15 * dt;
+        this.visualPos.y += (this.gridPos.y - this.visualPos.y) * 15 * dt;
+    }
+
     draw(ctx, cellSize, offset) {
         ctx.fillStyle = this.color;
-        ctx.fillRect(offset.x + this.gridPos.x * cellSize + 2, offset.y + this.gridPos.y * cellSize + 2, cellSize - 4, cellSize - 4);
+        ctx.fillRect(offset.x + this.visualPos.x * cellSize + 2, offset.y + this.visualPos.y * cellSize + 2, cellSize - 4, cellSize - 4);
     }
 }
 
@@ -227,14 +233,88 @@ class Player extends GridEntity {
         this.isPlayer = true;
         this.hp = 3;
         this.maxHp = 3;
+
+        this.facing = new Vector2(0, -1);
+        this.recoilTimer = 0;
+        this.thrustTimer = 0;
+        this.invulnTimer = 0;
+
+        this.dashCooldown = 0;
+        this.dashMaxCooldown = 5;
+        this.dashActive = false;
     }
+
+    update(dt) {
+        super.update(dt);
+        if (this.recoilTimer > 0) this.recoilTimer -= dt;
+        if (this.thrustTimer > 0) this.thrustTimer -= dt;
+        if (this.invulnTimer > 0) this.invulnTimer -= dt;
+    }
+
     draw(ctx, cellSize, offset) {
+        if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 15) % 2 === 0) return; // blink
+
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
+
+        let rx = 0;
+        let ry = 0;
+        if (this.recoilTimer > 0) {
+            let recoilMag = this.recoilTimer * 20;
+            rx = -this.facing.x * recoilMag;
+            ry = -this.facing.y * recoilMag;
+        }
+
+        ctx.save();
+        ctx.translate(cx + rx, cy + ry);
+        let angle = Math.atan2(this.facing.y, this.facing.x);
+        ctx.rotate(angle);
+
+        if (this.thrustTimer > 0) {
+            ctx.fillStyle = "#ffaa00";
+            ctx.beginPath();
+            ctx.moveTo(-cellSize * 0.35, 0);
+            ctx.lineTo(-cellSize * 0.5 - Math.random() * cellSize * 0.3, -cellSize * 0.2);
+            ctx.lineTo(-cellSize * 0.5 - Math.random() * cellSize * 0.3, cellSize * 0.2);
+            ctx.fill();
+        }
+
+        if (this.dashActive) {
+            ctx.strokeStyle = "rgba(0, 255, 255, 0.6)";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(cellSize * 0.4, 0);
+            ctx.lineTo(cellSize * 2.5, 0);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Multi-part procedural body
         ctx.fillStyle = this.color;
-        let cx = offset.x + this.gridPos.x * cellSize + cellSize / 2;
-        let cy = offset.y + this.gridPos.y * cellSize + cellSize / 2;
         ctx.beginPath();
-        ctx.arc(cx, cy, cellSize * 0.4, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, cellSize * 0.4, cellSize * 0.25, 0, 0, Math.PI * 2);
         ctx.fill();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(cellSize * 0.1, 0, cellSize * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#008888";
+        ctx.beginPath();
+        ctx.moveTo(-cellSize * 0.1, cellSize * 0.2);
+        ctx.lineTo(-cellSize * 0.4, cellSize * 0.45);
+        ctx.lineTo(-cellSize * 0.25, cellSize * 0.15);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(-cellSize * 0.1, -cellSize * 0.2);
+        ctx.lineTo(-cellSize * 0.4, -cellSize * 0.45);
+        ctx.lineTo(-cellSize * 0.25, -cellSize * 0.15);
+        ctx.fill();
+
+        ctx.restore();
     }
 }
 
@@ -244,8 +324,8 @@ class Enemy extends GridEntity {
     }
     draw(ctx, cellSize, offset) {
         ctx.fillStyle = this.color;
-        let cx = offset.x + this.gridPos.x * cellSize + cellSize / 2;
-        let cy = offset.y + this.gridPos.y * cellSize + cellSize / 2;
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
         ctx.beginPath();
         ctx.moveTo(cx, cy - cellSize * 0.4);
         ctx.lineTo(cx + cellSize * 0.4, cy + cellSize * 0.4);
@@ -262,8 +342,8 @@ class Orb extends GridEntity {
     }
     draw(ctx, cellSize, offset) {
         ctx.fillStyle = this.color;
-        let cx = offset.x + this.gridPos.x * cellSize + cellSize / 2;
-        let cy = offset.y + this.gridPos.y * cellSize + cellSize / 2;
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
         ctx.beginPath();
         ctx.arc(cx, cy, cellSize * 0.2, 0, Math.PI * 2);
         ctx.fill();
@@ -439,6 +519,10 @@ class Engine {
     }
 
     update(dt) {
+        for (let e of this.entities) {
+            if (e.update) e.update(dt);
+        }
+
         if (this.state === 'TITLE') {
             if (this.input.wasKeyPressed('Space') || this.input.wasKeyPressed('Enter') || this.input.pointers.length > 0) {
                 this.initGame();
@@ -464,6 +548,25 @@ class Engine {
     }
 
     handlePlayerInput() {
+        // Toggle dash
+        if ((this.input.wasKeyPressed('ShiftLeft') || this.input.wasKeyPressed('KeyE')) && this.player.dashCooldown <= 0) {
+            this.player.dashActive = !this.player.dashActive;
+            if (this.player.dashActive) this.sound.playSelect();
+        }
+
+        // On-screen Dash Button Check
+        for (let p of this.input.pointers) {
+            let bx = this.width / 2;
+            let by = this.height - 40;
+            if (Math.abs(p.x - bx) < 60 && Math.abs(p.y - by) < 40) {
+                if (this.player.dashCooldown <= 0) {
+                    this.player.dashActive = !this.player.dashActive;
+                    this.sound.playSelect();
+                }
+                p.x = -1000;
+            }
+        }
+
         let dx = 0;
         let dy = 0;
 
@@ -480,11 +583,21 @@ class Engine {
         }
 
         if (dx !== 0 || dy !== 0) {
-            let nextX = this.player.gridPos.x + dx;
-            let nextY = this.player.gridPos.y + dy;
+            this.player.facing = new Vector2(dx, dy);
 
-            if (nextX >= this.activeRect.minX && nextX <= this.activeRect.maxX &&
-                nextY >= this.activeRect.minY && nextY <= this.activeRect.maxY) {
+            let steps = this.player.dashActive ? 3 : 1;
+            let finalX = this.player.gridPos.x;
+            let finalY = this.player.gridPos.y;
+            let hitAnyEnemy = false;
+
+            for (let i = 0; i < steps; i++) {
+                let nextX = finalX + dx;
+                let nextY = finalY + dy;
+
+                if (nextX < this.activeRect.minX || nextX > this.activeRect.maxX ||
+                    nextY < this.activeRect.minY || nextY > this.activeRect.maxY) {
+                    break;
+                }
 
                 let targetEntities = this.getEntitiesAt(nextX, nextY);
                 let hitEnemy = targetEntities.find(e => e instanceof Enemy);
@@ -495,19 +608,42 @@ class Engine {
                         this.entities = this.entities.filter(e => e !== hitEnemy);
                         this.score += 10;
                         this.sound.playHit();
-                        // Step into space
-                        this.player.gridPos.x = nextX;
-                        this.player.gridPos.y = nextY;
                     } else {
                         this.sound.playShoot();
                     }
-                    this.advanceTurn();
-                } else {
-                    this.player.gridPos.x = nextX;
-                    this.player.gridPos.y = nextY;
-                    this.sound.playMove();
-                    this.advanceTurn();
+                    hitAnyEnemy = true;
+                    if (!this.player.dashActive && hitEnemy.hp > 0) {
+                        break;
+                    }
+                    if (!this.player.dashActive) {
+                        finalX = nextX;
+                        finalY = nextY;
+                        break;
+                    }
                 }
+
+                finalX = nextX;
+                finalY = nextY;
+            }
+
+            if (finalX !== this.player.gridPos.x || finalY !== this.player.gridPos.y || hitAnyEnemy) {
+                this.player.gridPos.x = finalX;
+                this.player.gridPos.y = finalY;
+
+                if (hitAnyEnemy) {
+                    this.player.recoilTimer = 0.2;
+                } else {
+                    this.player.thrustTimer = 0.2;
+                    this.sound.playMove();
+                }
+
+                if (this.player.dashActive) {
+                    this.player.dashActive = false;
+                    this.player.dashCooldown = this.player.dashMaxCooldown;
+                    this.player.invulnTimer = 0.5; // Dash grants brief invuln
+                }
+
+                this.advanceTurn();
             }
         }
     }
@@ -515,6 +651,10 @@ class Engine {
     advanceTurn() {
         this.turns++;
         this.turnsUntilShrink--;
+
+        if (this.player.dashCooldown > 0) {
+            this.player.dashCooldown--;
+        }
 
         // Pickups
         let items = this.getEntitiesAt(this.player.gridPos.x, this.player.gridPos.y).filter(e => e.isItem);
@@ -534,9 +674,10 @@ class Engine {
 
         // Collisions post-enemy-move
         let playerHit = this.getEntitiesAt(this.player.gridPos.x, this.player.gridPos.y).find(e => e instanceof Enemy);
-        if (playerHit) {
+        if (playerHit && this.player.invulnTimer <= 0) {
             this.player.hp--;
             this.sound.playExplosion();
+            this.player.invulnTimer = 0.3; // brief invuln after hit
             if (this.player.hp <= 0) {
                 this.gameOver();
                 return;
@@ -608,7 +749,10 @@ class Engine {
             if (e.gridPos.x < this.activeRect.minX || e.gridPos.x > this.activeRect.maxX ||
                 e.gridPos.y < this.activeRect.minY || e.gridPos.y > this.activeRect.maxY) {
                 if (e === this.player) {
-                    this.player.hp--;
+                    if (this.player.invulnTimer <= 0) {
+                        this.player.hp--;
+                        this.player.invulnTimer = 0.3;
+                    }
                     if (this.player.hp <= 0) this.gameOver();
                     else {
                         // teleport player back in
@@ -687,9 +831,28 @@ class Engine {
             this.ctx.fillText(`Score: ${this.score}`, 20, 30);
             this.ctx.fillText(`HP: ${this.player.hp}`, 20, 60);
 
+            // Dash HUD
+            let dashText = this.player.dashCooldown > 0 ? `Dash: ${this.player.dashCooldown}T` : `Dash: READY (Shift/E)`;
+            if (this.player.dashActive) dashText = "Dash: ACTIVE!";
+            this.ctx.fillStyle = this.player.dashActive ? "#00ffff" : (this.player.dashCooldown > 0 ? "#888" : "#fff");
+            this.ctx.fillText(dashText, 20, 90);
+
             this.ctx.textAlign = "right";
+            this.ctx.fillStyle = "#fff";
             this.ctx.fillText(`Wave: ${this.wave}`, this.width - 20, 30);
             this.ctx.fillText(`Shrink in: ${this.turnsUntilShrink}`, this.width - 20, 60);
+
+            // On-screen Dash Button for Mobile
+            let bx = this.width / 2;
+            let by = this.height - 40;
+            this.ctx.fillStyle = this.player.dashActive ? "rgba(0, 255, 255, 0.4)" : (this.player.dashCooldown > 0 ? "rgba(100, 100, 100, 0.4)" : "rgba(255, 255, 255, 0.2)");
+            this.ctx.fillRect(bx - 60, by - 25, 120, 50);
+            this.ctx.strokeStyle = this.player.dashCooldown <= 0 ? "#00ffff" : "#555";
+            this.ctx.strokeRect(bx - 60, by - 25, 120, 50);
+            this.ctx.fillStyle = "#fff";
+            this.ctx.textAlign = "center";
+            this.ctx.font = "16px monospace";
+            this.ctx.fillText("DASH", bx, by + 5);
 
             if (this.state === 'PAUSED') {
                 this.ctx.fillStyle = "rgba(0,0,0,0.7)";
