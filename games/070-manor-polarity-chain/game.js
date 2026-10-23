@@ -174,6 +174,52 @@ class Orb {
         if (this.y - this.radius < 0) { this.y = this.radius; this.vy *= -1; }
         if (this.y + this.radius > game.canvas.height) { this.y = game.canvas.height - this.radius; this.vy *= -1; }
 
+        // Hazard collision (Pillars)
+        if (game.hazardManager) {
+            for (const pillar of game.hazardManager.pillars) {
+                if (!pillar.active) continue;
+                const dx = this.x - pillar.x;
+                const dy = this.y - pillar.y;
+                const distSq = dx*dx + dy*dy;
+                const minDist = this.radius + pillar.radius;
+
+                if (distSq < minDist*minDist) {
+                    const dist = Math.sqrt(distSq);
+                    const overlap = minDist - dist;
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+
+                    this.x += nx * overlap;
+                    this.y += ny * overlap;
+
+                    // Basic bounce
+                    const vDot = this.vx * nx + this.vy * ny;
+                    if (vDot < 0) {
+                        this.vx -= 2 * vDot * nx;
+                        this.vy -= 2 * vDot * ny;
+                    }
+                }
+            }
+
+            // Hazard interaction (Pools)
+            let inPool = false;
+            for (const pool of game.hazardManager.pools) {
+                if (!pool.active) continue;
+                const dx = this.x - pool.x;
+                const dy = this.y - pool.y;
+                if (dx*dx + dy*dy < pool.radius * pool.radius) {
+                    inPool = true;
+                    break;
+                }
+            }
+
+            if (inPool) {
+                // Apply extra drag
+                this.vx *= 0.90;
+                this.vy *= 0.90;
+            }
+        }
+
         // Calculate magnetic force from player
         const dx = game.player.x - this.x;
         const dy = game.player.y - this.y;
@@ -403,6 +449,254 @@ class Player {
     }
 }
 
+
+class BackgroundManager {
+    constructor() {
+        this.stars = [];
+        for (let i = 0; i < 50; i++) {
+            this.stars.push({
+                x: Math.random(),
+                y: Math.random(),
+                size: Math.random() * 2 + 1
+            });
+        }
+    }
+
+    draw(ctx, canvas, px, py) {
+        // Clear background
+        ctx.fillStyle = '#1a1025'; // Deep dark purple
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+
+        // Parallax offsets (negative so background moves opposite to player)
+        const offsetX = (cx - px);
+        const offsetY = (cy - py);
+
+        // Layer 1: Moon & distant night sky (Slowest parallax)
+        ctx.save();
+        ctx.translate(offsetX * 0.05, offsetY * 0.05);
+
+        // Draw moon
+        ctx.fillStyle = '#ddd';
+        ctx.beginPath();
+        ctx.arc(canvas.width * 0.8, canvas.height * 0.2, 50, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1a1025';
+        ctx.beginPath();
+        ctx.arc(canvas.width * 0.8 - 15, canvas.height * 0.2 - 10, 45, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw stars
+        ctx.fillStyle = '#fff';
+        for (const star of this.stars) {
+            // Wrap stars
+            let sx = (star.x * canvas.width * 2) % canvas.width;
+            let sy = (star.y * canvas.height * 2) % canvas.height;
+            ctx.beginPath();
+            ctx.arc(sx, sy, star.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+
+        // Layer 2: Silhouette of haunted manor towers (Medium parallax)
+        ctx.save();
+        ctx.translate(offsetX * 0.15, offsetY * 0.15);
+        ctx.fillStyle = '#2a1a3a'; // Darker purple
+
+        // Draw some jagged towers
+        const baseHeight = canvas.height * 0.7;
+        ctx.beginPath();
+        ctx.moveTo(-100, canvas.height + 100);
+        ctx.lineTo(-100, baseHeight);
+        ctx.lineTo(canvas.width * 0.1, baseHeight - 100);
+        ctx.lineTo(canvas.width * 0.15, baseHeight);
+        ctx.lineTo(canvas.width * 0.3, baseHeight - 200); // Main tower
+        ctx.lineTo(canvas.width * 0.35, baseHeight - 200);
+        ctx.lineTo(canvas.width * 0.45, baseHeight);
+        ctx.lineTo(canvas.width * 0.6, baseHeight - 50);
+        ctx.lineTo(canvas.width * 0.7, baseHeight);
+        ctx.lineTo(canvas.width * 0.85, baseHeight - 150);
+        ctx.lineTo(canvas.width * 0.9, baseHeight - 150);
+        ctx.lineTo(canvas.width + 100, baseHeight - 50);
+        ctx.lineTo(canvas.width + 100, canvas.height + 100);
+        ctx.fill();
+        ctx.restore();
+
+        // Layer 3: Foreboding fence (Fastest parallax)
+        ctx.save();
+        ctx.translate(offsetX * 0.3, offsetY * 0.3);
+        ctx.fillStyle = '#110a18';
+        ctx.fillRect(-200, canvas.height * 0.9, canvas.width + 400, canvas.height * 0.2); // Ground
+
+        // Spikes
+        for (let i = -100; i < canvas.width + 200; i += 40) {
+            ctx.beginPath();
+            ctx.moveTo(i, canvas.height * 0.9);
+            ctx.lineTo(i + 5, canvas.height * 0.85);
+            ctx.lineTo(i + 10, canvas.height * 0.9);
+            ctx.fill();
+
+            ctx.fillRect(i + 3, canvas.height * 0.85, 4, canvas.height * 0.05);
+        }
+        ctx.restore();
+    }
+}
+
+class EctoplasmPool {
+    constructor(x, y, radius) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.timer = 0;
+        this.pulseInterval = 3.0; // Pulses every 3 seconds
+        this.active = true;
+    }
+
+    update(dt) {
+        this.timer += dt;
+        if (this.timer >= this.pulseInterval) {
+            this.timer = 0;
+            return true; // Indicates a pulse happened
+        }
+        return false;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = 0.5 + Math.sin(this.timer * Math.PI * 2 / this.pulseInterval) * 0.2;
+        ctx.fillStyle = '#00ff88'; // Sickly green
+        ctx.beginPath();
+
+        // Wavy shape
+        for (let i = 0; i < Math.PI * 2; i += 0.5) {
+            let r = this.radius + Math.sin(i * 3 + this.timer * 2) * 5;
+            let px = this.x + Math.cos(i) * r;
+            let py = this.y + Math.sin(i) * r;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class CursedPillar {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 25;
+        this.health = 3; // Takes 3 explosion hits to destroy
+        this.active = true;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        // Base
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Pillar body
+        ctx.fillStyle = '#444';
+        ctx.beginPath();
+        ctx.arc(0, -10, this.radius * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Cracks based on health
+        if (this.health < 3) {
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -20);
+            ctx.lineTo(5, -5);
+            ctx.lineTo(-5, 5);
+            ctx.stroke();
+        }
+        if (this.health < 2) {
+            ctx.beginPath();
+            ctx.moveTo(-10, -15);
+            ctx.lineTo(-5, 0);
+            ctx.lineTo(10, 10);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+}
+
+class HazardManager {
+    constructor() {
+        this.pools = [];
+        this.pillars = [];
+        this.spawnTimer = 0;
+        this.spawnInterval = 10; // Spawn new hazards periodically
+    }
+
+    spawnHazards(w, h) {
+        // Initial spawn
+        for (let i = 0; i < 3; i++) {
+            this.pools.push(new EctoplasmPool(
+                Math.random() * (w - 100) + 50,
+                Math.random() * (h - 100) + 50,
+                Math.random() * 30 + 40
+            ));
+        }
+        for (let i = 0; i < 4; i++) {
+            this.pillars.push(new CursedPillar(
+                Math.random() * (w - 100) + 50,
+                Math.random() * (h - 100) + 50
+            ));
+        }
+    }
+
+    update(dt, game) {
+        // Spawn periodically
+        this.spawnTimer += dt;
+        if (this.spawnTimer >= this.spawnInterval) {
+            this.spawnTimer = 0;
+            if (this.pools.length < 6) {
+                this.pools.push(new EctoplasmPool(
+                    Math.random() * (game.canvas.width - 100) + 50,
+                    Math.random() * (game.canvas.height - 100) + 50,
+                    Math.random() * 30 + 40
+                ));
+            }
+        }
+
+        for (let i = this.pools.length - 1; i >= 0; i--) {
+            let pool = this.pools[i];
+            let pulsed = pool.update(dt);
+
+            if (pulsed) {
+                // Pulse flips polarity of orbs in the pool
+                for (const orb of game.orbs) {
+                    if (!orb.active) continue;
+                    let dx = orb.x - pool.x;
+                    let dy = orb.y - pool.y;
+                    if (dx*dx + dy*dy < (pool.radius + orb.radius)*(pool.radius + orb.radius)) {
+                        orb.polarity = orb.polarity === 1 ? -1 : 1;
+                        // Spawn some particles or sound here in future
+                    }
+                }
+            }
+        }
+
+        this.pools = this.pools.filter(p => p.active);
+        this.pillars = this.pillars.filter(p => p.active);
+    }
+
+    draw(ctx) {
+        for (const pool of this.pools) pool.draw(ctx);
+        for (const pillar of this.pillars) pillar.draw(ctx);
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
@@ -410,6 +704,9 @@ class Game {
         this.input = new InputManager(this.canvas);
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
+
+        this.bgManager = new BackgroundManager();
+        this.hazardManager = new HazardManager();
 
         this.state = 'TITLE';
         this.lastTime = 0;
@@ -419,6 +716,9 @@ class Game {
         this.player = null;
         this.orbs = [];
         this.explosions = [];
+        this.hazardManager.pools = [];
+        this.hazardManager.pillars = [];
+        this.hazardManager.spawnHazards(this.canvas.width, this.canvas.height);
         this.particles = []; // For future use
 
         this.spawnTimer = 0;
@@ -490,6 +790,9 @@ class Game {
         this.player = new Player(this.canvas.width / 2, this.canvas.height / 2);
         this.orbs = [];
         this.explosions = [];
+        this.hazardManager.pools = [];
+        this.hazardManager.pillars = [];
+        this.hazardManager.spawnHazards(this.canvas.width, this.canvas.height);
         this.spawnTimer = 0;
 
         // Initial Orbs
@@ -520,6 +823,22 @@ class Game {
         this.explosions.push(new Explosion(x, y, radius, color));
         this.sound.playExplosion();
 
+        // Damage pillars
+        for (const pillar of this.hazardManager.pillars) {
+            if (!pillar.active) continue;
+            const dx = pillar.x - x;
+            const dy = pillar.y - y;
+            if (Math.sqrt(dx*dx + dy*dy) < radius + pillar.radius) {
+                pillar.health -= 1;
+                if (pillar.health <= 0) {
+                    pillar.active = false;
+                    // Spawn pool
+                    this.hazardManager.pools.push(new EctoplasmPool(pillar.x, pillar.y, 40));
+                    this.score += 25;
+                }
+            }
+        }
+
         // Check for chain reactions (damage nearby orbs)
         for (const orb of this.orbs) {
             if (!orb.active) continue;
@@ -540,6 +859,7 @@ class Game {
         if (this.state !== 'PLAYING') return;
 
         this.player.update(dt, this);
+        this.hazardManager.update(dt, this);
 
         // Spawner
         this.spawnTimer += dt;
@@ -644,8 +964,13 @@ class Game {
 
     draw() {
         // Background
-        this.ctx.fillStyle = '#222';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        let px = this.canvas.width / 2;
+        let py = this.canvas.height / 2;
+        if (this.player && this.state === 'PLAYING') {
+            px = this.player.x;
+            py = this.player.y;
+        }
+        this.bgManager.draw(this.ctx, this.canvas, px, py);
 
         if (this.state === 'TITLE') {
             this.drawTitle();
@@ -661,6 +986,7 @@ class Game {
     }
 
     drawPlaying() {
+        this.hazardManager.draw(this.ctx);
         for (const exp of this.explosions) exp.draw(this.ctx);
         for (const orb of this.orbs) orb.draw(this.ctx);
         if (this.player) this.player.draw(this.ctx);
