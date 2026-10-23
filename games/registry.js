@@ -1023,7 +1023,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move. Touch to drag. Avoid guard sight cones. Collect items.",
     "createdAt": "2024-05-18",
     "accentColor": "#cc846d",
-    "phase": "4",
+    "phase": "5",
     "path": "./games/077-origami-heist-shift/index.html"
   }
 ];
