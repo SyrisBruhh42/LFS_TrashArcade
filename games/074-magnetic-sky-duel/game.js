@@ -232,10 +232,21 @@ class Player extends Entity {
         this.maxHp = 100;
         this.polarity = 1;
         this.energy = 0;
+        this.dashTimer = 0;
+        this.dashCooldown = 0;
+        this.invulnTimer = 0;
+        this.recoil = 0;
+        this.thrustLevel = 0;
+        this.aimAngle = -Math.PI / 2;
     }
     update(dt, game) {
         let dx = 0;
         let dy = 0;
+
+        if (this.invulnTimer > 0) this.invulnTimer -= dt;
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+        if (this.dashTimer > 0) this.dashTimer -= dt;
+        this.recoil = Math.max(0, this.recoil - dt * 20);
 
         if (game.input.isDown('KeyW') || game.input.isDown('ArrowUp')) dy -= 1;
         if (game.input.isDown('KeyS') || game.input.isDown('ArrowDown')) dy += 1;
@@ -244,9 +255,13 @@ class Player extends Entity {
 
         if (dx !== 0 || dy !== 0) {
             const mag = Math.sqrt(dx*dx + dy*dy);
-            this.vel.set((dx/mag)*this.speed, (dy/mag)*this.speed);
+            const accel = 1500;
+            this.vel.x += (dx/mag) * accel * dt;
+            this.vel.y += (dy/mag) * accel * dt;
+            this.thrustLevel = GameMathExtras.lerp(this.thrustLevel, 1, dt * 10);
+            this.aimAngle = Math.atan2(dy, dx);
         } else {
-            this.vel.set(0, 0);
+            this.thrustLevel = GameMathExtras.lerp(this.thrustLevel, 0, dt * 10);
         }
 
         if (game.input.touchActive) {
@@ -258,8 +273,36 @@ class Player extends Entity {
 
             const dist = Math.sqrt((relX - this.pos.x)**2 + (relY - this.pos.y)**2);
             if (dist > 10) {
-                this.vel.set((relX - this.pos.x)/dist * this.speed, (relY - this.pos.y)/dist * this.speed);
+                const accel = 1500;
+                const ndx = (relX - this.pos.x)/dist;
+                const ndy = (relY - this.pos.y)/dist;
+                this.vel.x += ndx * accel * dt;
+                this.vel.y += ndy * accel * dt;
+                this.thrustLevel = GameMathExtras.lerp(this.thrustLevel, 1, dt * 10);
+                this.aimAngle = Math.atan2(ndy, ndx);
             }
+        }
+
+        const friction = 0.92;
+        this.vel.x *= friction;
+        this.vel.y *= friction;
+
+        const speedSq = this.vel.x*this.vel.x + this.vel.y*this.vel.y;
+        if (this.dashTimer <= 0 && speedSq > this.speed * this.speed) {
+            const mult = this.speed / Math.sqrt(speedSq);
+            this.vel.x *= mult;
+            this.vel.y *= mult;
+        }
+
+        if (game.input.isJustPressed('KeyF') && this.dashCooldown <= 0) {
+            this.dashTimer = 0.2;
+            this.dashCooldown = 1.5;
+            this.invulnTimer = Math.max(this.invulnTimer, 0.3);
+            const dSpd = 800;
+            this.vel.x = Math.cos(this.aimAngle) * dSpd;
+            this.vel.y = Math.sin(this.aimAngle) * dSpd;
+            game.sound.playShoot(this.polarity === 1);
+            game.spawnParticles(this.pos.x, this.pos.y, this.polarity, 15);
         }
 
         super.update(dt);
@@ -275,27 +318,43 @@ class Player extends Entity {
         this.shootTimer -= dt;
         if ((game.input.isDown('Space') || game.input.touchActive) && this.shootTimer <= 0) {
             this.shootTimer = 0.15;
-            game.spawnBullet(this.pos.x, this.pos.y - 15, 0, -600, this.polarity, false);
+            this.recoil = 5;
+            const bvx = Math.cos(this.aimAngle) * 600;
+            const bvy = Math.sin(this.aimAngle) * 600;
+            if (game.input.touchActive) {
+                game.spawnBullet(this.pos.x, this.pos.y - 15, 0, -600, this.polarity, false);
+            } else {
+                game.spawnBullet(this.pos.x + Math.cos(this.aimAngle)*15, this.pos.y + Math.sin(this.aimAngle)*15, bvx, bvy, this.polarity, false);
+            }
             game.sound.playShoot(this.polarity === 1);
         }
     }
     draw(ctx) {
+        if (this.invulnTimer > 0 && Math.floor(Date.now() / 50) % 2 === 0) return;
+
         ctx.save();
         ctx.translate(this.pos.x, this.pos.y);
 
-        ctx.beginPath();
-        ctx.arc(0, 0, this.radius + 4 + Math.sin(Date.now()*0.01)*2, 0, Math.PI*2);
-        ctx.strokeStyle = this.polarity === 1 ? 'rgba(255,51,102,0.5)' : 'rgba(51,204,255,0.5)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        const color = this.polarity === 1 ? '#ff3366' : '#33ccff';
+        const ringColor = this.polarity === 1 ? 'rgba(255,51,102,0.5)' : 'rgba(51,204,255,0.5)';
 
+        if (typeof VectorRenderer !== 'undefined') {
+            VectorRenderer.drawAimTelegraph(ctx, 0, 0, this.aimAngle, 60, ringColor);
+            VectorRenderer.drawRing(ctx, 0, 0, this.radius + 4 + Math.sin(Date.now()*0.01)*2, ringColor, 2);
+            ctx.translate(-Math.cos(this.aimAngle)*this.recoil, -Math.sin(this.aimAngle)*this.recoil);
+            if (this.thrustLevel > 0) {
+                VectorRenderer.drawThrust(ctx, -Math.cos(this.aimAngle)*this.radius, -Math.sin(this.aimAngle)*this.radius, this.aimAngle + Math.PI, 12, 10 + this.thrustLevel * 15 + Math.random()*5, '#ffa500');
+            }
+        }
+
+        ctx.rotate(this.aimAngle + Math.PI/2);
         ctx.beginPath();
         ctx.moveTo(0, -this.radius);
         ctx.lineTo(this.radius, this.radius);
         ctx.lineTo(0, this.radius - 4);
         ctx.lineTo(-this.radius, this.radius);
         ctx.closePath();
-        ctx.fillStyle = this.polarity === 1 ? '#ff3366' : '#33ccff';
+        ctx.fillStyle = color;
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
@@ -534,8 +593,9 @@ class Game {
                         this.player.energy += 5;
                         b.active = false;
                         this.spawnParticles(b.pos.x, b.pos.y, b.polarity, 5);
-                    } else {
+                    } else if (this.player.invulnTimer <= 0) {
                         this.player.hp -= 10;
+                        this.player.invulnTimer = 1.0;
                         b.active = false;
                         this.sound.playHit();
                         this.spawnParticles(this.player.pos.x, this.player.pos.y, -b.polarity, 10);
@@ -609,6 +669,21 @@ class Game {
             this.ctx.fillStyle = '#fff';
             this.ctx.font = '16px sans-serif';
             this.ctx.fillText(`Polarity: ${this.player.polarity === 1 ? 'RED (+)' : 'BLUE (-)'}`, 10, this.height - 40);
+
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(10, this.height - 65, 100, 15);
+            if (this.player.dashCooldown <= 0) {
+                this.ctx.fillStyle = '#ff0';
+                this.ctx.fillRect(10, this.height - 65, 100, 15);
+                this.ctx.fillStyle = '#000';
+                this.ctx.fillText('DASH READY [F]', 12, this.height - 53);
+            } else {
+                this.ctx.fillStyle = '#555';
+                const ratio = 1 - (this.player.dashCooldown / 1.5);
+                this.ctx.fillRect(10, this.height - 65, 100 * ratio, 15);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.fillText('COOLDOWN', 12, this.height - 53);
+            }
         }
 
         if (this.state === 'TITLE') {
