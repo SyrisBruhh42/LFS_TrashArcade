@@ -1,0 +1,13 @@
+{
+  "id": "076",
+  "slug": "076-blood-oath-overdrive",
+  "title": "Blood Oath Overdrive",
+  "genre": "Directional Parry/Slash Arcade",
+  "coreMechanic": "Sacrifice Health for Overdrive Power",
+  "setting": "Cyber Samurai Dojo",
+  "description": "Slice through cyber-enemies coming from all sides, and sacrifice your health to unleash devastating overdrive attacks.",
+  "controls": "WASD/Arrows to attack in directions, Space to sacrifice HP for Overdrive, Mouse/Touch to swipe/tap.",
+  "createdAt": "2024-10-25",
+  "accentColor": "#8b5ecb",
+  "phase": "1"
+}
