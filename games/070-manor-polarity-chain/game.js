@@ -60,7 +60,7 @@ class SaveManager {
             totalGamesPlayed: 0,
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
-            options: {}
+            options: { shakeIntensity: 1.0 }
         };
         this.load();
     }
@@ -569,6 +569,12 @@ class Player {
     }
 
     update(dt, game) {
+        if (game.vfx && (this.thrustIntensity > 0 || this.dashDuration > 0)) {
+            game.vfx.addTrail(this.x, this.y, this.radius, this.polarity === 1 ? '#ffcc00' : '#44aaff');
+            if (this.thrustIntensity > 0) {
+                game.vfx.addParticles(this.x - Math.cos(this.aimAngle) * this.radius, this.y - Math.sin(this.aimAngle) * this.radius, 1, '#ffaa00', 50, this.aimAngle + Math.PI, Math.PI/4);
+            }
+        }
         // Timers
         if (this.dashCooldown > 0) this.dashCooldown -= dt;
         if (this.dashDuration > 0) this.dashDuration -= dt;
@@ -965,6 +971,7 @@ class Game {
         this.hazardManager.pools = [];
         this.hazardManager.pillars = [];
         this.hazardManager.spawnHazards(this.canvas.width, this.canvas.height);
+        this.vfx = new VFXManager(this);
         this.particles = []; // For future use
 
         this.bossManager = new BossManager();
@@ -1118,6 +1125,11 @@ class Game {
     createExplosion(x, y, radius, color) {
         this.explosions.push(new Explosion(x, y, radius, color));
         this.sound.playExplosion();
+        if (this.vfx) {
+            this.vfx.addParticles(x, y, 20, color, 150);
+            this.vfx.addShake(8, 0.3);
+            this.vfx.triggerHitStop(0.05);
+        }
 
         // Damage pillars
         for (const pillar of this.hazardManager.pillars) {
@@ -1167,6 +1179,7 @@ class Game {
 
     update(dt) {
         if (this.state !== 'PLAYING') return;
+        if (this.vfx && this.vfx.update(dt)) return;
 
         this.player.update(dt, this);
         this.hazardManager.update(dt, this);
@@ -1231,8 +1244,20 @@ class Game {
                     if (o1.polarity !== o2.polarity && relSpeed > 100) {
                         o1.takeDamage();
                         o2.takeDamage();
-                        if (!o1.active) { this.score += Math.floor(50 * this.progression.comboMultiplier * (this.player ? this.player.baseScoreMult : 1)); this.progression.addCombo(); this.progression.spawnPickup(o1.x, o1.y); }
-                        if (!o2.active) { this.score += Math.floor(50 * this.progression.comboMultiplier * (this.player ? this.player.baseScoreMult : 1)); this.progression.addCombo(); this.progression.spawnPickup(o2.x, o2.y); }
+                        if (!o1.active) {
+                            let pts = Math.floor(50 * this.progression.comboMultiplier * (this.player ? this.player.baseScoreMult : 1));
+                            this.score += pts;
+                            this.progression.addCombo();
+                            this.progression.spawnPickup(o1.x, o1.y);
+                            if (this.vfx) this.vfx.addPopup(o1.x, o1.y, `+${pts}`, '#fff');
+                        }
+                        if (!o2.active) {
+                            let pts = Math.floor(50 * this.progression.comboMultiplier * (this.player ? this.player.baseScoreMult : 1));
+                            this.score += pts;
+                            this.progression.addCombo();
+                            this.progression.spawnPickup(o2.x, o2.y);
+                            if (this.vfx) this.vfx.addPopup(o2.x, o2.y, `+${pts}`, '#fff');
+                        }
                         if (!o1.active && !o2.active) {
                             this.createExplosion((o1.x + o2.x)/2, (o1.y + o2.y)/2, 100 * (this.player ? this.player.expRadMult : 1), '#ffcc00');
                         }
@@ -1298,6 +1323,10 @@ class Game {
                 this.player.hp = (this.player.hp || 1) - 1;
                 this.progression.breakCombo();
                 this.player.invulnTime = 1.0;
+                if (this.vfx) {
+                    this.vfx.addShake(15, 0.4);
+                    this.vfx.triggerHitStop(0.1);
+                }
                 if (this.player.hp <= 0) {
                     this.state = 'GAME_OVER';
                     this.saveManager.data.totalGamesPlayed++;
@@ -1318,6 +1347,9 @@ class Game {
     }
 
     draw() {
+        this.ctx.save();
+        if (this.vfx) this.vfx.applyShake(this.ctx);
+
         // Background
         let px = this.canvas.width / 2;
         let py = this.canvas.height / 2;
@@ -1338,6 +1370,7 @@ class Game {
             this.drawPlaying();
             this.drawGameOver();
         }
+        this.ctx.restore();
     }
 
     drawPlaying() {
@@ -1346,6 +1379,7 @@ class Game {
         for (const orb of this.orbs) orb.draw(this.ctx);
         if (this.player) this.player.draw(this.ctx);
         this.bossManager.draw(this.ctx, this.canvas);
+        if (this.vfx) this.vfx.draw(this.ctx);
 
         // HUD
         this.ctx.fillStyle = '#fff';
