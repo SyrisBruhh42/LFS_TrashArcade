@@ -185,10 +185,13 @@ class Entity {
 }
 
 class Particle extends Entity {
-    constructor(x, y, polarity, speed, life) {
+    constructor(x, y, polarity, speed, life, dirAngle = null, spread = null) {
         super(x, y, MathUtils.rand(2, 4));
         this.polarity = polarity;
-        const angle = MathUtils.rand(0, Math.PI * 2);
+        let angle = MathUtils.rand(0, Math.PI * 2);
+        if (dirAngle !== null && spread !== null) {
+            angle = dirAngle + MathUtils.rand(-spread/2, spread/2);
+        }
         this.vel.set(Math.cos(angle) * speed, Math.sin(angle) * speed);
         this.life = life;
         this.maxLife = life;
@@ -292,6 +295,13 @@ class Player extends Entity {
             const mult = this.speed / Math.sqrt(speedSq);
             this.vel.x *= mult;
             this.vel.y *= mult;
+        }
+
+        if (this.thrustLevel > 0.1 && Math.random() < 0.3) {
+            game.spawnDirectionalParticles(this.pos.x, this.pos.y, this.polarity, 1, this.aimAngle + Math.PI, Math.PI/4, 150);
+        }
+        if (this.dashTimer > 0) {
+            game.vfx.addTrail(this.pos.x, this.pos.y, this.radius, this.polarity, 0.2);
         }
 
         if (game.input.isJustPressed('KeyF') && this.dashCooldown <= 0) {
@@ -424,6 +434,7 @@ class Game {
 
         this.score = 0;
         this.wave = 1;
+        this.vfx = new VFXManager(this);
 
         this.resizeObserver = new ResizeObserver(entries => {
             for (let entry of entries) {
@@ -485,6 +496,11 @@ class Game {
             this.particles.push(new Particle(x, y, colorCode, MathUtils.rand(50, 150), MathUtils.rand(0.2, 0.6)));
         }
     }
+    spawnDirectionalParticles(x, y, colorCode, count, angle, spread, speedBase) {
+        for(let i=0; i<count; i++) {
+            this.particles.push(new Particle(x, y, colorCode, MathUtils.rand(speedBase, speedBase*2), MathUtils.rand(0.2, 0.6), angle, spread));
+        }
+    }
     addScore(pts) {
         let mult = 1;
         if (this.progression && this.progression.comboManager) {
@@ -539,6 +555,13 @@ class Game {
             return;
         }
 
+        if (this.vfx.hitStopTimer > 0) {
+            this.vfx.hitStopTimer -= dt;
+            this.input.update();
+            return;
+        }
+        this.vfx.update(dt);
+
         this.islands.forEach(i => i.update(dt, this.height));
         if (this.worldManager) this.worldManager.update(dt, this);
         this.player.update(dt, this);
@@ -587,6 +610,9 @@ class Game {
 
         this.bullets.forEach(b => {
             b.update(dt);
+            if (Math.random() < 0.5) {
+                this.vfx.addTrail(b.pos.x, b.pos.y, b.radius * 0.8, b.polarity, 0.15);
+            }
             if (b.pos.x < -10 || b.pos.x > this.width + 10 || b.pos.y < -10 || b.pos.y > this.height + 10) {
                 b.active = false;
             }
@@ -608,6 +634,8 @@ class Game {
                         b.active = false;
                         this.sound.playHit();
                         this.spawnParticles(this.player.pos.x, this.player.pos.y, -b.polarity, 10);
+                        this.vfx.triggerShake(5, 0.3);
+                        this.vfx.triggerHitStop(0.1);
                         if (this.player.hp <= 0) {
                             this.endGame();
                         }
@@ -621,12 +649,15 @@ class Game {
                         this.boss.hp -= dmg;
                         b.active = false;
                         this.addScore(5);
-                        this.spawnParticles(b.pos.x, b.pos.y, b.polarity, 3);
+                        this.spawnDirectionalParticles(b.pos.x, b.pos.y, b.polarity, 3, Math.atan2(b.vel.y, b.vel.x), Math.PI/2, 100);
+                        this.vfx.addPopup(b.pos.x, b.pos.y, dmg.toString(), b.polarity);
                         if (this.boss.hp <= 0) {
                             this.boss.active = false;
                             this.sound.playExplosion();
-                            this.spawnParticles(this.boss.pos.x, this.boss.pos.y, 1, 30);
-                            this.spawnParticles(this.boss.pos.x, this.boss.pos.y, -1, 30);
+                            this.spawnParticles(this.boss.pos.x, this.boss.pos.y, 1, 50);
+                            this.spawnParticles(this.boss.pos.x, this.boss.pos.y, -1, 50);
+                            this.vfx.triggerShake(15, 1.0);
+                            this.vfx.triggerHitStop(0.5);
                             this.addScore(1000);
                             this.boss = null;
                             this.wave++; // immediately advance wave to resume enemy spawns
@@ -645,10 +676,14 @@ class Game {
                             if (this.progression) dmg *= this.progression.perks.damageMult;
                             e.takeDamage(dmg);
                             b.active = false;
-                            this.spawnParticles(b.pos.x, b.pos.y, b.polarity, 3);
+                            this.spawnDirectionalParticles(b.pos.x, b.pos.y, b.polarity, 3, Math.atan2(b.vel.y, b.vel.x), Math.PI/2, 100);
+                            let combo = this.progression && this.progression.comboManager ? this.progression.comboManager.combo : 0;
+                            this.vfx.addPopup(b.pos.x, b.pos.y, dmg.toString(), b.polarity, combo >= 10);
                             if (e.hp <= 0) {
                                 this.sound.playExplosion();
                                 this.spawnParticles(e.pos.x, e.pos.y, e.polarity, 15);
+                                this.vfx.triggerShake(2, 0.2);
+                                if (combo >= 20) this.vfx.triggerHitStop(0.05);
                                 this.addScore(e.points);
                                 if (this.progression) this.progression.spawnPickup(e.pos.x, e.pos.y);
                                 if (e instanceof SplitterEnemy) {
@@ -680,6 +715,9 @@ class Game {
     draw() {
         this.ctx.fillStyle = '#000810';
         this.ctx.fillRect(0, 0, this.width, this.height);
+
+        this.ctx.save();
+        this.vfx.applyShake(this.ctx);
 
         if (this.worldManager) this.worldManager.drawBackground(this.ctx);
         this.islands.forEach(i => i.draw(this.ctx));
@@ -715,6 +753,10 @@ class Game {
             }
 
             if (this.player.hp > 0) this.player.draw(this.ctx);
+            this.vfx.drawTrails(this.ctx);
+            this.vfx.drawPopups(this.ctx);
+
+            this.ctx.restore();
 
             this.ctx.fillStyle = '#fff';
             this.ctx.font = '20px sans-serif';
