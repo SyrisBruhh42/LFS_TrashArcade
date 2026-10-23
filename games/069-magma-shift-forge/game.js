@@ -89,6 +89,17 @@ class SoundEngine {
     constructor() {
         this.ctx = null;
         this.initialized = false;
+        this.masterGain = null;
+        this.bgmOscillator = null;
+        this.bgmGain = null;
+        this.bgmFilter = null;
+        this.bgmPlaying = false;
+        this.tempo = 120;
+        this.nextNoteTime = 0;
+        this.noteIndex = 0;
+        this.sequence = [440, 554.37, 659.25, 440, 329.63, 220, 329.63, 554.37];
+        this.baseFreq = 0.5;
+        this.distortion = null;
     }
 
     init() {
@@ -96,8 +107,40 @@ class SoundEngine {
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             this.ctx = new AudioContext();
+
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = 0.3;
+            this.masterGain.connect(this.ctx.destination);
+
+            this.bgmGain = this.ctx.createGain();
+            this.bgmGain.gain.value = 0.1;
+
+            this.bgmFilter = this.ctx.createBiquadFilter();
+            this.bgmFilter.type = 'lowpass';
+            this.bgmFilter.frequency.value = 1000;
+
+            this.distortion = this.ctx.createWaveShaper();
+            this.distortion.curve = this.makeDistortionCurve(50);
+            this.distortion.oversample = '4x';
+
+            this.bgmGain.connect(this.bgmFilter);
+            this.bgmFilter.connect(this.distortion);
+            this.distortion.connect(this.masterGain);
+
             this.initialized = true;
         } catch(e) { console.error("Web Audio not supported", e); }
+    }
+
+    makeDistortionCurve(amount) {
+        let k = typeof amount === 'number' ? amount : 50;
+        let n_samples = 44100;
+        let curve = new Float32Array(n_samples);
+        let deg = Math.PI / 180;
+        for (let i = 0; i < n_samples; ++i) {
+            let x = i * 2 / n_samples - 1;
+            curve[i] = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
+        }
+        return curve;
     }
 
     resume() {
@@ -105,6 +148,130 @@ class SoundEngine {
             this.ctx.resume();
         }
     }
+
+    startBGM() {
+        if (!this.initialized || this.bgmPlaying) return;
+        this.bgmPlaying = true;
+        this.nextNoteTime = this.ctx.currentTime + 0.1;
+        this.noteIndex = 0;
+    }
+
+    stopBGM() {
+        this.bgmPlaying = false;
+    }
+
+    update(dt, game) {
+        if (!this.initialized || !this.bgmPlaying) return;
+
+        let intensity = 0;
+        if (game.bossActive) {
+            intensity = 1.0;
+        } else if (game.arena) {
+            let shrinkRatio = 1.0 - ((game.arena.radius - game.arena.minRadius) / (game.arena.maxRadius - game.arena.minRadius));
+            intensity = Math.max(0, Math.min(1, shrinkRatio));
+        }
+
+        this.tempo = 180 + (intensity * 120);
+        this.bgmFilter.frequency.setTargetAtTime(800 + (intensity * 2000), this.ctx.currentTime, 0.1);
+        this.baseFreq = 0.5 + (intensity * 0.5);
+
+        while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+            this.scheduleNote(this.nextNoteTime);
+            this.nextNoteTime += (60.0 / this.tempo) / 2; // 8th notes
+        }
+    }
+
+    scheduleNote(time) {
+        let osc = this.ctx.createOscillator();
+        let env = this.ctx.createGain();
+
+        osc.type = this.noteIndex % 4 === 0 ? 'sawtooth' : 'square';
+        let freq = this.sequence[this.noteIndex % this.sequence.length] * this.baseFreq;
+
+        if (this.noteIndex % 8 === 0) {
+            freq /= 2; // Bass note on beat
+            osc.type = 'sine';
+        }
+
+        osc.frequency.setValueAtTime(freq, time);
+
+        env.gain.setValueAtTime(0, time);
+        env.gain.linearRampToValueAtTime(0.3, time + 0.02);
+        env.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
+
+        osc.connect(env);
+        env.connect(this.bgmGain);
+
+        osc.start(time);
+        osc.stop(time + 0.15);
+
+        this.noteIndex++;
+    }
+
+    playOscillator(type, freqStart, freqEnd, duration, vol=0.5, sweepType='exp') {
+        if(!this.initialized) return;
+        let osc = this.ctx.createOscillator();
+        let gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freqStart, this.ctx.currentTime);
+        if(sweepType === 'exp') {
+            osc.frequency.exponentialRampToValueAtTime(freqEnd, this.ctx.currentTime + duration);
+        } else {
+            osc.frequency.linearRampToValueAtTime(freqEnd, this.ctx.currentTime + duration);
+        }
+
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    playNoise(duration, vol=0.5, type='white') {
+        if(!this.initialized) return;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        let filter = this.ctx.createBiquadFilter();
+        if(type === 'low') {
+            filter.type = 'lowpass';
+            filter.frequency.value = 1000;
+        } else {
+            filter.type = 'highpass';
+            filter.frequency.value = 1000;
+        }
+
+        let gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+
+        noise.start();
+    }
+
+    playShoot() { this.playOscillator('square', 800, 100, 0.1, 0.2); }
+    playEnemyHit() { this.playNoise(0.1, 0.3, 'high'); }
+    playEnemyDestroyed() { this.playNoise(0.3, 0.5, 'low'); this.playOscillator('sawtooth', 200, 50, 0.3, 0.3); }
+    playPlayerHit() { this.playOscillator('sawtooth', 150, 50, 0.4, 0.8); this.playNoise(0.4, 0.6, 'low'); }
+    playDash() { this.playOscillator('sine', 400, 1200, 0.2, 0.3, 'lin'); this.playNoise(0.2, 0.2, 'high'); }
+    playPickup() { this.playOscillator('sine', 800, 1600, 0.1, 0.3); setTimeout(()=>this.playOscillator('sine', 1200, 2400, 0.1, 0.3), 100); }
+    playBossWarning() { this.playOscillator('square', 400, 400, 0.5, 0.4); setTimeout(()=>this.playOscillator('square', 300, 300, 0.5, 0.4), 500); }
+    playBossSpawn() { this.playOscillator('sawtooth', 100, 50, 2.0, 0.7); this.playNoise(2.0, 0.6, 'low'); }
+    playUpgrade() { this.playOscillator('sine', 440, 880, 0.2, 0.4); setTimeout(()=>this.playOscillator('sine', 554, 1108, 0.2, 0.4), 150); setTimeout(()=>this.playOscillator('sine', 659, 1318, 0.4, 0.4), 300); }
+    playUIButton() { this.playOscillator('square', 600, 600, 0.1, 0.2); }
+    playGameOver() { this.playOscillator('sawtooth', 200, 50, 1.5, 0.6); }
 }
 
 class Game {
@@ -199,6 +366,7 @@ class Game {
         this.bossActive = false;
         if (typeof BossWarning !== 'undefined') {
             this.bossWarning = new BossWarning();
+                    this.sound.playBossWarning();
         }
     }
 
@@ -234,6 +402,8 @@ class Game {
     update(dt) {
         if(this.state === 'TITLE') {
             if(this.input.keys['Space'] || this.input.mouse.down) {
+                this.sound.playUIButton();
+                this.sound.startBGM();
                 this.state = 'PLAYING';
                 this.reset();
                 this.input.mouse.down = false;
@@ -246,6 +416,7 @@ class Game {
 
         if(this.state === 'GAME_OVER') {
             if(this.input.keys['Space'] || this.input.mouse.down) {
+                this.sound.playUIButton();
                 this.state = 'TITLE';
                 this.input.mouse.down = false;
                 this.input.keys['Space'] = false;
@@ -270,6 +441,7 @@ class Game {
                         if (unscaledMouseX >= bx && unscaledMouseX <= bx + boxW) {
                             if (this.progression && this.progression.draftChoices[i]) {
                                 this.progression.applyUpgrade(this.progression.draftChoices[i], this);
+                                this.sound.playUpgrade();
                                 this.state = 'PLAYING';
                                 this.input.mouse.down = false;
                                 return;
@@ -282,6 +454,7 @@ class Game {
         }
 
         if(this.state === 'PLAYING') {
+            this.sound.update(dt, this);
             if (this.parallax) this.parallax.update(dt, this.player);
             if (this.hazards) this.hazards.update(dt, this);
             if (this.bossWarning) this.bossWarning.update(dt);
@@ -290,6 +463,7 @@ class Game {
             if (this.score >= this.nextBossScore && !this.bossActive && !this.bossWarning.active) {
                 this.bossWarning.trigger("WARNING: BOSS APPROACHING");
                 this.bossActive = true;
+                this.sound.playBossSpawn();
             } else if (this.bossActive && !this.bossWarning.active && !this.enemies.find(e => e.isBoss)) {
                 // Spawn boss after warning finishes
                 const angle = Math.random() * Math.PI * 2;
@@ -338,6 +512,7 @@ class Game {
             if(this.input.mouse.down && this.projectiles.length < 30) {
                 if(this.player.fireTimer <= 0) {
                     this.player.fireTimer = this.player.fireCooldown;
+                    this.sound.playShoot();
                     this.player.recoil = 1.0;
 
                     const spread = 0.15;
@@ -371,6 +546,7 @@ class Game {
                         } else {
                             this.score += 100 * (this.progression ? this.progression.getComboMultiplier() : 1);
                         }
+                        this.sound.playPickup();
                         this.pickups.splice(i, 1);
                     } else if (p.life <= 0) {
                         this.pickups.splice(i, 1);
@@ -428,6 +604,7 @@ class Game {
                 if(Math.hypot(this.player.x - p.x, this.player.y - p.y) < this.player.radius + p.radius) {
                     if (this.player.invulnerabilityTime <= 0) {
                         this.vfx.triggerShake(20, 0.5);
+                        this.sound.playPlayerHit();
                         this.gameOver();
                     }
                     this.enemyProjectiles.splice(i, 1);
@@ -446,6 +623,7 @@ class Game {
 
                 if(Math.hypot(this.player.x - h.x, this.player.y - h.y) < this.player.radius + h.radius) {
                     if (this.player.invulnerabilityTime <= 0) {
+                        this.sound.playPlayerHit();
                         this.gameOver();
                     }
                 }
@@ -472,6 +650,7 @@ class Game {
                 if(Math.hypot(this.player.x - e.x, this.player.y - e.y) < this.player.radius + e.radius) {
                     if (this.player.invulnerabilityTime <= 0) {
                         this.vfx.triggerShake(20, 0.5);
+                        this.sound.playPlayerHit();
                         this.gameOver();
                     }
                 }
@@ -481,6 +660,7 @@ class Game {
                     let p = this.projectiles[j];
                     if(Math.hypot(p.x - e.x, p.y - e.y) < e.radius + 5) {
                         e.hp -= this.player.damage;
+                        if (e.hp <= 0) { this.sound.playEnemyDestroyed(); } else { this.sound.playEnemyHit(); }
                         p.pierce--;
 
                         this.vfx.emitParticles(e.x, e.y, '#f50', 200, 5, Math.atan2(p.vy, p.vx), Math.PI/2);
@@ -532,6 +712,8 @@ class Game {
 
     gameOver() {
         this.state = 'GAME_OVER';
+        this.sound.stopBGM();
+        this.sound.playGameOver();
         if(this.score > this.saveManager.data.highScore) {
             this.saveManager.data.highScore = this.score;
         }

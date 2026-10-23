@@ -925,7 +925,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Arrow keys or WASD to move, Space to switch polarity. Touch support included.",
     "createdAt": "2024-10-23",
     "accentColor": "#5544e7",
-    "phase": "2",
+    "phase": "3",
     "path": "./games/070-manor-polarity-chain/index.html"
   }
 ];
