@@ -193,10 +193,12 @@ class Player {
         this.x = Math.max(this.size, Math.min(window.innerWidth - this.size, this.x));
         this.y = Math.max(this.size, Math.min(window.innerHeight - this.size, this.y));
 
-        if ((input.isJustPressed('Space') || input.touchOverdrive) && this.hp > 20 && !this.overdrive) {
-            this.hp -= 20;
+        const cost = window.game && window.game.progression ? Math.max(1, 20 - window.game.progression.statOverdriveCostReduction) : 20;
+        const durBonus = window.game && window.game.progression ? window.game.progression.statOverdriveDurBonus : 0;
+        if ((input.isJustPressed('Space') || input.touchOverdrive) && this.hp > cost && !this.overdrive) {
+            this.hp -= cost;
             this.overdrive = true;
-            this.overdriveTimer = 5; // 5 seconds of overdrive
+            this.overdriveTimer = 5 + durBonus; // 5 seconds of overdrive + bonus
             if (window.game && window.game.sound) window.game.sound.playOverdrive();
         }
     }
@@ -287,6 +289,7 @@ class Game {
         this.boss = null;
         this.bossWave = 1;
         this.nextBossScore = 150;
+        this.progression = new ProgressionManager();
 
         this.player = null;
 
@@ -299,6 +302,10 @@ class Game {
                 this.startGame();
             } else if (this.state === 'GAME_OVER' && e.code === 'Enter') {
                 this.state = 'TITLE';
+            } else if (this.state === 'UPGRADE') {
+                if (e.code === 'Digit1') this.progression.selectPerk(0, this);
+                if (e.code === 'Digit2') this.progression.selectPerk(1, this);
+                if (e.code === 'Digit3') this.progression.selectPerk(2, this);
             } else if (e.code === 'Escape') {
                 if (this.state === 'PLAYING') this.state = 'PAUSED';
                 else if (this.state === 'PAUSED') this.state = 'PLAYING';
@@ -308,6 +315,19 @@ class Game {
         this.canvas.addEventListener('pointerdown', e => {
             if (this.state === 'TITLE') this.startGame();
             else if (this.state === 'GAME_OVER') this.state = 'TITLE';
+            else if (this.state === 'UPGRADE') {
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = this.canvas.width / rect.width;
+                const scaleY = this.canvas.height / rect.height;
+                const y = (e.clientY - rect.top) * scaleY;
+                for (let i = 0; i < this.progression.draftChoices.length; i++) {
+                    let btnY = this.canvas.height/2 - 40 + i * 80;
+                    if (y > btnY - 30 && y < btnY + 30) {
+                        this.progression.selectPerk(i, this);
+                        break;
+                    }
+                }
+            }
         });
 
         document.addEventListener('visibilitychange', () => {
@@ -339,14 +359,19 @@ class Game {
         this.nextBossScore = 150;
         this.player = new Player(this.canvas.width / 2, this.canvas.height / 2);
         this.world = new World(this.canvas.width, this.canvas.height);
+        this.progression.reset();
     }
     update(dt) {
+        if (this.state === 'UPGRADE') {
+            return;
+        }
         if (this.state !== 'PLAYING') return;
 
         this.player.update(dt, this.input);
         this.particles.update(dt);
         this.trails.update(dt);
         this.shake.update(dt);
+        this.progression.update(dt, this);
 
         if (this.world) {
             this.world.update(dt, this.player, this.enemies, this.sound);
@@ -410,8 +435,12 @@ class Game {
                 }
 
                 if (hit) {
-                    this.score += this.player.overdrive ? 20 : 10;
+                    this.score += (this.player.overdrive ? 20 : 10) * (1 + this.progression.combo * 0.1);
                     this.sound.playHit();
+                    if (e.hp - (this.player.overdrive ? 2 : 1) <= 0) {
+                        this.progression.addKill(this);
+                        this.progression.spawnPickup(e.x, e.y);
+                    }
                     e.takeDamage(this.player.overdrive ? 2 : 1, this, i);
                     this.shake.trigger(this.player.overdrive ? 10 : 5, 0.1);
                     continue;
@@ -538,6 +567,8 @@ class Game {
 
             this.ctx.restore();
 
+            this.progression.draw(this.ctx, this.canvas, this);
+
             this.ctx.fillStyle = '#fff';
             this.ctx.font = '20px monospace';
             this.ctx.textAlign = 'left';
@@ -560,6 +591,8 @@ class Game {
             this.ctx.font = '20px monospace';
             this.ctx.fillText('Score: ' + this.score, this.canvas.width/2, this.canvas.height/2);
             this.ctx.fillText('Press ENTER to Restart', this.canvas.width/2, this.canvas.height/2 + 50);
+        } else if (this.state === 'UPGRADE') {
+            this.progression.draw(this.ctx, this.canvas, this);
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
             this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
