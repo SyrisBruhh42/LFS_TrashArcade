@@ -1,13 +1,22 @@
 const SAVE_KEY = 'arcade_game_076_076-blood-oath-overdrive_v1';
 class SaveManager {
     constructor() {
-        this.data = { highScore: 0, totalGamesPlayed: 0, totalScoreAccumulated: 0, options: { mute: false, vfxIntensity: 1 } };
+        this.data = {
+            highScore: 0, totalGamesPlayed: 0, totalScoreAccumulated: 0, overdriveUses: 0,
+            unlockedMilestones: [],
+            options: { mute: false, sfxVol: 1, musicVol: 1, vfxIntensity: 1, shakeIntensity: 1, particleDensity: 1, highContrast: false, showFps: false, touchControls: 'Auto', leftHanded: false }
+        };
         this.load();
     }
     load() {
         try {
             const raw = localStorage.getItem(SAVE_KEY);
-            if (raw) { this.data = { ...this.data, ...JSON.parse(raw) }; }
+            if (raw) {
+                let parsed = JSON.parse(raw);
+                let loadedOptions = parsed.options;
+                this.data = { ...this.data, ...parsed };
+                if (loadedOptions) this.data.options = { ...{ mute: false, sfxVol: 1, musicVol: 1, vfxIntensity: 1, shakeIntensity: 1, particleDensity: 1, highContrast: false, showFps: false, touchControls: 'Auto', leftHanded: false }, ...loadedOptions };
+            }
         } catch (e) { console.warn('Save load failed', e); }
     }
     save() {
@@ -61,6 +70,13 @@ class SoundEngine {
         } catch (e) { this.enabled = false; }
     }
     resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
+
+    applyVolumes(opt) {
+        if (!this.ctx) return;
+        this.masterGain.gain.value = opt.mute ? 0 : 1;
+        this.sfxGain.gain.value = opt.sfxVol * 0.6;
+        this.musicGain.gain.value = opt.musicVol * 0.3;
+    }
 
     update(dt, game) {
         if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
@@ -232,6 +248,7 @@ class InputManager {
 
         canvas.addEventListener('pointerdown', e => {
             if (window.game && window.game.sound) { window.game.sound.init(); window.game.sound.resume(); }
+            if (window.game && window.game.ui && window.game.ui.handlePointer(e.clientX, e.clientY)) return;
             this.handlePointer(e.clientX, e.clientY);
         });
     }
@@ -367,6 +384,9 @@ class Player {
             this.overdrive = true;
             this.overdriveTimer = 5 + durBonus; // 5 seconds of overdrive + bonus
             if (window.game && window.game.sound) window.game.sound.playOverdrive();
+            if (window.game && window.game.saveManager) {
+                window.game.saveManager.data.overdriveUses = (window.game.saveManager.data.overdriveUses || 0) + 1;
+            }
         }
     }
     draw(ctx) {
@@ -446,6 +466,7 @@ class Game {
         this.trails = new TrailSystem();
         this.shake = new ScreenShake();
         this.vfx = new VFXManager();
+        this.ui = new UIManager(this);
 
         this.state = 'TITLE';
         this.lastTime = 0;
@@ -549,6 +570,7 @@ class Game {
         this.player.update(dt, this.input);
         this.progression.update(dt, this);
         this.sound.update(dt, this);
+        this.ui.update(dt);
 
         if (this.world) {
             this.world.update(dt, this.player, this.enemies, this.sound);
@@ -570,6 +592,7 @@ class Game {
                 this.vfx.spawnText(this.boss.x, this.boss.y - 50, "BOSS DEFEATED!", "#ff0");
                 this.hitStopTimer = 0.5;
                 this.boss = null;
+                this.saveManager.data.bossesDefeated = (this.saveManager.data.bossesDefeated || 0) + 1;
                 this.bossWave++;
                 this.score += 500;
                 this.nextBossScore = this.score + 500;
@@ -798,6 +821,15 @@ class Game {
             this.ctx.font = '20px monospace';
             this.ctx.fillText('Back to Arcade (../../index.html)', this.canvas.width/2, this.canvas.height - 30);
         }
+
+        if (this.saveManager.data.options.highContrast) {
+            this.ctx.globalCompositeOperation = 'difference';
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.globalCompositeOperation = 'source-over';
+        }
+
+        this.ui.draw(this.ctx, this.canvas);
     }
     loop(timestamp) {
         let dt = Math.min((timestamp - this.lastTime) / 1000, 0.1);
