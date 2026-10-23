@@ -528,6 +528,267 @@ class Hazard {
     }
 }
 
+class ParallaxEnvironment {
+    constructor(game) {
+        this.game = game;
+        this.gears = [];
+        for(let i=0; i<8; i++) {
+            this.gears.push({
+                x: Math.random() * game.width,
+                y: Math.random() * game.height,
+                radius: 50 + Math.random() * 150,
+                speed: (Math.random() - 0.5) * 0.5,
+                angle: Math.random() * Math.PI * 2,
+                depth: 0.2 + Math.random() * 0.3
+            });
+        }
+        this.steam = [];
+        for(let i=0; i<10; i++) {
+            this.steam.push({
+                x: Math.random() * game.width,
+                y: Math.random() * game.height,
+                radius: 40 + Math.random() * 80,
+                speedX: 10 + Math.random() * 20,
+                depth: 0.5 + Math.random() * 0.5
+            });
+        }
+        this.pipes = [];
+        for(let i=0; i<5; i++) {
+            this.pipes.push({
+                x: Math.random() * game.width,
+                width: 30 + Math.random() * 40,
+                depth: 1.2
+            });
+        }
+    }
+    update(dt) {
+        for (let g of this.gears) {
+            g.angle += g.speed * dt;
+        }
+        for (let s of this.steam) {
+            s.x += s.speedX * dt;
+            if (s.x - s.radius > this.game.width) {
+                s.x = -s.radius;
+                s.y = Math.random() * this.game.height;
+            }
+        }
+    }
+    draw(ctx, cameraX, cameraY) {
+        // Distant Gears
+        ctx.strokeStyle = '#2a2a35';
+        ctx.lineWidth = 2;
+        for (let g of this.gears) {
+            let px = g.x - cameraX * g.depth;
+            let py = g.y - cameraY * g.depth;
+            // Wrap around
+            px = ((px % this.game.width) + this.game.width) % this.game.width;
+            py = ((py % this.game.height) + this.game.height) % this.game.height;
+
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.rotate(g.angle);
+            ctx.beginPath();
+            ctx.arc(0, 0, g.radius, 0, Math.PI*2);
+            for(let i=0; i<6; i++){
+                ctx.moveTo(0,0);
+                ctx.lineTo(Math.cos(i*Math.PI/3)*g.radius, Math.sin(i*Math.PI/3)*g.radius);
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // Mid-ground Steam
+        ctx.fillStyle = 'rgba(200, 200, 220, 0.05)';
+        for (let s of this.steam) {
+            let px = s.x - cameraX * s.depth;
+            let py = s.y - cameraY * s.depth;
+            px = ((px % this.game.width) + this.game.width) % this.game.width;
+
+            ctx.beginPath();
+            ctx.arc(px, py, s.radius, 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        // Foreground Pipes
+        ctx.fillStyle = '#1e1e24';
+        ctx.strokeStyle = '#3a3a45';
+        ctx.lineWidth = 2;
+        for (let p of this.pipes) {
+            let px = p.x - cameraX * p.depth;
+            px = ((px % this.game.width) + this.game.width) % this.game.width;
+            ctx.fillRect(px, 0, p.width, this.game.height);
+            ctx.strokeRect(px, 0, p.width, this.game.height);
+        }
+    }
+}
+
+class SteamVent {
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.active = false;
+        this.timer = Math.random() * 3;
+        this.activeDuration = 2;
+        this.inactiveDuration = 3;
+        this.force = -1500;
+        this.particles = [];
+    }
+    update(dt) {
+        this.timer -= dt;
+        if (this.timer <= 0) {
+            this.active = !this.active;
+            this.timer = this.active ? this.activeDuration : this.inactiveDuration;
+        }
+
+        if (this.active) {
+            this.particles.push({
+                x: this.x + Math.random() * this.width,
+                y: this.y + this.height,
+                vy: -200 - Math.random() * 200,
+                life: 1.0
+            });
+        }
+
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.y += p.vy * dt;
+            p.life -= dt;
+            if (p.life <= 0) {
+                this.particles.splice(i, 1);
+            }
+        }
+    }
+    apply(player, dt) {
+        if (this.active && player.x > this.x && player.x < this.x + this.width && player.y > this.y && player.y < this.y + this.height) {
+            player.vy += this.force * dt;
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#333';
+        ctx.fillRect(this.x, this.y + this.height - 10, this.width, 10);
+
+        if (this.active) {
+            ctx.fillStyle = 'rgba(200, 200, 220, 0.4)';
+            for (let p of this.particles) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 5 + (1 - p.life) * 10, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+    }
+}
+
+class ConveyorBelt {
+    constructor(x, y, width) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = 20;
+        this.speed = (Math.random() > 0.5 ? 1 : -1) * 200;
+        this.offset = 0;
+    }
+    update(dt) {
+        this.offset = (this.offset + this.speed * dt) % 20;
+    }
+    apply(player, dt) {
+        if (player.y + player.radius > this.y && player.y - player.radius < this.y + this.height &&
+            player.x > this.x && player.x < this.x + this.width) {
+            player.x += this.speed * dt;
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#444';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        ctx.fillStyle = '#666';
+        for (let i = 0; i < this.width; i += 20) {
+            let lineX = this.x + ((i + this.offset + 20) % 20) + i;
+            if (lineX < this.x + this.width) {
+                 ctx.fillRect(lineX, this.y, 5, this.height);
+            }
+        }
+    }
+}
+
+class DestructibleCover {
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.destroyed = false;
+        this.fragments = [];
+    }
+    update(dt) {
+        if (this.destroyed) {
+            for (let f of this.fragments) {
+                f.x += f.vx * dt;
+                f.y += f.vy * dt;
+                f.vy += 800 * dt; // gravity
+                f.life -= dt;
+            }
+            this.fragments = this.fragments.filter(f => f.life > 0);
+        }
+    }
+    checkCollision(player) {
+        if (this.destroyed) return;
+
+        if (player.x + player.radius > this.x && player.x - player.radius < this.x + this.width &&
+            player.y + player.radius > this.y && player.y - player.radius < this.y + this.height) {
+
+            if (player.dashActive > 0) {
+                this.destroyed = true;
+                for(let i=0; i<10; i++) {
+                    this.fragments.push({
+                        x: this.x + Math.random() * this.width,
+                        y: this.y + Math.random() * this.height,
+                        vx: (Math.random() - 0.5) * 400 + player.vx * 0.5,
+                        vy: (Math.random() - 0.5) * 400 + player.vy * 0.5,
+                        life: 1 + Math.random()
+                    });
+                }
+            } else {
+                let overlapLeft = (player.x + player.radius) - this.x;
+                let overlapRight = (this.x + this.width) - (player.x - player.radius);
+                let overlapTop = (player.y + player.radius) - this.y;
+                let overlapBottom = (this.y + this.height) - (player.y - player.radius);
+
+                let min = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+                if (min === overlapLeft) { player.x = this.x - player.radius; player.vx *= -0.5; }
+                else if (min === overlapRight) { player.x = this.x + this.width + player.radius; player.vx *= -0.5; }
+                else if (min === overlapTop) { player.y = this.y - player.radius; player.vy *= -0.5; }
+                else if (min === overlapBottom) { player.y = this.y + this.height + player.radius; player.vy *= -0.5; }
+            }
+        }
+    }
+    draw(ctx) {
+        if (!this.destroyed) {
+            ctx.fillStyle = '#8a5a44';
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x + this.width, this.y + this.height);
+            ctx.moveTo(this.x + this.width, this.y);
+            ctx.lineTo(this.x, this.y + this.height);
+            ctx.stroke();
+        } else {
+            ctx.fillStyle = '#8a5a44';
+            for (let f of this.fragments) {
+                ctx.globalAlpha = f.life;
+                ctx.fillRect(f.x, f.y, 8, 8);
+            }
+            ctx.globalAlpha = 1.0;
+        }
+    }
+}
+
 class Engine {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
@@ -546,6 +807,11 @@ class Engine {
         this.player = null;
         this.grapplePoints = [];
         this.hazards = [];
+
+        this.env = new ParallaxEnvironment(this);
+        this.steamVents = [];
+        this.conveyors = [];
+        this.covers = [];
 
         this.setupResizeObserver();
         this.bindEvents();
@@ -614,6 +880,35 @@ class Engine {
             this.hazards.push(new Hazard(
                 50 + Math.random() * (this.width - 100),
                 150 + Math.random() * (this.height - 200)
+            ));
+        }
+
+        this.steamVents = [];
+        for (let i = 0; i < 3; i++) {
+            this.steamVents.push(new SteamVent(
+                100 + Math.random() * (this.width - 200),
+                200 + Math.random() * (this.height - 300),
+                80 + Math.random() * 100,
+                300
+            ));
+        }
+
+        this.conveyors = [];
+        for (let i = 0; i < 2; i++) {
+            this.conveyors.push(new ConveyorBelt(
+                50 + Math.random() * (this.width - 300),
+                this.height - 20,
+                200 + Math.random() * 200
+            ));
+        }
+
+        this.covers = [];
+        for (let i = 0; i < 5; i++) {
+            this.covers.push(new DestructibleCover(
+                100 + Math.random() * (this.width - 200),
+                100 + Math.random() * (this.height - 200),
+                40 + Math.random() * 40,
+                100 + Math.random() * 100
             ));
         }
 
@@ -697,6 +992,22 @@ class Engine {
             this.player.update(dt, this);
 
             for (const gp of this.grapplePoints) gp.update(dt);
+
+            this.env.update(dt);
+
+            for (const v of this.steamVents) {
+                v.update(dt);
+                v.apply(this.player, dt);
+            }
+            for (const c of this.conveyors) {
+                c.update(dt);
+                c.apply(this.player, dt);
+            }
+            for (const c of this.covers) {
+                c.update(dt);
+                c.checkCollision(this.player);
+            }
+
             for (const hz of this.hazards) {
                 hz.update(dt);
                 // Check collision
@@ -732,14 +1043,14 @@ class Engine {
         this.ctx.fillStyle = '#1a1a24';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
-        // Background gears
-        this.ctx.strokeStyle = '#2a2a35';
-        this.ctx.lineWidth = 2;
-        for(let i=0; i<5; i++) {
-            this.ctx.beginPath();
-            this.ctx.arc(this.width*0.2 + i*200, this.height*0.5, 100, 0, Math.PI*2);
-            this.ctx.stroke();
+        let cameraX = 0;
+        let cameraY = 0;
+        if (this.player) {
+            cameraX = (this.player.x - this.width/2) * 0.1;
+            cameraY = (this.player.y - this.height/2) * 0.1;
         }
+
+        this.env.draw(this.ctx, cameraX, cameraY);
 
         if (this.state === 'TITLE') this.drawTitle();
         else if (this.state === 'PLAYING') this.drawPlaying();
@@ -761,6 +1072,10 @@ class Engine {
             this.ctx.stroke();
             this.ctx.setLineDash([]);
         }
+
+        for (const v of this.steamVents) v.draw(this.ctx);
+        for (const c of this.conveyors) c.draw(this.ctx);
+        for (const c of this.covers) c.draw(this.ctx);
 
         for (const gp of this.grapplePoints) gp.draw(this.ctx);
         for (const hz of this.hazards) hz.draw(this.ctx);
