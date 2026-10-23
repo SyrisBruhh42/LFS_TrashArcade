@@ -156,6 +156,11 @@ class VFXManager {
     }
 
     spawnExplosion(x, y, color, count) {
+        if (window.game && window.game.saveManager && window.game.saveManager.data.options) {
+            if (window.game.saveManager.data.options.particleDensity === 'Low') {
+                count = Math.max(1, Math.floor(count / 2));
+            }
+        }
         for(let i=0; i<count; i++) {
             let speed = 50 + Math.random() * 150;
             let angle = Math.random() * Math.PI * 2;
