@@ -98,9 +98,35 @@ class InputManager {
       e.preventDefault();
       this.touch.down = false;
     }, { passive: false });
+
+    this.touches = [];
+    const updateTouches = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      this.touches = Array.from(e.touches).map(t => ({
+        id: t.identifier,
+        x: t.clientX - rect.left,
+        y: t.clientY - rect.top
+      }));
+      if (this.touches.length > 0) {
+        this.touch.active = true;
+        this.touch.down = true;
+        this.touch.x = this.touches[0].x;
+        this.touch.y = this.touches[0].y;
+      } else {
+        this.touch.down = false;
+      }
+    };
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); updateTouches(e); }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); updateTouches(e); }, { passive: false });
+    canvas.addEventListener('touchend', (e) => { e.preventDefault(); updateTouches(e); }, { passive: false });
+    canvas.addEventListener('touchcancel', (e) => { e.preventDefault(); updateTouches(e); }, { passive: false });
   }
 
   isFirePressed() {
+    let usingVirtual = window.game && window.uiManager && window.uiManager.isTouchControlActive();
+    if (usingVirtual) {
+        return window.uiManager.fireActive || this.keys['Space'] || this.mouse.down;
+    }
     return this.keys['Space'] || this.mouse.down || this.touch.down;
   }
 
@@ -109,8 +135,13 @@ class InputManager {
   }
 
   getAimDir(playerPos) {
+    let usingVirtual = window.game && window.uiManager && window.uiManager.isTouchControlActive();
+    if (usingVirtual && window.uiManager.joystickActive) {
+       let dir = window.uiManager.joystickDir;
+       if (dir.mag() > 0) return dir.normalize();
+    }
     let target = new Vector2();
-    if (this.touch.active && this.touch.down) {
+    if (this.touch.active && this.touch.down && !usingVirtual) {
       target.set(this.touch.x, this.touch.y);
     } else if (this.keys['ArrowUp'] || this.keys['ArrowDown'] || this.keys['ArrowLeft'] || this.keys['ArrowRight'] ||
                this.keys['KeyW'] || this.keys['KeyS'] || this.keys['KeyA'] || this.keys['KeyD']) {
@@ -149,8 +180,19 @@ class SaveManager {
     try {
       const stored = localStorage.getItem(this.key);
       if (stored) {
-        this.data = { ...this.data, ...JSON.parse(stored) };
+        let parsed = JSON.parse(stored);
+        this.data = { ...this.data, ...parsed };
+        if (parsed.options) {
+           this.data.options = { ...this.data.options, ...parsed.options };
+        }
       }
+      if (!this.data.options) this.data.options = {};
+      const defOpts = {
+          masterVolume: 1.0, sfxVolume: 1.0, musicVolume: 1.0,
+          screenShake: 1, particleDensity: 'high', highContrast: false,
+          showFPS: false, touchControl: 'auto', leftHanded: false
+      };
+      this.data.options = { ...defOpts, ...this.data.options };
     } catch (e) {
       console.warn('SaveManager load failed', e);
     }
@@ -289,7 +331,8 @@ class SoundEngine {
       osc.type = type;
       osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
 
-      gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+      let sysVol = window.game ? window.game.save.data.options.sfxVolume * window.game.save.data.options.masterVolume : 1;
+      gain.gain.setValueAtTime(vol * sysVol, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
 
       osc.connect(gain);
@@ -1109,6 +1152,8 @@ class GameEngine {
     this.nextBossScore = 150;
     this.bossKillCount = 0;
 
+    window.uiManager = new UIManager(this);
+
     this.setupResize();
 
     // First interaction init audio
@@ -1205,6 +1250,7 @@ class GameEngine {
     } else {
        this.update(dt);
     }
+    if (window.uiManager) window.uiManager.update(dt);
     this.draw();
 
     requestAnimationFrame((t) => this.loop(t));
@@ -1490,14 +1536,17 @@ class GameEngine {
 
   draw() {
     this.ctx.save();
-    if (this.vfx && this.save && this.save.data.options.shakeIntensity !== 0) {
-        let intensityMult = this.save.data.options.shakeIntensity === undefined ? 1 : this.save.data.options.shakeIntensity;
-        // this is a bit ugly. Let's make options.shakeIntensity default to 1 somewhere else if needed, or just default to 1 here
-        this.vfx.applyShake(this.ctx);
+    if (this.vfx && this.save && this.save.data.options.screenShake !== 0) {
+        let intensityMult = this.save.data.options.screenShake === undefined ? 1 : this.save.data.options.screenShake;
+        this.vfx.applyShake(this.ctx, intensityMult);
     }
 
     this.ctx.fillStyle = '#0a1a0f'; // Jungle theme background
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    if (this.save && this.save.data.options.highContrast) {
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
 
     if (this.state === 'TITLE') {
       this.ctx.fillStyle = '#fff';
@@ -1618,6 +1667,7 @@ class GameEngine {
       this.ctx.fillText(`Final Score: ${this.score}`, this.canvas.width / 2, this.canvas.height / 2);
       this.ctx.fillText('Click/Touch or Space to Continue', this.canvas.width / 2, this.canvas.height / 2 + 40);
     }
+    if (window.uiManager) window.uiManager.draw(this.ctx);
     this.ctx.restore();
   }
 }

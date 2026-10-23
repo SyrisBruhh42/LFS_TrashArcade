@@ -86,9 +86,9 @@ class VFXManager {
         }
     }
 
-    applyShake(ctx) {
+    applyShake(ctx, mult=1) {
         if (this.shakeTime > 0) {
-            let intensity = this.shakeIntensity * (this.shakeTime / 0.5);
+            let intensity = this.shakeIntensity * mult * (this.shakeTime / 0.5);
             let dx = (Math.random() - 0.5) * intensity * 2;
             let dy = (Math.random() - 0.5) * intensity * 2;
             if (this.shakeDir.x !== 0 || this.shakeDir.y !== 0) {
@@ -100,6 +100,7 @@ class VFXManager {
     }
 
     spawnExplosion(x, y, color, count=20) {
+        if (window.game && window.game.save.data.options.particleDensity === 'low') count = Math.ceil(count / 2);
         for (let i = 0; i < count; i++) {
             let angle = Math.random() * Math.PI * 2;
             let speed = Math.random() * 100 + 50;
@@ -116,6 +117,7 @@ class VFXManager {
     }
 
     spawnDirectional(x, y, dirX, dirY, color, count=10) {
+        if (window.game && window.game.save.data.options.particleDensity === 'low') count = Math.ceil(count / 2);
         let baseAngle = Math.atan2(dirY, dirX);
         for (let i = 0; i < count; i++) {
             let angle = baseAngle + (Math.random() - 0.5) * Math.PI / 2;
