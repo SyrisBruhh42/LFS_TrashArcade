@@ -590,7 +590,15 @@ class Engine {
     spawnEnemy() {
         let pos = this.getRandomEmptyPos();
         if (pos) {
-            this.entities.push(new Enemy(pos.x, pos.y));
+            let r = Math.random();
+            let enemyObj;
+            if (r < 0.16) enemyObj = new SwarmerEnemy(pos.x, pos.y);
+            else if (r < 0.32) enemyObj = new BruiserEnemy(pos.x, pos.y);
+            else if (r < 0.48) enemyObj = new SniperEnemy(pos.x, pos.y);
+            else if (r < 0.64) enemyObj = new SpawnerEnemy(pos.x, pos.y);
+            else if (r < 0.80) enemyObj = new HazardEnemy(pos.x, pos.y);
+            else enemyObj = new BlitzEnemy(pos.x, pos.y);
+            this.entities.push(enemyObj);
         }
     }
 
@@ -835,6 +843,10 @@ class Engine {
     }
 
     updateEnemyAI(enemy) {
+        if (typeof enemy.aiMove === "function") {
+            enemy.aiMove(this);
+            return;
+        }
         let dx = this.player.gridPos.x - enemy.gridPos.x;
         let dy = this.player.gridPos.y - enemy.gridPos.y;
 
@@ -1027,3 +1039,340 @@ class Engine {
 window.onload = () => {
     window.game = new Engine();
 };
+
+class SwarmerEnemy extends Enemy {
+    constructor(x, y) { super(x, y); this.color = "#ff6699"; this.telegraphActive = false; }
+    draw(ctx, cellSize, offset) {
+        ctx.fillStyle = this.color;
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, cellSize * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        if (this.telegraphActive) {
+            ctx.strokeStyle = "rgba(255, 100, 150, 0.8)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, cellSize * 0.45, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+    aiMove(engine) {
+        let dx = engine.player.gridPos.x - this.gridPos.x;
+        let dy = engine.player.gridPos.y - this.gridPos.y;
+        this.telegraphActive = (Math.abs(dx) <= 2 && Math.abs(dy) <= 2);
+
+        let moveX = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+        let moveY = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+
+        if (Math.abs(dx) > Math.abs(dy)) { moveY = 0; } else { moveX = 0; }
+        this.tryMove(engine, this.gridPos.x + moveX, this.gridPos.y + moveY);
+    }
+    tryMove(engine, nextX, nextY) {
+        if (nextX >= engine.activeRect.minX && nextX <= engine.activeRect.maxX &&
+            nextY >= engine.activeRect.minY && nextY <= engine.activeRect.maxY) {
+            let block = engine.getEntityAt(nextX, nextY);
+            if (!block || !(block instanceof Enemy)) {
+                this.gridPos.x = nextX;
+                this.gridPos.y = nextY;
+            }
+        }
+    }
+}
+
+class BruiserEnemy extends Enemy {
+    constructor(x, y) { super(x, y); this.color = "#ff3333"; this.hp = 3; this.maxHp = 3; this.telegraphDir = null; }
+    draw(ctx, cellSize, offset) {
+        ctx.fillStyle = this.color;
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
+        ctx.fillRect(cx - cellSize * 0.35, cy - cellSize * 0.35, cellSize * 0.7, cellSize * 0.7);
+
+        ctx.fillStyle = "black";
+        for(let i=0; i<this.hp; i++) {
+            ctx.fillRect(cx - cellSize * 0.2 + i * (cellSize*0.2), cy - cellSize * 0.1, cellSize * 0.1, cellSize * 0.2);
+        }
+
+        if (this.telegraphDir) {
+            ctx.fillStyle = "rgba(255, 50, 50, 0.5)";
+            ctx.fillRect(offset.x + (this.gridPos.x + this.telegraphDir.x) * cellSize, offset.y + (this.gridPos.y + this.telegraphDir.y) * cellSize, cellSize, cellSize);
+        }
+    }
+    aiMove(engine) {
+        if (this.telegraphDir) {
+            let nextX = this.gridPos.x + this.telegraphDir.x;
+            let nextY = this.gridPos.y + this.telegraphDir.y;
+            this.tryMove(engine, nextX, nextY);
+            this.telegraphDir = null;
+        } else {
+            let dx = engine.player.gridPos.x - this.gridPos.x;
+            let dy = engine.player.gridPos.y - this.gridPos.y;
+            let moveX = 0, moveY = 0;
+            if (Math.abs(dx) > Math.abs(dy)) { moveX = dx > 0 ? 1 : -1; } else if (dy !== 0) { moveY = dy > 0 ? 1 : -1; }
+
+            if (Math.abs(dx) + Math.abs(dy) === 1) {
+                this.telegraphDir = new Vector2(moveX, moveY);
+            } else {
+                this.tryMove(engine, this.gridPos.x + moveX, this.gridPos.y + moveY);
+            }
+        }
+    }
+    tryMove(engine, nextX, nextY) {
+        if (nextX >= engine.activeRect.minX && nextX <= engine.activeRect.maxX &&
+            nextY >= engine.activeRect.minY && nextY <= engine.activeRect.maxY) {
+            let block = engine.getEntityAt(nextX, nextY);
+            if (!block || !(block instanceof Enemy)) {
+                this.gridPos.x = nextX;
+                this.gridPos.y = nextY;
+            }
+        }
+    }
+}
+
+class SniperEnemy extends Enemy {
+    constructor(x, y) { super(x, y); this.color = "#33ffcc"; this.aimTimer = 0; this.aimTarget = null; }
+    draw(ctx, cellSize, offset) {
+        ctx.fillStyle = this.color;
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - cellSize * 0.4);
+        ctx.lineTo(cx + cellSize * 0.3, cy + cellSize * 0.2);
+        ctx.lineTo(cx - cellSize * 0.3, cy + cellSize * 0.2);
+        ctx.closePath();
+        ctx.fill();
+
+        if (this.aimTarget) {
+            ctx.strokeStyle = "rgba(50, 255, 200, 0.8)";
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(offset.x + this.aimTarget.x * cellSize + cellSize / 2, offset.y + this.aimTarget.y * cellSize + cellSize / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    }
+    aiMove(engine) {
+        let dx = engine.player.gridPos.x - this.gridPos.x;
+        let dy = engine.player.gridPos.y - this.gridPos.y;
+
+        if (this.aimTarget) {
+            if (engine.player.gridPos.x === this.aimTarget.x && engine.player.gridPos.y === this.aimTarget.y) {
+                engine.player.hp--;
+                if (engine.player.hp <= 0) engine.gameOver();
+            }
+            this.aimTarget = null;
+            this.aimTimer = 0;
+            // Move away
+            let moveX = dx > 0 ? -1 : (dx < 0 ? 1 : 0);
+            let moveY = dy > 0 ? -1 : (dy < 0 ? 1 : 0);
+            if (Math.abs(dx) > Math.abs(dy)) { moveY = 0; } else { moveX = 0; }
+            this.tryMove(engine, this.gridPos.x + moveX, this.gridPos.y + moveY);
+        } else {
+            if (dx === 0 || dy === 0) {
+                this.aimTimer++;
+                if (this.aimTimer >= 1) {
+                    this.aimTarget = new Vector2(engine.player.gridPos.x, engine.player.gridPos.y);
+                }
+            } else {
+                this.aimTimer = 0;
+                let moveX = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+                let moveY = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+                if (Math.abs(dx) < Math.abs(dy)) { moveY = 0; } else { moveX = 0; }
+                this.tryMove(engine, this.gridPos.x + moveX, this.gridPos.y + moveY);
+            }
+        }
+    }
+    tryMove(engine, nextX, nextY) {
+        if (nextX >= engine.activeRect.minX && nextX <= engine.activeRect.maxX &&
+            nextY >= engine.activeRect.minY && nextY <= engine.activeRect.maxY) {
+            let block = engine.getEntityAt(nextX, nextY);
+            if (!block || !(block instanceof Enemy)) {
+                this.gridPos.x = nextX;
+                this.gridPos.y = nextY;
+            }
+        }
+    }
+}
+
+class SpawnerEnemy extends Enemy {
+    constructor(x, y) { super(x, y); this.color = "#cc33ff"; this.spawnTimer = 0; }
+    draw(ctx, cellSize, offset) {
+        ctx.fillStyle = this.color;
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - cellSize * 0.3, cy);
+        ctx.lineTo(cx, cy - cellSize * 0.4);
+        ctx.lineTo(cx + cellSize * 0.3, cy);
+        ctx.lineTo(cx, cy + cellSize * 0.4);
+        ctx.closePath();
+        ctx.fill();
+
+        if (this.spawnTimer >= 2) {
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(cx - cellSize * 0.4, cy - cellSize * 0.4, cellSize * 0.8, cellSize * 0.8);
+        }
+    }
+    aiMove(engine) {
+        this.spawnTimer++;
+        if (this.spawnTimer >= 3) {
+            let emptyAdj = [];
+            let dirs = [[0,1],[1,0],[0,-1],[-1,0]];
+            for (let d of dirs) {
+                let nx = this.gridPos.x + d[0];
+                let ny = this.gridPos.y + d[1];
+                if (nx >= engine.activeRect.minX && nx <= engine.activeRect.maxX &&
+                    ny >= engine.activeRect.minY && ny <= engine.activeRect.maxY) {
+                    if (!engine.getEntityAt(nx, ny)) emptyAdj.push(new Vector2(nx, ny));
+                }
+            }
+            if (emptyAdj.length > 0) {
+                let p = emptyAdj[Math.floor(Math.random() * emptyAdj.length)];
+                engine.entities.push(new SwarmerEnemy(p.x, p.y));
+            }
+            this.spawnTimer = 0;
+            // Move away from player
+            let dx = engine.player.gridPos.x - this.gridPos.x;
+            let dy = engine.player.gridPos.y - this.gridPos.y;
+            let moveX = dx > 0 ? -1 : (dx < 0 ? 1 : 0);
+            let moveY = dy > 0 ? -1 : (dy < 0 ? 1 : 0);
+            if (Math.abs(dx) > Math.abs(dy)) { moveY = 0; } else { moveX = 0; }
+            this.tryMove(engine, this.gridPos.x + moveX, this.gridPos.y + moveY);
+        } else {
+            // Flee
+            let dx = engine.player.gridPos.x - this.gridPos.x;
+            let dy = engine.player.gridPos.y - this.gridPos.y;
+            let moveX = dx > 0 ? -1 : (dx < 0 ? 1 : 0);
+            let moveY = dy > 0 ? -1 : (dy < 0 ? 1 : 0);
+            if (Math.abs(dx) > Math.abs(dy)) { moveY = 0; } else { moveX = 0; }
+            this.tryMove(engine, this.gridPos.x + moveX, this.gridPos.y + moveY);
+        }
+    }
+    tryMove(engine, nextX, nextY) {
+        if (nextX >= engine.activeRect.minX && nextX <= engine.activeRect.maxX &&
+            nextY >= engine.activeRect.minY && nextY <= engine.activeRect.maxY) {
+            let block = engine.getEntityAt(nextX, nextY);
+            if (!block || !(block instanceof Enemy)) {
+                this.gridPos.x = nextX;
+                this.gridPos.y = nextY;
+            }
+        }
+    }
+}
+
+class HazardEnemy extends Enemy {
+    constructor(x, y) { super(x, y); this.color = "#ffaa00"; this.trail = []; }
+    draw(ctx, cellSize, offset) {
+        ctx.fillStyle = this.color;
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - cellSize * 0.3);
+        ctx.lineTo(cx + cellSize * 0.4, cy + cellSize * 0.2);
+        ctx.lineTo(cx - cellSize * 0.4, cy + cellSize * 0.2);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(255, 170, 0, 0.4)";
+        for (let p of this.trail) {
+             ctx.fillRect(offset.x + p.x * cellSize, offset.y + p.y * cellSize, cellSize, cellSize);
+        }
+    }
+    aiMove(engine) {
+        let dx = engine.player.gridPos.x - this.gridPos.x;
+        let dy = engine.player.gridPos.y - this.gridPos.y;
+        let moveX = 0, moveY = 0;
+        if (Math.abs(dx) > Math.abs(dy)) { moveX = dx > 0 ? 1 : -1; } else if (dy !== 0) { moveY = dy > 0 ? 1 : -1; }
+
+        let nextX = this.gridPos.x + moveX;
+        let nextY = this.gridPos.y + moveY;
+
+        let oldX = this.gridPos.x;
+        let oldY = this.gridPos.y;
+
+        if (this.tryMove(engine, nextX, nextY)) {
+            this.trail.push(new Vector2(oldX, oldY));
+            if (this.trail.length > 2) this.trail.shift();
+        }
+
+        // Damage player if on trail
+        for (let p of this.trail) {
+            if (engine.player.gridPos.x === p.x && engine.player.gridPos.y === p.y) {
+                engine.player.hp--;
+                if (engine.player.hp <= 0) engine.gameOver();
+            }
+        }
+    }
+    tryMove(engine, nextX, nextY) {
+        if (nextX >= engine.activeRect.minX && nextX <= engine.activeRect.maxX &&
+            nextY >= engine.activeRect.minY && nextY <= engine.activeRect.maxY) {
+            let block = engine.getEntityAt(nextX, nextY);
+            if (!block || !(block instanceof Enemy)) {
+                this.gridPos.x = nextX;
+                this.gridPos.y = nextY;
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+class BlitzEnemy extends Enemy {
+    constructor(x, y) { super(x, y); this.color = "#ff0000"; this.dashCharged = false; }
+    draw(ctx, cellSize, offset) {
+        ctx.fillStyle = this.color;
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - cellSize * 0.4);
+        ctx.lineTo(cx + cellSize * 0.2, cy + cellSize * 0.4);
+        ctx.lineTo(cx - cellSize * 0.2, cy + cellSize * 0.4);
+        ctx.closePath();
+        ctx.fill();
+
+        if (this.dashCharged) {
+            ctx.strokeStyle = "rgba(255, 0, 0, 0.8)";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(cx - cellSize * 0.3, cy);
+            ctx.lineTo(cx + cellSize * 0.3, cy);
+            ctx.stroke();
+        }
+    }
+    aiMove(engine) {
+        let dx = engine.player.gridPos.x - this.gridPos.x;
+        let dy = engine.player.gridPos.y - this.gridPos.y;
+
+        if (this.dashCharged) {
+            let moveX = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+            let moveY = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+            if (Math.abs(dx) > Math.abs(dy)) { moveY = 0; } else { moveX = 0; }
+
+            let nx = this.gridPos.x + moveX * 2;
+            let ny = this.gridPos.y + moveY * 2;
+            this.tryMove(engine, nx, ny);
+            this.dashCharged = false;
+        } else {
+            if (Math.abs(dx) + Math.abs(dy) === 2 || Math.abs(dx) + Math.abs(dy) === 3) {
+                this.dashCharged = true;
+            } else {
+                let moveX = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+                let moveY = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+                if (Math.abs(dx) > Math.abs(dy)) { moveY = 0; } else { moveX = 0; }
+                this.tryMove(engine, this.gridPos.x + moveX, this.gridPos.y + moveY);
+            }
+        }
+    }
+    tryMove(engine, nextX, nextY) {
+        if (nextX >= engine.activeRect.minX && nextX <= engine.activeRect.maxX &&
+            nextY >= engine.activeRect.minY && nextY <= engine.activeRect.maxY) {
+            let block = engine.getEntityAt(nextX, nextY);
+            if (!block || !(block instanceof Enemy)) {
+                this.gridPos.x = nextX;
+                this.gridPos.y = nextY;
+            }
+        }
+    }
+}
