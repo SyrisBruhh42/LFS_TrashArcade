@@ -587,6 +587,15 @@ class Engine {
         }
     }
 
+    spawnBoss() {
+        let pos = this.getRandomEmptyPos();
+        if (pos) {
+            let bossObj = Math.random() < 0.5 ? new TrenchLeviathan(pos.x, pos.y) : new AbyssalConstructor(pos.x, pos.y);
+            this.entities.push(bossObj);
+            this.sound.playSelect();
+        }
+    }
+
     spawnEnemy() {
         let pos = this.getRandomEmptyPos();
         if (pos) {
@@ -727,13 +736,24 @@ class Engine {
                 let hitEnemy = targetEntities.find(e => e instanceof Enemy || e instanceof CoralCover);
 
                 if (hitEnemy) {
-                    hitEnemy.hp--;
-                    if (hitEnemy.hp <= 0) {
-                        this.entities = this.entities.filter(e => e !== hitEnemy);
-                        if (hitEnemy instanceof Enemy) this.score += 10;
-                        this.sound.playHit();
+                    if (hitEnemy.isBoss) {
+                        hitEnemy.takeDamage(1, this);
+                        if (hitEnemy.hp <= 0) {
+                            this.entities = this.entities.filter(e => e !== hitEnemy);
+                            this.score += 500;
+                            this.sound.playExplosion();
+                        } else {
+                            this.sound.playShoot();
+                        }
                     } else {
-                        this.sound.playShoot();
+                        hitEnemy.hp--;
+                        if (hitEnemy.hp <= 0) {
+                            this.entities = this.entities.filter(e => e !== hitEnemy);
+                            if (hitEnemy instanceof Enemy) this.score += 10;
+                            this.sound.playHit();
+                        } else {
+                            this.sound.playShoot();
+                        }
                     }
                     hitAnyEnemy = true;
                     if (!this.player.dashActive && hitEnemy.hp > 0) {
@@ -803,9 +823,15 @@ class Engine {
             if (e instanceof HydroVent && e.activeTimer > 0) {
                 let hit = this.getEntitiesAt(e.gridPos.x, e.gridPos.y).find(t => t instanceof Enemy || t === this.player);
                 if (hit) {
-                    hit.hp--;
-                    if(hit === this.player) { this.sound.playExplosion(); this.player.invulnTimer = 0.3; if(this.player.hp<=0) { this.gameOver(); return; } }
-                    else if(hit.hp <= 0) { this.entities = this.entities.filter(x => x !== hit); this.sound.playHit(); this.score+=10; }
+                    if(hit === this.player) { hit.hp--; this.sound.playExplosion(); this.player.invulnTimer = 0.3; if(this.player.hp<=0) { this.gameOver(); return; } }
+                    else if(hit.isBoss) {
+                        hit.takeDamage(1, this);
+                        if (hit.hp <= 0) { this.entities = this.entities.filter(x => x !== hit); this.sound.playExplosion(); this.score+=500; }
+                    }
+                    else {
+                        hit.hp--;
+                        if(hit.hp <= 0) { this.entities = this.entities.filter(x => x !== hit); this.sound.playHit(); this.score+=10; }
+                    }
                 }
             }
             if (e instanceof OceanCurrent) {
@@ -838,7 +864,11 @@ class Engine {
             this.shrinkArena();
             this.turnsUntilShrink = 8 + Math.floor(this.wave / 2);
             this.wave++;
-            this.spawnEnemy();
+            if (this.wave % 5 === 0) {
+                this.spawnBoss();
+            } else {
+                this.spawnEnemy();
+            }
         }
     }
 
@@ -997,6 +1027,11 @@ class Engine {
             this.ctx.fillStyle = "#fff";
             this.ctx.fillText(`Wave: ${this.wave}`, this.width - 20, 30);
             this.ctx.fillText(`Shrink in: ${this.turnsUntilShrink}`, this.width - 20, 60);
+
+            let boss = this.entities.find(e => e.isBoss);
+            if (boss && this.state !== 'GAME_OVER') {
+                boss.drawBossUI(this.ctx, this.width, this.height);
+            }
 
             // On-screen Dash Button for Mobile
             let bx = this.width / 2;
