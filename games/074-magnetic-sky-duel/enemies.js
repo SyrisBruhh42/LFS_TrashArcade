@@ -143,6 +143,7 @@ class EnemySpawner {
                 case 4: enemy = new HazardEnemy(x, y); break;
             }
             game.enemies.push(enemy);
+            game.sound.playEnemySpawn();
         }
     }
 }

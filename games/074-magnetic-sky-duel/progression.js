@@ -103,7 +103,7 @@ class ProgressionManager {
                 p.update(dt);
                 if (this.game.player && MathUtils.distSq(p.pos.x, p.pos.y, this.game.player.pos.x, this.game.player.pos.y) < (p.radius + this.game.player.radius)**2) {
                     p.active = false;
-                    this.game.sound.playSwitch();
+                    this.game.sound.playUIHover();
                     if (p.type === 'heal') {
                         this.game.player.hp = Math.min(this.game.player.maxHp, this.game.player.hp + this.perks.healAmount);
                     } else if (p.type === 'score') {
@@ -119,6 +119,7 @@ class ProgressionManager {
     }
     showDraft() {
         this.game.setState('UPGRADE');
+        this.game.sound.playLevelUp();
         this.draftOptions = [];
         const pool = [...this.availablePerks];
         for (let i = 0; i < 3; i++) {
@@ -131,15 +132,15 @@ class ProgressionManager {
     update(dt) {
         if (this.game.input.isJustPressed('KeyW') || this.game.input.isJustPressed('ArrowUp')) {
             this.selectedIndex = (this.selectedIndex - 1 + 3) % 3;
-            this.game.sound.playSwitch();
+            this.game.sound.playUIHover();
         }
         if (this.game.input.isJustPressed('KeyS') || this.game.input.isJustPressed('ArrowDown')) {
             this.selectedIndex = (this.selectedIndex + 1) % 3;
-            this.game.sound.playSwitch();
+            this.game.sound.playUIHover();
         }
         if (this.game.input.isJustPressed('Space') || this.game.input.isJustPressed('Enter')) {
             this.draftOptions[this.selectedIndex].apply();
-            this.game.sound.playShoot(true);
+            this.game.sound.playUIClick();
             this.game.setState('PLAYING');
         }
 
@@ -154,7 +155,7 @@ class ProgressionManager {
             if (!this.lastTouchActive) {
                 if (ty >= startY - 25 && ty < startY + 165) {
                     this.draftOptions[this.selectedIndex].apply();
-                    this.game.sound.playShoot(true);
+                    this.game.sound.playUIClick();
                     this.game.setState('PLAYING');
                     this.game.input.touchActive = false;
                 }
