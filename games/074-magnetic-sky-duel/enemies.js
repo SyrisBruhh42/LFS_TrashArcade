@@ -124,14 +124,16 @@ class HazardEnemy extends BaseEnemy {
     }
 }
 class EnemySpawner {
-    constructor() { this.timer = 0; this.spawnInterval = 3; }
+    constructor() { this.timer = 0; this.spawnInterval = 4; }
     update(dt, game) {
         this.timer += dt;
         if (this.timer > this.spawnInterval) {
             this.timer = 0;
-            this.spawnInterval = MathUtils.rand(2, 4) - (game.wave * 0.1);
-            if (this.spawnInterval < 0.5) this.spawnInterval = 0.5;
-            const type = MathUtils.randInt(0, 4);
+            this.spawnInterval = MathUtils.rand(3, 5) - (game.wave * 0.15);
+            if (this.spawnInterval < 0.3) this.spawnInterval = 0.3;
+
+            let maxType = Math.min(6, Math.floor(game.wave / 2));
+            const type = MathUtils.randInt(0, maxType);
             const x = MathUtils.rand(50, game.width - 50);
             const y = -50;
             let enemy;
@@ -141,6 +143,8 @@ class EnemySpawner {
                 case 2: enemy = new ShieldedBruiser(x, y); break;
                 case 3: enemy = new SplitterEnemy(x, y); break;
                 case 4: enemy = new HazardEnemy(x, y); break;
+                case 5: enemy = new HeavyTankEnemy(x, y); break;
+                case 6: enemy = new HeavyTankEnemyElite(x, y); break;
             }
             game.enemies.push(enemy);
             game.sound.playEnemySpawn();
@@ -148,3 +152,71 @@ class EnemySpawner {
     }
 }
 window.EnemySpawner = new EnemySpawner();
+class HeavyTankEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y, 35, 300, 150);
+        this.shootTimer = 0;
+        this.speed = 20;
+    }
+    update(dt, game) {
+        this.timer += dt;
+        this.shootTimer += dt;
+
+        const dx = game.player.pos.x - this.pos.x;
+        const dy = game.player.pos.y - this.pos.y;
+        const mag = Math.sqrt(dx*dx + dy*dy);
+
+        if (mag > 0) {
+            this.vel.set((dx/mag) * this.speed, (dy/mag) * this.speed);
+        }
+
+        this.pos.x += this.vel.x * dt;
+        this.pos.y += this.vel.y * dt;
+
+        if (this.shootTimer > 2.5) {
+            this.shootTimer = 0;
+            const p = Math.random() > 0.5 ? 1 : -1;
+            game.spawnBullet(this.pos.x - 15, this.pos.y + 20, 0, 150, p, true);
+            game.spawnBullet(this.pos.x + 15, this.pos.y + 20, 0, 150, p, true);
+            game.sound.playShoot(p === 1);
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.pos.x, this.pos.y);
+        ctx.beginPath();
+        ctx.rect(-30, -20, 60, 40);
+        ctx.fillStyle = this.polarity === 1 ? '#aa1133' : '#1166aa';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, 15, 0, Math.PI * 2);
+        ctx.fillStyle = '#000';
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class HeavyTankEnemyElite extends HeavyTankEnemy {
+    constructor(x, y) {
+        super(x, y);
+        this.maxHp = 600;
+        this.hp = 600;
+        this.speed = 25;
+        this.points = 300;
+    }
+    draw(ctx) {
+        super.draw(ctx);
+        ctx.save();
+        ctx.translate(this.pos.x, this.pos.y);
+        ctx.beginPath();
+        ctx.arc(0, 0, 20, 0, Math.PI * 2);
+        ctx.strokeStyle = '#ff0';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+    }
+}
