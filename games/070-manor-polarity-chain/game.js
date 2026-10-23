@@ -969,6 +969,7 @@ class Game {
 
         this.bossManager = new BossManager();
         this.nextBossScore = 500;
+        this.progression = new ProgressionManager(this);
 
         this.spawnTimer = 0;
         this.spawnInterval = 2;
@@ -998,6 +999,13 @@ class Game {
             if (!this.sound.ctx) this.sound.init();
             this.sound.resume();
 
+            if (this.state === 'UPGRADE') {
+                if (e.code === 'Digit1' && this.progression.draftOptions[0]) { this.progression.applyUpgrade(this.progression.draftOptions[0].id); this.state = 'PLAYING'; this.wave++; }
+                if (e.code === 'Digit2' && this.progression.draftOptions[1]) { this.progression.applyUpgrade(this.progression.draftOptions[1].id); this.state = 'PLAYING'; this.wave++; }
+                if (e.code === 'Digit3' && this.progression.draftOptions[2]) { this.progression.applyUpgrade(this.progression.draftOptions[2].id); this.state = 'PLAYING'; this.wave++; }
+                return;
+            }
+
             if (e.code === 'Enter') {
                 if (this.state === 'TITLE' || this.state === 'GAME_OVER') {
                     this.resetGame();
@@ -1010,9 +1018,30 @@ class Game {
             }
         });
 
-        this.canvas.addEventListener('pointerdown', () => {
+        this.canvas.addEventListener('pointerdown', (e) => {
             if (!this.sound.ctx) this.sound.init();
             this.sound.resume();
+
+            if (this.state === 'UPGRADE') {
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = this.canvas.width / rect.width;
+                const scaleY = this.canvas.height / rect.height;
+                const touches = e.type.includes('touch') ? e.changedTouches : [{clientX: e.clientX, clientY: e.clientY}];
+                for (let touch of touches) {
+                    const tx = (touch.clientX - rect.left) * scaleX;
+                    const ty = (touch.clientY - rect.top) * scaleY;
+                    for (let i = 0; i < this.progression.draftOptions.length; i++) {
+                        let y = 250 + i * 100;
+                        if (tx > this.canvas.width/2 - 200 && tx < this.canvas.width/2 + 200 && ty > y - 40 && ty < y + 40) {
+                            this.progression.applyUpgrade(this.progression.draftOptions[i].id);
+                            this.state = 'PLAYING';
+                            this.wave++;
+                            return;
+                        }
+                    }
+                }
+                return;
+            }
 
             if (this.state === 'TITLE' || this.state === 'GAME_OVER') {
                 this.resetGame();
@@ -1044,9 +1073,14 @@ class Game {
         this.hazardManager.spawnHazards(this.canvas.width, this.canvas.height);
         this.spawnTimer = 0;
 
+        this.progression.reset();
         this.bossManager.activeBoss = null;
         this.bossManager.warningTimer = 0;
         this.nextBossScore = 500;
+
+        // Ensure initial HP reset
+        this.player.maxHp = this.player.maxHp || 1;
+        this.player.hp = this.player.maxHp;
 
         // Initial Orbs
         for(let i=0; i<5; i++) {
@@ -1096,7 +1130,7 @@ class Game {
                     pillar.active = false;
                     // Spawn pool
                     this.hazardManager.pools.push(new EctoplasmPool(pillar.x, pillar.y, 40));
-                    this.score += 25;
+                    this.score += Math.floor(25 * this.progression.comboMultiplier * (this.player ? this.player.baseScoreMult : 1));
                 }
             }
         }
@@ -1111,9 +1145,11 @@ class Game {
             if (dist < radius + orb.radius) {
                 orb.takeDamage();
                 if (!orb.active) {
-                    this.score += 50;
+                    this.score += Math.floor(50 * this.progression.comboMultiplier * (this.player ? this.player.baseScoreMult : 1));
+                    this.progression.addCombo();
+                    this.progression.spawnPickup(orb.x, orb.y);
                     // Potential chain reaction
-                    this.createExplosion(orb.x, orb.y, 80, orb.polarity === 1 ? '#ff4444' : '#4444ff');
+                    this.createExplosion(orb.x, orb.y, 80 * (this.player ? this.player.expRadMult : 1), orb.polarity === 1 ? '#ff4444' : '#4444ff');
                 }
             }
         }
@@ -1195,10 +1231,10 @@ class Game {
                     if (o1.polarity !== o2.polarity && relSpeed > 100) {
                         o1.takeDamage();
                         o2.takeDamage();
-                        if (!o1.active) this.score += 50;
-                        if (!o2.active) this.score += 50;
+                        if (!o1.active) { this.score += Math.floor(50 * this.progression.comboMultiplier * (this.player ? this.player.baseScoreMult : 1)); this.progression.addCombo(); this.progression.spawnPickup(o1.x, o1.y); }
+                        if (!o2.active) { this.score += Math.floor(50 * this.progression.comboMultiplier * (this.player ? this.player.baseScoreMult : 1)); this.progression.addCombo(); this.progression.spawnPickup(o2.x, o2.y); }
                         if (!o1.active && !o2.active) {
-                            this.createExplosion((o1.x + o2.x)/2, (o1.y + o2.y)/2, 100, '#ffcc00');
+                            this.createExplosion((o1.x + o2.x)/2, (o1.y + o2.y)/2, 100 * (this.player ? this.player.expRadMult : 1), '#ffcc00');
                         }
                     } else {
                         // Elastic collision
@@ -1233,14 +1269,21 @@ class Game {
                     orb.vy += (dy/dist) * 1500 * dt;
                 }
             } else {
-                if (dist < orb.radius + this.player.radius) {
-                    this.state = 'GAME_OVER';
-                    this.saveManager.data.totalGamesPlayed++;
-                    if (this.score > this.saveManager.data.highScore) {
-                        this.saveManager.data.highScore = this.score;
+                if (this.player.invulnTime <= 0 && dist < orb.radius + this.player.radius) {
+                    this.player.hp = (this.player.hp || 1) - 1;
+                    this.progression.breakCombo();
+                    this.player.invulnTime = 1.0;
+                    if (this.player.hp <= 0) {
+                        this.state = 'GAME_OVER';
+                        this.saveManager.data.totalGamesPlayed++;
+                        if (this.score > this.saveManager.data.highScore) {
+                            this.saveManager.data.highScore = this.score;
+                        }
+                        this.saveManager.save();
+                        this.sound.playExplosion();
+                    } else {
+                        this.sound.playSwitch();
                     }
-                    this.saveManager.save();
-                    this.sound.playExplosion();
                 }
             }
         }
@@ -1252,13 +1295,20 @@ class Game {
             const dy = b.y - this.player.y;
             const dist = Math.sqrt(dx*dx + dy*dy);
             if (this.player.invulnTime <= 0 && dist < b.radius + this.player.radius) {
-                this.state = 'GAME_OVER';
-                this.saveManager.data.totalGamesPlayed++;
-                if (this.score > this.saveManager.data.highScore) {
-                    this.saveManager.data.highScore = this.score;
+                this.player.hp = (this.player.hp || 1) - 1;
+                this.progression.breakCombo();
+                this.player.invulnTime = 1.0;
+                if (this.player.hp <= 0) {
+                    this.state = 'GAME_OVER';
+                    this.saveManager.data.totalGamesPlayed++;
+                    if (this.score > this.saveManager.data.highScore) {
+                        this.saveManager.data.highScore = this.score;
+                    }
+                    this.saveManager.save();
+                    this.sound.playExplosion();
+                } else {
+                    this.sound.playSwitch();
                 }
-                this.saveManager.save();
-                this.sound.playExplosion();
             }
         }
 
