@@ -32,39 +32,6 @@ class SaveManager {
     }
 }
 
-class SoundEngine {
-    constructor() {
-        this.ctx = null;
-        this.enabled = true;
-    }
-    init() {
-        if (!this.ctx) {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.ctx = new AudioContext();
-        }
-        if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
-    }
-    playTone(freq, type, duration, vol) {
-        if (!this.ctx || !this.enabled) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
-    }
-    playPickup() { this.playTone(800, 'sine', 0.1, 0.2); setTimeout(()=>this.playTone(1200, 'sine', 0.2, 0.2), 50); }
-    playAlert() { this.playTone(200, 'sawtooth', 0.3, 0.3); }
-    playGameOver() { this.playTone(150, 'square', 0.5, 0.4); setTimeout(()=>this.playTone(100, 'square', 0.8, 0.4), 200); }
-    playClick() { this.playTone(400, 'sine', 0.05, 0.1); }
-}
-
 class InputManager {
     constructor(canvas) {
         this.canvas = canvas;
@@ -85,7 +52,7 @@ class InputManager {
             }
         };
 
-        this.canvas.addEventListener('mousedown', e => { updateMouse(e, true); window.game.sound.init(); });
+        this.canvas.addEventListener('mousedown', e => { updateMouse(e, true); window.game.sound.init(); window.game.sound.startMusic(); });
         this.canvas.addEventListener('mousemove', e => updateMouse(e, null));
         this.canvas.addEventListener('mouseup', e => updateMouse(e, false));
 
@@ -94,6 +61,7 @@ class InputManager {
             this.touchActive = true;
             updateMouse(e.touches[0], true);
             window.game.sound.init();
+            window.game.sound.startMusic();
         }, {passive: false});
         this.canvas.addEventListener('touchmove', e => {
             e.preventDefault();
@@ -196,7 +164,7 @@ class Player {
             this.recoil = 1.0;
 
             if(window.game && window.game.sound) {
-                window.game.sound.playTone(300, 'square', 0.1, 0.2); // Dash sound
+                window.game.sound.playDash();
             }
         }
 
@@ -429,7 +397,8 @@ class Game {
 
     spawnBoss() {
         this.bossMode = true;
-        this.sound.playAlert();
+        if(this.sound) this.sound.bossMode = true;
+        this.sound.playBossSpawn();
         this.guards = [];
         if (this.bossCount % 2 === 0) {
             this.currentBoss = new OrigamiDragon(this.baseWidth/2, 100);
@@ -510,6 +479,7 @@ class Game {
             if (this.arenaRadius < 50) this.arenaRadius = 50;
 
             if (this.bossMode && this.currentBoss) {
+                if(this.sound) this.sound.lowHp = (this.currentBoss.hp <= this.currentBoss.maxHp / 3);
                 this.currentBoss.update(dt, this.player, this);
                 if (this.currentBoss.hp <= 0) {
                     if (this.vfx) {
@@ -518,6 +488,7 @@ class Game {
                         this.vfx.createExplosion(this.currentBoss.x, this.currentBoss.y, '#ff4444', 50, 200);
                     }
                     this.bossMode = false;
+                    if(this.sound) this.sound.bossMode = false;
                     this.currentBoss = null;
                     this.score += Math.floor(20 * this.comboManager.combo);
                     this.arenaRadius = 380;
@@ -557,8 +528,10 @@ class Game {
                         this.vfx.addFloatingText(t.x, t.y, '+' + Math.floor(this.treasureBasePoints * this.comboManager.combo), '#ffd700', 24);
                     }
                     if (this.bossMode && this.currentBoss) {
+                if(this.sound) this.sound.lowHp = (this.currentBoss.hp <= this.currentBoss.maxHp / 3);
                         if (this.currentBoss.active) {
                             this.currentBoss.takeDamage(1);
+                            this.sound.playEnemyHit();
                             if (this.vfx) {
                                 this.vfx.createExplosion(this.currentBoss.x, this.currentBoss.y, '#ff4444', 10, 80);
                                 this.vfx.shake(5, 100);
@@ -589,17 +562,17 @@ class Game {
             if (this.input.isDown('Digit1')) {
                 this.upgradeManager.applyUpgrade(0, this);
                 this.state = STATES.PLAYING;
-                this.sound.playClick();
+                this.sound.playUpgrade();
                 this.input.keys['Digit1'] = false;
             } else if (this.input.isDown('Digit2')) {
                 this.upgradeManager.applyUpgrade(1, this);
                 this.state = STATES.PLAYING;
-                this.sound.playClick();
+                this.sound.playUpgrade();
                 this.input.keys['Digit2'] = false;
             } else if (this.input.isDown('Digit3')) {
                 this.upgradeManager.applyUpgrade(2, this);
                 this.state = STATES.PLAYING;
-                this.sound.playClick();
+                this.sound.playUpgrade();
                 this.input.keys['Digit3'] = false;
             }
         } else if (this.state === STATES.GAME_OVER) {
@@ -661,6 +634,7 @@ class Game {
 
             this.treasures.forEach(t => t.draw(this.ctx));
             if (this.bossMode && this.currentBoss) {
+                if(this.sound) this.sound.lowHp = (this.currentBoss.hp <= this.currentBoss.maxHp / 3);
                 this.currentBoss.draw(this.ctx);
             } else {
                 this.guards.forEach(g => g.draw(this.ctx));
@@ -679,6 +653,7 @@ class Game {
             this.comboManager.draw(this.ctx, this.baseWidth, this.baseHeight);
 
             if (this.bossMode && this.currentBoss) {
+                if(this.sound) this.sound.lowHp = (this.currentBoss.hp <= this.currentBoss.maxHp / 3);
                 if (this.currentBoss.warningTimer > 0) {
                     this.ctx.fillStyle = 'rgba(255, 0, 0, ' + (Math.sin(Date.now()/100)*0.5+0.5) + ')';
                     this.ctx.fillRect(0, this.baseHeight/2 - 40, this.baseWidth, 80);
