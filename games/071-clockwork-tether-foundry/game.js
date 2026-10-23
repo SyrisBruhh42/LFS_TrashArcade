@@ -807,6 +807,7 @@ class Engine {
         this.player = null;
         this.grapplePoints = [];
         this.hazards = [];
+        this.enemies = [];
 
         this.env = new ParallaxEnvironment(this);
         this.steamVents = [];
@@ -867,6 +868,7 @@ class Engine {
 
         this.grapplePoints = [];
         this.hazards = [];
+        this.enemies = [];
 
         // Generate procedural steampunk factory layout
         for (let i = 0; i < 15; i++) {
@@ -911,6 +913,12 @@ class Engine {
                 100 + Math.random() * 100
             ));
         }
+
+        this.enemies.push(new SwarmerEnemy(this.width * 0.2, this.height * 0.2));
+        this.enemies.push(new SniperEnemy(this.width * 0.8, this.height * 0.2));
+        this.enemies.push(new ShieldedBruiser(this.width * 0.5, this.height * 0.5));
+        this.enemies.push(new SpawnerEnemy(this.width * 0.2, this.height * 0.8));
+        this.enemies.push(new AreaDenialEnemy(this.width * 0.8, this.height * 0.8));
 
         this.saveManager.data.totalGamesPlayed++;
         this.saveManager.save();
@@ -1009,15 +1017,23 @@ class Engine {
             }
 
             for (const hz of this.hazards) {
-                hz.update(dt);
-                // Check collision
-                const dist = Math.hypot(this.player.x - hz.x, this.player.y - hz.y);
-                if (dist < this.player.radius + hz.radius) {
-                    if (this.player.invulnerableTimer <= 0) {
-                        this.die();
+                hz.update(dt, this);
+                if (hz.radius && !hz.dead) { // Only do this for base hazards that lack their own update collision
+                    // Check collision
+                    const dist = Math.hypot(this.player.x - hz.x, this.player.y - hz.y);
+                    if (dist < this.player.radius + hz.radius) {
+                        if (this.player.invulnerableTimer <= 0) {
+                            this.die();
+                        }
                     }
                 }
             }
+            this.hazards = this.hazards.filter(hz => !hz.dead);
+
+            for (const en of this.enemies) {
+                en.update(dt, this);
+            }
+            this.enemies = this.enemies.filter(en => !en.dead);
 
             // Floor death
             if (this.player.y >= this.height - this.player.radius - 5) {
@@ -1079,6 +1095,7 @@ class Engine {
 
         for (const gp of this.grapplePoints) gp.draw(this.ctx);
         for (const hz of this.hazards) hz.draw(this.ctx);
+        for (const en of this.enemies) en.draw(this.ctx);
         if (this.player) this.player.draw(this.ctx);
 
         // Dash Cooldown HUD
