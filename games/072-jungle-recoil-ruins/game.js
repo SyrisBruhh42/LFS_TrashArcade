@@ -325,6 +325,13 @@ class Player {
 
     game.sound.playShoot();
 
+    if (game.vfx) {
+       // Thruster particle effect backwards
+       game.vfx.spawnDirectional(this.pos.x, this.pos.y, recoilDir.x, recoilDir.y, '#ffffff', 10);
+       // Screen shake towards aim direction
+       game.vfx.shake(5, 0.1, aimDir.x, aimDir.y);
+    }
+
     let pierceCount = game.upgradeManager && game.upgradeManager.hasUpgrade('pierce') ? game.upgradeManager.getUpgradeLevel('pierce') + 1 : 1;
     let projDamage = game.upgradeManager && game.upgradeManager.hasUpgrade('damage') ? 15 : 10;
 
@@ -806,6 +813,7 @@ class GameEngine {
     this.upgradeManager = new UpgradeManager();
     this.comboManager = new ComboManager();
     this.pickupManager = new PickupManager();
+    this.vfx = new VFXManager();
     this.draftChoices = [];
     this.enemySpawnTimer = 0;
     this.enemySpawnRate = 2; // seconds
@@ -851,6 +859,7 @@ class GameEngine {
     this.upgradeManager = new UpgradeManager();
     this.comboManager = new ComboManager();
     this.pickupManager = new PickupManager();
+    this.vfx = new VFXManager();
     this.draftChoices = [];
     this.enemySpawnTimer = 2;
     this.enemySpawnRate = 2;
@@ -898,7 +907,11 @@ class GameEngine {
     if (dt > 0.1) dt = 0.1; // Cap dt for pausing/lag
     this.lastTime = timestamp;
 
-    this.update(dt);
+    if (this.vfx && this.vfx.update(dt)) {
+       // hitstop logic: just draw without update
+    } else {
+       this.update(dt);
+    }
     this.draw();
 
     requestAnimationFrame((t) => this.loop(t));
@@ -980,12 +993,23 @@ class GameEngine {
             p.pierce--;
             if (p.pierce <= 0) p.active = false;
             this.sound.playHit();
+            if (this.vfx) {
+               this.vfx.spawnExplosion(p.pos.x, p.pos.y, '#ffea00', 10);
+               this.vfx.spawnFloatingText(p.pos.x, p.pos.y - 30, (p.damage || 10).toString(), '#ffaa00', 25);
+               this.vfx.hitStop(0.03);
+            }
           }
         }
         if (!this.boss.active) {
           this.score += this.comboManager.addScore(this.boss.scoreValue);
           this.nextBossScore = this.score + 200;
           this.bossKillCount++;
+          if (this.vfx) {
+              this.vfx.spawnExplosion(this.boss.pos.x, this.boss.pos.y, '#ff0000', 50);
+              this.vfx.hitStop(0.5);
+              this.vfx.shake(20, 1.0);
+              this.vfx.spawnFloatingText(this.boss.pos.x, this.boss.pos.y, "BOSS DEFEATED", "#ff0000", 30);
+          }
           this.boss = null;
           this.sound.playExplosion();
           this.state = 'DRAFT';
@@ -1004,6 +1028,9 @@ class GameEngine {
       for (let i = this.projectiles.length - 1; i >= 0; i--) {
         let p = this.projectiles[i];
         p.update(dt, this);
+        if (this.vfx && p.active) {
+            this.vfx.addTrail(p.pos.x, p.pos.y, Math.atan2(p.vel.y, p.vel.x), p.radius, p.color || '#ffea00');
+        }
         if (!p.active) {
           this.projectiles.splice(i, 1);
         }
@@ -1083,6 +1110,11 @@ class GameEngine {
             p.pierce--;
             if (p.pierce <= 0) p.active = false;
             this.sound.playHit();
+            if (this.vfx) {
+               this.vfx.spawnExplosion(e.pos.x, e.pos.y, '#ffea00', 5);
+               this.vfx.spawnFloatingText(e.pos.x, e.pos.y - 20, (p.damage || 10).toString(), '#ffea00');
+               this.vfx.hitStop(0.02);
+            }
             break;
           }
         }
@@ -1113,6 +1145,13 @@ class GameEngine {
   }
 
   draw() {
+    this.ctx.save();
+    if (this.vfx && this.save && this.save.data.options.shakeIntensity !== 0) {
+        let intensityMult = this.save.data.options.shakeIntensity === undefined ? 1 : this.save.data.options.shakeIntensity;
+        // this is a bit ugly. Let's make options.shakeIntensity default to 1 somewhere else if needed, or just default to 1 here
+        this.vfx.applyShake(this.ctx);
+    }
+
     this.ctx.fillStyle = '#0a1a0f'; // Jungle theme background
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -1139,6 +1178,7 @@ class GameEngine {
       for (let p of this.projectiles) p.draw(this.ctx);
       for (let ep of this.enemyProjectiles) ep.draw(this.ctx);
       if (this.pickupManager) this.pickupManager.draw(this.ctx);
+      if (this.vfx) this.vfx.draw(this.ctx);
       for (let h of this.hazards) h.draw(this.ctx);
       for (let e of this.enemies) e.draw(this.ctx);
       if (this.boss) this.boss.draw(this.ctx);
@@ -1230,6 +1270,7 @@ class GameEngine {
       this.ctx.fillText(`Final Score: ${this.score}`, this.canvas.width / 2, this.canvas.height / 2);
       this.ctx.fillText('Click/Touch or Space to Continue', this.canvas.width / 2, this.canvas.height / 2 + 40);
     }
+    this.ctx.restore();
   }
 }
 
