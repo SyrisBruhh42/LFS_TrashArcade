@@ -317,7 +317,9 @@ class Player extends Entity {
 
         this.shootTimer -= dt;
         if ((game.input.isDown('Space') || game.input.touchActive) && this.shootTimer <= 0) {
-            this.shootTimer = 0.15;
+            let fireDelay = 0.15;
+            if (game.progression) fireDelay *= game.progression.perks.fireRateMult;
+            this.shootTimer = fireDelay;
             this.recoil = 5;
             const bvx = Math.cos(this.aimAngle) * 600;
             const bvy = Math.sin(this.aimAngle) * 600;
@@ -406,6 +408,9 @@ class Game {
         this.input = new InputManager(canvas);
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
+        if (typeof ProgressionManager !== 'undefined') {
+            this.progression = new ProgressionManager(this);
+        }
 
         this.state = 'TITLE';
         this.lastTime = performance.now();
@@ -470,6 +475,7 @@ class Game {
         this.worldManager = new WorldManager(this.width, this.height);
         this.score = 0;
         this.wave = 1;
+        if (this.progression) this.progression.reset();
     }
     spawnBullet(x, y, vx, vy, polarity, isEnemy) {
         this.bullets.push(new Bullet(x, y, vx, vy, polarity, isEnemy));
@@ -478,6 +484,15 @@ class Game {
         for(let i=0; i<count; i++) {
             this.particles.push(new Particle(x, y, colorCode, MathUtils.rand(50, 150), MathUtils.rand(0.2, 0.6)));
         }
+    }
+    addScore(pts) {
+        let mult = 1;
+        if (this.progression && this.progression.comboManager) {
+            mult = this.progression.comboManager.getMultiplier();
+            this.progression.comboManager.addCombo(1);
+        }
+        let bonus = this.scoreMult || 1;
+        this.score += Math.floor(pts * mult * bonus);
     }
     setState(newState) {
         this.state = newState;
@@ -494,6 +509,16 @@ class Game {
 
         if (this.state === 'PAUSED') {
             if (this.input.isJustPressed('Space') || this.input.touchActive) {
+                this.setState('PLAYING');
+            }
+            this.input.update();
+            return;
+        }
+
+        if (this.state === 'UPGRADE') {
+            if (this.progression) {
+                this.progression.update(dt);
+            } else {
                 this.setState('PLAYING');
             }
             this.input.update();
@@ -517,12 +542,14 @@ class Game {
         this.islands.forEach(i => i.update(dt, this.height));
         if (this.worldManager) this.worldManager.update(dt, this);
         this.player.update(dt, this);
+        if (this.progression) this.progression.updatePlaying(dt);
 
         if (!this.boss && this.bossWarningTimer <= 0) {
             this.waveTimer += dt;
             if (this.waveTimer >= 10) {
                 this.waveTimer = 0;
                 this.wave++;
+                if (this.progression) this.progression.showDraft();
                 if (this.wave % 5 === 0) {
                     this.bossWarningTimer = 3;
                     this.sound.playSwitch();
@@ -571,7 +598,7 @@ class Game {
             if (b.isEnemy) {
                 if (MathUtils.distSq(b.pos.x, b.pos.y, this.player.pos.x, this.player.pos.y) < (b.radius + this.player.radius)**2) {
                     if (b.polarity === this.player.polarity) {
-                        this.score += 10;
+                        this.addScore(10);
                         this.player.energy += 5;
                         b.active = false;
                         this.spawnParticles(b.pos.x, b.pos.y, b.polarity, 5);
@@ -589,19 +616,21 @@ class Game {
             } else {
                 if (this.boss && this.boss.active) {
                     if (MathUtils.distSq(b.pos.x, b.pos.y, this.boss.pos.x, this.boss.pos.y) < (b.radius + this.boss.radius)**2) {
-                        const dmg = b.polarity !== 0 ? 20 : 10;
+                        let dmg = b.polarity !== 0 ? 20 : 10;
+                        if (this.progression) dmg *= this.progression.perks.damageMult;
                         this.boss.hp -= dmg;
                         b.active = false;
-                        this.score += 5;
+                        this.addScore(5);
                         this.spawnParticles(b.pos.x, b.pos.y, b.polarity, 3);
                         if (this.boss.hp <= 0) {
                             this.boss.active = false;
                             this.sound.playExplosion();
                             this.spawnParticles(this.boss.pos.x, this.boss.pos.y, 1, 30);
                             this.spawnParticles(this.boss.pos.x, this.boss.pos.y, -1, 30);
-                            this.score += 1000;
+                            this.addScore(1000);
                             this.boss = null;
                             this.wave++; // immediately advance wave to resume enemy spawns
+                            if (this.progression) this.progression.showDraft();
                         }
                     }
                 }
@@ -612,14 +641,16 @@ class Game {
                             b.active = false;
                             this.sound.playHit();
                         } else {
-                            const dmg = b.polarity !== e.polarity ? 20 : 10;
+                            let dmg = b.polarity !== e.polarity ? 20 : 10;
+                            if (this.progression) dmg *= this.progression.perks.damageMult;
                             e.takeDamage(dmg);
                             b.active = false;
                             this.spawnParticles(b.pos.x, b.pos.y, b.polarity, 3);
                             if (e.hp <= 0) {
                                 this.sound.playExplosion();
                                 this.spawnParticles(e.pos.x, e.pos.y, e.polarity, 15);
-                                this.score += e.points;
+                                this.addScore(e.points);
+                                if (this.progression) this.progression.spawnPickup(e.pos.x, e.pos.y);
                                 if (e instanceof SplitterEnemy) {
                                     const s1 = new SwarmerEnemy(e.pos.x - 15, e.pos.y);
                                     const s2 = new SwarmerEnemy(e.pos.x + 15, e.pos.y);
@@ -654,7 +685,8 @@ class Game {
         this.islands.forEach(i => i.draw(this.ctx));
         if (this.worldManager) this.worldManager.drawForeground(this.ctx);
 
-        if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+        if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER' || this.state === 'UPGRADE') {
+            if (this.progression) this.progression.drawPickups(this.ctx);
             this.particles.forEach(p => p.draw(this.ctx));
             this.enemies.forEach(e => e.draw(this.ctx));
             this.bullets.forEach(b => b.draw(this.ctx));
@@ -712,6 +744,12 @@ class Game {
                 this.ctx.fillRect(10, this.height - 65, 100 * ratio, 15);
                 this.ctx.fillStyle = '#fff';
                 this.ctx.fillText('COOLDOWN', 12, this.height - 53);
+            }
+
+            if (this.progression) this.progression.drawUI(this.ctx);
+
+            if (this.state === 'UPGRADE' && this.progression) {
+                this.progression.drawDraft(this.ctx);
             }
         }
 
