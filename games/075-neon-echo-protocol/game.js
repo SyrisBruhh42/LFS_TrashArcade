@@ -262,10 +262,61 @@ class Player {
         this.shootCooldown = 0.15;
         this.history = []; // Array of {t: time, pos: Vector2, shootDir: Vector2|null}
         this.recordingTime = 0;
+
+        // Phase 2 additions
+        this.dashTimer = 0;
+        this.dashCooldown = 3.0; // 3 seconds cooldown
+        this.isDashing = false;
+        this.dashDuration = 0.2;
+        this.invulnerableTimer = 0;
+        this.facing = new Vector2(1, 0);
+        this.recoilOffset = 0;
+        this.thrustIntensity = 0;
+
+        // Physics
+        this.friction = 0.9;
+        this.acceleration = 1200;
     }
     update(dt, input, game) {
+        if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
+        if (this.dashTimer > 0) this.dashTimer -= dt;
+        if (this.recoilOffset > 0) this.recoilOffset -= dt * 15; // Recover from recoil
+
         let move = input.getMovement();
-        this.vel = move.mul(this.speed);
+
+        let dashTrigger = input.keys['ShiftLeft'] || input.keys['ShiftRight'] || input.dashTouched;
+        if (dashTrigger && this.dashTimer <= 0) {
+            this.dashTimer = this.dashCooldown;
+            this.isDashing = true;
+            this.invulnerableTimer = this.dashDuration;
+            let dashDir = move.mag() > 0 ? move.norm() : this.facing;
+            this.vel = dashDir.mul(this.speed * 4); // Burst speed
+            game.sound.playTone(800, 'sine', 0.2, 0.7); // Dash sound
+        }
+
+        if (this.isDashing) {
+            if (this.dashTimer <= this.dashCooldown - this.dashDuration) {
+                this.isDashing = false;
+            }
+        } else {
+            if (move.mag() > 0) {
+                this.vel = this.vel.add(move.mul(this.acceleration * dt));
+                this.thrustIntensity = 1;
+            } else {
+                this.thrustIntensity = Math.max(0, this.thrustIntensity - dt * 5);
+            }
+        }
+
+        // Apply friction
+        if (!this.isDashing) {
+            this.vel = this.vel.mul(Math.pow(this.friction, dt * 60));
+        }
+
+        // Limit max speed
+        if (!this.isDashing && this.vel.mag() > this.speed) {
+            this.vel = this.vel.norm().mul(this.speed);
+        }
+
         this.pos = this.pos.add(this.vel.mul(dt));
 
         // Boundaries
@@ -277,12 +328,21 @@ class Player {
             y: game.canvas.height/2 + (this.pos.y - game.camera.y)
         });
 
+        if (aim) {
+            this.facing = aim.norm();
+        } else if (this.vel.mag() > 10) {
+            this.facing = this.vel.norm();
+        }
+
         let shootDir = null;
+        let isDashingThisFrame = this.isDashing;
+
         if (this.shootTimer > 0) this.shootTimer -= dt;
-        if ((aim || input.keys['Space']) && this.shootTimer <= 0) {
-            shootDir = aim || (this.vel.mag() > 0 ? this.vel.norm() : new Vector2(1, 0));
+        if ((aim || input.keys['Space']) && this.shootTimer <= 0 && !this.isDashing) {
+            shootDir = aim || (this.vel.mag() > 0 ? this.vel.norm() : this.facing);
             game.spawnBullet(this.pos.copy(), shootDir, true);
             this.shootTimer = this.shootCooldown;
+            this.recoilOffset = 5; // Pixels of recoil
             game.sound.shoot();
         }
 
@@ -291,22 +351,74 @@ class Player {
             this.history.push({
                 t: this.recordingTime,
                 pos: this.pos.copy(),
-                shootDir: shootDir
+                shootDir: shootDir,
+                dash: isDashingThisFrame,
+                facing: this.facing.copy()
             });
         }
     }
     draw(ctx) {
         ctx.save();
         ctx.translate(this.pos.x, this.pos.y);
+
+        // Recoil effect
+        let recoilDir = this.facing.mul(-this.recoilOffset);
+        ctx.translate(recoilDir.x, recoilDir.y);
+
+        // Invulnerability Blink
+        if (this.invulnerableTimer > 0) {
+            if (Math.floor(Date.now() / 50) % 2 === 0) {
+                ctx.globalAlpha = 0.3;
+            }
+        }
+
+        // Aim telegraph
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(this.facing.x * 200, this.facing.y * 200);
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.rotate(Math.atan2(this.facing.y, this.facing.x));
+
+        // Thrust particle logic or visuals
+        if (this.thrustIntensity > 0 && !this.isDashing) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.beginPath();
+            let thrusterLen = 8 + Math.random() * 8 * this.thrustIntensity;
+            ctx.moveTo(-this.radius, -4);
+            ctx.lineTo(-this.radius - thrusterLen, 0);
+            ctx.lineTo(-this.radius, 4);
+            ctx.fill();
+        }
+
+        // Draw multi-part procedural ship
         ctx.fillStyle = this.color;
         ctx.shadowColor = this.color;
         ctx.shadowBlur = 10;
+
+        // Main body
         ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.moveTo(this.radius, 0); // Nose
+        ctx.lineTo(-this.radius, this.radius); // Back right
+        ctx.lineTo(-this.radius + 4, 0); // Back center indentation
+        ctx.lineTo(-this.radius, -this.radius); // Back left
+        ctx.closePath();
         ctx.fill();
+
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2;
         ctx.stroke();
+
+        // Cockpit
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-4, 3);
+        ctx.lineTo(-4, -3);
+        ctx.fill();
+
         ctx.restore();
     }
 }
@@ -334,9 +446,11 @@ class Echo {
         }
 
         if (this.index < this.history.length) {
-            this.pos = this.history[this.index].pos.copy();
+            let frame = this.history[this.index];
+            this.pos = frame.pos.copy();
+            this.facing = frame.facing || new Vector2(1, 0);
+            this.isDashing = frame.dash || false;
         } else {
-            // Loop or disappear? Let's have them fade out or disappear after replay
             this.active = false;
         }
     }
@@ -344,16 +458,31 @@ class Echo {
         if (!this.active) return;
         ctx.save();
         ctx.translate(this.pos.x, this.pos.y);
-        ctx.fillStyle = this.color;
+
         ctx.globalAlpha = 0.6;
+
+        let rot = 0;
+        if (this.facing) {
+             rot = Math.atan2(this.facing.y, this.facing.x);
+        }
+        ctx.rotate(rot);
+
+        ctx.fillStyle = this.color;
         ctx.shadowColor = this.color;
         ctx.shadowBlur = 10;
+
         ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(-this.radius, this.radius);
+        ctx.lineTo(-this.radius + 4, 0);
+        ctx.lineTo(-this.radius, -this.radius);
+        ctx.closePath();
         ctx.fill();
+
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1;
         ctx.stroke();
+
         ctx.restore();
     }
 }
@@ -700,9 +829,24 @@ class Game {
                 }
             } else {
                 if (b.pos.dist(this.player.pos) < b.radius + this.player.radius) {
-                    this.core.takeDamage(5);
+                    if (this.player.invulnerableTimer <= 0) {
+                        this.core.takeDamage(5);
+                    }
                     b.active = false;
                 }
+            }
+        }
+
+        // Enemy vs Player collision (enemies damaging core via player proxy)
+        for (let j = this.enemies.length - 1; j >= 0; j--) {
+            let e = this.enemies[j];
+            if (!e.active) continue;
+            if (e.pos.dist(this.player.pos) < e.radius + this.player.radius) {
+                 if (this.player.invulnerableTimer <= 0) {
+                     this.core.takeDamage(10);
+                     // Briefly make invulnerable so we don't drain HP in 1 frame
+                     this.player.invulnerableTimer = 0.5;
+                 }
             }
         }
 
@@ -762,6 +906,15 @@ class Game {
             } else {
                 this.ctx.fillStyle = 'red';
                 this.ctx.fillText(`ECHO COOLDOWN: ${Math.ceil(this.echoCooldown)}s`, this.width/2 - 100, 30);
+            }
+
+            // Dash HUD
+            if (this.player && this.player.dashTimer <= 0) {
+                this.ctx.fillStyle = '#00ffff';
+                this.ctx.fillText(`DASH READY (Shift)`, 10, 90);
+            } else if (this.player) {
+                this.ctx.fillStyle = 'gray';
+                this.ctx.fillText(`DASH: ${Math.ceil(this.player.dashTimer)}s`, 10, 90);
             }
 
             // Draw Virtual Joysticks if active
@@ -831,23 +984,35 @@ class Game {
             this.ctx.fill();
         }
 
-        // Touch button for echo if touch is active
+        this.input.dashTouched = false;
+        // Touch button for echo and dash if touch is active
         if (this.input.touches.length > 0) {
             this.ctx.fillStyle = this.echoCooldown <= 0 ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 0, 0, 0.5)';
-            this.ctx.fillRect(this.width/2 - 40, this.height - 80, 80, 60);
+            this.ctx.fillRect(this.width/2 + 20, this.height - 80, 80, 60);
             this.ctx.fillStyle = 'white';
             this.ctx.textAlign = 'center';
-            this.ctx.fillText('ECHO', this.width/2, this.height - 45);
+            this.ctx.fillText('ECHO', this.width/2 + 60, this.height - 45);
+
+            let dashTimer = this.player ? this.player.dashTimer : 0;
+            this.ctx.fillStyle = dashTimer <= 0 ? 'rgba(0, 255, 255, 0.5)' : 'rgba(128, 128, 128, 0.5)';
+            this.ctx.fillRect(this.width/2 - 100, this.height - 80, 80, 60);
+            this.ctx.fillStyle = 'white';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('DASH', this.width/2 - 60, this.height - 45);
+
             this.ctx.textAlign = 'left';
 
             // Basic touch check for button
             for(let t of this.input.touches) {
                 let tx = t.clientX * (this.width / this.canvas.width);
                 let ty = t.clientY * (this.height / this.canvas.height);
-                if (tx > this.width/2 - 40 && tx < this.width/2 + 40 && ty > this.height - 80 && ty < this.height - 20) {
+                if (tx > this.width/2 + 20 && tx < this.width/2 + 100 && ty > this.height - 80 && ty < this.height - 20) {
                     if (this.echoCooldown <= 0) {
                         this.deployEcho();
                     }
+                }
+                if (tx > this.width/2 - 100 && tx < this.width/2 - 20 && ty > this.height - 80 && ty < this.height - 20) {
+                    this.input.dashTouched = true;
                 }
             }
         }
