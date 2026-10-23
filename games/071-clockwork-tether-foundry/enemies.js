@@ -129,6 +129,7 @@ class SniperEnemy extends Enemy {
                     Math.cos(this.aimAngle)*300,
                     Math.sin(this.aimAngle)*300
                 ));
+                if (game.sound) game.sound.playWeaponFire();
             }
         } else if (this.state === 'FIRE') {
             if (this.stateTimer <= 0) {
@@ -371,6 +372,7 @@ class AreaDenialEnemy extends Enemy {
             if (this.stateTimer <= 0) {
                 this.state = 'DROP';
                 game.hazards.push(new ToxicPuddle(this.x, this.y));
+                if (game.sound) game.sound.playWeaponFire();
                 this.stateTimer = 5.0;
             }
         } else if (this.state === 'DROP') {
