@@ -364,68 +364,7 @@ class Player extends Entity {
     }
 }
 
-class Boss extends Entity {
-    constructor(x, y) {
-        super(x, y, 40);
-        this.hp = 1000;
-        this.maxHp = 1000;
-        this.timer = 0;
-        this.state = 0;
-        this.targetPos = new Vector2(x, y);
-    }
-    update(dt, game) {
-        this.timer += dt;
-
-        if (MathUtils.distSq(this.pos.x, this.pos.y, this.targetPos.x, this.targetPos.y) < 100) {
-            this.targetPos.set(MathUtils.rand(100, game.width - 100), MathUtils.rand(100, game.height/3));
-        }
-
-        const dx = this.targetPos.x - this.pos.x;
-        const dy = this.targetPos.y - this.pos.y;
-        const mag = Math.sqrt(dx*dx + dy*dy);
-        if (mag > 0) {
-            this.vel.set((dx/mag)*100, (dy/mag)*100);
-        }
-
-        super.update(dt);
-
-        if (this.timer > 2) {
-            this.timer = 0;
-            const p = Math.random() > 0.5 ? 1 : -1;
-            for(let i=0; i<12; i++) {
-                const angle = (i/12) * Math.PI * 2;
-                const speed = 150;
-                game.spawnBullet(this.pos.x, this.pos.y, Math.cos(angle)*speed, Math.sin(angle)*speed, p, true);
-            }
-            game.sound.playShoot(p === 1);
-        }
-    }
-    draw(ctx) {
-        ctx.save();
-        ctx.translate(this.pos.x, this.pos.y);
-        ctx.rotate(this.timer);
-
-        ctx.beginPath();
-        ctx.rect(-this.radius, -this.radius, this.radius*2, this.radius*2);
-        ctx.fillStyle = '#444';
-        ctx.fill();
-        ctx.strokeStyle = '#7751ef';
-        ctx.lineWidth = 4;
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(0, 0, this.radius * 0.5, 0, Math.PI*2);
-        ctx.fillStyle = '#222';
-        ctx.fill();
-
-        ctx.restore();
-
-        ctx.fillStyle = '#f00';
-        ctx.fillRect(this.pos.x - 50, this.pos.y - this.radius - 20, 100, 10);
-        ctx.fillStyle = '#0f0';
-        ctx.fillRect(this.pos.x - 50, this.pos.y - this.radius - 20, 100 * (this.hp/this.maxHp), 10);
-    }
-}
+// Boss classes moved to bosses.js
 
 class Island {
     constructor(gameWidth, gameHeight) {
@@ -518,7 +457,9 @@ class Game {
     }
     reset() {
         this.player = new Player(this.width / 2, this.height * 0.8);
-        this.boss = new Boss(this.width / 2, 100);
+        this.boss = null;
+        this.bossWarningTimer = 0;
+        this.waveTimer = 0;
         this.enemies = [];
         this.bullets = [];
         this.particles = [];
@@ -576,11 +517,33 @@ class Game {
         this.islands.forEach(i => i.update(dt, this.height));
         if (this.worldManager) this.worldManager.update(dt, this);
         this.player.update(dt, this);
+
+        if (!this.boss && this.bossWarningTimer <= 0) {
+            this.waveTimer += dt;
+            if (this.waveTimer >= 10) {
+                this.waveTimer = 0;
+                this.wave++;
+                if (this.wave % 5 === 0) {
+                    this.bossWarningTimer = 3;
+                    this.sound.playSwitch();
+                }
+            }
+        }
+        if (this.bossWarningTimer > 0) {
+            this.bossWarningTimer -= dt;
+            if (this.bossWarningTimer <= 0) {
+                const bossTypes = [MagnetoBoss, PolarisBoss];
+                const BossClass = bossTypes[((this.wave / 5) - 1) % bossTypes.length] || MagnetoBoss;
+                this.boss = new BossClass(this.width/2, -100, this.wave, this);
+            }
+        }
         if (this.boss && this.boss.active) {
             this.boss.update(dt, this);
         }
 
-        if (window.EnemySpawner) window.EnemySpawner.update(dt, this);
+        if (window.EnemySpawner && !this.boss && this.bossWarningTimer <= 0) {
+            window.EnemySpawner.update(dt, this);
+        }
         this.enemies.forEach(e => e.update(dt, this));
 
         this.enemies.forEach(e => {
@@ -637,12 +600,8 @@ class Game {
                             this.spawnParticles(this.boss.pos.x, this.boss.pos.y, 1, 30);
                             this.spawnParticles(this.boss.pos.x, this.boss.pos.y, -1, 30);
                             this.score += 1000;
-                            setTimeout(() => {
-                                this.wave++;
-                                this.boss = new Boss(this.width/2, -100);
-                                this.boss.hp = 1000 * this.wave;
-                                this.boss.maxHp = this.boss.hp;
-                            }, 2000);
+                            this.boss = null;
+                            this.wave++; // immediately advance wave to resume enemy spawns
                         }
                     }
                 }
@@ -699,7 +658,30 @@ class Game {
             this.particles.forEach(p => p.draw(this.ctx));
             this.enemies.forEach(e => e.draw(this.ctx));
             this.bullets.forEach(b => b.draw(this.ctx));
-            if (this.boss && this.boss.active) this.boss.draw(this.ctx);
+            if (this.boss && this.boss.active) {
+                this.boss.draw(this.ctx);
+
+                if (!this.bossDisplayHp) this.bossDisplayHp = this.boss.maxHp;
+                this.bossDisplayHp += (this.boss.hp - this.bossDisplayHp) * 0.1;
+                this.ctx.fillStyle = '#f00';
+                this.ctx.fillRect(this.width/2 - 150, 20, 300, 15);
+                this.ctx.fillStyle = '#0f0';
+                this.ctx.fillRect(this.width/2 - 150, 20, 300 * Math.max(0, this.bossDisplayHp/this.boss.maxHp), 15);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '14px sans-serif';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(`BOSS - PHASE ${this.boss.phase}`, this.width/2, 15);
+            }
+
+            if (this.bossWarningTimer > 0) {
+                if (Math.floor(Date.now() / 200) % 2 === 0) {
+                    this.ctx.fillStyle = '#f00';
+                    this.ctx.font = '30px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('WARNING: BOSS APPROACHING!', this.width/2, this.height/2);
+                }
+            }
+
             if (this.player.hp > 0) this.player.draw(this.ctx);
 
             this.ctx.fillStyle = '#fff';
