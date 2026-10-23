@@ -983,5 +983,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#7751ef",
     "phase": "3",
     "path": "./games/074-magnetic-sky-duel/index.html"
+  },
+  {
+    "id": "075",
+    "slug": "075-neon-echo-protocol",
+    "title": "Neon Echo Protocol",
+    "genre": "Wave-Defense Tower Micro-Strategy",
+    "coreMechanic": "Echo/Ghost Self-Cooperation",
+    "setting": "Neon Synthwave City",
+    "description": "Defend the core by recording your actions and deploying echoes to fight alongside you in a neon-drenched synthwave city.",
+    "controls": "Desktop: WASD/Arrows to move, Mouse/Arrows to aim, Click/Space to shoot, E to deploy echo. Touch: On-screen joysticks.",
+    "createdAt": "2024-05-24",
+    "accentColor": "#ff62ac",
+    "phase": "1",
+    "path": "./games/075-neon-echo-protocol/index.html"
   }
 ];
