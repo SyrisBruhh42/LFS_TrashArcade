@@ -1,7 +1,7 @@
 const SAVE_KEY = 'arcade_game_076_076-blood-oath-overdrive_v1';
 class SaveManager {
     constructor() {
-        this.data = { highScore: 0, totalGamesPlayed: 0, totalScoreAccumulated: 0, options: { mute: false } };
+        this.data = { highScore: 0, totalGamesPlayed: 0, totalScoreAccumulated: 0, options: { mute: false, vfxIntensity: 1 } };
         this.load();
     }
     load() {
@@ -184,6 +184,12 @@ class Player {
         this.vx *= Math.pow(this.friction, dt * 60);
         this.vy *= Math.pow(this.friction, dt * 60);
 
+        if (this.dashTimer > 0 || this.overdrive) {
+            if (window.game && window.game.vfx && Math.random() < 0.5) {
+                window.game.vfx.spawnAfterimage(this.x, this.y, this.size, this.overdrive ? '#f00' : '#0ff', 0.3);
+            }
+        }
+
         // Add trail effect when dashing
         if (this.dashTimer > 0 && window.game && window.game.trails) {
             window.game.trails.spawn(this.x, this.y, this.size, 0.3, this.overdrive ? '#f0f' : '#0ff');
@@ -278,9 +284,11 @@ class Game {
         this.particles = new ParticleSystem();
         this.trails = new TrailSystem();
         this.shake = new ScreenShake();
+        this.vfx = new VFXManager();
 
         this.state = 'TITLE';
         this.lastTime = 0;
+        this.hitStopTimer = 0;
 
         this.score = 0;
         this.enemies = [];
@@ -367,10 +375,17 @@ class Game {
         }
         if (this.state !== 'PLAYING') return;
 
-        this.player.update(dt, this.input);
         this.particles.update(dt);
         this.trails.update(dt);
         this.shake.update(dt);
+        this.vfx.update(dt);
+
+        if (this.hitStopTimer > 0) {
+            this.hitStopTimer -= dt;
+            dt *= 0.1; // Slow-mo during hitstop
+        }
+
+        this.player.update(dt, this.input);
         this.progression.update(dt, this);
 
         if (this.world) {
@@ -389,11 +404,14 @@ class Game {
             }
 
             if (this.boss.hp <= 0) {
+                this.vfx.emitExplosion(this.boss.x, this.boss.y, 50, '#f00');
+                this.vfx.spawnText(this.boss.x, this.boss.y - 50, "BOSS DEFEATED!", "#ff0");
+                this.hitStopTimer = 0.5;
                 this.boss = null;
                 this.bossWave++;
                 this.score += 500;
                 this.nextBossScore = this.score + 500;
-                this.shake.trigger(20, 0.5);
+                this.shake.trigger(30, 0.7, 0, 1);
                 this.sound.playDamage(); // use damage sound for explosion
             }
         } else {
@@ -435,14 +453,28 @@ class Game {
                 }
 
                 if (hit) {
-                    this.score += (this.player.overdrive ? 20 : 10) * (1 + this.progression.combo * 0.1);
+                    const dmg = this.player.overdrive ? 2 : 1;
+                    this.score += (dmg * 10) * (1 + this.progression.combo * 0.1);
                     this.sound.playHit();
-                    if (e.hp - (this.player.overdrive ? 2 : 1) <= 0) {
+
+                    let dirX = 0, dirY = 0;
+                    if (this.player.attackDir === 'up') dirY = -1;
+                    if (this.player.attackDir === 'down') dirY = 1;
+                    if (this.player.attackDir === 'left') dirX = -1;
+                    if (this.player.attackDir === 'right') dirX = 1;
+
+                    this.vfx.emitSparks(e.x, e.y, dirX, dirY, 10, '#ff0');
+                    this.vfx.spawnText(e.x, e.y - 20, dmg.toString(), '#fff');
+                    this.hitStopTimer = 0.05;
+
+                    if (e.hp - dmg <= 0) {
                         this.progression.addKill(this);
                         this.progression.spawnPickup(e.x, e.y);
+                        this.vfx.emitExplosion(e.x, e.y, 15, '#f80');
+                        this.hitStopTimer = 0.1;
                     }
-                    e.takeDamage(this.player.overdrive ? 2 : 1, this, i);
-                    this.shake.trigger(this.player.overdrive ? 10 : 5, 0.1);
+                    e.takeDamage(dmg, this, i);
+                    this.shake.trigger(this.player.overdrive ? 15 : 8, 0.15, dirX, dirY);
                     continue;
                 }
             }
@@ -555,6 +587,7 @@ class Game {
 
             this.trails.draw(this.ctx);
             this.particles.draw(this.ctx);
+            this.vfx.draw(this.ctx);
             this.player.draw(this.ctx);
             for (let e of this.enemies) e.draw(this.ctx);
             if (this.projectiles) {
@@ -772,16 +805,21 @@ class ScreenShake {
         this.intensity = 0;
         this.offsetX = 0;
         this.offsetY = 0;
+        this.dirX = 0;
+        this.dirY = 0;
     }
-    trigger(intensity, duration) {
-        this.intensity = intensity;
+    trigger(intensity, duration, dirX = 0, dirY = 0) {
+        const mult = (window.game && window.game.saveManager && window.game.saveManager.data.options.vfxIntensity !== undefined) ? window.game.saveManager.data.options.vfxIntensity : 1;
+        this.intensity = intensity * mult;
         this.duration = duration;
+        this.dirX = dirX;
+        this.dirY = dirY;
     }
     update(dt) {
         if (this.duration > 0) {
             this.duration -= dt;
-            this.offsetX = (Math.random() - 0.5) * this.intensity;
-            this.offsetY = (Math.random() - 0.5) * this.intensity;
+            this.offsetX = this.dirX * this.intensity + (Math.random() - 0.5) * this.intensity;
+            this.offsetY = this.dirY * this.intensity + (Math.random() - 0.5) * this.intensity;
         } else {
             this.offsetX = 0;
             this.offsetY = 0;
