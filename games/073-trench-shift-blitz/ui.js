@@ -377,5 +377,58 @@ class UIManager {
         this.engine.saveManager.save();
         this.engine.sound.updateVolumes();
         alert("Save reset!");
+}
+
+    // Masterpiece Release Extras
+    drawCredits(ctx, width, height) {
+        if (this.engine.state === 'CREDITS') {
+            ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.fillStyle = "#fff";
+            ctx.textAlign = "center";
+            ctx.font = "24px monospace";
+            ctx.fillText("TRENCH SHIFT BLITZ", width / 2, 80);
+
+            ctx.font = "16px monospace";
+            ctx.fillText("A 10-Session Masterpiece", width / 2, 120);
+
+            ctx.fillStyle = "#ffcc00";
+            ctx.fillText("Thanks for playing!", width / 2, 160);
+
+            ctx.fillStyle = "#ccc";
+            ctx.font = "14px monospace";
+            ctx.fillText("Code, Art, Audio, Design:", width / 2, 220);
+            ctx.fillText("The Factory", width / 2, 250);
+
+            ctx.fillText("Press Space/Click to Return", width / 2, height - 60);
+        }
+    }
+
+    drawStats(ctx, width, height) {
+        if (this.engine.state === 'STATS') {
+            ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.fillStyle = "#fff";
+            ctx.textAlign = "center";
+            ctx.font = "24px monospace";
+            ctx.fillText("DIVER LOG (STATS)", width / 2, 60);
+
+            ctx.font = "16px monospace";
+            ctx.textAlign = "left";
+            let sx = width / 2 - 120;
+            let sy = 120;
+            let lh = 30;
+
+            ctx.fillText(`High Score: ${this.engine.saveManager.data.highScore}`, sx, sy);
+            ctx.fillText(`Best Wave: ${this.engine.saveManager.data.bestWaveOrCombo}`, sx, sy + lh);
+            ctx.fillText(`Games Played: ${this.engine.saveManager.data.totalGamesPlayed}`, sx, sy + lh*2);
+            ctx.fillText(`Total Score: ${this.engine.saveManager.data.totalScoreAccumulated}`, sx, sy + lh*3);
+
+            ctx.textAlign = "center";
+            ctx.fillStyle = "#aaa";
+            ctx.fillText("Press ESC / [Back] to Return", width / 2, height - 60);
+        }
     }
 }

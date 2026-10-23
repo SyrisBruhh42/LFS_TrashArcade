@@ -834,6 +834,8 @@ class Engine {
         let pos = this.getRandomEmptyPos();
         if (pos) {
             let bossObj = Math.random() < 0.5 ? new TrenchLeviathan(pos.x, pos.y) : new AbyssalConstructor(pos.x, pos.y);
+            bossObj.maxHp += Math.floor(this.wave * 1.5);
+            bossObj.hp = bossObj.maxHp;
             this.entities.push(bossObj);
             this.sound.playBossSpawn();
         }
@@ -844,11 +846,23 @@ class Engine {
         if (pos) {
             let r = Math.random();
             let enemyObj;
-            if (r < 0.16) enemyObj = new SwarmerEnemy(pos.x, pos.y);
-            else if (r < 0.32) enemyObj = new BruiserEnemy(pos.x, pos.y);
-            else if (r < 0.48) enemyObj = new SniperEnemy(pos.x, pos.y);
-            else if (r < 0.64) enemyObj = new SpawnerEnemy(pos.x, pos.y);
-            else if (r < 0.80) enemyObj = new HazardEnemy(pos.x, pos.y);
+            let w = this.wave;
+            let pSwarmer = Math.max(0.1, 0.4 - w * 0.02);
+            let pBruiser = Math.max(0.1, 0.3 - w * 0.015);
+            let pSniper = Math.min(0.25, 0.05 + w * 0.015);
+            let pSpawner = Math.min(0.2, 0.05 + w * 0.01);
+            let pHazard = Math.min(0.2, 0.1 + w * 0.01);
+            let cumulSwarmer = pSwarmer;
+            let cumulBruiser = cumulSwarmer + pBruiser;
+            let cumulSniper = cumulBruiser + pSniper;
+            let cumulSpawner = cumulSniper + pSpawner;
+            let cumulHazard = cumulSpawner + pHazard;
+
+            if (r < cumulSwarmer) enemyObj = new SwarmerEnemy(pos.x, pos.y);
+            else if (r < cumulBruiser) enemyObj = new BruiserEnemy(pos.x, pos.y);
+            else if (r < cumulSniper) enemyObj = new SniperEnemy(pos.x, pos.y);
+            else if (r < cumulSpawner) enemyObj = new SpawnerEnemy(pos.x, pos.y);
+            else if (r < cumulHazard) enemyObj = new HazardEnemy(pos.x, pos.y);
             else enemyObj = new BlitzEnemy(pos.x, pos.y);
             this.entities.push(enemyObj);
         }
@@ -1168,7 +1182,10 @@ class Engine {
             if (this.wave % 5 === 0) {
                 this.spawnBoss();
             } else {
-                this.spawnEnemy();
+                let enemiesToSpawn = 1 + Math.floor(this.wave / 3);
+                for (let i = 0; i < enemiesToSpawn; i++) {
+                    this.spawnEnemy();
+                }
             }
         }
     }
@@ -1364,6 +1381,19 @@ class Engine {
             this.ctx.textAlign = "center";
             this.ctx.font = "16px monospace";
             this.ctx.fillText("DASH", bx, by + 5);
+
+            if (this.wave === 1 && this.turns === 0) {
+                this.ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+                this.ctx.fillRect(0, 0, this.width, this.height);
+                this.ctx.fillStyle = "#fff";
+                this.ctx.textAlign = "center";
+                this.ctx.font = "20px monospace";
+                this.ctx.fillText("Welcome to Trench Shift Blitz!", this.width / 2, this.height / 2 - 40);
+                this.ctx.font = "16px monospace";
+                this.ctx.fillText("Bump into enemies to attack.", this.width / 2, this.height / 2);
+                this.ctx.fillText("Collect Orbs to survive the shrink.", this.width / 2, this.height / 2 + 25);
+                this.ctx.fillText("Move (WASD/Arrows) to start.", this.width / 2, this.height / 2 + 60);
+            }
 
             if (this.state === 'PAUSED') {
                 this.ctx.fillStyle = "rgba(0,0,0,0.7)";
