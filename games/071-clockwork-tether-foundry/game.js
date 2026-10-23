@@ -1,0 +1,691 @@
+class SaveManager {
+    constructor() {
+        this.saveKey = 'arcade_game_071_071-clockwork-tether-foundry_v1';
+        this.data = {
+            highScore: 0,
+            bestWaveOrCombo: 0,
+            totalGamesPlayed: 0,
+            totalScoreAccumulated: 0,
+            unlockedMilestones: [],
+            options: { mute: false, sfxVolume: 1, musicVolume: 1 }
+        };
+        this.load();
+    }
+    load() {
+        try {
+            const stored = localStorage.getItem(this.saveKey);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                this.data = { ...this.data, ...parsed };
+            }
+        } catch (e) {
+            console.warn('Save load failed', e);
+        }
+    }
+    save() {
+        try {
+            localStorage.setItem(this.saveKey, JSON.stringify(this.data));
+        } catch (e) {
+            console.warn('Save failed', e);
+        }
+    }
+}
+
+class SoundEngine {
+    constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.sfxGain = null;
+        this.musicGain = null;
+        this.initialized = false;
+    }
+    init() {
+        if (this.initialized) return;
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+            this.masterGain = this.ctx.createGain();
+            this.sfxGain = this.ctx.createGain();
+            this.musicGain = this.ctx.createGain();
+
+            this.sfxGain.connect(this.masterGain);
+            this.musicGain.connect(this.masterGain);
+            this.masterGain.connect(this.ctx.destination);
+
+            this.masterGain.gain.value = 0.5;
+            this.initialized = true;
+        } catch (e) {
+            console.warn('AudioContext init failed', e);
+        }
+    }
+    resume() {
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    }
+    playTone(freq, type = 'sine', duration = 0.1, vol = 0.5) {
+        if (!this.initialized || !this.ctx) return;
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+            osc.onended = () => {
+                try { osc.disconnect(); gain.disconnect(); } catch (e) {}
+            };
+        } catch (e) {}
+    }
+    playJump() { this.playTone(400, 'square', 0.15, 0.3); }
+    playGrapple() { this.playTone(800, 'sawtooth', 0.1, 0.2); }
+    playScore() { this.playTone(1200, 'sine', 0.2, 0.4); }
+    playHurt() { this.playTone(150, 'square', 0.3, 0.5); }
+    playTetherGrow() { this.playTone(600, 'triangle', 0.05, 0.1); }
+}
+
+class InputManager {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.keys = {};
+        this.prevKeys = {};
+        this.mouse = { x: 0, y: 0, down: false, justDown: false };
+        this.touch = { active: false, x: 0, y: 0 };
+        this.initListeners();
+    }
+    initListeners() {
+        window.addEventListener('keydown', e => {
+            this.keys[e.code] = true;
+        });
+        window.addEventListener('keyup', e => {
+            this.keys[e.code] = false;
+        });
+        this.canvas.addEventListener('mousedown', e => {
+            this.updateMousePos(e);
+            this.mouse.down = true;
+            this.mouse.justDown = true;
+        });
+        this.canvas.addEventListener('mousemove', e => {
+            this.updateMousePos(e);
+        });
+        this.canvas.addEventListener('mouseup', e => {
+            this.mouse.down = false;
+        });
+        this.canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            this.touch.active = true;
+            this.mouse.down = true;
+            this.mouse.justDown = true;
+            this.updateTouchPos(e);
+        }, { passive: false });
+        this.canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            this.updateTouchPos(e);
+        }, { passive: false });
+        this.canvas.addEventListener('touchend', e => {
+            e.preventDefault();
+            this.touch.active = false;
+            this.mouse.down = false;
+        }, { passive: false });
+    }
+    updateMousePos(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        this.mouse.x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+        this.mouse.y = (e.clientY - rect.top) * (this.canvas.height / rect.height);
+    }
+    updateTouchPos(e) {
+        if (e.touches.length > 0) {
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouse.x = (e.touches[0].clientX - rect.left) * (this.canvas.width / rect.width);
+            this.mouse.y = (e.touches[0].clientY - rect.top) * (this.canvas.height / rect.height);
+        }
+    }
+    update() {
+        this.prevKeys = { ...this.keys };
+        this.mouse.justDown = false;
+    }
+    isKeyDown(code) { return !!this.keys[code]; }
+    isKeyJustPressed(code) { return !!this.keys[code] && !this.prevKeys[code]; }
+}
+
+class Player {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = 0;
+        this.vy = 0;
+        this.radius = 12;
+        this.tethered = false;
+        this.tetherPoint = null;
+        this.tetherLength = 0;
+        this.angle = 0;
+        this.angularVel = 0;
+        this.gravity = 800;
+        this.color = '#a04e7e';
+        this.tail = [];
+        this.tailMaxLength = 10;
+        this.scoreMultiplier = 1;
+    }
+    update(dt, game) {
+        // Tail tracking
+        this.tail.push({x: this.x, y: this.y});
+        if (this.tail.length > this.tailMaxLength) {
+            this.tail.shift();
+        }
+
+        if (this.tethered && this.tetherPoint) {
+            // Pendulum physics
+            const dx = this.x - this.tetherPoint.x;
+            const dy = this.y - this.tetherPoint.y;
+            this.angle = Math.atan2(dy, dx);
+
+            // Allow risk/reward tether growth - the longer the tether, the more points, but harder to control
+            if (game.input.isKeyDown('Space') || game.input.mouse.down) {
+                this.tetherLength += 150 * dt; // Grow tether
+                game.sound.playTetherGrow();
+                this.scoreMultiplier = 1 + Math.floor(this.tetherLength / 50);
+            } else {
+                this.scoreMultiplier = 1;
+            }
+
+            // Gravity affects angular velocity
+            const gravityForce = (this.gravity / this.tetherLength) * Math.cos(this.angle);
+            this.angularVel -= gravityForce * dt;
+
+            // Dampening
+            this.angularVel *= 0.999;
+
+            this.angle += this.angularVel * dt;
+
+            // Convert polar to cartesian
+            this.x = this.tetherPoint.x + this.tetherLength * Math.cos(this.angle);
+            this.y = this.tetherPoint.y + this.tetherLength * Math.sin(this.angle);
+
+            // Calculate actual velocity for when tether is released
+            this.vx = -this.tetherLength * this.angularVel * Math.sin(this.angle);
+            this.vy = this.tetherLength * this.angularVel * Math.cos(this.angle);
+
+            // Score generation over time while tethered
+            game.score += (10 * this.scoreMultiplier) * dt;
+
+        } else {
+            // Free fall physics
+            this.vy += this.gravity * dt;
+
+            // Air resistance
+            this.vx *= 0.99;
+            this.vy *= 0.99;
+
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+
+            this.scoreMultiplier = 1;
+        }
+
+        // Screen boundaries (bounce)
+        if (this.x < this.radius) {
+            this.x = this.radius;
+            this.vx *= -0.5;
+        } else if (this.x > game.width - this.radius) {
+            this.x = game.width - this.radius;
+            this.vx *= -0.5;
+        }
+
+        // Floor / Ceiling bounce
+        if (this.y < this.radius) {
+            this.y = this.radius;
+            this.vy *= -0.5;
+        } else if (this.y > game.height - this.radius) {
+            this.y = game.height - this.radius;
+            this.vy *= -0.5;
+            // Un-tether if hit floor
+            if (this.tethered) this.releaseTether();
+        }
+    }
+
+    fireTether(point, game) {
+        this.tetherPoint = point;
+        this.tethered = true;
+        const dx = this.x - point.x;
+        const dy = this.y - point.y;
+        this.tetherLength = Math.sqrt(dx * dx + dy * dy);
+        this.angle = Math.atan2(dy, dx);
+
+        // Calculate initial angular velocity from linear velocity
+        // v = r * w => w = v/r
+        // Project velocity onto the tangent of the pendulum arc
+        const tangentX = -Math.sin(this.angle);
+        const tangentY = Math.cos(this.angle);
+        const tangentVel = this.vx * tangentX + this.vy * tangentY;
+
+        this.angularVel = tangentVel / this.tetherLength;
+        game.sound.playGrapple();
+    }
+
+    releaseTether() {
+        this.tethered = false;
+        this.tetherPoint = null;
+    }
+
+    draw(ctx) {
+        // Draw tether
+        if (this.tethered && this.tetherPoint) {
+            ctx.beginPath();
+            ctx.moveTo(this.tetherPoint.x, this.tetherPoint.y);
+            ctx.lineTo(this.x, this.y);
+            ctx.strokeStyle = `rgba(160, 78, 126, ${0.5 + Math.random() * 0.5})`;
+            ctx.lineWidth = 2 + (this.scoreMultiplier - 1);
+            ctx.stroke();
+
+            // Draw multiplier text
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px monospace';
+            ctx.fillText(`x${this.scoreMultiplier}`, this.x + 15, this.y - 15);
+        }
+
+        // Draw tail
+        ctx.beginPath();
+        if (this.tail.length > 0) {
+            ctx.moveTo(this.tail[0].x, this.tail[0].y);
+            for(let i=1; i<this.tail.length; i++) {
+                ctx.lineTo(this.tail[i].x, this.tail[i].y);
+            }
+        }
+        ctx.strokeStyle = '#a04e7e';
+        ctx.lineWidth = 4;
+        ctx.globalAlpha = 0.5;
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+
+        // Draw player body (steampunk gear-like)
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        if (this.tethered) {
+            ctx.rotate(this.angle);
+        } else {
+            ctx.rotate(Math.atan2(this.vy, this.vx));
+        }
+
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Inner gear detail
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius / 2, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class GrapplePoint {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 15;
+        this.rotation = Math.random() * Math.PI * 2;
+        this.rotSpeed = (Math.random() - 0.5) * 2;
+    }
+    update(dt) {
+        this.rotation += this.rotSpeed * dt;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+
+        // Draw gear
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * Math.PI * 2;
+            const r1 = this.radius;
+            const r2 = this.radius * 1.3;
+            ctx.lineTo(Math.cos(a - 0.1) * r1, Math.sin(a - 0.1) * r1);
+            ctx.lineTo(Math.cos(a - 0.1) * r2, Math.sin(a - 0.1) * r2);
+            ctx.lineTo(Math.cos(a + 0.1) * r2, Math.sin(a + 0.1) * r2);
+            ctx.lineTo(Math.cos(a + 0.1) * r1, Math.sin(a + 0.1) * r1);
+        }
+        ctx.closePath();
+        ctx.fillStyle = '#a87a51'; // Steampunk brass
+        ctx.fill();
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Inner hole
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius / 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#222';
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+class Hazard {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 10;
+        this.time = Math.random() * 100;
+        this.startX = x;
+        this.startY = y;
+        this.amp = 50 + Math.random() * 100;
+        this.speed = 1 + Math.random() * 2;
+        this.horizontal = Math.random() > 0.5;
+    }
+    update(dt) {
+        this.time += dt * this.speed;
+        if (this.horizontal) {
+            this.x = this.startX + Math.sin(this.time) * this.amp;
+        } else {
+            this.y = this.startY + Math.cos(this.time) * this.amp;
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.time * 5);
+        ctx.beginPath();
+        // Spiky gear
+        for(let i=0; i<6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            ctx.lineTo(Math.cos(a)*this.radius*1.5, Math.sin(a)*this.radius*1.5);
+            ctx.lineTo(Math.cos(a+0.5)*this.radius, Math.sin(a+0.5)*this.radius);
+        }
+        ctx.closePath();
+        ctx.fillStyle = '#e53935';
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class Engine {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.width = 800;
+        this.height = 600;
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+
+        this.saveManager = new SaveManager();
+        this.sound = new SoundEngine();
+        this.input = new InputManager(this.canvas);
+
+        this.lastTime = 0;
+        this.score = 0;
+
+        this.player = null;
+        this.grapplePoints = [];
+        this.hazards = [];
+
+        this.setupResizeObserver();
+        this.bindEvents();
+
+        requestAnimationFrame(t => this.loop(t));
+    }
+
+    setupResizeObserver() {
+        const resize = () => {
+            const parent = this.canvas.parentElement;
+            this.width = parent.clientWidth;
+            this.height = parent.clientHeight;
+            this.canvas.width = this.width;
+            this.canvas.height = this.height;
+        };
+        const ro = new ResizeObserver(resize);
+        ro.observe(this.canvas.parentElement);
+        resize();
+    }
+
+    bindEvents() {
+        window.addEventListener('keydown', e => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+                e.preventDefault();
+            }
+            if (e.code === 'Escape' || e.code === 'KeyP') {
+                if (this.state === 'PLAYING') this.state = 'PAUSED';
+                else if (this.state === 'PAUSED') this.state = 'PLAYING';
+            }
+        });
+
+        // Interaction starts audio
+        const startInteraction = () => {
+            this.sound.init();
+            this.sound.resume();
+        };
+        window.addEventListener('mousedown', startInteraction, {once: true});
+        window.addEventListener('keydown', startInteraction, {once: true});
+        window.addEventListener('touchstart', startInteraction, {once: true});
+
+        // Auto-pause
+        window.addEventListener('blur', () => {
+            if (this.state === 'PLAYING') this.state = 'PAUSED';
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && this.state === 'PLAYING') this.state = 'PAUSED';
+        });
+    }
+
+    resetGame() {
+        this.score = 0;
+        this.player = new Player(this.width / 2, 50);
+
+        this.grapplePoints = [];
+        this.hazards = [];
+
+        // Generate procedural steampunk factory layout
+        for (let i = 0; i < 15; i++) {
+            this.grapplePoints.push(new GrapplePoint(
+                100 + Math.random() * (this.width - 200),
+                100 + Math.random() * (this.height - 200)
+            ));
+        }
+
+        for (let i = 0; i < 10; i++) {
+            this.hazards.push(new Hazard(
+                50 + Math.random() * (this.width - 100),
+                150 + Math.random() * (this.height - 200)
+            ));
+        }
+
+        this.saveManager.data.totalGamesPlayed++;
+        this.saveManager.save();
+    }
+
+    start() {
+        this.resetGame();
+        this.state = 'PLAYING';
+    }
+
+    loop(timestamp) {
+        let dt = (timestamp - this.lastTime) / 1000;
+        this.lastTime = timestamp;
+        if (dt > 0.1) dt = 0.1;
+
+        this.update(dt);
+        this.draw();
+        this.input.update();
+
+        requestAnimationFrame(t => this.loop(t));
+    }
+
+    update(dt) {
+        if (this.state === 'TITLE') {
+            if (this.input.isKeyJustPressed('Space') || this.input.mouse.justDown) {
+                this.start();
+            }
+        } else if (this.state === 'GAME_OVER') {
+            if (this.input.isKeyJustPressed('Space') || this.input.mouse.justDown) {
+                this.state = 'TITLE';
+            }
+        } else if (this.state === 'PLAYING') {
+            // Gameplay Logic
+
+            // Tether mechanics
+            if (this.input.mouse.justDown || this.input.isKeyJustPressed('Space')) {
+                // Find nearest grapple point
+                let nearest = null;
+                let minDist = Infinity;
+                let tx = this.input.mouse.x || this.width/2;
+                let ty = this.input.mouse.y || this.height/2;
+
+                if (this.input.isKeyJustPressed('Space')) {
+                    // Auto-aim if space pressed
+                    tx = this.player.x;
+                    ty = this.player.y;
+                }
+
+                for (const gp of this.grapplePoints) {
+                    let d = Math.hypot(gp.x - tx, gp.y - ty);
+                    if (this.input.isKeyJustPressed('Space')) {
+                        d = Math.hypot(gp.x - this.player.x, gp.y - this.player.y);
+                    }
+                    if (d < minDist && d < 300) {
+                        minDist = d;
+                        nearest = gp;
+                    }
+                }
+
+                if (nearest && !this.player.tethered) {
+                    this.player.fireTether(nearest, this);
+                } else if (this.player.tethered) {
+                    this.player.releaseTether();
+                }
+            }
+
+            // if input released, drop tether
+            if (!this.input.isKeyDown('Space') && !this.input.mouse.down && this.player.tethered) {
+                 this.player.releaseTether();
+            }
+
+            this.player.update(dt, this);
+
+            for (const gp of this.grapplePoints) gp.update(dt);
+            for (const hz of this.hazards) {
+                hz.update(dt);
+                // Check collision
+                const dist = Math.hypot(this.player.x - hz.x, this.player.y - hz.y);
+                if (dist < this.player.radius + hz.radius) {
+                    this.die();
+                }
+            }
+
+            // Floor death
+            if (this.player.y >= this.height - this.player.radius - 5) {
+                this.die();
+            }
+
+            // Gain passive score for staying alive
+            this.score += 5 * dt;
+        }
+    }
+
+    die() {
+        this.sound.playHurt();
+        this.state = 'GAME_OVER';
+        this.saveManager.data.totalScoreAccumulated += Math.floor(this.score);
+        if (Math.floor(this.score) > this.saveManager.data.highScore) {
+            this.saveManager.data.highScore = Math.floor(this.score);
+        }
+        this.saveManager.save();
+    }
+
+    draw() {
+        this.ctx.fillStyle = '#1a1a24';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        // Background gears
+        this.ctx.strokeStyle = '#2a2a35';
+        this.ctx.lineWidth = 2;
+        for(let i=0; i<5; i++) {
+            this.ctx.beginPath();
+            this.ctx.arc(this.width*0.2 + i*200, this.height*0.5, 100, 0, Math.PI*2);
+            this.ctx.stroke();
+        }
+
+        if (this.state === 'TITLE') this.drawTitle();
+        else if (this.state === 'PLAYING') this.drawPlaying();
+        else if (this.state === 'PAUSED') this.drawPaused();
+        else if (this.state === 'GAME_OVER') this.drawGameOver();
+    }
+
+    drawPlaying() {
+        for (const gp of this.grapplePoints) gp.draw(this.ctx);
+        for (const hz of this.hazards) hz.draw(this.ctx);
+        if (this.player) this.player.draw(this.ctx);
+
+        // HUD
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '20px monospace';
+        this.ctx.textAlign = 'left';
+        this.ctx.fillText(`Score: ${Math.floor(this.score)}`, 20, 30);
+
+        this.ctx.textAlign = 'right';
+        this.ctx.fillText(`High: ${this.saveManager.data.highScore}`, this.width - 20, 30);
+    }
+
+    drawTitle() {
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+
+        this.ctx.font = '40px monospace';
+        this.ctx.fillStyle = '#a04e7e';
+        this.ctx.fillText('CLOCKWORK TETHER FOUNDRY', this.width/2, this.height/2 - 50);
+
+        this.ctx.font = '20px monospace';
+        this.ctx.fillStyle = '#aaa';
+        this.ctx.fillText('Click or Press Space to Swing', this.width/2, this.height/2 + 20);
+
+        this.ctx.font = '16px monospace';
+        this.ctx.fillStyle = '#777';
+        this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, this.height/2 + 80);
+    }
+
+    drawPaused() {
+        this.drawPlaying();
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+        this.ctx.font = '40px monospace';
+        this.ctx.fillText('PAUSED', this.width/2, this.height/2);
+
+        this.ctx.font = '20px monospace';
+        this.ctx.fillStyle = '#aaa';
+        this.ctx.fillText('Press P or Esc to Resume', this.width/2, this.height/2 + 40);
+        this.ctx.fillText('Back to Arcade (../../index.html)', this.width/2, this.height - 40);
+    }
+
+    drawGameOver() {
+        this.drawPlaying();
+        this.ctx.fillStyle = 'rgba(160, 78, 126, 0.5)';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+        this.ctx.font = '50px monospace';
+        this.ctx.fillText('GEARS CRUSHED', this.width/2, this.height/2 - 40);
+
+        this.ctx.font = '30px monospace';
+        this.ctx.fillText(`Final Score: ${Math.floor(this.score)}`, this.width/2, this.height/2 + 20);
+
+        this.ctx.font = '20px monospace';
+        this.ctx.fillStyle = '#ddd';
+        this.ctx.fillText('Click or Space to Restart', this.width/2, this.height/2 + 80);
+    }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    window.game = new Engine('game-canvas');
+});
