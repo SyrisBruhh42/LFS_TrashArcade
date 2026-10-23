@@ -266,32 +266,6 @@ class Player {
         ctx.restore();
     }
 }
-class Enemy {
-    constructor(x, y, speed, type) {
-        this.x = x;
-        this.y = y;
-        this.speed = speed;
-        this.size = 15;
-        this.active = true;
-    }
-    update(dt, targetX, targetY) {
-        const dx = targetX - this.x;
-        const dy = targetY - this.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 0) {
-            this.x += (dx / dist) * this.speed * dt;
-            this.y += (dy / dist) * this.speed * dt;
-        }
-    }
-    draw(ctx) {
-        ctx.fillStyle = '#f00';
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y - this.size);
-        ctx.lineTo(this.x + this.size, this.y + this.size);
-        ctx.lineTo(this.x - this.size, this.y + this.size);
-        ctx.fill();
-    }
-}
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -354,6 +328,7 @@ class Game {
         this.state = 'PLAYING';
         this.score = 0;
         this.enemies = [];
+        this.projectiles = [];
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2;
         this.player = new Player(this.canvas.width / 2, this.canvas.height / 2);
@@ -380,7 +355,7 @@ class Game {
 
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             let e = this.enemies[i];
-            e.update(dt, this.player.x, this.player.y);
+            e.update(dt, this.player, this);
 
             // Check collision with player attack
             if (this.player.attackDir && this.player.attackTimer > 0) {
@@ -400,7 +375,7 @@ class Game {
                 if (hit) {
                     this.score += this.player.overdrive ? 20 : 10;
                     this.sound.playHit();
-                    this.enemies.splice(i, 1);
+                    e.takeDamage(this.player.overdrive ? 2 : 1, this, i);
                     this.shake.trigger(this.player.overdrive ? 10 : 5, 0.1);
                     continue;
                 }
@@ -413,10 +388,31 @@ class Game {
                 if (this.player.dashTimer > 0) continue; // Invulnerable during dash
 
                 this.player.hp -= 20;
-                this.enemies.splice(i, 1);
+                e.takeDamage(1, this, i);
                 this.sound.playDamage();
                 if (this.player.hp <= 0) {
                     this.checkGameOver();
+                }
+            }
+        }
+
+        if (this.projectiles) {
+            for (let i = this.projectiles.length - 1; i >= 0; i--) {
+                let p = this.projectiles[i];
+                p.update(dt);
+                if (p.x < -50 || p.x > this.canvas.width + 50 || p.y < -50 || p.y > this.canvas.height + 50) {
+                    this.projectiles.splice(i, 1);
+                    continue;
+                }
+                const dx = p.x - this.player.x;
+                const dy = p.y - this.player.y;
+                if (Math.sqrt(dx*dx + dy*dy) < this.player.size + p.size) {
+                    if (this.player.dashTimer <= 0) {
+                        this.player.hp -= p.damage;
+                        this.sound.playDamage();
+                        if (this.player.hp <= 0) this.checkGameOver();
+                    }
+                    this.projectiles.splice(i, 1);
                 }
             }
         }
@@ -446,7 +442,10 @@ class Game {
             x = Math.random() * this.canvas.width;
             y = Math.random() < 0.5 ? -30 : this.canvas.height + 30;
         }
-        this.enemies.push(new Enemy(x, y, 100 + Math.random() * 50));
+        const speed = 100 + Math.random() * 50;
+        const types = [EnemySwarmer, EnemySniper, EnemyBruiser, EnemySplitter, EnemyHazard];
+        const EnemyClass = types[Math.floor(Math.random() * types.length)];
+        this.enemies.push(new EnemyClass(x, y, speed));
     }
     draw() {
         if (this.state !== 'PLAYING') {
@@ -476,6 +475,9 @@ class Game {
             this.particles.draw(this.ctx);
             this.player.draw(this.ctx);
             for (let e of this.enemies) e.draw(this.ctx);
+            if (this.projectiles) {
+                for (let p of this.projectiles) p.draw(this.ctx);
+            }
 
             this.ctx.restore();
 
