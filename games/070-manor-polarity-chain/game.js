@@ -157,6 +157,10 @@ class Orb {
         this.hp = 1;
     }
 
+    takeDamage() {
+        this.active = false;
+    }
+
     update(dt, game) {
         if (!this.active) return;
 
@@ -262,6 +266,248 @@ class Orb {
         ctx.font = '20px monospace';
         ctx.fillText(this.polarity === 1 ? '+' : '-', 0, 0);
 
+        ctx.restore();
+    }
+}
+
+class SwarmerEnemy extends Orb {
+    constructor(x, y, vx, vy, polarity) {
+        super(x, y, vx, vy, polarity);
+        this.chargeTimer = 0;
+    }
+
+    update(dt, game) {
+        if (!this.active) return;
+        this.chargeTimer += dt;
+        if (this.chargeTimer > 1 && game.player) {
+            const dx = game.player.x - this.x;
+            const dy = game.player.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0) {
+                this.vx += (dx / dist) * 200 * dt;
+                this.vy += (dy / dist) * 200 * dt;
+            }
+        }
+        super.update(dt, game);
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        if (this.chargeTimer <= 1) {
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius + 10 * (1 - this.chargeTimer), 0, Math.PI * 2);
+            ctx.strokeStyle = 'red';
+            ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.moveTo(0, -this.radius);
+        ctx.lineTo(this.radius, this.radius);
+        ctx.lineTo(-this.radius, this.radius);
+        ctx.closePath();
+        ctx.fillStyle = this.polarity === 1 ? '#ff4444' : '#4444ff';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '20px monospace';
+        ctx.fillText(this.polarity === 1 ? '+' : '-', 0, 0);
+        ctx.restore();
+    }
+}
+
+class BruiserEnemy extends Orb {
+    constructor(x, y, vx, vy, polarity) {
+        super(x, y, vx * 0.5, vy * 0.5, polarity);
+        this.hp = 3;
+        this.radius = 25;
+    }
+
+    takeDamage() {
+        this.hp--;
+        if (this.hp <= 0) this.active = false;
+    }
+
+    update(dt, game) {
+        if (!this.active) return;
+        if(game.player) {
+            const dx = game.player.x - this.x;
+            const dy = game.player.y - this.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist > 0) {
+                this.vx += (dx/dist) * 50 * dt;
+                this.vy += (dy/dist) * 50 * dt;
+            }
+        }
+        super.update(dt, game);
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+        super.draw(ctx);
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius + 5, 0, Math.PI * 2);
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class SniperEnemy extends Orb {
+    constructor(x, y, vx, vy, polarity) {
+        super(x, y, vx, vy, polarity);
+        this.shootTimer = 0;
+    }
+
+    update(dt, game) {
+        if (!this.active) return;
+        if (game.player) {
+            const dx = game.player.x - this.x;
+            const dy = game.player.y - this.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < 200 && dist > 0) {
+                this.vx -= (dx/dist) * 100 * dt;
+                this.vy -= (dy/dist) * 100 * dt;
+            }
+        }
+        this.shootTimer += dt;
+        if (this.shootTimer > 3 && game.player) {
+            this.shootTimer = 0;
+            const dx = game.player.x - this.x;
+            const dy = game.player.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0) {
+                game.orbs.push(new Orb(this.x, this.y, (dx / dist) * 200, (dy / dist) * 200, this.polarity));
+            }
+        }
+        super.update(dt, game);
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = this.polarity === 1 ? '#ff4444' : '#4444ff';
+        ctx.fillRect(-this.radius, -this.radius, this.radius * 2, this.radius * 2);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-this.radius, -this.radius, this.radius * 2, this.radius * 2);
+
+        if (this.shootTimer > 2.5) {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-this.radius - 5, -this.radius - 5, this.radius * 2 + 10, this.radius * 2 + 10);
+        }
+
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '20px monospace';
+        ctx.fillText(this.polarity === 1 ? '+' : '-', 0, 0);
+        ctx.restore();
+    }
+}
+
+class SpawnerEnemy extends Orb {
+    constructor(x, y, vx, vy, polarity) {
+        super(x, y, vx * 0.3, vy * 0.3, polarity);
+        this.radius = 30;
+        this.spawnTimer = 0;
+    }
+
+    update(dt, game) {
+        if (!this.active) return;
+        if (this.spawnTimer > 4) {
+            this.vx *= 0.95;
+            this.vy *= 0.95;
+        }
+        this.spawnTimer += dt;
+        if (this.spawnTimer > 5) {
+            this.spawnTimer = 0;
+            game.orbs.push(new SwarmerEnemy(this.x, this.y, (Math.random() - 0.5) * 100, (Math.random() - 0.5) * 100, this.polarity));
+        }
+        super.update(dt, game);
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        if (this.spawnTimer > 4) {
+            ctx.globalAlpha = 0.5 + 0.5 * Math.sin(this.spawnTimer * 20);
+        }
+        ctx.fillStyle = this.polarity === 1 ? '#ff4444' : '#4444ff';
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+            ctx.lineTo(Math.cos(i * Math.PI / 4) * this.radius, Math.sin(i * Math.PI / 4) * this.radius);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '20px monospace';
+        ctx.fillText(this.polarity === 1 ? '+' : '-', 0, 0);
+        ctx.restore();
+    }
+}
+
+class HazardEnemy extends Orb {
+    constructor(x, y, vx, vy, polarity) {
+        super(x, y, vx, vy, polarity);
+        this.hazardTimer = 0;
+        this.time = 0;
+    }
+
+    update(dt, game) {
+        if (!this.active) return;
+        this.time += dt;
+        this.vx += Math.cos(this.time * 5) * 100 * dt;
+        this.hazardTimer += dt;
+        if (this.hazardTimer > 4 && game.hazardManager) {
+            this.hazardTimer = 0;
+            game.hazardManager.pools.push(new EctoplasmPool(this.x, this.y, 30));
+        }
+        super.update(dt, game);
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        if (this.hazardTimer > 3) {
+            ctx.strokeStyle = '#00ff88';
+            ctx.strokeRect(-this.radius * (4 - this.hazardTimer), -this.radius * (4 - this.hazardTimer), this.radius * 2 * (4 - this.hazardTimer), this.radius * 2 * (4 - this.hazardTimer));
+        }
+
+        ctx.fillStyle = this.polarity === 1 ? '#ff4444' : '#4444ff';
+        ctx.fillRect(-this.radius, -this.radius / 3, this.radius * 2, this.radius * 2 / 3);
+        ctx.fillRect(-this.radius / 3, -this.radius, this.radius * 2 / 3, this.radius * 2);
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-this.radius, -this.radius / 3, this.radius * 2, this.radius * 2 / 3);
+        ctx.strokeRect(-this.radius / 3, -this.radius, this.radius * 2 / 3, this.radius * 2);
+
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '20px monospace';
+        ctx.fillText(this.polarity === 1 ? '+' : '-', 0, 0);
         ctx.restore();
     }
 }
@@ -816,7 +1062,16 @@ class Game {
         const vy = (Math.random() - 0.5) * 100;
         const polarity = Math.random() > 0.5 ? 1 : -1;
 
-        this.orbs.push(new Orb(x, y, vx, vy, polarity));
+        const typeRand = Math.random();
+        let newEnemy;
+        if (typeRand < 0.2) newEnemy = new SwarmerEnemy(x, y, vx, vy, polarity);
+        else if (typeRand < 0.4) newEnemy = new BruiserEnemy(x, y, vx, vy, polarity);
+        else if (typeRand < 0.6) newEnemy = new SniperEnemy(x, y, vx, vy, polarity);
+        else if (typeRand < 0.8) newEnemy = new SpawnerEnemy(x, y, vx, vy, polarity);
+        else if (typeRand < 0.95) newEnemy = new HazardEnemy(x, y, vx, vy, polarity);
+        else newEnemy = new Orb(x, y, vx, vy, polarity);
+
+        this.orbs.push(newEnemy);
     }
 
     createExplosion(x, y, radius, color) {
@@ -847,10 +1102,12 @@ class Game {
             const dist = Math.sqrt(dx*dx + dy*dy);
 
             if (dist < radius + orb.radius) {
-                orb.active = false; // Destroyed in explosion
-                this.score += 50;
-                // Potential chain reaction
-                this.createExplosion(orb.x, orb.y, 80, orb.polarity === 1 ? '#ff4444' : '#4444ff');
+                orb.takeDamage();
+                if (!orb.active) {
+                    this.score += 50;
+                    // Potential chain reaction
+                    this.createExplosion(orb.x, orb.y, 80, orb.polarity === 1 ? '#ff4444' : '#4444ff');
+                }
             }
         }
     }
@@ -908,10 +1165,13 @@ class Game {
                     const relSpeed = Math.sqrt(relVelX*relVelX + relVelY*relVelY);
 
                     if (o1.polarity !== o2.polarity && relSpeed > 100) {
-                        o1.active = false;
-                        o2.active = false;
-                        this.score += 100;
-                        this.createExplosion((o1.x + o2.x)/2, (o1.y + o2.y)/2, 100, '#ffcc00');
+                        o1.takeDamage();
+                        o2.takeDamage();
+                        if (!o1.active) this.score += 50;
+                        if (!o2.active) this.score += 50;
+                        if (!o1.active && !o2.active) {
+                            this.createExplosion((o1.x + o2.x)/2, (o1.y + o2.y)/2, 100, '#ffcc00');
+                        }
                     } else {
                         // Elastic collision
                         const tx = -ny;
