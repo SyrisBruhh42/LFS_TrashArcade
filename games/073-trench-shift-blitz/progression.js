@@ -68,7 +68,7 @@ class ProgressionSystem {
             case "dash_free": engine.player.dashCooldown = 0; break;
         }
         this.inDraft = false;
-        engine.sound.playSelect();
+        if(perkId === 'heal' || perkId === 'max_hp') engine.sound.playHeal(); else engine.sound.playPowerup();
     }
 
     drawComboUI(ctx, width, height) {

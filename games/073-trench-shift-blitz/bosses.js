@@ -17,7 +17,7 @@ class Boss extends Enemy {
     }
 
     onPhaseTransition(engine) {
-        engine.sound.playSelect();
+        engine.sound.playWarning();
     }
 
     drawBossUI(ctx, width, height) {
