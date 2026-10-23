@@ -41,13 +41,13 @@ class ProgressionManager {
         this.pickups = [];
 
         this.upgrades = [
-            { id: 'hp', name: 'Core Reinforcement', desc: 'Max Core HP +50', apply: (g) => { g.core.maxHp += 50; g.core.hp += 50; } },
-            { id: 'dmg', name: 'Overcharge Rounds', desc: 'Damage Multiplier +20%', apply: (g) => { g.player.dmgMult = (g.player.dmgMult || 1) + 0.2; } },
-            { id: 'echo', name: 'Echo Efficiency', desc: 'Echo Cooldown -2s', apply: (g) => { g.player.echoCooldownReduction = (g.player.echoCooldownReduction || 0) + 2; } },
-            { id: 'speed', name: 'Agility Protocol', desc: 'Player Speed +20%', apply: (g) => { g.player.speed *= 1.2; } },
-            { id: 'dash', name: 'Dash Capacitor', desc: 'Dash Cooldown -1s', apply: (g) => { g.player.dashCooldownReduction = (g.player.dashCooldownReduction || 0) + 1; } },
-            { id: 'regen', name: 'Nano-Repair', desc: 'Core Regens 1 HP/sec', apply: (g) => { g.core.regenRate = (g.core.regenRate || 0) + 1; } },
-            { id: 'fireRate', name: 'Rapid Fire', desc: 'Fire Rate +15%', apply: (g) => { g.player.fireRateMult = (g.player.fireRateMult || 1) + 0.15; } },
+            { id: 'hp', name: 'Core Reinforcement', desc: 'Max Core HP +100', apply: (g) => { g.core.maxHp += 100; g.core.hp += 100; } },
+            { id: 'dmg', name: 'Overcharge Rounds', desc: 'Damage Multiplier +30%', apply: (g) => { g.player.dmgMult = (g.player.dmgMult || 1) + 0.3; } },
+            { id: 'echo', name: 'Echo Efficiency', desc: 'Echo Cooldown -3s', apply: (g) => { g.player.echoCooldownReduction = (g.player.echoCooldownReduction || 0) + 3; } },
+            { id: 'speed', name: 'Agility Protocol', desc: 'Player Speed +25%', apply: (g) => { g.player.speed *= 1.25; } },
+            { id: 'dash', name: 'Dash Capacitor', desc: 'Dash Cooldown -1.5s', apply: (g) => { g.player.dashCooldownReduction = (g.player.dashCooldownReduction || 0) + 1.5; } },
+            { id: 'regen', name: 'Nano-Repair', desc: 'Core Regens 2 HP/sec', apply: (g) => { g.core.regenRate = (g.core.regenRate || 0) + 2; } },
+            { id: 'fireRate', name: 'Rapid Fire', desc: 'Fire Rate +20%', apply: (g) => { g.player.fireRateMult = (g.player.fireRateMult || 1) + 0.20; } },
             { id: 'spread', name: 'Scatter Shot', desc: 'Add 2 projectiles', apply: (g) => { g.player.extraProjectiles = (g.player.extraProjectiles || 0) + 2; } }
         ];
 

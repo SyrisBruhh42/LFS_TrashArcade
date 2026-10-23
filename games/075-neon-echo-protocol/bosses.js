@@ -19,6 +19,13 @@ class BossManager {
             } else {
                 this.boss = new OmegaSwarmBoss(game.width / 2, -100);
             }
+
+            // Dynamic Boss HP scaling based on wave
+            let waveMultiplier = Math.max(1, game.wave / 5);
+            this.boss.maxHp = this.boss.maxHp * waveMultiplier;
+            this.boss.hp = this.boss.maxHp;
+            this.boss.displayHp = this.boss.maxHp;
+
             if(game.sound) {
                 if (game.sound.bossSpawn) game.sound.bossSpawn();
                 else game.sound.echoSpawn();

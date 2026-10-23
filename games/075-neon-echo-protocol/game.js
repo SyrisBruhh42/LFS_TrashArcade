@@ -617,6 +617,11 @@ class Player {
                 dash: isDashingThisFrame,
                 facing: this.facing.copy()
             });
+
+            // Cap history to 20 seconds to prevent memory leak
+            while (this.history.length > 0 && this.recordingTime - this.history[0].t > 20) {
+                this.history.shift();
+            }
         }
     }
     draw(ctx) {
@@ -1352,15 +1357,24 @@ class Game {
 
                 let r = Math.random();
                 let enemy;
-                if (r < 0.3) enemy = new SwarmerEnemy(ex, ey);
-                else if (r < 0.5) enemy = new SniperEnemy(ex, ey);
-                else if (r < 0.7) enemy = new BruiserEnemy(ex, ey);
-                else if (r < 0.9) enemy = new SplitterEnemy(ex, ey);
+
+                // Dynamic spawn weights based on wave progression
+                let w = Math.min(1.0, this.wave / 20.0);
+                let swarmerW = 0.4 - w * 0.1;
+                let sniperW = 0.2 + w * 0.05;
+                let bruiserW = 0.2 + w * 0.05;
+                let splitterW = 0.1 + w * 0.1;
+                // Hazard gets remainder (0.1 -> 0)
+
+                if (r < swarmerW) enemy = new SwarmerEnemy(ex, ey);
+                else if (r < swarmerW + sniperW) enemy = new SniperEnemy(ex, ey);
+                else if (r < swarmerW + sniperW + bruiserW) enemy = new BruiserEnemy(ex, ey);
+                else if (r < swarmerW + sniperW + bruiserW + splitterW) enemy = new SplitterEnemy(ex, ey);
                 else enemy = new HazardEnemy(ex, ey);
                 this.enemies.push(enemy);
 
-
-                this.spawnTimer = Math.max(0.5, 2.0 - this.wave * 0.1);
+                // Smoother spawn timer scaling (asymptotic approach to 0.4s)
+                this.spawnTimer = Math.max(0.4, 2.5 * Math.pow(0.9, this.wave - 1));
             }
         }
 
