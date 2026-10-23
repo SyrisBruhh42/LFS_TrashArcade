@@ -1,0 +1,603 @@
+/**
+ * Cytoplasm Recoil - Phase 1
+ */
+
+const SAVE_KEY = "arcade_game_078_078-cytoplasm-recoil_v1";
+const STATES = { TITLE: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3 };
+
+class MathUtils {
+    static clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+    static lerp(a, b, t) { return a + (b - a) * t; }
+    static randomRange(min, max) { return Math.random() * (max - min) + min; }
+    static distance(x1, y1, x2, y2) { return Math.sqrt((x2 - x1)**2 + (y2 - y1)**2); }
+}
+
+class SaveManager {
+    constructor() {
+        this.data = {
+            highScore: 0,
+            bestWaveOrCombo: 0,
+            totalGamesPlayed: 0,
+            totalScoreAccumulated: 0,
+            unlockedMilestones: [],
+            options: { musicVolume: 1, sfxVolume: 1, mute: false }
+        };
+        this.load();
+    }
+    load() {
+        try {
+            const stored = localStorage.getItem(SAVE_KEY);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                this.data = { ...this.data, ...parsed };
+            }
+        } catch (e) { console.warn("SaveManager error.", e); }
+    }
+    save() {
+        try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); }
+        catch (e) { console.warn("SaveManager error.", e); }
+    }
+    updateHighScore(score) {
+        if (score > this.data.highScore) {
+            this.data.highScore = score;
+            this.save();
+        }
+    }
+    addGamePlayed(score) {
+        this.data.totalGamesPlayed++;
+        this.data.totalScoreAccumulated += score;
+        this.save();
+    }
+}
+
+class SoundEngine {
+    constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.sfxGain = null;
+        this.musicGain = null;
+        this.initialized = false;
+    }
+    init() {
+        if (this.initialized) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        this.ctx = new AudioContext();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.connect(this.ctx.destination);
+        this.sfxGain = this.ctx.createGain();
+        this.sfxGain.connect(this.masterGain);
+        this.musicGain = this.ctx.createGain();
+        this.musicGain.connect(this.masterGain);
+        this.initialized = true;
+    }
+    playTone(freq, type, duration, vol) {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+    shoot() { this.playTone(400, 'square', 0.1, 0.5); }
+    bounce() { this.playTone(600, 'sine', 0.1, 0.3); }
+    hit() { this.playTone(150, 'sawtooth', 0.2, 0.5); }
+    pickup() { this.playTone(800, 'sine', 0.1, 0.4); }
+    death() { this.playTone(100, 'sawtooth', 0.5, 0.6); }
+    start() { this.playTone(440, 'square', 0.3, 0.5); }
+}
+
+class InputManager {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.keys = {};
+        this.mouse = { x: 0, y: 0, down: false, clicked: false };
+        this.joystick = { active: false, baseX: 0, baseY: 0, curX: 0, curY: 0, nx: 0, ny: 0 };
+        this.bindEvents();
+    }
+    bindEvents() {
+        window.addEventListener('keydown', (e) => { this.keys[e.code] = true; });
+        window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
+        this.canvas.addEventListener('mousedown', (e) => {
+            this.updateMousePos(e);
+            this.mouse.down = true;
+            this.mouse.clicked = true;
+            this.resumeAudio();
+        });
+        this.canvas.addEventListener('mousemove', (e) => this.updateMousePos(e));
+        this.canvas.addEventListener('mouseup', () => { this.mouse.down = false; });
+        this.canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.resumeAudio();
+            const touch = e.changedTouches[0];
+            const rect = this.canvas.getBoundingClientRect();
+            const scaleX = this.canvas.width / rect.width;
+            const scaleY = this.canvas.height / rect.height;
+            const x = (touch.clientX - rect.left) * scaleX;
+            const y = (touch.clientY - rect.top) * scaleY;
+            if (x < window.innerWidth / 2) {
+                if (!this.joystick.active) {
+                    this.joystick.active = true;
+                    this.joystick.baseX = x;
+                    this.joystick.baseY = y;
+                    this.joystick.curX = x;
+                    this.joystick.curY = y;
+                }
+            } else {
+                this.mouse.x = x;
+                this.mouse.y = y;
+                this.mouse.clicked = true;
+            }
+        }, { passive: false });
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = this.canvas.width / rect.width;
+                const scaleY = this.canvas.height / rect.height;
+                const x = (touch.clientX - rect.left) * scaleX;
+                const y = (touch.clientY - rect.top) * scaleY;
+                if (this.joystick.active && touch.clientX < window.innerWidth / 2) {
+                    this.joystick.curX = x;
+                    this.joystick.curY = y;
+                    let dx = this.joystick.curX - this.joystick.baseX;
+                    let dy = this.joystick.curY - this.joystick.baseY;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist > 0) {
+                        this.joystick.nx = dx / dist;
+                        this.joystick.ny = dy / dist;
+                    }
+                }
+            }
+        }, { passive: false });
+        this.canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                if (touch.clientX < window.innerWidth / 2) {
+                    this.joystick.active = false;
+                    this.joystick.nx = 0;
+                    this.joystick.ny = 0;
+                }
+            }
+        }, { passive: false });
+        window.addEventListener('keydown', () => this.resumeAudio());
+    }
+    resumeAudio() {
+        if (window.game && window.game.sound && window.game.sound.ctx && window.game.sound.ctx.state === 'suspended') {
+            window.game.sound.ctx.resume();
+        }
+    }
+    updateMousePos(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        this.mouse.x = (e.clientX - rect.left) * scaleX;
+        this.mouse.y = (e.clientY - rect.top) * scaleY;
+    }
+    update() { this.mouse.clicked = false; }
+}
+
+class Vector {
+    constructor(x, y) { this.x = x; this.y = y; }
+    add(v) { this.x += v.x; this.y += v.y; return this; }
+    sub(v) { this.x -= v.x; this.y -= v.y; return this; }
+    mult(n) { this.x *= n; this.y *= n; return this; }
+    mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+    normalize() {
+        let m = this.mag();
+        if (m !== 0) { this.x /= m; this.y /= m; }
+        return this;
+    }
+    copy() { return new Vector(this.x, this.y); }
+    dot(v) { return this.x * v.x + this.y * v.y; }
+}
+
+class Player {
+    constructor(x, y) {
+        this.pos = new Vector(x, y);
+        this.vel = new Vector(0, 0);
+        this.radius = 15;
+        this.speed = 300;
+        this.hasAmmo = true;
+    }
+    update(dt, input, gameWidth, gameHeight) {
+        let dx = 0;
+        let dy = 0;
+        if (input.keys['KeyW'] || input.keys['ArrowUp']) dy -= 1;
+        if (input.keys['KeyS'] || input.keys['ArrowDown']) dy += 1;
+        if (input.keys['KeyA'] || input.keys['ArrowLeft']) dx -= 1;
+        if (input.keys['KeyD'] || input.keys['ArrowRight']) dx += 1;
+        if (input.joystick.active) {
+            dx = input.joystick.nx;
+            dy = input.joystick.ny;
+        }
+        let move = new Vector(dx, dy);
+        if (move.mag() > 0) move.normalize();
+        this.vel = move.mult(this.speed);
+        this.pos.add(new Vector(this.vel.x * dt, this.vel.y * dt));
+        this.pos.x = MathUtils.clamp(this.pos.x, this.radius, gameWidth - this.radius);
+        this.pos.y = MathUtils.clamp(this.pos.y, this.radius, gameHeight - this.radius);
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#448b6f';
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#2e4a3b';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.fillStyle = '#2e4a3b';
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        if (this.hasAmmo) {
+            ctx.fillStyle = '#ffeb3b';
+            ctx.beginPath();
+            ctx.arc(this.pos.x + this.radius, this.pos.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+}
+
+class Ammo {
+    constructor(x, y, dir) {
+        this.pos = new Vector(x, y);
+        this.vel = dir.mult(800);
+        this.radius = 8;
+        this.active = true;
+        this.bounces = 0;
+        this.maxBounces = 5;
+    }
+    update(dt, gameWidth, gameHeight, bumpers) {
+        if (!this.active) return false;
+        this.pos.add(new Vector(this.vel.x * dt, this.vel.y * dt));
+        let bounced = false;
+
+        if (this.pos.x - this.radius < 0) { this.pos.x = this.radius; this.vel.x *= -1; bounced = true; }
+        if (this.pos.x + this.radius > gameWidth) { this.pos.x = gameWidth - this.radius; this.vel.x *= -1; bounced = true; }
+        if (this.pos.y - this.radius < 0) { this.pos.y = this.radius; this.vel.y *= -1; bounced = true; }
+        if (this.pos.y + this.radius > gameHeight) { this.pos.y = gameHeight - this.radius; this.vel.y *= -1; bounced = true; }
+
+        for (let b of bumpers) {
+            let dist = MathUtils.distance(this.pos.x, this.pos.y, b.pos.x, b.pos.y);
+            if (dist < this.radius + b.radius) {
+                let dx = this.pos.x - b.pos.x;
+                let dy = this.pos.y - b.pos.y;
+                let n = new Vector(dx, dy).normalize();
+                let v = this.vel.mag();
+                this.vel = n.mult(v);
+                let overlap = (this.radius + b.radius) - dist;
+                this.pos.add(n.normalize().mult(overlap));
+                bounced = true;
+            }
+        }
+
+        if (bounced) {
+            this.bounces++;
+            if (this.bounces >= this.maxBounces) {
+                this.active = false;
+                this.vel = new Vector(0, 0);
+            }
+            return true;
+        }
+        return false;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.active ? '#ffeb3b' : '#9e9e9e';
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+}
+
+class Enemy {
+    constructor(x, y) {
+        this.pos = new Vector(x, y);
+        this.radius = 12;
+        this.speed = MathUtils.randomRange(100, 150);
+        this.markedForDeletion = false;
+    }
+    update(dt, playerPos) {
+        let dir = new Vector(playerPos.x - this.pos.x, playerPos.y - this.pos.y);
+        if (dir.mag() > 0) dir.normalize();
+        dir.x += MathUtils.randomRange(-0.25, 0.25);
+        dir.y += MathUtils.randomRange(-0.25, 0.25);
+        dir.normalize();
+        this.pos.add(new Vector(dir.x * this.speed * dt, dir.y * this.speed * dt));
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#e91e63';
+        ctx.beginPath();
+        let numSpikes = 8;
+        for (let i = 0; i < numSpikes * 2; i++) {
+            let angle = (i * Math.PI * 2) / (numSpikes * 2);
+            let r = i % 2 === 0 ? this.radius : this.radius * 0.6;
+            let x = this.pos.x + Math.cos(angle) * r;
+            let y = this.pos.y + Math.sin(angle) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#880e4f';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
+class Bumper {
+    constructor(x, y, r) {
+        this.pos = new Vector(x, y);
+        this.radius = r;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#8bc34a';
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#33691e';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.beginPath();
+        ctx.arc(this.pos.x - this.radius*0.3, this.pos.y - this.radius*0.3, this.radius*0.3, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.pos = new Vector(x, y);
+        let angle = Math.random() * Math.PI * 2;
+        let speed = MathUtils.randomRange(50, 150);
+        this.vel = new Vector(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        this.life = 1.0;
+        this.color = color;
+        this.size = MathUtils.randomRange(2, 5);
+    }
+    update(dt) {
+        this.pos.add(new Vector(this.vel.x * dt, this.vel.y * dt));
+        this.life -= dt * 2;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.size, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.width = 800;
+        this.height = 600;
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+        this.input = new InputManager(this.canvas);
+        this.saveManager = new SaveManager();
+        this.sound = new SoundEngine();
+        this.state = STATES.TITLE;
+        this.lastTime = 0;
+        this.score = 0;
+        this.player = null;
+        this.ammo = null;
+        this.enemies = [];
+        this.bumpers = [];
+        this.particles = [];
+        this.enemySpawnTimer = 0;
+        this.enemySpawnRate = 2.0;
+        this.resizeObserver = new ResizeObserver(() => this.resize());
+        this.resizeObserver.observe(this.canvas);
+        this.resize();
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && this.state === STATES.PLAYING) this.state = STATES.PAUSED;
+        });
+        window.addEventListener('blur', () => {
+            if (this.state === STATES.PLAYING) this.state = STATES.PAUSED;
+        });
+        requestAnimationFrame((t) => this.loop(t));
+    }
+    resize() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+        this.width = this.canvas.width;
+        this.height = this.canvas.height;
+    }
+    initGame() {
+        this.player = new Player(this.width / 2, this.height / 2);
+        this.ammo = null;
+        this.enemies = [];
+        this.particles = [];
+        this.score = 0;
+        this.enemySpawnTimer = 0;
+        this.enemySpawnRate = 2.0;
+        this.bumpers = [];
+        for (let i = 0; i < 6; i++) {
+            this.bumpers.push(new Bumper(
+                MathUtils.randomRange(50, this.width - 50),
+                MathUtils.randomRange(50, this.height - 50),
+                MathUtils.randomRange(20, 40)
+            ));
+        }
+        this.sound.init();
+        this.sound.start();
+        this.state = STATES.PLAYING;
+    }
+    spawnParticles(x, y, color, count) {
+        for (let i = 0; i < count; i++) this.particles.push(new Particle(x, y, color));
+    }
+    update(dt) {
+        if (this.state === STATES.TITLE) {
+            if (this.input.mouse.clicked || this.input.keys['Enter'] || this.input.keys['Space']) this.initGame();
+            return;
+        }
+        if (this.state === STATES.GAME_OVER) {
+            if (this.input.mouse.clicked || this.input.keys['Enter']) this.state = STATES.TITLE;
+            return;
+        }
+        if (this.state === STATES.PAUSED) {
+            if (this.input.keys['KeyP'] || this.input.mouse.clicked) this.state = STATES.PLAYING;
+            return;
+        }
+        if (this.input.keys['KeyP']) {
+            this.state = STATES.PAUSED;
+            this.input.keys['KeyP'] = false;
+            return;
+        }
+        this.player.update(dt, this.input, this.width, this.height);
+
+        if (this.player.hasAmmo && this.input.mouse.clicked) {
+            this.sound.init();
+            let dir = new Vector(this.input.mouse.x - this.player.pos.x, this.input.mouse.y - this.player.pos.y).normalize();
+            this.ammo = new Ammo(this.player.pos.x, this.player.pos.y, dir);
+            this.player.hasAmmo = false;
+            this.sound.shoot();
+        }
+
+        if (this.ammo) {
+            let bounced = this.ammo.update(dt, this.width, this.height, this.bumpers);
+            if (bounced) {
+                this.sound.bounce();
+                this.spawnParticles(this.ammo.pos.x, this.ammo.pos.y, '#ffeb3b', 3);
+            }
+            if (!this.ammo.active) {
+                let dist = MathUtils.distance(this.player.pos.x, this.player.pos.y, this.ammo.pos.x, this.ammo.pos.y);
+                if (dist < this.player.radius + this.ammo.radius) {
+                    this.player.hasAmmo = true;
+                    this.ammo = null;
+                    this.sound.pickup();
+                }
+            }
+        }
+
+        this.enemySpawnTimer -= dt;
+        if (this.enemySpawnTimer <= 0) {
+            let side = Math.floor(Math.random() * 4);
+            let ex = 0, ey = 0;
+            if (side === 0) { ex = Math.random() * this.width; ey = -20; }
+            if (side === 1) { ex = Math.random() * this.width; ey = this.height + 20; }
+            if (side === 2) { ex = -20; ey = Math.random() * this.height; }
+            if (side === 3) { ex = this.width + 20; ey = Math.random() * this.height; }
+
+            this.enemies.push(new Enemy(ex, ey));
+            this.enemySpawnTimer = this.enemySpawnRate;
+            this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.02);
+        }
+
+        for (let e of this.enemies) {
+            e.update(dt, this.player.pos);
+            let dist = MathUtils.distance(this.player.pos.x, this.player.pos.y, e.pos.x, e.pos.y);
+            if (dist < this.player.radius + e.radius) {
+                this.sound.death();
+                this.saveManager.updateHighScore(this.score);
+                this.saveManager.addGamePlayed(this.score);
+                this.state = STATES.GAME_OVER;
+            }
+            if (this.ammo && this.ammo.active) {
+                let adist = MathUtils.distance(this.ammo.pos.x, this.ammo.pos.y, e.pos.x, e.pos.y);
+                if (adist < this.ammo.radius + e.radius) {
+                    e.markedForDeletion = true;
+                    this.sound.hit();
+                    this.score += 10;
+                    this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 10);
+                }
+            }
+        }
+        this.enemies = this.enemies.filter(e => !e.markedForDeletion);
+
+        for (let p of this.particles) p.update(dt);
+        this.particles = this.particles.filter(p => p.life > 0);
+
+        this.input.update();
+    }
+    draw() {
+        this.ctx.fillStyle = '#1a2a22';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+        this.ctx.strokeStyle = '#2e4a3b';
+        this.ctx.lineWidth = 1;
+        for(let x=0; x<this.width; x+=50) {
+            this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.height); this.ctx.stroke();
+        }
+        for(let y=0; y<this.height; y+=50) {
+            this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.width, y); this.ctx.stroke();
+        }
+
+        if (this.state === STATES.TITLE) {
+            this.drawText("CYTOPLASM RECOIL", this.width/2, this.height/3, 50, '#448b6f');
+            this.drawText("Click or Press Enter to Start", this.width/2, this.height/2, 24, '#fff');
+            this.drawText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, this.height/2 + 40, 20, '#aaa');
+            this.ctx.fillStyle = '#aaa';
+            this.ctx.font = '16px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText("Back to Arcade", this.width/2, this.height - 50);
+            return;
+        }
+
+        for (let b of this.bumpers) b.draw(this.ctx);
+        if (this.ammo) this.ammo.draw(this.ctx);
+        for (let e of this.enemies) e.draw(this.ctx);
+        for (let p of this.particles) p.draw(this.ctx);
+        if (this.player) this.player.draw(this.ctx);
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '24px monospace';
+        this.ctx.textAlign = 'left';
+        this.ctx.fillText(`Score: ${this.score}`, 20, 40);
+
+        if (this.state === STATES.GAME_OVER) {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            this.drawText("CELL DESTROYED", this.width/2, this.height/3, 50, '#e91e63');
+            this.drawText(`Final Score: ${this.score}`, this.width/2, this.height/2, 30, '#fff');
+            this.drawText("Click to Return", this.width/2, this.height/2 + 50, 20, '#aaa');
+        }
+        if (this.state === STATES.PAUSED) {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            this.drawText("PAUSED", this.width/2, this.height/2, 50, '#fff');
+            this.ctx.fillStyle = '#aaa';
+            this.ctx.font = '16px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText("Back to Arcade", this.width/2, this.height - 50);
+        }
+
+        if (this.input.joystick.active) {
+            this.ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            this.ctx.beginPath();
+            this.ctx.arc(this.input.joystick.baseX, this.input.joystick.baseY, 50, 0, Math.PI*2);
+            this.ctx.stroke();
+            this.ctx.beginPath();
+            this.ctx.arc(this.input.joystick.curX, this.input.joystick.curY, 20, 0, Math.PI*2);
+            this.ctx.stroke();
+        }
+    }
+    drawText(text, x, y, size, color) {
+        this.ctx.fillStyle = color;
+        this.ctx.font = `bold ${size}px monospace`;
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(text, x, y);
+    }
+    loop(time) {
+        let dt = (time - this.lastTime) / 1000;
+        this.lastTime = time;
+        if (dt > 0.1) dt = 0.1;
+        this.update(dt);
+        this.draw();
+        requestAnimationFrame((t) => this.loop(t));
+    }
+}
+window.onload = () => { window.game = new Game(); };
