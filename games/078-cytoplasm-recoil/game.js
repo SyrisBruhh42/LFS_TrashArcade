@@ -90,6 +90,7 @@ class SoundEngine {
     pickup() { this.playTone(800, 'sine', 0.1, 0.4); }
     death() { this.playTone(100, 'sawtooth', 0.5, 0.6); }
     start() { this.playTone(440, 'square', 0.3, 0.5); }
+    dash() { this.playTone(300, 'sawtooth', 0.15, 0.6); }
 }
 
 class InputManager {
@@ -204,8 +205,17 @@ class Player {
         this.pos = new Vector(x, y);
         this.vel = new Vector(0, 0);
         this.radius = 15;
-        this.speed = 300;
+        this.accel = 1500;
+        this.friction = 0.92;
+        this.maxSpeed = 300;
         this.hasAmmo = true;
+        this.dashCooldown = 0;
+        this.dashCooldownMax = 3.0;
+        this.isDashing = false;
+        this.dashDuration = 0.2;
+        this.dashTimer = 0;
+        this.invulnTimer = 0;
+        this.facingAngle = 0;
     }
     update(dt, input, gameWidth, gameHeight) {
         let dx = 0;
@@ -219,29 +229,113 @@ class Player {
             dy = input.joystick.ny;
         }
         let move = new Vector(dx, dy);
-        if (move.mag() > 0) move.normalize();
-        this.vel = move.mult(this.speed);
+        if (move.mag() > 0) {
+            move.normalize();
+            this.facingAngle = Math.atan2(move.y, move.x);
+        }
+
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+        if (this.invulnTimer > 0) this.invulnTimer -= dt;
+
+        if ((input.keys['ShiftLeft'] || input.keys['ShiftRight']) && this.dashCooldown <= 0 && !this.isDashing && move.mag() > 0 && this.hasAmmo) {
+            this.isDashing = true;
+            this.dashTimer = this.dashDuration;
+            this.dashCooldown = this.dashCooldownMax;
+            this.invulnTimer = this.dashDuration;
+            if (window.game && window.game.sound) window.game.sound.dash();
+            this.vel = move.mult(800);
+        }
+
+        if (this.isDashing) {
+            this.dashTimer -= dt;
+            if (this.dashTimer <= 0) {
+                this.isDashing = false;
+            }
+        } else {
+            this.vel.add(move.mult(this.accel * dt));
+            this.vel.mult(this.friction);
+            let speed = this.vel.mag();
+            if (speed > this.maxSpeed) {
+                this.vel.normalize().mult(this.maxSpeed);
+            }
+        }
+
         this.pos.add(new Vector(this.vel.x * dt, this.vel.y * dt));
-        this.pos.x = MathUtils.clamp(this.pos.x, this.radius, gameWidth - this.radius);
-        this.pos.y = MathUtils.clamp(this.pos.y, this.radius, gameHeight - this.radius);
+
+        if (this.pos.x - this.radius < 0) { this.pos.x = this.radius; this.vel.x *= -0.5; }
+        if (this.pos.x + this.radius > gameWidth) { this.pos.x = gameWidth - this.radius; this.vel.x *= -0.5; }
+        if (this.pos.y - this.radius < 0) { this.pos.y = this.radius; this.vel.y *= -0.5; }
+        if (this.pos.y + this.radius > gameHeight) { this.pos.y = gameHeight - this.radius; this.vel.y *= -0.5; }
     }
     draw(ctx) {
+        if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 20) % 2 === 0) return;
+
+        ctx.save();
+        ctx.translate(this.pos.x, this.pos.y);
+        ctx.rotate(this.facingAngle);
+
+        if (this.isDashing) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.beginPath();
+            ctx.moveTo(-30, 0);
+            ctx.lineTo(-this.radius, -this.radius);
+            ctx.lineTo(-this.radius, this.radius);
+            ctx.fill();
+        }
+
+        let speed = this.vel.mag();
+        if (speed > 50 && !this.isDashing) {
+            ctx.fillStyle = '#ff9800';
+            ctx.beginPath();
+            ctx.moveTo(-this.radius, 0);
+            ctx.lineTo(-this.radius - 10 - Math.random() * 10, -5);
+            ctx.lineTo(-this.radius - 5, 0);
+            ctx.lineTo(-this.radius - 10 - Math.random() * 10, 5);
+            ctx.fill();
+        }
+
         ctx.fillStyle = '#448b6f';
         ctx.beginPath();
-        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        let sides = 6;
+        for (let i = 0; i < sides; i++) {
+            let a = (i * Math.PI * 2) / sides;
+            let r = this.radius;
+            let x = Math.cos(a) * r;
+            let y = Math.sin(a) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
         ctx.fill();
+
         ctx.strokeStyle = '#2e4a3b';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.fillStyle = '#2e4a3b';
-        ctx.beginPath();
-        ctx.arc(this.pos.x, this.pos.y, this.radius * 0.4, 0, Math.PI * 2);
-        ctx.fill();
+
         if (this.hasAmmo) {
             ctx.fillStyle = '#ffeb3b';
             ctx.beginPath();
-            ctx.arc(this.pos.x + this.radius, this.pos.y, 5, 0, Math.PI * 2);
+            ctx.arc(0, 0, 5, 0, Math.PI * 2);
             ctx.fill();
+        }
+
+        ctx.restore();
+
+        if (this.hasAmmo && window.game && window.game.input.mouse.down && !window.game.input.joystick.active) {
+            let dx = window.game.input.mouse.x - this.pos.x;
+            let dy = window.game.input.mouse.y - this.pos.y;
+            let dir = new Vector(dx, dy);
+            if (dir.mag() > 0) {
+                dir.normalize();
+                ctx.strokeStyle = 'rgba(255, 235, 59, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(this.pos.x + dir.x * this.radius, this.pos.y + dir.y * this.radius);
+                ctx.lineTo(this.pos.x + dir.x * 100, this.pos.y + dir.y * 100);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
         }
     }
 }
@@ -324,8 +418,11 @@ class Enemy {
             let r = i % 2 === 0 ? this.radius : this.radius * 0.6;
             let x = this.pos.x + Math.cos(angle) * r;
             let y = this.pos.y + Math.sin(angle) * r;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
         }
         ctx.closePath();
         ctx.fill();
@@ -460,11 +557,36 @@ class Game {
         }
         this.player.update(dt, this.input, this.width, this.height);
 
+        for (let b of this.bumpers) {
+            let dist = MathUtils.distance(this.player.pos.x, this.player.pos.y, b.pos.x, b.pos.y);
+            if (dist < this.player.radius + b.radius) {
+                let dx = this.player.pos.x - b.pos.x;
+                let dy = this.player.pos.y - b.pos.y;
+                let n = new Vector(dx, dy).normalize();
+                let overlap = (this.player.radius + b.radius) - dist;
+                this.player.pos.add(n.copy().mult(overlap));
+                let dot = this.player.vel.dot(n);
+                if (dot < 0) {
+                    this.player.vel.sub(n.copy().mult(2 * dot));
+                    this.player.vel.mult(0.8);
+                }
+            }
+        }
+
         if (this.player.hasAmmo && this.input.mouse.clicked) {
             this.sound.init();
-            let dir = new Vector(this.input.mouse.x - this.player.pos.x, this.input.mouse.y - this.player.pos.y).normalize();
+            let dx = this.input.mouse.x - this.player.pos.x;
+            let dy = this.input.mouse.y - this.player.pos.y;
+            let dir = new Vector(dx, dy);
+            if (dir.mag() > 0) dir.normalize();
+            else dir = new Vector(1, 0);
+
             this.ammo = new Ammo(this.player.pos.x, this.player.pos.y, dir);
             this.player.hasAmmo = false;
+
+            this.player.vel.sub(dir.copy().mult(400));
+            this.player.invulnTimer = 0.1;
+
             this.sound.shoot();
         }
 
@@ -502,10 +624,17 @@ class Game {
             e.update(dt, this.player.pos);
             let dist = MathUtils.distance(this.player.pos.x, this.player.pos.y, e.pos.x, e.pos.y);
             if (dist < this.player.radius + e.radius) {
-                this.sound.death();
-                this.saveManager.updateHighScore(this.score);
-                this.saveManager.addGamePlayed(this.score);
-                this.state = STATES.GAME_OVER;
+                if (this.player.isDashing) {
+                    e.markedForDeletion = true;
+                    this.sound.hit();
+                    this.score += 20;
+                    this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 15);
+                } else if (this.player.invulnTimer <= 0) {
+                    this.sound.death();
+                    this.saveManager.updateHighScore(this.score);
+                    this.saveManager.addGamePlayed(this.score);
+                    this.state = STATES.GAME_OVER;
+                }
             }
             if (this.ammo && this.ammo.active) {
                 let adist = MathUtils.distance(this.ammo.pos.x, this.ammo.pos.y, e.pos.x, e.pos.y);
@@ -557,6 +686,17 @@ class Game {
         this.ctx.font = '24px monospace';
         this.ctx.textAlign = 'left';
         this.ctx.fillText(`Score: ${this.score}`, 20, 40);
+
+        if (this.player) {
+            this.ctx.fillStyle = '#2e4a3b';
+            this.ctx.fillRect(20, 50, 100, 10);
+            let cdRatio = Math.max(0, 1 - (this.player.dashCooldown / this.player.dashCooldownMax));
+            this.ctx.fillStyle = cdRatio >= 1 ? '#4caf50' : '#ff9800';
+            this.ctx.fillRect(20, 50, 100 * cdRatio, 10);
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(20, 50, 100, 10);
+        }
 
         if (this.state === STATES.GAME_OVER) {
             this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
