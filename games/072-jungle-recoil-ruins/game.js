@@ -263,6 +263,7 @@ class Player {
     this.recoilForce = 400; // Recoil applied per shot
     this.fireRate = 0.2; // seconds
     this.fireTimer = 0;
+    this.hasShield = false;
 
     this.dashCooldown = 3;
     this.dashTimer = 0;
@@ -285,7 +286,9 @@ class Player {
     if (this.dashActiveTimer > 0) {
       this.friction = 0.99;
     } else {
-      this.friction = 0.95;
+      let f = 0.95;
+      if (game.upgradeManager && game.upgradeManager.hasUpgrade('speed')) f = 0.97;
+      this.friction = f;
     }
 
     if (input.isDashPressed() && this.dashTimer <= 0) {
@@ -298,7 +301,9 @@ class Player {
 
     if (input.isFirePressed() && this.fireTimer <= 0) {
       this.fire(aimDir, game);
-      this.fireTimer = this.fireRate;
+      let fireRateMult = game.upgradeManager && game.upgradeManager.hasUpgrade('fireRate') ?
+                         Math.pow(0.8, game.upgradeManager.getUpgradeLevel('fireRate')) : 1;
+      this.fireTimer = this.fireRate * fireRateMult;
     }
 
     this.vel.mult(this.friction);
@@ -314,18 +319,40 @@ class Player {
   fire(aimDir, game) {
     // Recoil-as-movement: Push player opposite to aim direction
     let recoilDir = aimDir.copy().mult(-1);
-    this.vel.add(recoilDir.mult(this.recoilForce));
+    let recoilMult = game.upgradeManager && game.upgradeManager.hasUpgrade('recoil') ? 1.5 : 1;
+    this.vel.add(recoilDir.mult(this.recoilForce * recoilMult));
     this.recoilAnimTimer = 0.1;
 
     game.sound.playShoot();
 
+    let pierceCount = game.upgradeManager && game.upgradeManager.hasUpgrade('pierce') ? game.upgradeManager.getUpgradeLevel('pierce') + 1 : 1;
+    let projDamage = game.upgradeManager && game.upgradeManager.hasUpgrade('damage') ? 15 : 10;
+
     // Spawn projectile
-    game.projectiles.push(new Projectile(this.pos.x, this.pos.y, aimDir));
+    game.projectiles.push(new Projectile(this.pos.x, this.pos.y, aimDir, pierceCount, projDamage));
+
+    if (game.upgradeManager && game.upgradeManager.hasUpgrade('spread')) {
+      for (let i = 1; i <= game.upgradeManager.getUpgradeLevel('spread'); i++) {
+        let angle1 = Math.atan2(aimDir.y, aimDir.x) + i * 0.2;
+        let angle2 = Math.atan2(aimDir.y, aimDir.x) - i * 0.2;
+        game.projectiles.push(new Projectile(this.pos.x, this.pos.y, new Vector2(Math.cos(angle1), Math.sin(angle1)), pierceCount, projDamage));
+        game.projectiles.push(new Projectile(this.pos.x, this.pos.y, new Vector2(Math.cos(angle2), Math.sin(angle2)), pierceCount, projDamage));
+      }
+    }
   }
 
   draw(ctx, aimDir) {
     ctx.save();
     ctx.translate(this.pos.x, this.pos.y);
+
+    if (this.hasShield) {
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius + 5, 0, Math.PI * 2);
+      ctx.strokeStyle = '#00bcd4';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
     ctx.rotate(Math.atan2(aimDir.y, aimDir.x));
 
     if (this.recoilAnimTimer > 0) {
@@ -369,12 +396,15 @@ class Player {
 }
 
 class Projectile {
-  constructor(x, y, dir) {
+  constructor(x, y, dir, pierce = 1, damage = 10) {
     this.pos = new Vector2(x, y);
     this.vel = dir.copy().mult(600); // Bullet speed
     this.radius = 4;
     this.color = '#ffeb3b';
     this.active = true;
+    this.pierce = pierce;
+    this.damage = damage;
+    this.hitEnemies = new Set();
   }
   update(dt, game) {
     this.pos.add(this.vel.copy().mult(dt));
@@ -461,7 +491,7 @@ class BaseEnemy {
   }
   draw(ctx) {}
   onDeath(game) {
-    game.score += this.scoreValue;
+    game.score += game.comboManager ? game.comboManager.addScore(this.scoreValue) : this.scoreValue;
   }
 }
 
@@ -773,6 +803,10 @@ class GameEngine {
 
     this.score = 0;
     this.wave = 1;
+    this.upgradeManager = new UpgradeManager();
+    this.comboManager = new ComboManager();
+    this.pickupManager = new PickupManager();
+    this.draftChoices = [];
     this.enemySpawnTimer = 0;
     this.enemySpawnRate = 2; // seconds
     this.boss = null;
@@ -814,6 +848,10 @@ class GameEngine {
     this.hazards = [];
     this.score = 0;
     this.wave = 1;
+    this.upgradeManager = new UpgradeManager();
+    this.comboManager = new ComboManager();
+    this.pickupManager = new PickupManager();
+    this.draftChoices = [];
     this.enemySpawnTimer = 2;
     this.enemySpawnRate = 2;
     this.boss = null;
@@ -871,9 +909,42 @@ class GameEngine {
       if (this.input.isFirePressed()) {
         this.resetGame();
       }
+    } else if (this.state === 'DRAFT') {
+      let selectedIdx = -1;
+      if (this.input.keys['Digit1']) selectedIdx = 0;
+      else if (this.input.keys['Digit2']) selectedIdx = 1;
+      else if (this.input.keys['Digit3']) selectedIdx = 2;
+
+      let isFire = this.input.keys['Space'] || this.input.mouse.down || this.input.touch.down;
+
+      if (isFire) {
+        let px = this.input.mouse.down ? this.input.mouse.x : this.input.touch.x;
+        let py = this.input.mouse.down ? this.input.mouse.y : this.input.touch.y;
+        for (let i = 0; i < this.draftChoices.length; i++) {
+          let y = this.canvas.height / 2 - 50 + i * 80;
+          if (py >= y && py <= y + 60 && px >= this.canvas.width/2 - 300 && px <= this.canvas.width/2 + 300) {
+            selectedIdx = i;
+            break;
+          }
+        }
+      }
+
+      if (selectedIdx >= 0 && selectedIdx < this.draftChoices.length) {
+        this.upgradeManager.applyUpgrade(this.draftChoices[selectedIdx].id);
+        this.wave++;
+        this.state = 'PLAYING';
+        // Give invuln to prevent instant death from leftover projectiles
+        this.player.invulnerableTimer = 2.0;
+
+        // Ensure space release is necessary so they don't immediately fire
+        this.player.fireTimer = 0.5;
+      }
     } else if (this.state === 'PLAYING') {
       this.player.update(dt, this.input, this);
       if (this.environment) this.environment.update(dt, this);
+
+      if (this.comboManager) this.comboManager.update(dt, this.upgradeManager);
+      if (this.pickupManager) this.pickupManager.update(dt, this);
 
       // Spawner
       if (this.score >= this.nextBossScore && !this.boss && this.bossWarningTimer <= 0) {
@@ -889,25 +960,36 @@ class GameEngine {
         this.boss.update(dt, this);
         let dist = this.boss.pos.copy().sub(this.player.pos).mag();
         if (dist < this.boss.radius + this.player.radius && this.player.invulnerableTimer <= 0) {
-          this.sound.playExplosion();
-          this.gameOver();
-          return;
+          if (this.player.hasShield) {
+            this.player.hasShield = false;
+            this.player.invulnerableTimer = 1.0;
+            this.sound.playHit();
+          } else {
+            this.sound.playExplosion();
+            this.gameOver();
+            return;
+          }
         }
         for (let j = this.projectiles.length - 1; j >= 0; j--) {
           let p = this.projectiles[j];
+          if (p.hitEnemies.has(this.boss)) continue;
           let pDist = this.boss.pos.copy().sub(p.pos).mag();
           if (pDist < this.boss.radius + p.radius) {
-            this.boss.takeDamage(10);
-            p.active = false;
+            this.boss.takeDamage(p.damage || 10);
+            p.hitEnemies.add(this.boss);
+            p.pierce--;
+            if (p.pierce <= 0) p.active = false;
             this.sound.playHit();
           }
         }
         if (!this.boss.active) {
-          this.score += this.boss.scoreValue;
+          this.score += this.comboManager.addScore(this.boss.scoreValue);
           this.nextBossScore = this.score + 200;
           this.bossKillCount++;
           this.boss = null;
           this.sound.playExplosion();
+          this.state = 'DRAFT';
+          this.draftChoices = this.upgradeManager.getDraftChoices();
         }
       } else {
         this.enemySpawnTimer -= dt;
@@ -937,9 +1019,15 @@ class GameEngine {
         }
         let dist = p.pos.copy().sub(this.player.pos).mag();
         if (dist < p.radius + this.player.radius && this.player.invulnerableTimer <= 0) {
-          this.sound.playExplosion();
-          this.gameOver();
-          return;
+          if (this.player.hasShield) {
+            this.player.hasShield = false;
+            this.player.invulnerableTimer = 1.0;
+            this.sound.playHit();
+          } else {
+            this.sound.playExplosion();
+            this.gameOver();
+            return;
+          }
         }
       }
 
@@ -953,9 +1041,15 @@ class GameEngine {
         }
         let dist = h.pos.copy().sub(this.player.pos).mag();
         if (dist < h.radius + this.player.radius && this.player.invulnerableTimer <= 0) {
-          this.sound.playExplosion();
-          this.gameOver();
-          return;
+          if (this.player.hasShield) {
+            this.player.hasShield = false;
+            this.player.invulnerableTimer = 1.0;
+            this.sound.playHit();
+          } else {
+            this.sound.playExplosion();
+            this.gameOver();
+            return;
+          }
         }
       }
 
@@ -967,18 +1061,27 @@ class GameEngine {
         // Collision with player
         let dist = e.pos.copy().sub(this.player.pos).mag();
         if (dist < e.radius + this.player.radius && this.player.invulnerableTimer <= 0) {
-          this.sound.playExplosion();
-          this.gameOver();
-          return;
+          if (this.player.hasShield) {
+            this.player.hasShield = false;
+            this.player.invulnerableTimer = 1.0;
+            this.sound.playHit();
+          } else {
+            this.sound.playExplosion();
+            this.gameOver();
+            return;
+          }
         }
 
         // Collision with projectiles
         for (let j = this.projectiles.length - 1; j >= 0; j--) {
           let p = this.projectiles[j];
+          if (p.hitEnemies.has(e)) continue;
           let pDist = e.pos.copy().sub(p.pos).mag();
           if (pDist < e.radius + p.radius) {
-            e.takeDamage(10);
-            p.active = false;
+            e.takeDamage(p.damage || 10);
+            p.hitEnemies.add(e);
+            p.pierce--;
+            if (p.pierce <= 0) p.active = false;
             this.sound.playHit();
             break;
           }
@@ -986,6 +1089,8 @@ class GameEngine {
 
         if (!e.active) {
           e.onDeath(this);
+          if (this.comboManager) this.comboManager.onKill();
+          if (this.pickupManager) this.pickupManager.spawnPickup(e.pos.x, e.pos.y);
           this.enemies.splice(i, 1);
         }
       }
@@ -1033,6 +1138,7 @@ class GameEngine {
 
       for (let p of this.projectiles) p.draw(this.ctx);
       for (let ep of this.enemyProjectiles) ep.draw(this.ctx);
+      if (this.pickupManager) this.pickupManager.draw(this.ctx);
       for (let h of this.hazards) h.draw(this.ctx);
       for (let e of this.enemies) e.draw(this.ctx);
       if (this.boss) this.boss.draw(this.ctx);
@@ -1051,6 +1157,8 @@ class GameEngine {
       this.ctx.fillStyle = dashReady ? '#00ffff' : '#888';
       this.ctx.fillText(`Dash: ${dashReady ? 'READY' : Math.ceil(this.player.dashTimer)}`, 20, 90);
 
+      if (this.comboManager) this.comboManager.draw(this.ctx, this.canvas.width);
+
       if (this.bossWarningTimer > 0) {
         if (Math.floor(performance.now() / 200) % 2 === 0) {
           this.ctx.fillStyle = '#f44336';
@@ -1062,6 +1170,39 @@ class GameEngine {
         this.boss.drawHpBar(this.ctx, this.canvas.width, this.canvas.height);
       }
 
+    } else if (this.state === 'DRAFT') {
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+      this.ctx.fillStyle = '#fff';
+      this.ctx.textAlign = 'center';
+      this.ctx.font = '40px monospace';
+      this.ctx.fillText('WAVE CLEARED', this.canvas.width / 2, this.canvas.height / 4);
+      this.ctx.font = '24px monospace';
+      this.ctx.fillText('Select an Upgrade (Press 1, 2, or 3)', this.canvas.width / 2, this.canvas.height / 4 + 40);
+
+      for (let i = 0; i < this.draftChoices.length; i++) {
+        let choice = this.draftChoices[i];
+        let x = this.canvas.width / 2;
+        let y = this.canvas.height / 2 - 50 + i * 80;
+
+        let hover = false;
+        let px = this.input.mouse.x;
+        let py = this.input.mouse.y;
+        if (py >= y && py <= y + 60 && px >= x - 300 && px <= x + 300) {
+          hover = true;
+        }
+
+        this.ctx.fillStyle = hover ? '#555' : '#333';
+        this.ctx.fillRect(x - 300, y, 600, 60);
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.strokeRect(x - 300, y, 600, 60);
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'left';
+        this.ctx.font = '20px monospace';
+        this.ctx.fillText(`[${i + 1}] ${choice.name}: ${choice.desc}`, x - 280, y + 35);
+      }
     } else if (this.state === 'PAUSED') {
       this.ctx.fillStyle = '#0a1a0f';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
