@@ -284,6 +284,9 @@ class Game {
         this.enemies = [];
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2; // seconds
+        this.boss = null;
+        this.bossWave = 1;
+        this.nextBossScore = 150;
 
         this.player = null;
 
@@ -331,6 +334,9 @@ class Game {
         this.projectiles = [];
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2;
+        this.boss = null;
+        this.bossWave = 1;
+        this.nextBossScore = 150;
         this.player = new Player(this.canvas.width / 2, this.canvas.height / 2);
         this.world = new World(this.canvas.width, this.canvas.height);
     }
@@ -346,11 +352,42 @@ class Game {
             this.world.update(dt, this.player, this.enemies, this.sound);
         }
 
-        this.enemySpawnTimer += dt;
-        if (this.enemySpawnTimer >= this.enemySpawnRate) {
-            this.enemySpawnTimer = 0;
-            this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.05); // gets faster
-            this.spawnEnemy();
+        if (this.boss) {
+            this.boss.update(dt, this.player, this);
+            const bx = this.boss.x - this.player.x;
+            const by = this.boss.y - this.player.y;
+            if (Math.sqrt(bx*bx + by*by) < this.player.size + this.boss.size && this.player.dashTimer <= 0) {
+                this.player.hp -= 30;
+                this.sound.playDamage();
+                this.player.dashTimer = 0.5; // IFrames
+                if (this.player.hp <= 0) this.checkGameOver();
+            }
+
+            if (this.boss.hp <= 0) {
+                this.boss = null;
+                this.bossWave++;
+                this.score += 500;
+                this.nextBossScore = this.score + 500;
+                this.shake.trigger(20, 0.5);
+                this.sound.playDamage(); // use damage sound for explosion
+            }
+        } else {
+            this.enemySpawnTimer += dt;
+            if (this.enemySpawnTimer >= this.enemySpawnRate) {
+                this.enemySpawnTimer = 0;
+                this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.05); // gets faster
+                this.spawnEnemy();
+            }
+
+            if (this.score >= this.nextBossScore) {
+                this.enemies = [];
+                this.projectiles = [];
+                if (this.bossWave % 2 !== 0) {
+                    this.boss = new CyberSamuraiBoss(this.canvas.width / 2, -100);
+                } else {
+                    this.boss = new OniTankBoss(this.canvas.width / 2, -100);
+                }
+            }
         }
 
         for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -393,6 +430,22 @@ class Game {
                 if (this.player.hp <= 0) {
                     this.checkGameOver();
                 }
+            }
+        }
+
+        if (this.boss && this.player.attackDir && this.player.attackTimer > 0) {
+            const range = this.player.overdrive ? 100 : 60;
+            const w = 40;
+            let ax = this.player.x, ay = this.player.y, aw = 0, ah = 0;
+            if (this.player.attackDir === 'up') { aw = w; ah = range; ax -= w/2; ay -= range; }
+            if (this.player.attackDir === 'down') { aw = w; ah = range; ax -= w/2; }
+            if (this.player.attackDir === 'left') { aw = range; ah = w; ax -= range; ay -= w/2; }
+            if (this.player.attackDir === 'right') { aw = range; ah = w; ay -= w/2; }
+
+            if (this.boss.x > ax && this.boss.x < ax + aw && this.boss.y > ay && this.boss.y < ay + ah) {
+                this.boss.takeDamage(this.player.overdrive ? 20 : 10, this);
+                this.sound.playHit();
+                this.shake.trigger(this.player.overdrive ? 10 : 5, 0.1);
             }
         }
 
@@ -477,6 +530,10 @@ class Game {
             for (let e of this.enemies) e.draw(this.ctx);
             if (this.projectiles) {
                 for (let p of this.projectiles) p.draw(this.ctx);
+            }
+
+            if (this.boss) {
+                this.boss.draw(this.ctx, this.canvas);
             }
 
             this.ctx.restore();
