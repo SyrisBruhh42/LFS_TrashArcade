@@ -53,7 +53,7 @@ class SaveManager {
             totalGamesPlayed: 0,
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
-            options: { mute: false, sfxVolume: 1, musicVolume: 1 }
+            options: { mute: false, sfxVolume: 1, musicVolume: 1, shakeIntensity: 100 }
         };
         this.load();
     }
@@ -247,6 +247,13 @@ class Player {
             this.invulnerableTimer = 0.1;
         }
         if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
+
+        if (this.dashActive > 0 || this.tethered) {
+            game.vfx.addAfterimage(this.x, this.y, this.radius, '#00ffff');
+            if (this.dashActive > 0) {
+                game.vfx.emitDirectional(this.x, this.y, 1, '#ffaa00', -this.vx, -this.vy, 0.2, 2);
+            }
+        }
 
         // Tail tracking
         this.tail.push({x: this.x, y: this.y});
@@ -836,6 +843,8 @@ class Engine {
         this.conveyors = [];
         this.covers = [];
 
+        this.vfx = new VFXManager();
+
         this.setupResizeObserver();
         this.bindEvents();
 
@@ -973,6 +982,9 @@ class Engine {
     }
 
     update(dt) {
+        this.vfx.update(dt, this);
+        if (this.vfx.hitStop > 0) return;
+
         if (this.state === 'TITLE') {
             if (this.input.isKeyJustPressed('Space') || this.input.mouse.justDown) {
                 this.start();
@@ -1054,6 +1066,8 @@ class Engine {
                     const dist = Math.hypot(this.player.x - hz.x, this.player.y - hz.y);
                     if (dist < this.player.radius + hz.radius) {
                         if (this.player.invulnerableTimer <= 0) {
+                            this.vfx.shake(10, 0.2);
+                            this.vfx.emit(this.player.x, this.player.y, 20, '#ff0000', 5);
                             this.die();
                         }
                     }
@@ -1101,7 +1115,13 @@ class Engine {
                         this.player.vy = -this.player.vy;
                         this.player.invulnerableTimer = 0.5;
                         this.sound.playHurt();
+                        this.vfx.freeze(0.1);
+                        this.vfx.shake(5, 0.2);
+                        this.vfx.emitDirectional(b.x, b.y, 15, '#ffaa00', this.player.vx, this.player.vy, 0.5, 8);
+                        this.vfx.addText(b.x, b.y, '-20', '#ff0000');
                     } else if (this.player.invulnerableTimer <= 0) {
+                        this.vfx.shake(10, 0.2);
+                        this.vfx.emit(this.player.x, this.player.y, 20, '#ff0000', 5);
                         this.die();
                     }
                 }
@@ -1109,6 +1129,10 @@ class Engine {
             this.bosses = this.bosses.filter(b => b.hp > 0);
 
             if (this.bossActive && this.bosses.length === 0) {
+                this.vfx.freeze(0.5);
+                this.vfx.shake(20, 1.0);
+                this.vfx.emit(this.width/2, this.height/2, 50, '#ffaa00', 10);
+                this.vfx.addText(this.width/2, this.height/2, 'BOSS DEFEATED', '#ffaa00');
                 this.bossActive = false;
                 this.bossesKilled++;
                 this.nextBossScore = this.score + 500 + (this.bossesKilled * 300);
@@ -1142,6 +1166,10 @@ class Engine {
             // Spawn pickup on some enemy deaths
             if (this.enemies.length < beforeLen) {
                 let killed = beforeLen - this.enemies.length;
+                this.vfx.freeze(0.05);
+                this.vfx.shake(3, 0.1);
+                this.vfx.addText(this.player.x, this.player.y - 20, '+Combo!', '#00ffaa');
+
                 for (let i = 0; i < killed; i++) {
                     if (Math.random() < 0.3) {
                         this.pickups.push(new Pickup(this.width/2 + (Math.random()-0.5)*200, this.height/2 + (Math.random()-0.5)*200));
@@ -1228,6 +1256,8 @@ class Engine {
             cameraY = (this.player.y - this.height/2) * 0.1;
         }
 
+        this.vfx.applyShake(this.ctx, this.saveManager.data.options);
+
         this.env.draw(this.ctx, cameraX, cameraY);
 
         if (this.state === 'TITLE') this.drawTitle();
@@ -1235,6 +1265,8 @@ class Engine {
         else if (this.state === 'PAUSED') this.drawPaused();
         else if (this.state === 'UPGRADE') this.drawUpgrade();
         else if (this.state === 'GAME_OVER') this.drawGameOver();
+
+        this.vfx.restoreShake(this.ctx);
     }
 
     drawPlaying() {
@@ -1264,6 +1296,8 @@ class Engine {
             b.draw(this.ctx);
         }
         if (this.player) this.player.draw(this.ctx);
+
+        this.vfx.draw(this.ctx, this);
 
         if (this.bossWarningTimer > 0) {
             this.ctx.fillStyle = `rgba(255, 0, 0, ${Math.abs(Math.sin(this.bossWarningTimer * 10))})`;
