@@ -106,7 +106,7 @@ class Pickup {
 
     collect(game) {
         this.dead = true;
-        try { game.sound.playGrapple(); } catch(e){} // Reusing a sound
+        try { game.sound.playPickup(); } catch(e){}
 
         switch (this.type) {
             case 'score':

@@ -47,7 +47,7 @@ class CogwheelTitan extends Boss {
         if (this.phase === 1) {
             if (this.attackTimer <= 0) {
                 this.attackTimer = 1.5;
-                game.sound.playHurt();
+                game.sound.playWeaponFire();
                 for (let i = 0; i < 8; i++) {
                     const angle = (i / 8) * Math.PI * 2;
                     game.hazards.push(new Projectile(this.x, this.y, Math.cos(angle) * 150, Math.sin(angle) * 150));
@@ -127,7 +127,7 @@ class SteamOverlord extends Boss {
             if (this.attackTimer <= 0) {
                 this.attackTimer = 1.5;
                 game.hazards.push(new ToxicPuddle(this.x, game.height - 50));
-                game.sound.playHurt();
+                game.sound.playWeaponFire();
             }
         } else {
             if (this.attackTimer <= 0) {
