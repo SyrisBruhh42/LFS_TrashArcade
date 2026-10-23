@@ -869,6 +869,7 @@ class Game {
         this.sound = new SoundEngine();
 
         this.world = new World(this.width, this.height);
+        this.bossManager = new BossManager();
 
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
         this.score = 0;
@@ -1018,29 +1019,33 @@ class Game {
 
         this.bullets.forEach(b => b.update(dt, this));
 
+        this.bossManager.update(dt, this);
+
         // Wave spawning
-        this.spawnTimer -= dt;
-        if (this.spawnTimer <= 0) {
-            let side = Math.floor(Math.random() * 4);
-            let ex, ey;
-            if (side === 0) { ex = Math.random() * this.width; ey = -20; }
-            else if (side === 1) { ex = this.width + 20; ey = Math.random() * this.height; }
-            else if (side === 2) { ex = Math.random() * this.width; ey = this.height + 20; }
-            else { ex = -20; ey = Math.random() * this.height; }
+        if (!this.bossManager.bossWaveActive) {
+            this.spawnTimer -= dt;
+            if (this.spawnTimer <= 0) {
+                let side = Math.floor(Math.random() * 4);
+                let ex, ey;
+                if (side === 0) { ex = Math.random() * this.width; ey = -20; }
+                else if (side === 1) { ex = this.width + 20; ey = Math.random() * this.height; }
+                else if (side === 2) { ex = Math.random() * this.width; ey = this.height + 20; }
+                else { ex = -20; ey = Math.random() * this.height; }
 
-            let type = Math.random() > 0.8 ? 'big' : 'normal';
+                let type = Math.random() > 0.8 ? 'big' : 'normal';
 
-            let r = Math.random();
-            let enemy;
-            if (r < 0.3) enemy = new SwarmerEnemy(ex, ey);
-            else if (r < 0.5) enemy = new SniperEnemy(ex, ey);
-            else if (r < 0.7) enemy = new BruiserEnemy(ex, ey);
-            else if (r < 0.9) enemy = new SplitterEnemy(ex, ey);
-            else enemy = new HazardEnemy(ex, ey);
-            this.enemies.push(enemy);
+                let r = Math.random();
+                let enemy;
+                if (r < 0.3) enemy = new SwarmerEnemy(ex, ey);
+                else if (r < 0.5) enemy = new SniperEnemy(ex, ey);
+                else if (r < 0.7) enemy = new BruiserEnemy(ex, ey);
+                else if (r < 0.9) enemy = new SplitterEnemy(ex, ey);
+                else enemy = new HazardEnemy(ex, ey);
+                this.enemies.push(enemy);
 
 
-            this.spawnTimer = Math.max(0.5, 2.0 - this.wave * 0.1);
+                this.spawnTimer = Math.max(0.5, 2.0 - this.wave * 0.1);
+            }
         }
 
         this.enemies.forEach(e => e.update(dt, this));
@@ -1134,6 +1139,8 @@ class Game {
             this.enemies.forEach(e => e.draw(this.ctx));
             this.bullets.forEach(b => b.draw(this.ctx));
             this.particles.forEach(p => p.draw(this.ctx));
+
+            this.bossManager.draw(this.ctx, this);
 
             // HUD
             this.ctx.fillStyle = '#ff62ac';
