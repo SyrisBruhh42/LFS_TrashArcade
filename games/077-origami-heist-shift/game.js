@@ -359,6 +359,7 @@ class Game {
         this.world = new WorldManager(this.baseWidth, this.baseHeight);
         this.upgradeManager = new UpgradeManager();
         this.comboManager = new ComboManager();
+        this.vfx = new VFXManager();
 
         this.state = STATES.TITLE;
         this.lastTime = performance.now();
@@ -458,6 +459,8 @@ class Game {
     }
 
     update(dt) {
+        if (this.vfx && this.vfx.update(dt)) return;
+
         if (this.state === STATES.TITLE) {
             if (this.input.mouse.justDown || this.input.isDown('Space') || this.input.isDown('Enter')) {
                 this.sound.playClick();
@@ -475,6 +478,9 @@ class Game {
             }
 
             this.player.update(dt, this.input);
+            if (this.vfx && (this.player.vx !== 0 || this.player.vy !== 0) && Math.random() < 0.4) {
+                this.vfx.addParticle(this.player.x, this.player.y, '#aaa', 50, this.player.angle + Math.PI, 0.3);
+            }
 
             // Constrain player to arena
             const dx = this.player.x - this.baseWidth/2;
@@ -506,6 +512,11 @@ class Game {
             if (this.bossMode && this.currentBoss) {
                 this.currentBoss.update(dt, this.player, this);
                 if (this.currentBoss.hp <= 0) {
+                    if (this.vfx) {
+                        this.vfx.triggerHitStop(500);
+                        this.vfx.shake(20, 500);
+                        this.vfx.createExplosion(this.currentBoss.x, this.currentBoss.y, '#ff4444', 50, 200);
+                    }
                     this.bossMode = false;
                     this.currentBoss = null;
                     this.score += Math.floor(20 * this.comboManager.combo);
@@ -541,8 +552,19 @@ class Game {
                 if (Math.hypot(tdx, tdy) < this.player.radius + t.radius) {
                     t.active = false;
                     this.sound.playPickup();
+                    if (this.vfx && (!this.bossMode || !this.currentBoss)) {
+                        this.vfx.createExplosion(t.x, t.y, '#ffd700', 15, 100);
+                        this.vfx.addFloatingText(t.x, t.y, '+' + Math.floor(this.treasureBasePoints * this.comboManager.combo), '#ffd700', 24);
+                    }
                     if (this.bossMode && this.currentBoss) {
-                        if (this.currentBoss.active) this.currentBoss.takeDamage(1);
+                        if (this.currentBoss.active) {
+                            this.currentBoss.takeDamage(1);
+                            if (this.vfx) {
+                                this.vfx.createExplosion(this.currentBoss.x, this.currentBoss.y, '#ff4444', 10, 80);
+                                this.vfx.shake(5, 100);
+                                this.vfx.addFloatingText(this.currentBoss.x, this.currentBoss.y, '-1', '#ff4444', 20);
+                            }
+                        }
                     } else {
                         this.comboManager.addCombo(1.0);
                         this.score += Math.floor(this.treasureBasePoints * this.comboManager.combo);
@@ -607,6 +629,7 @@ class Game {
         if (this.state === STATES.PLAYING || this.state === STATES.PAUSED || this.state === STATES.GAME_OVER) {
             // Draw Arena (Paper cutout hole)
             this.ctx.save();
+            if (this.vfx) this.vfx.applyShake(this.ctx);
             this.ctx.fillStyle = '#d3cbb8'; // Paper color
             this.ctx.beginPath();
             this.ctx.arc(this.baseWidth/2, this.baseHeight/2, this.arenaRadius, 0, Math.PI*2);
@@ -643,6 +666,7 @@ class Game {
                 this.guards.forEach(g => g.draw(this.ctx));
             }
             this.player.draw(this.ctx);
+            if (this.vfx) this.vfx.draw(this.ctx);
 
             this.ctx.restore();
 
