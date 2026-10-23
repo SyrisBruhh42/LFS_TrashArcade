@@ -981,7 +981,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows/Drag to move. Space/Tap to shoot. Shift/E to switch polarity.",
     "createdAt": "2024-05-18",
     "accentColor": "#7751ef",
-    "phase": "5",
+    "phase": "6",
     "path": "./games/074-magnetic-sky-duel/index.html"
   },
   {
