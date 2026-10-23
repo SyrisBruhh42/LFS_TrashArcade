@@ -63,12 +63,27 @@ class SoundEngine {
         this.sfxGain = null;
         this.musicGain = null;
         this.initialized = false;
+
+        // BGM State
+        this.bgmPlaying = false;
+        this.nextNoteTime = 0;
+        this.tempo = 120;
+        this.noteIndex = 0;
+        this.bassIndex = 0;
+        this.isBossWave = false;
+        this.isLowHp = false;
+
+        // BGM Nodes
+        this.bgmFilter = null;
+        this.arpeggioNodes = [];
     }
+
     init() {
         if (this.initialized) return;
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         if (!AudioContext) return;
         this.ctx = new AudioContext();
+
         this.masterGain = this.ctx.createGain();
         this.sfxGain = this.ctx.createGain();
         this.musicGain = this.ctx.createGain();
@@ -77,13 +92,202 @@ class SoundEngine {
         this.musicGain.connect(this.masterGain);
         this.masterGain.connect(this.ctx.destination);
 
+        // BGM filter
+        this.bgmFilter = this.ctx.createBiquadFilter();
+        this.bgmFilter.type = 'lowpass';
+        this.bgmFilter.frequency.value = 1000;
+        this.bgmFilter.connect(this.musicGain);
+
+        this.musicGain.gain.value = 0.3;
+        this.sfxGain.gain.value = 0.5;
+
         this.initialized = true;
     }
+
     resume() {
         if (this.ctx && this.ctx.state === 'suspended') {
             this.ctx.resume();
         }
     }
+
+    startBGM() {
+        if (!this.initialized || !this.ctx) return;
+        this.resume();
+        if (this.bgmPlaying) return;
+        this.bgmPlaying = true;
+        this.nextNoteTime = this.ctx.currentTime + 0.1;
+    }
+
+    stopBGM() {
+        this.bgmPlaying = false;
+    }
+
+    setBGMState(isBossWave, isLowHp) {
+        this.isBossWave = isBossWave;
+        this.isLowHp = isLowHp;
+
+        if (this.isBossWave) {
+            this.tempo = 160;
+        } else {
+            this.tempo = 120;
+        }
+
+        if (this.initialized && this.ctx && this.bgmFilter) {
+            if (this.isLowHp) {
+                this.bgmFilter.frequency.setTargetAtTime(300, this.ctx.currentTime, 0.5);
+                this.bgmFilter.Q.setTargetAtTime(5, this.ctx.currentTime, 0.5);
+            } else if (this.isBossWave) {
+                this.bgmFilter.frequency.setTargetAtTime(2000, this.ctx.currentTime, 0.5);
+                this.bgmFilter.Q.setTargetAtTime(1, this.ctx.currentTime, 0.5);
+            } else {
+                this.bgmFilter.frequency.setTargetAtTime(1000, this.ctx.currentTime, 0.5);
+                this.bgmFilter.Q.setTargetAtTime(1, this.ctx.currentTime, 0.5);
+            }
+        }
+    }
+
+    updateBGM(dt) {
+        if (!this.bgmPlaying || !this.initialized || !this.ctx) return;
+
+        const lookahead = 0.1;
+        const scheduleAheadTime = 0.1;
+
+        while (this.nextNoteTime < this.ctx.currentTime + scheduleAheadTime) {
+            this.scheduleNote(this.nextNoteTime);
+            this.nextNote();
+        }
+    }
+
+    nextNote() {
+        const secondsPerBeat = 60.0 / this.tempo;
+        // 16th notes
+        this.nextNoteTime += 0.25 * secondsPerBeat;
+        this.noteIndex = (this.noteIndex + 1) % 16;
+        this.bassIndex = (this.bassIndex + 1) % 32;
+    }
+
+    scheduleNote(time) {
+        // Percussion
+        if (this.noteIndex % 4 === 0) {
+            this.playKick(time);
+        } else if (this.noteIndex % 4 === 2) {
+            this.playSnare(time);
+        }
+        if (this.noteIndex % 2 === 0) {
+            this.playHiHat(time);
+        }
+
+        // Bassline
+        const bassNotesNormal = [32.7, 0, 32.7, 0, 38.9, 0, 38.9, 0, 43.65, 0, 43.65, 0, 38.9, 0, 32.7, 0];
+        const bassNotesBoss = [41.2, 41.2, 0, 41.2, 49.0, 49.0, 0, 49.0, 36.7, 36.7, 0, 36.7, 49.0, 0, 41.2, 0];
+        const bassNotes = this.isBossWave ? bassNotesBoss : bassNotesNormal;
+
+        const bFreq = bassNotes[this.bassIndex % 16];
+        if (bFreq > 0) {
+            this.playSynthNote(time, bFreq, 'sawtooth', 0.15, 0.2);
+        }
+
+        // Arpeggiator
+        const arpNormal = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63, 261.63, 329.63];
+        const arpBoss = [329.63, 392.00, 493.88, 659.25, 493.88, 392.00, 329.63, 293.66];
+        const arpNotes = this.isBossWave ? arpBoss : arpNormal;
+
+        if (this.noteIndex % 2 === 0) {
+            const freq = arpNotes[(this.noteIndex / 2) % 8];
+            this.playSynthNote(time, freq, 'square', 0.1, 0.05);
+        }
+    }
+
+    playSynthNote(time, freq, type, duration, vol) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+
+        gain.gain.setValueAtTime(vol, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
+
+        osc.connect(gain);
+        gain.connect(this.bgmFilter);
+
+        osc.start(time);
+        osc.stop(time + duration);
+        setTimeout(() => {
+            osc.disconnect();
+            gain.disconnect();
+        }, (time + duration - this.ctx.currentTime) * 1000 + 100);
+    }
+
+    playKick(time) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.frequency.setValueAtTime(150, time);
+        osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.1);
+        gain.gain.setValueAtTime(0.3, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+        osc.connect(gain);
+        gain.connect(this.bgmFilter);
+        osc.start(time);
+        osc.stop(time + 0.1);
+        setTimeout(() => { osc.disconnect(); gain.disconnect(); }, (time + 0.1 - this.ctx.currentTime) * 1000 + 100);
+    }
+
+    playSnare(time) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(250, time);
+        gain.gain.setValueAtTime(0.2, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+
+        // noise
+        const bufferSize = this.ctx.sampleRate * 0.1;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const noiseFilter = this.ctx.createBiquadFilter();
+        noiseFilter.type = 'highpass';
+        noiseFilter.frequency.value = 1000;
+        noise.connect(noiseFilter);
+        noiseFilter.connect(gain);
+
+        osc.connect(gain);
+        gain.connect(this.bgmFilter);
+
+        osc.start(time);
+        noise.start(time);
+        osc.stop(time + 0.1);
+        setTimeout(() => { osc.disconnect(); noise.disconnect(); noiseFilter.disconnect(); gain.disconnect(); }, (time + 0.1 - this.ctx.currentTime) * 1000 + 100);
+    }
+
+    playHiHat(time) {
+        const bufferSize = this.ctx.sampleRate * 0.05;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const noiseFilter = this.ctx.createBiquadFilter();
+        noiseFilter.type = 'bandpass';
+        noiseFilter.frequency.value = 10000;
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.1, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+
+        noise.connect(noiseFilter);
+        noiseFilter.connect(gain);
+        gain.connect(this.bgmFilter);
+
+        noise.start(time);
+        setTimeout(() => { noise.disconnect(); noiseFilter.disconnect(); gain.disconnect(); }, (time + 0.05 - this.ctx.currentTime) * 1000 + 100);
+    }
+
     playTone(freq, type, duration, vol=0.1) {
         if (!this.initialized || !this.ctx) return;
         this.resume();
@@ -106,6 +310,8 @@ class SoundEngine {
             gain.disconnect();
         }, duration * 1000 + 100);
     }
+
+    // SFX (10+ distinct SFX)
     playShoot(isRed) {
         this.playTone(isRed ? 600 : 400, 'square', 0.1, 0.05);
     }
@@ -113,13 +319,108 @@ class SoundEngine {
         this.playTone(150, 'sawtooth', 0.2, 0.1);
     }
     playExplosion() {
-        this.playTone(100, 'square', 0.5, 0.15);
+        // complex explosion
+        if (!this.initialized || !this.ctx) return;
+        this.resume();
+        const time = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(100, time);
+        osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.5);
+        gain.gain.setValueAtTime(0.15, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(time);
+        osc.stop(time + 0.5);
+        setTimeout(() => { osc.disconnect(); gain.disconnect(); }, 600);
     }
     playSwitch() {
         this.playTone(800, 'sine', 0.1, 0.05);
     }
+    playPowerup() {
+        if (!this.initialized || !this.ctx) return;
+        this.resume();
+        const time = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, time);
+        osc.frequency.linearRampToValueAtTime(800, time + 0.1);
+        osc.frequency.linearRampToValueAtTime(1200, time + 0.2);
+        gain.gain.setValueAtTime(0.1, time);
+        gain.gain.linearRampToValueAtTime(0, time + 0.3);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(time);
+        osc.stop(time + 0.3);
+        setTimeout(() => { osc.disconnect(); gain.disconnect(); }, 400);
+    }
+    playUIClick() {
+        this.playTone(1000, 'sine', 0.05, 0.1);
+    }
+    playUIHover() {
+        this.playTone(1200, 'sine', 0.03, 0.05);
+    }
+    playDash() {
+        if (!this.initialized || !this.ctx) return;
+        this.resume();
+        const time = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(200, time);
+        osc.frequency.exponentialRampToValueAtTime(50, time + 0.2);
+        gain.gain.setValueAtTime(0.1, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(time);
+        osc.stop(time + 0.2);
+        setTimeout(() => { osc.disconnect(); gain.disconnect(); }, 300);
+    }
+    playBossSpawn() {
+        if (!this.initialized || !this.ctx) return;
+        this.resume();
+        const time = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(50, time);
+        osc.frequency.linearRampToValueAtTime(100, time + 1.0);
+        gain.gain.setValueAtTime(0, time);
+        gain.gain.linearRampToValueAtTime(0.2, time + 0.5);
+        gain.gain.linearRampToValueAtTime(0, time + 1.0);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(time);
+        osc.stop(time + 1.0);
+        setTimeout(() => { osc.disconnect(); gain.disconnect(); }, 1100);
+    }
+    playLevelUp() {
+        if (!this.initialized || !this.ctx) return;
+        this.resume();
+        const time = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(440, time);
+        osc.frequency.setValueAtTime(554.37, time + 0.1);
+        osc.frequency.setValueAtTime(659.25, time + 0.2);
+        osc.frequency.setValueAtTime(880, time + 0.3);
+        gain.gain.setValueAtTime(0.1, time);
+        gain.gain.linearRampToValueAtTime(0, time + 0.5);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(time);
+        osc.stop(time + 0.5);
+        setTimeout(() => { osc.disconnect(); gain.disconnect(); }, 600);
+    }
+    playEnemySpawn() {
+        this.playTone(300, 'triangle', 0.1, 0.05);
+    }
 }
-
 class InputManager {
     constructor(canvas) {
         this.canvas = canvas;
@@ -311,7 +612,7 @@ class Player extends Entity {
             const dSpd = 800;
             this.vel.x = Math.cos(this.aimAngle) * dSpd;
             this.vel.y = Math.sin(this.aimAngle) * dSpd;
-            game.sound.playShoot(this.polarity === 1);
+            game.sound.playDash();
             game.spawnParticles(this.pos.x, this.pos.y, this.polarity, 15);
         }
 
@@ -517,6 +818,7 @@ class Game {
         if (this.state === 'TITLE') {
             if (this.input.isJustPressed('Space') || this.input.touchActive) {
                 this.reset();
+                this.sound.startBGM();
                 this.setState('PLAYING');
             }
             this.input.update();
@@ -560,6 +862,7 @@ class Game {
             this.input.update();
             return;
         }
+        this.sound.updateBGM(dt);
         this.vfx.update(dt);
 
         this.islands.forEach(i => i.update(dt, this.height));
@@ -575,7 +878,7 @@ class Game {
                 if (this.progression) this.progression.showDraft();
                 if (this.wave % 5 === 0) {
                     this.bossWarningTimer = 3;
-                    this.sound.playSwitch();
+                    this.sound.playBossSpawn();
                 }
             }
         }
@@ -586,6 +889,10 @@ class Game {
                 const BossClass = bossTypes[((this.wave / 5) - 1) % bossTypes.length] || MagnetoBoss;
                 this.boss = new BossClass(this.width/2, -100, this.wave, this);
             }
+        }
+
+        if (this.player) {
+            this.sound.setBGMState(this.boss != null, this.player.hp < this.player.maxHp * 0.3);
         }
         if (this.boss && this.boss.active) {
             this.boss.update(dt, this);
@@ -705,6 +1012,7 @@ class Game {
     }
     endGame() {
         this.setState('GAME_OVER');
+        this.sound.stopBGM();
         this.sound.playExplosion();
         this.saveManager.data.totalGamesPlayed++;
         if (this.score > this.saveManager.data.highScore) {
