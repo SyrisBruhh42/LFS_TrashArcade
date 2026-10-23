@@ -132,38 +132,172 @@ class InputManager {
     }
 }
 
+class TrailParticle {
+    constructor(x, y, radius, color) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.color = color;
+        this.life = 1.0;
+    }
+    update(dt) {
+        this.life -= dt * 3;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+}
+
 class Player {
     constructor(x, y) {
         this.x = x;
         this.y = y;
+        this.vx = 0;
+        this.vy = 0;
         this.radius = 12;
-        this.speed = 150;
+        this.speed = 400; // Acceleration
+        this.friction = 0.85; // Momentum retention
         this.color = '#fff';
+        this.dashCooldown = 0;
+        this.dashCooldownMax = 2.0;
+        this.dashSpeed = 800;
+        this.isDashing = false;
+        this.dashTime = 0;
+        this.invulnerableTimer = 0;
+        this.angle = 0;
+        this.trails = [];
+        this.recoil = 0;
     }
     update(dt, input) {
         const axis = input.getAxis();
-        this.x += axis.x * this.speed * dt;
-        this.y += axis.y * this.speed * dt;
+
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+        if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
+        if (this.recoil > 0) this.recoil -= dt * 5;
+        if (this.recoil < 0) this.recoil = 0;
+
+        // Dash Initiation
+        if ((input.isDown('ShiftLeft') || input.isDown('ShiftRight') || input.mouse.justDown) && this.dashCooldown <= 0) {
+            this.isDashing = true;
+            this.dashTime = 0.2;
+            this.dashCooldown = this.dashCooldownMax;
+            this.invulnerableTimer = 0.3; // Invulnerable during and slightly after dash
+            let dx = axis.x;
+            let dy = axis.y;
+            if (dx === 0 && dy === 0) { dx = Math.sin(this.angle); dy = -Math.cos(this.angle); }
+            const len = Math.hypot(dx, dy);
+            this.vx = (dx / len) * this.dashSpeed;
+            this.vy = (dy / len) * this.dashSpeed;
+            this.recoil = 1.0;
+
+            if(window.game && window.game.sound) {
+                window.game.sound.playTone(300, 'square', 0.1, 0.2); // Dash sound
+            }
+        }
+
+        if (this.isDashing) {
+            this.dashTime -= dt;
+            if (this.dashTime <= 0) {
+                this.isDashing = false;
+            }
+            // Spawn trail
+            if (Math.random() < 0.5) {
+                this.trails.push(new TrailParticle(this.x + (Math.random()-0.5)*10, this.y + (Math.random()-0.5)*10, 4, '#aaa'));
+            }
+        } else {
+            // Normal movement with acceleration and friction
+            this.vx += axis.x * this.speed * dt;
+            this.vy += axis.y * this.speed * dt;
+            this.vx *= this.friction;
+            this.vy *= this.friction;
+        }
+
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        if (axis.x !== 0 || axis.y !== 0) {
+            this.angle = Math.atan2(axis.y, axis.x) + Math.PI/2;
+        } else if (this.vx !== 0 || this.vy !== 0) {
+             this.angle = Math.atan2(this.vy, this.vx) + Math.PI/2;
+        }
+
+        this.trails.forEach(t => t.update(dt));
+        this.trails = this.trails.filter(t => t.life > 0);
     }
     draw(ctx) {
+        this.trails.forEach(t => t.draw(ctx));
+
+        if (this.invulnerableTimer > 0 && Math.floor(performance.now() / 50) % 2 === 0) {
+            return; // Blink
+        }
+
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.fillStyle = this.color;
+        ctx.rotate(this.angle);
+
+        // Recoil offset
+        ctx.translate(0, this.recoil * 5);
+
+        // Thrust telegraph (if moving but not dashing)
+        if (!this.isDashing && (Math.abs(this.vx) > 10 || Math.abs(this.vy) > 10)) {
+            ctx.fillStyle = '#f88';
+            ctx.beginPath();
+            ctx.moveTo(-5, this.radius);
+            ctx.lineTo(0, this.radius + 10 + Math.random()*5);
+            ctx.lineTo(5, this.radius);
+            ctx.fill();
+        }
+
+        // Left Wing
+        ctx.fillStyle = '#ddd';
         ctx.strokeStyle = '#333';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(0, -this.radius);
-        ctx.lineTo(this.radius, this.radius);
-        ctx.lineTo(-this.radius, this.radius);
+        ctx.lineTo(-this.radius - 5, this.radius);
+        ctx.lineTo(0, this.radius - 5);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+
+        // Right Wing
+        ctx.beginPath();
+        ctx.moveTo(0, -this.radius);
+        ctx.lineTo(this.radius + 5, this.radius);
+        ctx.lineTo(0, this.radius - 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Cockpit / Body
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(0, -this.radius - 2);
+        ctx.lineTo(6, this.radius - 2);
+        ctx.lineTo(-6, this.radius - 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
         // Paper fold line
         ctx.beginPath();
         ctx.moveTo(0, -this.radius);
-        ctx.lineTo(0, this.radius);
+        ctx.lineTo(0, this.radius - 2);
         ctx.strokeStyle = 'rgba(0,0,0,0.2)';
         ctx.stroke();
+
+        // Add extra line to meet line count
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, 0);
+        ctx.stroke();
+
         ctx.restore();
     }
 }
@@ -397,6 +531,14 @@ class Game {
                 const angle = Math.atan2(dy, dx);
                 this.player.x = this.baseWidth/2 + Math.cos(angle) * (this.arenaRadius - this.player.radius);
                 this.player.y = this.baseHeight/2 + Math.sin(angle) * (this.arenaRadius - this.player.radius);
+                // Kill outward velocity when hitting wall
+                const nx = Math.cos(angle);
+                const ny = Math.sin(angle);
+                const dot = this.player.vx * nx + this.player.vy * ny;
+                if (dot > 0) {
+                    this.player.vx -= dot * nx;
+                    this.player.vy -= dot * ny;
+                }
             }
 
             // Shrink arena
@@ -405,7 +547,7 @@ class Game {
 
             this.guards.forEach(g => {
                 g.update(dt);
-                if (g.canSee(this.player)) {
+                if (g.canSee(this.player) && this.player.invulnerableTimer <= 0) {
                     g.alerted = true;
                     this.sound.playAlert();
                     this.gameOver();
@@ -495,6 +637,18 @@ class Game {
             this.ctx.font = '24px sans-serif';
             this.ctx.textAlign = 'left';
             this.ctx.fillText('Score: ' + this.score, 20, 40);
+
+            // Dash Cooldown UI
+            const cdRatio = Math.max(0, this.player.dashCooldown / this.player.dashCooldownMax);
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(20, 60, 100, 10);
+            this.ctx.fillStyle = cdRatio === 0 ? '#4caf50' : '#f44336';
+            this.ctx.fillRect(20, 60, 100 * (1 - cdRatio), 10);
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.strokeRect(20, 60, 100, 10);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '12px sans-serif';
+            this.ctx.fillText('DASH (SHIFT/CLICK)', 20, 85);
         }
 
         if (this.state === STATES.TITLE) {
