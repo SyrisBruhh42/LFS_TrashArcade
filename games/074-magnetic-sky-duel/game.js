@@ -552,6 +552,10 @@ class Player extends Entity {
         if (this.dashTimer > 0) this.dashTimer -= dt;
         this.recoil = Math.max(0, this.recoil - dt * 20);
 
+        if (game.ui && game.ui.dpadActive) {
+            dx = game.ui.dpadVector.x;
+            dy = game.ui.dpadVector.y;
+        }
         if (game.input.isDown('KeyW') || game.input.isDown('ArrowUp')) dy -= 1;
         if (game.input.isDown('KeyS') || game.input.isDown('ArrowDown')) dy += 1;
         if (game.input.isDown('KeyA') || game.input.isDown('ArrowLeft')) dx -= 1;
@@ -568,7 +572,7 @@ class Player extends Entity {
             this.thrustLevel = GameMathExtras.lerp(this.thrustLevel, 0, dt * 10);
         }
 
-        if (game.input.touchActive) {
+        if (game.input.touchActive && !(game.ui && (game.ui.dpadActive || game.ui.shootActive || game.ui.switchActive))) {
             const tx = game.input.touchMove.x;
             const ty = game.input.touchMove.y;
             const canvasRect = game.canvas.getBoundingClientRect();
@@ -621,20 +625,23 @@ class Player extends Entity {
         this.pos.x = MathUtils.clamp(this.pos.x, this.radius, game.width - this.radius);
         this.pos.y = MathUtils.clamp(this.pos.y, this.radius, game.height - this.radius);
 
-        if (game.input.isJustPressed('ShiftLeft') || game.input.isJustPressed('ShiftRight') || game.input.isJustPressed('KeyE')) {
+        if (game.input.isJustPressed('ShiftLeft') || game.input.isJustPressed('ShiftRight') || game.input.isJustPressed('KeyE') || (game.ui && game.ui.switchJustPressed)) {
+            if (game.ui) game.ui.switchJustPressed = false;
             this.polarity *= -1;
             game.sound.playSwitch();
         }
 
         this.shootTimer -= dt;
-        if ((game.input.isDown('Space') || game.input.touchActive) && this.shootTimer <= 0) {
+        let isShooting = game.input.isDown('Space') || (game.ui && game.ui.shootActive);
+        if (game.input.touchActive && !(game.ui && (game.ui.dpadActive || game.ui.shootActive || game.ui.switchActive))) isShooting = true;
+        if (isShooting && this.shootTimer <= 0) {
             let fireDelay = 0.15;
             if (game.progression) fireDelay *= game.progression.perks.fireRateMult;
             this.shootTimer = fireDelay;
             this.recoil = 5;
             const bvx = Math.cos(this.aimAngle) * 600;
             const bvy = Math.sin(this.aimAngle) * 600;
-            if (game.input.touchActive) {
+            if (game.input.touchActive && !(game.ui && (game.ui.dpadActive || game.ui.shootActive || game.ui.switchActive))) {
                 game.spawnBullet(this.pos.x, this.pos.y - 15, 0, -600, this.polarity, false);
             } else {
                 game.spawnBullet(this.pos.x + Math.cos(this.aimAngle)*15, this.pos.y + Math.sin(this.aimAngle)*15, bvx, bvy, this.polarity, false);
@@ -736,6 +743,9 @@ class Game {
         this.score = 0;
         this.wave = 1;
         this.vfx = new VFXManager(this);
+        if (typeof UIManager !== 'undefined') {
+            this.ui = new UIManager(this);
+        }
 
         this.resizeObserver = new ResizeObserver(entries => {
             for (let entry of entries) {
@@ -793,11 +803,13 @@ class Game {
         this.bullets.push(new Bullet(x, y, vx, vy, polarity, isEnemy));
     }
     spawnParticles(x, y, colorCode, count) {
+        if (this.vfx && this.vfx.particleMultiplier !== undefined) count = Math.floor(count * this.vfx.particleMultiplier);
         for(let i=0; i<count; i++) {
             this.particles.push(new Particle(x, y, colorCode, MathUtils.rand(50, 150), MathUtils.rand(0.2, 0.6)));
         }
     }
     spawnDirectionalParticles(x, y, colorCode, count, angle, spread, speedBase) {
+        if (this.vfx && this.vfx.particleMultiplier !== undefined) count = Math.floor(count * this.vfx.particleMultiplier);
         for(let i=0; i<count; i++) {
             this.particles.push(new Particle(x, y, colorCode, MathUtils.rand(speedBase, speedBase*2), MathUtils.rand(0.2, 0.6), angle, spread));
         }
@@ -816,6 +828,7 @@ class Game {
     }
     update(dt) {
         if (this.state === 'TITLE') {
+            if (this.ui) this.ui.drawMilestones(this.ctx);
             if (this.input.isJustPressed('Space') || this.input.touchActive) {
                 this.reset();
                 this.sound.startBGM();
@@ -844,6 +857,7 @@ class Game {
         }
 
         if (this.state === 'GAME_OVER') {
+            if (this.ui) this.ui.drawMilestones(this.ctx);
             if (this.input.isJustPressed('Space') || this.input.touchActive) {
                 this.setState('TITLE');
             }
@@ -863,6 +877,7 @@ class Game {
             return;
         }
         this.sound.updateBGM(dt);
+        if (this.ui) this.ui.update(dt);
         this.vfx.update(dt);
 
         this.islands.forEach(i => i.update(dt, this.height));
@@ -1021,6 +1036,8 @@ class Game {
         this.saveManager.save();
     }
     draw() {
+        if (this.highContrast) { this.ctx.filter = 'contrast(200%) saturate(200%) grayscale(50%)'; }
+        else { this.ctx.filter = 'none'; }
         this.ctx.fillStyle = '#000810';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
@@ -1104,6 +1121,7 @@ class Game {
         }
 
         if (this.state === 'TITLE') {
+            if (this.ui) this.ui.drawMilestones(this.ctx);
             this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
             this.ctx.fillRect(0, 0, this.width, this.height);
             this.ctx.fillStyle = '#fff';
@@ -1132,6 +1150,7 @@ class Game {
         }
 
         if (this.state === 'GAME_OVER') {
+            if (this.ui) this.ui.drawMilestones(this.ctx);
             this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
             this.ctx.fillRect(0, 0, this.width, this.height);
             this.ctx.fillStyle = '#fff';
