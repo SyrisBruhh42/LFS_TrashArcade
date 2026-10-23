@@ -809,6 +809,14 @@ class Engine {
         this.hazards = [];
         this.enemies = [];
 
+        this.nextBossScore = 500;
+        this.bossActive = false;
+        this.bossWarningTimer = 0;
+        this.bossesKilled = 0;
+        this.bossSpawnType = 0;
+        this.bosses = [];
+        this.enemySpawnTimer = 3.0;
+
         this.env = new ParallaxEnvironment(this);
         this.steamVents = [];
         this.conveyors = [];
@@ -1030,6 +1038,60 @@ class Engine {
             }
             this.hazards = this.hazards.filter(hz => !hz.dead);
 
+            if (!this.bossActive && this.bossWarningTimer <= 0) {
+                this.enemySpawnTimer -= dt;
+                if (this.enemySpawnTimer <= 0) {
+                    this.enemySpawnTimer = 2.0;
+                    const r = Math.random();
+                    let EnemyClass = SwarmerEnemy;
+                    if (r < 0.2) EnemyClass = SniperEnemy;
+                    else if (r < 0.4) EnemyClass = ShieldedBruiser;
+                    else if (r < 0.6) EnemyClass = SpawnerEnemy;
+                    else if (r < 0.8) EnemyClass = AreaDenialEnemy;
+                    this.enemies.push(new EnemyClass(Math.random() > 0.5 ? 50 : this.width - 50, 100 + Math.random() * (this.height - 200)));
+                }
+            }
+
+            if (this.score >= this.nextBossScore && !this.bossActive && this.bossWarningTimer <= 0) {
+                this.bossWarningTimer = 3.0;
+                this.enemies = [];
+                this.sound.playHurt();
+            }
+
+            if (this.bossWarningTimer > 0) {
+                this.bossWarningTimer -= dt;
+                if (this.bossWarningTimer <= 0) {
+                    let BossClass = (this.bossSpawnType === 0) ? CogwheelTitan : SteamOverlord;
+                    this.bosses.push(new BossClass(this.width / 2, 100));
+                    this.bossActive = true;
+                    this.bossSpawnType = 1 - this.bossSpawnType;
+                }
+            }
+
+            for (const b of this.bosses) {
+                b.update(dt, this);
+                let dist = Math.hypot(this.player.x - b.x, this.player.y - b.y);
+                if (dist < b.radius + this.player.radius) {
+                    if (this.player.dashActive > 0) {
+                        b.hp -= 20;
+                        this.player.vx = -this.player.vx;
+                        this.player.vy = -this.player.vy;
+                        this.player.invulnerableTimer = 0.5;
+                        this.sound.playHurt();
+                    } else if (this.player.invulnerableTimer <= 0) {
+                        this.die();
+                    }
+                }
+            }
+            this.bosses = this.bosses.filter(b => b.hp > 0);
+
+            if (this.bossActive && this.bosses.length === 0) {
+                this.bossActive = false;
+                this.bossesKilled++;
+                this.nextBossScore = this.score + 500 + (this.bossesKilled * 300);
+                this.score += 500;
+            }
+
             for (const en of this.enemies) {
                 en.update(dt, this);
             }
@@ -1096,7 +1158,23 @@ class Engine {
         for (const gp of this.grapplePoints) gp.draw(this.ctx);
         for (const hz of this.hazards) hz.draw(this.ctx);
         for (const en of this.enemies) en.draw(this.ctx);
+        for (const b of this.bosses) {
+            b.draw(this.ctx);
+        }
         if (this.player) this.player.draw(this.ctx);
+
+        if (this.bossWarningTimer > 0) {
+            this.ctx.fillStyle = `rgba(255, 0, 0, ${Math.abs(Math.sin(this.bossWarningTimer * 10))})`;
+            this.ctx.fillRect(0, this.height / 2 - 50, this.width, 100);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '40px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('WARNING: BOSS APPROACHING', this.width / 2, this.height / 2 + 10);
+        }
+
+        if (this.bossActive && this.bosses.length > 0) {
+            this.bosses[0].drawHealthBar(this.ctx, this);
+        }
 
         // Dash Cooldown HUD
         if (this.player) {
