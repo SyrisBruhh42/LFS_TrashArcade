@@ -88,16 +88,16 @@ class ProgressionManager {
     applyUpgrade(upgradeName, game) {
         switch(upgradeName) {
             case "Damage Boost":
-                game.player.damage += 1;
+                game.player.damage += 2;
                 break;
             case "Speed Overdrive":
-                game.player.maxSpeed += 50;
+                game.player.maxSpeed += 75;
                 break;
             case "Rapid Fire":
                 game.player.fireCooldown = Math.max(0.05, game.player.fireCooldown - 0.05);
                 break;
             case "Dash Stabilizer":
-                game.player.dashCooldownMax = Math.max(0.2, game.player.dashCooldownMax - 0.2);
+                game.player.dashCooldownMax = Math.max(0.2, game.player.dashCooldownMax - 0.3);
                 break;
             case "Arena Expander":
                 game.arena.maxRadius += 50;
@@ -105,7 +105,7 @@ class ProgressionManager {
                 game.arena.radius = game.arena.maxRadius;
                 break;
             case "Piercing Plasma":
-                game.player.pierce += 1;
+                game.player.pierce += 2;
                 break;
             case "Multishot":
                 game.player.multishot += 1;

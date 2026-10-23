@@ -91,8 +91,8 @@ class BaseBoss extends BaseEnemy {
 }
 
 class MagmaCoreBoss extends BaseBoss {
-    constructor(x, y) {
-        super(x, y, 40, 100, 40, '#f50');
+    constructor(x, y, wave = 1) {
+        super(x, y, 40, 100 * (1 + (wave - 1) * 0.2), 40 * (1 + (wave - 1) * 0.2), '#f50');
         this.shootTimer = 1.5;
         this.originalGravityStrength = 0;
         this.angleOffset = 0;
@@ -207,8 +207,8 @@ class MagmaCoreBoss extends BaseBoss {
 }
 
 class ForgeOverseerBoss extends BaseBoss {
-    constructor(x, y) {
-        super(x, y, 35, 120, 80, '#0ff');
+    constructor(x, y, wave = 1) {
+        super(x, y, 35, 120 * (1 + (wave - 1) * 0.2), 80 * (1 + (wave - 1) * 0.2), '#0ff');
         this.angle = 0;
         this.attackTimer = 2.0;
     }

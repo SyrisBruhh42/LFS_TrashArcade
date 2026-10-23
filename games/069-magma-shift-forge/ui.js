@@ -348,6 +348,17 @@ class UIManager {
             this.drawMilestones(ctx, game);
         }
 
+        if (game.state === 'PLAYING' && game.progression && game.progression.wave === 1 && game.showTutorial) {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(game.targetWidth/2 - 200, game.targetHeight - 150, 400, 100);
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("WASD to Move", game.targetWidth/2, game.targetHeight - 110);
+            ctx.fillText("Mouse to Aim & Shoot", game.targetWidth/2, game.targetHeight - 80);
+            ctx.fillText("Space to Dash", game.targetWidth/2, game.targetHeight - 50);
+        }
+
         // Draw Joysticks
         if (this.isTouchMode(game) && game.state === 'PLAYING' && !this.inSettings) {
             ctx.lineWidth = 2;
