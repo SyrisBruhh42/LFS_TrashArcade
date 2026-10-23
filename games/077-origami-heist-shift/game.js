@@ -302,81 +302,6 @@ class Player {
     }
 }
 
-class Guard {
-    constructor(x, y, path) {
-        this.x = x;
-        this.y = y;
-        this.path = path;
-        this.pathIndex = 0;
-        this.speed = 60;
-        this.angle = 0;
-        this.radius = 14;
-        this.sightRange = 150;
-        this.sightAngle = Math.PI / 3;
-        this.alerted = false;
-        this.color = '#cc846d';
-    }
-    update(dt) {
-        if (this.path.length === 0) return;
-        const target = this.path[this.pathIndex];
-        const dx = target.x - this.x;
-        const dy = target.y - this.y;
-        const dist = Math.hypot(dx, dy);
-
-        if (dist < 5) {
-            this.pathIndex = (this.pathIndex + 1) % this.path.length;
-        } else {
-            this.angle = Math.atan2(dy, dx);
-            this.x += Math.cos(this.angle) * this.speed * dt;
-            this.y += Math.sin(this.angle) * this.speed * dt;
-        }
-    }
-    canSee(player) {
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > this.sightRange) return false;
-        const angleToPlayer = Math.atan2(dy, dx);
-        let angleDiff = angleToPlayer - this.angle;
-        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-        return Math.abs(angleDiff) < this.sightAngle / 2;
-    }
-    draw(ctx) {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.angle);
-
-        // Sight cone
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.arc(0, 0, this.sightRange, -this.sightAngle/2, this.sightAngle/2);
-        ctx.closePath();
-        ctx.fillStyle = this.alerted ? 'rgba(255, 0, 0, 0.3)' : 'rgba(255, 255, 0, 0.2)';
-        ctx.fill();
-
-        // Guard body
-        ctx.fillStyle = this.color;
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(this.radius, 0);
-        ctx.lineTo(-this.radius/2, this.radius/2);
-        ctx.lineTo(-this.radius/2, -this.radius/2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-
-        // Fold line
-        ctx.beginPath();
-        ctx.moveTo(this.radius, 0);
-        ctx.lineTo(-this.radius/2, 0);
-        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-        ctx.stroke();
-
-        ctx.restore();
-    }
-}
 
 class Treasure {
     constructor(x, y) {
@@ -477,8 +402,11 @@ class Game {
     resetGame() {
         this.player = new Player(400, 500);
         this.guards = [
-            new Guard(200, 200, [{x: 200, y: 200}, {x: 600, y: 200}, {x: 600, y: 400}, {x: 200, y: 400}]),
-            new Guard(600, 100, [{x: 600, y: 100}, {x: 600, y: 500}, {x: 400, y: 500}, {x: 400, y: 100}])
+            new StandardGuard(200, 200, [{x: 200, y: 200}, {x: 600, y: 200}, {x: 600, y: 400}, {x: 200, y: 400}]),
+            new Sniper(400, 200, Math.PI/2),
+            new Bruiser(600, 100, [{x: 600, y: 100}, {x: 600, y: 500}, {x: 400, y: 500}, {x: 400, y: 100}]),
+            new Spawner(400, 400),
+            new Swarmer(500, 300)
         ];
         this.treasures = [];
         this.score = 0;
@@ -551,12 +479,12 @@ class Game {
             if (this.arenaRadius < 50) this.arenaRadius = 50;
 
             this.guards.forEach(g => {
-                g.update(dt);
-                if (g.canSee(this.player) && this.player.invulnerableTimer <= 0) {
+                g.update(dt, this.player, this);
+                if ((g.canSee(this.player) || (g instanceof Sniper && g.alerted)) && this.player.invulnerableTimer <= 0) {
                     g.alerted = true;
                     this.sound.playAlert();
                     this.gameOver();
-                } else {
+                } else if (!(g instanceof Sniper)) {
                     g.alerted = false;
                 }
             });
