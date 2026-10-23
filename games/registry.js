@@ -927,5 +927,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#5544e7",
     "phase": "5",
     "path": "./games/070-manor-polarity-chain/index.html"
+  },
+  {
+    "id": "071",
+    "slug": "071-clockwork-tether-foundry",
+    "title": "Clockwork Tether Foundry",
+    "genre": "Momentum/Grapple Platformer",
+    "coreMechanic": "Risk/Reward Tether or Tail Growth",
+    "setting": "Clockwork Steampunk Foundry",
+    "description": "Swing through the hazardous steampunk foundry. The longer your tether, the more points you gain, but the greater the danger.",
+    "controls": "WASD/Arrows to move, Mouse Click/Touch to fire tether.",
+    "createdAt": "2023-10-23",
+    "accentColor": "#a04e7e",
+    "phase": "1",
+    "path": "./games/071-clockwork-tether-foundry/index.html"
   }
 ];
