@@ -44,6 +44,79 @@ class Vector2 {
         return new Vector2(this.x, this.y);
     }
 }
+
+class WaveManager {
+    constructor() {
+        this.waveSettings = [
+            { wave: 1, nextBossScore: 500, spawnRate: 3.0, bossHpMult: 1.0, weights: { swarmer: 0.8, sniper: 0.2, bruiser: 0.0, spawner: 0.0, denial: 0.0 } },
+            { wave: 2, nextBossScore: 1200, spawnRate: 2.5, bossHpMult: 1.2, weights: { swarmer: 0.6, sniper: 0.3, bruiser: 0.1, spawner: 0.0, denial: 0.0 } },
+            { wave: 3, nextBossScore: 2200, spawnRate: 2.2, bossHpMult: 1.5, weights: { swarmer: 0.5, sniper: 0.2, bruiser: 0.2, spawner: 0.1, denial: 0.0 } },
+            { wave: 4, nextBossScore: 3500, spawnRate: 2.0, bossHpMult: 1.8, weights: { swarmer: 0.4, sniper: 0.2, bruiser: 0.2, spawner: 0.1, denial: 0.1 } },
+            { wave: 5, nextBossScore: 5000, spawnRate: 1.8, bossHpMult: 2.2, weights: { swarmer: 0.3, sniper: 0.2, bruiser: 0.2, spawner: 0.15, denial: 0.15 } }
+        ];
+        this.tutorialState = {
+            tetherShown: false,
+            dashShown: false
+        };
+        this.tutorialTimer = 0;
+    }
+
+    getWaveSettings(waveCount) {
+        let maxWave = this.waveSettings[this.waveSettings.length - 1];
+        if (waveCount > maxWave.wave) {
+            let mult = (waveCount - maxWave.wave);
+            return {
+                wave: waveCount,
+                nextBossScore: maxWave.nextBossScore + mult * 2000,
+                spawnRate: Math.max(0.5, maxWave.spawnRate - mult * 0.1),
+                bossHpMult: maxWave.bossHpMult + mult * 0.5,
+                weights: { swarmer: 0.2, sniper: 0.2, bruiser: 0.2, spawner: 0.2, denial: 0.2 }
+            };
+        }
+        return this.waveSettings.find(w => w.wave === waveCount) || maxWave;
+    }
+
+    getSpawnClass(waveCount) {
+        let settings = this.getWaveSettings(waveCount);
+        let r = Math.random();
+        let w = settings.weights;
+        if (r < w.swarmer) return SwarmerEnemy;
+        r -= w.swarmer;
+        if (r < w.sniper) return SniperEnemy;
+        r -= w.sniper;
+        if (r < w.bruiser) return ShieldedBruiser;
+        r -= w.bruiser;
+        if (r < w.spawner) return SpawnerEnemy;
+        return AreaDenialEnemy;
+    }
+
+    updateTutorial(dt, game) {
+        if (game.waveCount === 1) {
+            this.tutorialTimer += dt;
+            if (this.tutorialTimer > 2.0 && !game.player.tethered && !this.tutorialState.tetherShown) {
+                // Time to show tether tutorial
+            }
+            if (game.player.tethered) this.tutorialState.tetherShown = true;
+            if (game.player.dashCooldown > 0) this.tutorialState.dashShown = true;
+        }
+    }
+
+    drawTutorial(ctx, game) {
+        if (game.waveCount === 1) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.font = '20px monospace';
+            ctx.textAlign = 'center';
+            if (!this.tutorialState.tetherShown && this.tutorialTimer > 1.0) {
+                ctx.fillText("Click or Space to fire Tether at Grapple Points!", game.width / 2, game.height / 2 + 100);
+            } else if (this.tutorialState.tetherShown && !this.tutorialState.dashShown && this.tutorialTimer > 3.0) {
+                ctx.fillText("Right-Click or Shift to Dash towards mouse!", game.width / 2, game.height / 2 + 100);
+            }
+            ctx.restore();
+        }
+    }
+}
+
 class SaveManager {
     constructor() {
         this.saveKey = 'arcade_game_071_071-clockwork-tether-foundry_v1';
@@ -242,6 +315,7 @@ class SoundEngine {
             gain.connect(this.musicGain);
             osc.start(time);
             osc.stop(time + 0.1);
+            osc.onended = () => { try { osc.disconnect(); gain.disconnect(); } catch(e){} };
         } catch(e){}
     }
 
@@ -273,6 +347,7 @@ class SoundEngine {
 
             noise.start(time);
             noise.stop(time + 0.1);
+            noise.onended = () => { try { noise.disconnect(); gain.disconnect(); filter.disconnect(); } catch(e){} };
         } catch(e){}
     }
 
@@ -298,6 +373,7 @@ class SoundEngine {
             gain.connect(this.sfxGain);
             osc.start();
             osc.stop(this.ctx.currentTime + 0.2);
+            osc.onended = () => { try { osc.disconnect(); gain.disconnect(); } catch(e){} };
         } catch(e){}
     }
     playSynthHurt() { this.playTone(150, 'sawtooth', 0.3, 0.6); }
@@ -1014,6 +1090,7 @@ class Engine {
         this.enemySpawnTimer = 3.0;
 
         this.upgradeSystem = new UpgradeSystem();
+        this.waveManager = new WaveManager();
         this.upgradeDraft = null;
         this.waveCount = 1;
         this.comboMultiplier = 1;
@@ -1274,17 +1351,15 @@ class Engine {
             if (!this.bossActive && this.bossWarningTimer <= 0) {
                 this.enemySpawnTimer -= dt;
                 if (this.enemySpawnTimer <= 0) {
-                    this.enemySpawnTimer = 2.0;
-                    const r = Math.random();
-                    let EnemyClass = SwarmerEnemy;
-                    if (r < 0.2) EnemyClass = SniperEnemy;
-                    else if (r < 0.4) EnemyClass = ShieldedBruiser;
-                    else if (r < 0.6) EnemyClass = SpawnerEnemy;
-                    else if (r < 0.8) EnemyClass = AreaDenialEnemy;
+                    let settings = this.waveManager.getWaveSettings(this.waveCount);
+                    this.enemySpawnTimer = settings.spawnRate;
+                    let EnemyClass = this.waveManager.getSpawnClass(this.waveCount);
                     this.enemies.push(new EnemyClass(Math.random() > 0.5 ? 50 : this.width - 50, 100 + Math.random() * (this.height - 200)));
                 }
             }
 
+
+            if (this.waveManager) this.waveManager.updateTutorial(dt, this);
             if (this.score >= this.nextBossScore && !this.bossActive && this.bossWarningTimer <= 0) {
                 this.bossWarningTimer = 3.0;
                 this.enemies = [];
@@ -1295,7 +1370,11 @@ class Engine {
                 this.bossWarningTimer -= dt;
                 if (this.bossWarningTimer <= 0) {
                     let BossClass = (this.bossSpawnType === 0) ? CogwheelTitan : SteamOverlord;
-                    this.bosses.push(new BossClass(this.width / 2, 100));
+                    let b = new BossClass(this.width / 2, 100);
+                    let settings = this.waveManager.getWaveSettings(this.waveCount);
+                    b.maxHp *= settings.bossHpMult;
+                    b.hp = b.maxHp;
+                    this.bosses.push(b);
                     this.bossActive = true;
                     this.bossSpawnType = 1 - this.bossSpawnType;
                 }
@@ -1331,7 +1410,8 @@ class Engine {
                 this.vfx.addText(this.width/2, this.height/2, 'BOSS DEFEATED', '#ffaa00');
                 this.bossActive = false;
                 this.bossesKilled++;
-                this.nextBossScore = this.score + 500 + (this.bossesKilled * 300);
+                let settings = this.waveManager.getWaveSettings(this.waveCount + 1);
+                this.nextBossScore = Math.max(this.score + 500, settings.nextBossScore);
                 this.score += 500 * (this.comboMultiplier || 1);
 
                 this.state = 'UPGRADE';
@@ -1512,6 +1592,8 @@ class Engine {
         if (this.bossActive && this.bosses.length > 0) {
             this.bosses[0].drawHealthBar(this.ctx, this);
         }
+
+        if (this.waveManager) this.waveManager.drawTutorial(this.ctx, this);
 
         // Dash Cooldown HUD
         if (this.player) {
