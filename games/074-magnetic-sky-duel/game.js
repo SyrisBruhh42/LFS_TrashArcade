@@ -473,6 +473,7 @@ class Game {
 
         this.player = null;
         this.boss = null;
+        this.enemies = [];
         this.bullets = [];
         this.particles = [];
         this.islands = [];
@@ -518,6 +519,7 @@ class Game {
     reset() {
         this.player = new Player(this.width / 2, this.height * 0.8);
         this.boss = new Boss(this.width / 2, 100);
+        this.enemies = [];
         this.bullets = [];
         this.particles = [];
         this.islands = [];
@@ -578,6 +580,21 @@ class Game {
             this.boss.update(dt, this);
         }
 
+        if (window.EnemySpawner) window.EnemySpawner.update(dt, this);
+        this.enemies.forEach(e => e.update(dt, this));
+
+        this.enemies.forEach(e => {
+            if (e.active && MathUtils.distSq(e.pos.x, e.pos.y, this.player.pos.x, this.player.pos.y) < (e.radius + this.player.radius)**2) {
+                if (this.player.invulnTimer <= 0) {
+                    this.player.hp -= 20;
+                    this.player.invulnTimer = 1.0;
+                    this.sound.playHit();
+                    this.spawnParticles(this.player.pos.x, this.player.pos.y, -e.polarity, 10);
+                    if (this.player.hp <= 0) this.endGame();
+                }
+            }
+        });
+
         this.bullets.forEach(b => {
             b.update(dt);
             if (b.pos.x < -10 || b.pos.x > this.width + 10 || b.pos.y < -10 || b.pos.y > this.height + 10) {
@@ -629,9 +646,34 @@ class Game {
                         }
                     }
                 }
+
+                this.enemies.forEach(e => {
+                    if (e.active && b.active && MathUtils.distSq(b.pos.x, b.pos.y, e.pos.x, e.pos.y) < (b.radius + e.radius)**2) {
+                        if (e.shieldActive && b.polarity !== e.polarity) {
+                            b.active = false;
+                            this.sound.playHit();
+                        } else {
+                            const dmg = b.polarity !== e.polarity ? 20 : 10;
+                            e.takeDamage(dmg);
+                            b.active = false;
+                            this.spawnParticles(b.pos.x, b.pos.y, b.polarity, 3);
+                            if (e.hp <= 0) {
+                                this.sound.playExplosion();
+                                this.spawnParticles(e.pos.x, e.pos.y, e.polarity, 15);
+                                this.score += e.points;
+                                if (e instanceof SplitterEnemy) {
+                                    const s1 = new SwarmerEnemy(e.pos.x - 15, e.pos.y);
+                                    const s2 = new SwarmerEnemy(e.pos.x + 15, e.pos.y);
+                                    this.enemies.push(s1, s2);
+                                }
+                            }
+                        }
+                    }
+                });
             }
         });
 
+        this.enemies = this.enemies.filter(e => e.active && e.pos.y < this.height + 100 && e.pos.x > -100 && e.pos.x < this.width + 100);
         this.bullets = this.bullets.filter(b => b.active);
         this.particles = this.particles.filter(p => p.active);
         this.input.update();
@@ -655,6 +697,7 @@ class Game {
 
         if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
             this.particles.forEach(p => p.draw(this.ctx));
+            this.enemies.forEach(e => e.draw(this.ctx));
             this.bullets.forEach(b => b.draw(this.ctx));
             if (this.boss && this.boss.active) this.boss.draw(this.ctx);
             if (this.player.hp > 0) this.player.draw(this.ctx);
