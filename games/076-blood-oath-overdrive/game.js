@@ -345,6 +345,10 @@ class Game {
     resize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
+        if (this.world) {
+            this.world.width = this.canvas.width;
+            this.world.height = this.canvas.height;
+        }
     }
     startGame() {
         this.state = 'PLAYING';
@@ -353,6 +357,7 @@ class Game {
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2;
         this.player = new Player(this.canvas.width / 2, this.canvas.height / 2);
+        this.world = new World(this.canvas.width, this.canvas.height);
     }
     update(dt) {
         if (this.state !== 'PLAYING') return;
@@ -361,6 +366,10 @@ class Game {
         this.particles.update(dt);
         this.trails.update(dt);
         this.shake.update(dt);
+
+        if (this.world) {
+            this.world.update(dt, this.player, this.enemies, this.sound);
+        }
 
         this.enemySpawnTimer += dt;
         if (this.enemySpawnTimer >= this.enemySpawnRate) {
@@ -407,18 +416,26 @@ class Game {
                 this.enemies.splice(i, 1);
                 this.sound.playDamage();
                 if (this.player.hp <= 0) {
-                    this.state = 'GAME_OVER';
-                    if (this.score > this.saveManager.data.highScore) {
-                        this.saveManager.data.highScore = this.score;
-                    }
-                    this.saveManager.data.totalGamesPlayed++;
-                    this.saveManager.data.totalScoreAccumulated += this.score;
-                    this.saveManager.save();
+                    this.checkGameOver();
                 }
             }
         }
 
+        if (this.player.hp <= 0 && this.state !== 'GAME_OVER') {
+            this.checkGameOver();
+        }
+
         this.input.update();
+    }
+
+    checkGameOver() {
+        this.state = 'GAME_OVER';
+        if (this.score > this.saveManager.data.highScore) {
+            this.saveManager.data.highScore = this.score;
+        }
+        this.saveManager.data.totalGamesPlayed++;
+        this.saveManager.data.totalScoreAccumulated += this.score;
+        this.saveManager.save();
     }
     spawnEnemy() {
         let x, y;
@@ -432,8 +449,10 @@ class Game {
         this.enemies.push(new Enemy(x, y, 100 + Math.random() * 50));
     }
     draw() {
-        this.ctx.fillStyle = '#111';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        if (this.state !== 'PLAYING') {
+            this.ctx.fillStyle = '#111';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
 
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = '#fff';
@@ -447,6 +466,11 @@ class Game {
         } else if (this.state === 'PLAYING') {
             this.ctx.save();
             this.shake.apply(this.ctx);
+
+            if (this.world) {
+                this.world.drawBackground(this.ctx);
+                this.world.drawHazards(this.ctx);
+            }
 
             this.trails.draw(this.ctx);
             this.particles.draw(this.ctx);
