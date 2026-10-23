@@ -27,8 +27,9 @@ class Boss extends Orb {
 class PhantomBaronBoss extends Boss {
     constructor(x, y, vx, vy, polarity) {
         super(x, y, vx, vy, polarity);
-        this.maxHp = 200;
-        this.hp = 200;
+        let scale = window.game && window.game.bossManager ? window.game.bossManager.bossCount : 1;
+        this.maxHp = 200 + (scale * 50);
+        this.hp = this.maxHp;
         this.attackTimer = 0;
         this.chargeTimer = 0;
     }
@@ -68,8 +69,9 @@ class PhantomBaronBoss extends Boss {
 class MagneticConstructBoss extends Boss {
     constructor(x, y, vx, vy, polarity) {
         super(x, y, vx, vy, polarity);
-        this.maxHp = 250;
-        this.hp = 250;
+        let scale = window.game && window.game.bossManager ? window.game.bossManager.bossCount : 1;
+        this.maxHp = 250 + (scale * 50);
+        this.hp = this.maxHp;
         this.pullTimer = 0;
     }
     onPhaseChange() {

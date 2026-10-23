@@ -1331,13 +1331,23 @@ class Game {
         const vy = (Math.random() - 0.5) * 100;
         const polarity = Math.random() > 0.5 ? 1 : -1;
 
-        const typeRand = Math.random();
+        let typeRand = Math.random();
+
+        // Scale probabilities based on wave (Wave 1 starts heavily weighted to basic Orbs, scales up to 10)
+        let orbThreshold = Math.max(0.2, 1.0 - (this.wave * 0.08));
+        let swarmerThresh = orbThreshold + 0.15 + (this.wave * 0.01);
+        let bruiserThresh = swarmerThresh + 0.10 + (this.wave * 0.015);
+        let sniperThresh = bruiserThresh + 0.05 + (this.wave * 0.02);
+        let spawnerThresh = sniperThresh + 0.05 + (this.wave * 0.02);
+        let hazardThresh = spawnerThresh + 0.05 + (this.wave * 0.02);
+
         let newEnemy;
-        if (typeRand < 0.2) newEnemy = new SwarmerEnemy(x, y, vx, vy, polarity);
-        else if (typeRand < 0.4) newEnemy = new BruiserEnemy(x, y, vx, vy, polarity);
-        else if (typeRand < 0.6) newEnemy = new SniperEnemy(x, y, vx, vy, polarity);
-        else if (typeRand < 0.8) newEnemy = new SpawnerEnemy(x, y, vx, vy, polarity);
-        else if (typeRand < 0.95) newEnemy = new HazardEnemy(x, y, vx, vy, polarity);
+        if (typeRand < orbThreshold) newEnemy = new Orb(x, y, vx, vy, polarity);
+        else if (typeRand < swarmerThresh) newEnemy = new SwarmerEnemy(x, y, vx, vy, polarity);
+        else if (typeRand < bruiserThresh) newEnemy = new BruiserEnemy(x, y, vx, vy, polarity);
+        else if (typeRand < sniperThresh && this.wave >= 2) newEnemy = new SniperEnemy(x, y, vx, vy, polarity);
+        else if (typeRand < spawnerThresh && this.wave >= 3) newEnemy = new SpawnerEnemy(x, y, vx, vy, polarity);
+        else if (typeRand < hazardThresh && this.wave >= 4) newEnemy = new HazardEnemy(x, y, vx, vy, polarity);
         else newEnemy = new Orb(x, y, vx, vy, polarity);
 
         this.orbs.push(newEnemy);
@@ -1613,6 +1623,8 @@ class Game {
         } else if (this.state === 'PAUSED') {
             this.drawPlaying();
             this.drawPaused();
+        } else if (this.state === 'UPGRADE') {
+            this.drawPlaying();
         } else if (this.state === 'GAME_OVER') {
             this.drawPlaying();
             this.drawGameOver();
@@ -1652,6 +1664,16 @@ class Game {
             this.ctx.fillRect(20, 50, 100 * Math.max(0, 1 - (this.player.dashCooldown / this.player.maxDashCooldown)), 10);
         }
         this.drawTouchUI();
+        this.progression.draw(this.ctx, this.canvas);
+        if (this.wave === 1 && this.state === 'PLAYING') {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(0, this.canvas.height - 100, this.canvas.width, 100);
+            this.ctx.fillStyle = '#ffcc00';
+            this.ctx.font = '16px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('TUTORIAL: Move (WASD/Arrows), Switch Polarity (SPACE).', this.canvas.width/2, this.canvas.height - 70);
+            this.ctx.fillText('Collide with OPPOSITE polarity while moving fast to chain explosions!', this.canvas.width/2, this.canvas.height - 40);
+        }
     }
 
     drawTouchUI() {
@@ -2046,3 +2068,63 @@ class PercussionPatternGenerator {
         return this.patterns.length - 1;
     }
 }
+
+
+// Phase 10 Additional Utility Functions and Logic
+class StatisticsTracker {
+    constructor(game) {
+        this.game = game;
+        this.totalOrbsSpawned = 0;
+        this.totalExplosionsTriggered = 0;
+        this.totalDistanceMoved = 0;
+        this.maxComboReached = 0;
+        this.upgradesSelected = 0;
+        this.bossesDefeated = 0;
+        this.activeTime = 0;
+    }
+
+    update(dt) {
+        if (this.game && this.game.state === 'PLAYING') {
+            this.activeTime += dt;
+        }
+    }
+
+    recordSpawn() {
+        this.totalOrbsSpawned++;
+    }
+
+    recordExplosion() {
+        this.totalExplosionsTriggered++;
+    }
+
+    recordMove(dx, dy) {
+        this.totalDistanceMoved += Math.sqrt(dx*dx + dy*dy);
+    }
+
+    updateMaxCombo(combo) {
+        if (combo > this.maxComboReached) {
+            this.maxComboReached = combo;
+        }
+    }
+
+    recordUpgrade() {
+        this.upgradesSelected++;
+    }
+
+    recordBossKill() {
+        this.bossesDefeated++;
+    }
+
+    getStatsSummary() {
+        return {
+            orbs: this.totalOrbsSpawned,
+            explosions: this.totalExplosionsTriggered,
+            distance: Math.floor(this.totalDistanceMoved),
+            maxCombo: this.maxComboReached,
+            upgrades: this.upgradesSelected,
+            bosses: this.bossesDefeated,
+            time: Math.floor(this.activeTime)
+        };
+    }
+}
+window.GameStatsTracker = StatisticsTracker;
