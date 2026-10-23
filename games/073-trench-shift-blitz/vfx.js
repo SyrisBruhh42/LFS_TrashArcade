@@ -82,6 +82,8 @@ class VFXManager {
         }
     }
     emitParticles(x, y, color, count, speed, isBurst) {
+        let opts = this.engine && this.engine.saveManager && this.engine.saveManager.data.options || {};
+        if(opts.particleDensity === "low") count = Math.max(1, Math.floor(count / 3));
         for (let i = 0; i < count; i++) {
             let angle = Math.random() * Math.PI * 2;
             let vel = speed * (0.5 + Math.random() * 0.5);

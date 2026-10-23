@@ -119,6 +119,9 @@ class SaveManager {
                 if(parsed.options) {
                     this.data.options = { ...this.data.options, ...parsed.options };
                 }
+                if (!this.data.unlockedMilestones) {
+                    this.data.unlockedMilestones = [];
+                }
             }
         } catch (e) {
             console.warn("Could not load save data", e);
@@ -713,6 +716,7 @@ class Engine {
 
         this.progression = new ProgressionSystem();
         this.vfx = new VFXManager(this);
+        this.ui = new UIManager(this);
 
         this.setupResize();
         this.bindEvents();
@@ -1003,10 +1007,10 @@ class Engine {
                             this.entities = this.entities.filter(e => e !== hitEnemy);
                             this.score += 500 * this.progression.getMultiplier();
                             this.progression.addCombo(5);
-                            this.sound.playExplosion();
+                            if(this.sound) this.sound.playExplosion();
                             if (this.vfx) {
                                 this.vfx.triggerHitStop(0.5);
-                                this.vfx.triggerShake(15, 0.5);
+                                this.vfx.triggerShake(15 * ((this.saveManager.data.options.shakeIntensity !== undefined ? this.saveManager.data.options.shakeIntensity : 1)), 0.5);
                                 let cx = this.gridOffset.x + hitEnemy.gridPos.x * this.cellSize + this.cellSize/2;
                                 let cy = this.gridOffset.y + hitEnemy.gridPos.y * this.cellSize + this.cellSize/2;
                                 this.vfx.emitParticles(cx, cy, "#ffaa00", 30, 200, true);
@@ -1016,7 +1020,7 @@ class Engine {
                             this.sound.playShoot();
                             if (this.vfx) {
                                 this.vfx.triggerHitStop(0.05);
-                                this.vfx.triggerShake(5, 0.1);
+                                this.vfx.triggerShake(5 * ((this.saveManager.data.options.shakeIntensity !== undefined ? this.saveManager.data.options.shakeIntensity : 1)), 0.1);
                                 let cx = this.gridOffset.x + hitEnemy.gridPos.x * this.cellSize + this.cellSize/2;
                                 let cy = this.gridOffset.y + hitEnemy.gridPos.y * this.cellSize + this.cellSize/2;
                                 this.vfx.emitParticles(cx, cy, "#fff", 10, 100, false);
@@ -1256,7 +1260,7 @@ class Engine {
         this.sound.playExplosion();
         if (this.vfx && this.player) {
             this.vfx.triggerHitStop(0.1);
-            this.vfx.triggerShake(10, 0.3);
+            this.vfx.triggerShake(10 * ((this.saveManager.data.options.shakeIntensity !== undefined ? this.saveManager.data.options.shakeIntensity : 1)), 0.3);
             let cx = this.gridOffset.x + this.player.gridPos.x * this.cellSize + this.cellSize/2;
             let cy = this.gridOffset.y + this.player.gridPos.y * this.cellSize + this.cellSize/2;
             this.vfx.emitParticles(cx, cy, "#ff0000", 20, 150, true);
@@ -1269,11 +1273,13 @@ class Engine {
             this.saveManager.data.bestWaveOrCombo = this.wave;
         }
         this.saveManager.data.totalScoreAccumulated += this.score;
+        this.saveManager.data.totalGamesPlayed++;
+        if (this.ui) this.ui.checkMilestones();
         this.saveManager.save();
     }
 
     draw() {
-        this.ctx.fillStyle = "#050a15";
+        this.ctx.fillStyle = this.saveManager.data.options.colorblind ? "#111" : "#050a15";
         this.ctx.fillRect(0, 0, this.width, this.height);
         this.env.draw(this.ctx);
 
@@ -1383,6 +1389,7 @@ class Engine {
             }
         }
         this.ctx.restore();
+        if (this.ui) this.ui.draw(this.ctx, this.width, this.height);
     }
 }
 
