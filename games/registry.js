@@ -941,5 +941,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#a04e7e",
     "phase": "7",
     "path": "./games/071-clockwork-tether-foundry/index.html"
+  },
+  {
+    "id": "072",
+    "slug": "072-jungle-recoil-ruins",
+    "title": "Jungle Recoil Ruins",
+    "genre": "Twin-Stick Arena",
+    "coreMechanic": "Recoil-as-Movement",
+    "setting": "Overgrown Jungle Ruins",
+    "description": "Navigate overgrown jungle ruins by using weapon recoil for movement.",
+    "controls": "WASD/Arrows to aim, Space/Click to fire/move. Touch to aim and fire.",
+    "createdAt": "2023-10-23",
+    "accentColor": "#f84f55",
+    "phase": "1",
+    "path": "./games/072-jungle-recoil-ruins/index.html"
   }
 ];
