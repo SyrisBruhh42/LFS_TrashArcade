@@ -911,7 +911,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD to move, Mouse to aim/shoot. Touch supported.",
     "createdAt": "2024-10-22",
     "accentColor": "#935491",
-    "phase": "8",
+    "phase": "9",
     "path": "./games/069-magma-shift-forge/index.html"
   },
   {
