@@ -103,7 +103,8 @@ class SaveManager {
             options: {
                 mute: false,
                 musicVol: 1.0,
-                sfxVol: 1.0
+                sfxVol: 1.0,
+                shakeIntensity: 1.0
             }
         };
         this.load();
@@ -479,6 +480,7 @@ class Engine {
         this.turnsUntilShrink = 5;
 
         this.progression = new ProgressionSystem();
+        this.vfx = new VFXManager(this);
 
         this.setupResize();
         this.bindEvents();
@@ -655,6 +657,8 @@ class Engine {
     }
 
     update(dt) {
+        if (this.vfx && this.vfx.update(dt)) return;
+
         this.env.update(dt);
         for (let e of this.entities) {
             if (e.update) e.update(dt);
@@ -730,6 +734,12 @@ class Engine {
         if (dx !== 0 || dy !== 0) {
             this.player.facing = new Vector2(dx, dy);
 
+            if (this.vfx) {
+                if (this.player.dashActive) {
+                    this.vfx.addTrail(this.player.gridPos.x, this.player.gridPos.y, "rgba(0, 255, 255, 0.5)");
+                }
+            }
+
             let steps = this.player.dashActive ? 3 : 1;
             let finalX = this.player.gridPos.x;
             let finalY = this.player.gridPos.y;
@@ -755,8 +765,24 @@ class Engine {
                             this.score += 500 * this.progression.getMultiplier();
                             this.progression.addCombo(5);
                             this.sound.playExplosion();
+                            if (this.vfx) {
+                                this.vfx.triggerHitStop(0.5);
+                                this.vfx.triggerShake(15, 0.5);
+                                let cx = this.gridOffset.x + hitEnemy.gridPos.x * this.cellSize + this.cellSize/2;
+                                let cy = this.gridOffset.y + hitEnemy.gridPos.y * this.cellSize + this.cellSize/2;
+                                this.vfx.emitParticles(cx, cy, "#ffaa00", 30, 200, true);
+                                this.vfx.spawnFloatingText(cx, cy - 20, `BOSS KILL!`, 255, 170, 0, 30);
+                            }
                         } else {
                             this.sound.playShoot();
+                            if (this.vfx) {
+                                this.vfx.triggerHitStop(0.05);
+                                this.vfx.triggerShake(5, 0.1);
+                                let cx = this.gridOffset.x + hitEnemy.gridPos.x * this.cellSize + this.cellSize/2;
+                                let cy = this.gridOffset.y + hitEnemy.gridPos.y * this.cellSize + this.cellSize/2;
+                                this.vfx.emitParticles(cx, cy, "#fff", 10, 100, false);
+                                this.vfx.spawnFloatingText(cx, cy - 10, `1`, 255, 255, 255, 20);
+                            }
                         }
                     } else {
                         hitEnemy.hp--;
@@ -765,6 +791,14 @@ class Engine {
                             if (hitEnemy instanceof Enemy) {
                                 this.score += 10 * this.progression.getMultiplier();
                                 this.progression.addCombo(1);
+                                if (this.vfx) {
+                                    this.vfx.triggerHitStop(0.02);
+                                    let cx = this.gridOffset.x + hitEnemy.gridPos.x * this.cellSize + this.cellSize/2;
+                                    let cy = this.gridOffset.y + hitEnemy.gridPos.y * this.cellSize + this.cellSize/2;
+                                    this.vfx.emitParticles(cx, cy, hitEnemy.color, 15, 150, true);
+                                    let multi = this.progression.getMultiplier();
+                                    this.vfx.spawnFloatingText(cx, cy - 10, multi > 1 ? `x${multi}` : `1`, 255, 51, 102, 20);
+                                }
                                 if (Math.random() < 0.2) {
                                     this.entities.push(new Pickup(hitEnemy.gridPos.x, hitEnemy.gridPos.y));
                                 }
@@ -980,6 +1014,14 @@ class Engine {
     gameOver() {
         this.state = 'GAME_OVER';
         this.sound.playExplosion();
+        if (this.vfx && this.player) {
+            this.vfx.triggerHitStop(0.1);
+            this.vfx.triggerShake(10, 0.3);
+            let cx = this.gridOffset.x + this.player.gridPos.x * this.cellSize + this.cellSize/2;
+            let cy = this.gridOffset.y + this.player.gridPos.y * this.cellSize + this.cellSize/2;
+            this.vfx.emitParticles(cx, cy, "#ff0000", 20, 150, true);
+            this.vfx.spawnFloatingText(cx, cy - 20, `-1 HP`, 255, 0, 0, 25);
+        }
         if (this.score > this.saveManager.data.highScore) {
             this.saveManager.data.highScore = this.score;
         }
@@ -994,6 +1036,9 @@ class Engine {
         this.ctx.fillStyle = "#050a15";
         this.ctx.fillRect(0, 0, this.width, this.height);
         this.env.draw(this.ctx);
+
+        this.ctx.save();
+        if (this.vfx) this.vfx.applyShake(this.ctx);
 
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = "#b67083";
@@ -1057,6 +1102,8 @@ class Engine {
                 boss.drawBossUI(this.ctx, this.width, this.height);
             }
 
+            if (this.vfx) this.vfx.draw(this.ctx, this.cellSize, this.gridOffset);
+
             this.progression.drawComboUI(this.ctx, this.width, this.height);
             this.progression.drawDraftUI(this.ctx, this.width, this.height);
 
@@ -1095,6 +1142,7 @@ class Engine {
                 this.ctx.fillText("Back to Arcade (../../index.html)", this.width / 2, this.height / 2 + 90);
             }
         }
+        this.ctx.restore();
     }
 }
 
