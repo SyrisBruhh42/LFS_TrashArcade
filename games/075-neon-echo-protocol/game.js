@@ -298,10 +298,12 @@ class Player {
             if (this.dashTimer <= this.dashCooldown - this.dashDuration) {
                 this.isDashing = false;
             }
+            if (game.vfx) game.vfx.spawnTrail(this);
         } else {
             if (move.mag() > 0) {
                 this.vel = this.vel.add(move.mul(this.acceleration * dt));
                 this.thrustIntensity = 1;
+                if (game.vfx && Math.random() < 0.2) game.vfx.spawnTrail(this);
             } else {
                 this.thrustIntensity = Math.max(0, this.thrustIntensity - dt * 5);
             }
@@ -863,6 +865,7 @@ class Game {
         this.width = 800;
         this.height = 600;
         this.camera = { x: 0, y: 0 };
+        this.vfx = new VFXManager();
 
         this.input = new InputManager();
         this.saveManager = new SaveManager();
@@ -1007,6 +1010,14 @@ class Game {
         let dt = Math.min((time - this.lastTime) / 1000, 0.1);
         this.lastTime = time;
 
+        if (this.vfx) this.vfx.update(dt, this);
+
+        if (this.vfx && this.vfx.hitStopTimer > 0) {
+            this.draw();
+            requestAnimationFrame((t) => this.loop(t));
+            return;
+        }
+
         this.update(dt);
         this.draw();
 
@@ -1083,12 +1094,24 @@ class Game {
                         e.takeDamage(10);
                         b.active = false;
                         this.spawnParticles(b.pos.x, b.pos.y, '#ffffff', 5);
+
+                        if (this.vfx) {
+                            this.vfx.spawnHitSparks(b.pos.x, b.pos.y, b.vel.x, b.vel.y, 5, '#ffffff');
+                            this.vfx.spawnFloatingText(e.pos.x, e.pos.y - 15, '10', '#ffffff');
+                        }
+
                         this.sound.hit();
                         if (e.hp <= 0) {
                             e.die(this);
                             e.active = false;
                             this.score += e.value;
                             this.spawnParticles(e.pos.x, e.pos.y, e.color, 15);
+
+                            if (this.vfx) {
+                                this.vfx.spawnExplosion(e.pos.x, e.pos.y, e.color, 20);
+                                this.vfx.shakeScreen(5, 0.2);
+                                this.vfx.hitStop(0.04);
+                            }
 
                             if (Math.random() < 0.2) this.progression.spawnPickup(e.pos.x, e.pos.y);
                             this.progression.addCombo(1);
@@ -1148,6 +1171,8 @@ class Game {
         this.ctx.scale(this.canvas.width / this.width, this.canvas.height / this.height);
         this.ctx.translate(-this.camera.x, -this.camera.y);
 
+        if (this.vfx) this.vfx.applyShake(this.ctx);
+
         if (this.world) {
             this.world.drawBackground(this.ctx);
         }
@@ -1164,6 +1189,8 @@ class Game {
             this.enemies.forEach(e => e.draw(this.ctx));
             this.bullets.forEach(b => b.draw(this.ctx));
             this.particles.forEach(p => p.draw(this.ctx));
+
+            if (this.vfx) this.vfx.draw(this.ctx, this);
 
             this.bossManager.draw(this.ctx, this);
 
