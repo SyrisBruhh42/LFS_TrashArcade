@@ -939,7 +939,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move, Mouse Click/Touch to fire tether.",
     "createdAt": "2023-10-23",
     "accentColor": "#a04e7e",
-    "phase": "1",
+    "phase": "2",
     "path": "./games/071-clockwork-tether-foundry/index.html"
   }
 ];
