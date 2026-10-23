@@ -1025,5 +1025,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#cc846d",
     "phase": "5",
     "path": "./games/077-origami-heist-shift/index.html"
+  },
+  {
+    "id": "078",
+    "slug": "078-cytoplasm-recoil",
+    "title": "Cytoplasm Recoil",
+    "genre": "Pinball/Ricochet Dungeon",
+    "coreMechanic": "Limited Ammo Must Be Physically Retrieved",
+    "setting": "Microscopic Cell Interior",
+    "description": "Navigate a microscopic cell. Fire your single ribosome, let it ricochet to destroy viruses, and retrieve it to fire again.",
+    "controls": "WASD/Arrows to move, Mouse/Touch to aim and shoot. Touch/Drag to move and tap to shoot.",
+    "createdAt": "2023-10-25",
+    "accentColor": "#448b6f",
+    "phase": "1",
+    "path": "./games/078-cytoplasm-recoil/index.html"
   }
 ];
