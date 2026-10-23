@@ -1118,6 +1118,22 @@ class Game {
             if (this.state === 'UPGRADE' && this.progression) {
                 this.progression.drawDraft(this.ctx);
             }
+
+            if (this.wave === 1 && this.state === 'PLAYING') {
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                this.ctx.fillRect(this.width / 2 - 200, 100, 400, 140);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.textAlign = 'center';
+                this.ctx.font = '16px sans-serif';
+                this.ctx.fillText('WASD/Drag: Move', this.width / 2, 125);
+                this.ctx.fillText('Space/Tap: Shoot', this.width / 2, 150);
+                this.ctx.fillText('Shift: Switch Polarity (+ / -)', this.width / 2, 175);
+                this.ctx.fillStyle = '#ff0';
+                this.ctx.fillText('Match enemy polarity to absorb, opposite to damage!', this.width / 2, 205);
+                this.ctx.fillStyle = '#aaa';
+                this.ctx.font = '12px sans-serif';
+                this.ctx.fillText('(Hint will disappear after Wave 1)', this.width / 2, 225);
+            }
         }
 
         if (this.state === 'TITLE') {

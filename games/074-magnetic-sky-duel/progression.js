@@ -63,10 +63,10 @@ class ProgressionManager {
         };
 
         this.availablePerks = [
-            { id: 'hpUp', name: 'Max HP +20', desc: 'Increase maximum health', apply: () => { this.perks.maxHp += 20; this.game.player.maxHp = this.perks.maxHp; this.game.player.hp += 20; } },
+            { id: 'hpUp', name: 'Max HP +25', desc: 'Increase maximum health', apply: () => { this.perks.maxHp += 25; this.game.player.maxHp = this.perks.maxHp; this.game.player.hp += 25; } },
             { id: 'heal', name: 'Full Heal', desc: 'Restore all health', apply: () => { this.game.player.hp = this.game.player.maxHp; } },
             { id: 'speedUp', name: 'Speed +15%', desc: 'Move faster', apply: () => { this.perks.speed *= 1.15; this.game.player.speed = this.perks.speed; } },
-            { id: 'dmgUp', name: 'Damage +20%', desc: 'Deal more damage', apply: () => { this.perks.damageMult *= 1.2; } },
+            { id: 'dmgUp', name: 'Damage +25%', desc: 'Deal more damage', apply: () => { this.perks.damageMult *= 1.25; } },
             { id: 'fireRate', name: 'Fire Rate +15%', desc: 'Shoot faster', apply: () => { this.perks.fireRateMult *= 0.85; } },
             { id: 'comboTime', name: 'Combo Time +2s', desc: 'Combo decays slower', apply: () => { this.comboManager.maxDecayTime += 2; } },
             { id: 'pickupHeal', name: 'Better Heals', desc: 'Heal pickups give +10 HP', apply: () => { this.perks.healAmount += 10; } },

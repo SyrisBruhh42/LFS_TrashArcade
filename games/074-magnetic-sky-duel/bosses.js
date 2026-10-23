@@ -22,7 +22,7 @@ class BaseBoss extends Entity {
 
 class MagnetoBoss extends BaseBoss {
     constructor(x, y, wave, game) {
-        super(x, y, 1500 + wave * 200, game);
+        super(x, y, 800 + wave * 400, game);
         this.attackTimer = 0;
     }
     update(dt) {
@@ -87,7 +87,7 @@ class MagnetoBoss extends BaseBoss {
 
 class PolarisBoss extends BaseBoss {
     constructor(x, y, wave, game) {
-        super(x, y, 2000 + wave * 200, game);
+        super(x, y, 1200 + wave * 500, game);
         this.attackTimer = 0;
         this.spin = 0;
     }
