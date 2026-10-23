@@ -22,6 +22,9 @@ class VFXManager {
     }
 
     emitParticles(x, y, color, speed, count, angleBase, spread) {
+        if (window.game && window.game.saveManager.data.options.particleDensity === 'Low') {
+            count = Math.max(1, Math.floor(count / 3));
+        }
         for(let i=0; i<count; i++) {
             const angle = angleBase + (Math.random() - 0.5) * spread;
             const spd = speed * (0.5 + Math.random() * 0.5);

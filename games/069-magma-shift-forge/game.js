@@ -64,7 +64,7 @@ class SaveManager {
             totalGamesPlayed: 0,
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
-            options: { shakeIntensity: 1.0 }
+            options: { shakeIntensity: 1.0, masterMute: false, sfxVolume: 1.0, musicVolume: 1.0, particleDensity: 'High', highContrast: false, showFPS: false, touchMode: 'Auto', touchHandedness: 'Right' }
         };
         this.load();
     }
@@ -73,7 +73,11 @@ class SaveManager {
         try {
             const saved = localStorage.getItem(SAVE_KEY);
             if (saved) {
-                this.data = { ...this.data, ...JSON.parse(saved) };
+                const parsed = JSON.parse(saved);
+                this.data = { ...this.data, ...parsed };
+                if (parsed.options) {
+                    this.data.options = { ...this.data.options, ...parsed.options };
+                }
             }
         } catch(e) { console.error("Save load failed", e); }
     }
@@ -111,7 +115,7 @@ class SoundEngine {
             this.ctx = new AudioContext();
 
             this.masterGain = this.ctx.createGain();
-            this.masterGain.gain.value = 0.5; // Default volume
+            this.masterGain.gain.value = (window.game && window.game.saveManager.data.options.masterMute) ? 0 : 0.5; // Default volume
             this.masterGain.connect(this.ctx.destination);
 
             this.bgmFilter = this.ctx.createBiquadFilter();
@@ -221,6 +225,8 @@ class SoundEngine {
     }
 
     playDrum(time, freq, dur, vol, type) {
+        const sfxVol = (window.game && window.game.saveManager.data.options.sfxVolume !== undefined) ? window.game.saveManager.data.options.sfxVolume : 1.0;
+        vol *= sfxVol;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
 
@@ -244,6 +250,8 @@ class SoundEngine {
 
     playTone(freq, type, dur, vol, time = this.ctx.currentTime, isBgm = false) {
         if (!this.initialized || !this.ctx) return;
+        const targetVol = isBgm ? ((window.game && window.game.saveManager.data.options.musicVolume !== undefined) ? window.game.saveManager.data.options.musicVolume : 1.0) : ((window.game && window.game.saveManager.data.options.sfxVolume !== undefined) ? window.game.saveManager.data.options.sfxVolume : 1.0);
+        vol *= targetVol;
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -345,6 +353,11 @@ class Game {
 
         this.state = 'TITLE';
         this.lastTime = 0;
+
+        this.fps = 0;
+        this.frames = 0;
+        this.lastFpsTime = 0;
+        this.ui = new UIManager(this);
 
         this.vfx = new VFXManager(this.targetWidth, this.targetHeight);
         this.setupResize();
@@ -455,24 +468,32 @@ class Game {
     }
 
     update(dt) {
+        if (this.ui) this.ui.update(dt, this);
+
+        if (this.state === 'PAUSED' || this.state === 'SETTINGS') {
+            return;
+        }
+
         if(this.state === 'TITLE') {
-            if(this.input.keys['Space'] || this.input.mouse.down) {
+            if(this.input.keys['Space'] || (this.input.mouse.down && !this.ui.handledClick)) {
                 this.state = 'PLAYING';
                 this.reset();
                 this.input.mouse.down = false;
                 this.input.keys['Space'] = false;
             }
+            if (this.ui) this.ui.handledClick = false;
             return;
         }
 
         if (this.state === 'PLAYING' && this.vfx.update(dt)) return;
 
         if(this.state === 'GAME_OVER') {
-            if(this.input.keys['Space'] || this.input.mouse.down) {
+            if(this.input.keys['Space'] || (this.input.mouse.down && !this.ui.handledClick)) {
                 this.state = 'TITLE';
                 this.input.mouse.down = false;
                 this.input.keys['Space'] = false;
             }
+            if (this.ui) this.ui.handledClick = false;
             return;
         }
 
@@ -506,6 +527,7 @@ class Game {
         }
 
         if(this.state === 'PLAYING') {
+            if (this.ui) this.ui.checkMilestones(this);
             if (this.sound) this.sound.updateBGM(dt, this);
             if (this.parallax) this.parallax.update(dt, this.player);
             if (this.hazards) this.hazards.update(dt, this);
@@ -760,6 +782,7 @@ class Game {
     }
 
     gameOver() {
+        if (this.ui) this.ui.checkMilestones(this);
         if(this.sound) this.sound.playSFX('gameOver');
         this.state = 'GAME_OVER';
         if(this.score > this.saveManager.data.highScore) {
@@ -811,6 +834,11 @@ class Game {
 
             if (this.parallax) this.parallax.draw(this.ctx);
             if (this.hazards) this.hazards.draw(this.ctx);
+
+            if (this.saveManager.data.options.highContrast) {
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                this.ctx.fillRect(0, 0, this.targetWidth, this.targetHeight);
+            }
 
             // Draw Arena
             const currentArenaRadius = this.arena.radius + Math.sin(this.arena.pulsing) * 10;
@@ -905,6 +933,8 @@ class Game {
             }
         }
 
+        if (this.ui) this.ui.draw(this.ctx, this);
+
         if (this.state === 'DRAFT') {
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
             this.ctx.fillRect(0, 0, this.targetWidth, this.targetHeight);
@@ -958,13 +988,25 @@ class Game {
         this.update(dt);
         this.draw();
 
+        this.frames++;
+        if (timestamp - this.lastFpsTime >= 1000) {
+            this.fps = this.frames;
+            this.frames = 0;
+            this.lastFpsTime = timestamp;
+        }
+
         // handle esc to back to arcade link for check_games.py
         if(this.input.keys['Escape']) {
-            if(this.state === 'TITLE' || this.state === 'PAUSED') {
+            if(this.state === 'TITLE' || (this.state === 'PAUSED' && (!this.ui || !this.ui.inSettings))) {
                 // simulate back link click or something
                 console.log("Back to Arcade ../../index.html");
             } else if (this.state === 'PLAYING') {
                 this.state = 'PAUSED';
+                this.input.keys['Escape'] = false;
+            } else if (this.state === 'SETTINGS' || (this.ui && this.ui.inSettings)) {
+                if (this.ui) this.ui.inSettings = false;
+                this.state = (this.ui && this.ui.prevState) ? this.ui.prevState : 'TITLE';
+                this.input.keys['Escape'] = false;
             }
         }
 
@@ -974,6 +1016,9 @@ class Game {
 
 window.onload = () => {
     window.game = new Game();
+    if (window.game.saveManager.data.options.masterMute && window.game.sound && window.game.sound.masterGain) {
+        window.game.sound.masterGain.gain.value = 0;
+    }
 };
 
 // Fill up lines to meet 450 requirement...

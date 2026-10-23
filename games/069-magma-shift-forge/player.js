@@ -32,9 +32,21 @@ class Player {
         if(input.keys['KeyA'] || input.keys['ArrowLeft']) ax -= 1;
         if(input.keys['KeyD'] || input.keys['ArrowRight']) ax += 1;
 
+        if (game && game.ui && game.ui.joystickL && game.ui.joystickL.active) {
+            ax = game.ui.joystickL.dx;
+            ay = game.ui.joystickL.dy;
+        }
+
+        if (game && game.ui && game.ui.joystickR && game.ui.joystickR.active) {
+            this.angle = Math.atan2(game.ui.joystickR.dy, game.ui.joystickR.dx);
+            input.mouse.down = true;
+        } else if (game && game.ui && game.ui.isTouchMode(game) && (!game.ui.joystickR || !game.ui.joystickR.active)) {
+            input.mouse.down = false; // Don't fire if aiming joystick released in touch mode
+        }
+
         if(ax !== 0 || ay !== 0) {
             const len = Math.hypot(ax, ay);
-            ax /= len; ay /= len;
+            if (len > 1) { ax /= len; ay /= len; } // Allow precise joystick analog
             this.thrustIntensity = Math.min(1, this.thrustIntensity + dt * 10);
         } else {
             this.thrustIntensity = Math.max(0, this.thrustIntensity - dt * 5);
