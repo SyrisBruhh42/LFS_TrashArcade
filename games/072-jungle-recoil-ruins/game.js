@@ -775,6 +775,10 @@ class GameEngine {
     this.wave = 1;
     this.enemySpawnTimer = 0;
     this.enemySpawnRate = 2; // seconds
+    this.boss = null;
+    this.bossWarningTimer = 0;
+    this.nextBossScore = 150;
+    this.bossKillCount = 0;
 
     this.setupResize();
 
@@ -812,8 +816,26 @@ class GameEngine {
     this.wave = 1;
     this.enemySpawnTimer = 2;
     this.enemySpawnRate = 2;
+    this.boss = null;
+    this.bossWarningTimer = 0;
+    this.nextBossScore = 150;
+    this.bossKillCount = 0;
     this.environment = new Environment(this);
     this.state = 'PLAYING';
+  }
+
+  spawnBoss() {
+    this.enemies = [];
+    this.enemyProjectiles = [];
+    this.hazards = [];
+    this.sound.playExplosion();
+    let cx = this.canvas.width / 2;
+    let cy = this.canvas.height / 2;
+    if (this.bossKillCount % 2 === 0) {
+      this.boss = new OvergrownColossus(cx, cy);
+    } else {
+      this.boss = new RuinsGuardian(cx, cy);
+    }
   }
 
   spawnEnemy() {
@@ -854,11 +876,46 @@ class GameEngine {
       if (this.environment) this.environment.update(dt, this);
 
       // Spawner
-      this.enemySpawnTimer -= dt;
-      if (this.enemySpawnTimer <= 0) {
-        this.spawnEnemy();
-        this.enemySpawnTimer = this.enemySpawnRate;
-        this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.05); // increases difficulty
+      if (this.score >= this.nextBossScore && !this.boss && this.bossWarningTimer <= 0) {
+        this.bossWarningTimer = 3;
+      }
+
+      if (this.bossWarningTimer > 0) {
+        this.bossWarningTimer -= dt;
+        if (this.bossWarningTimer <= 0) {
+          this.spawnBoss();
+        }
+      } else if (this.boss) {
+        this.boss.update(dt, this);
+        let dist = this.boss.pos.copy().sub(this.player.pos).mag();
+        if (dist < this.boss.radius + this.player.radius && this.player.invulnerableTimer <= 0) {
+          this.sound.playExplosion();
+          this.gameOver();
+          return;
+        }
+        for (let j = this.projectiles.length - 1; j >= 0; j--) {
+          let p = this.projectiles[j];
+          let pDist = this.boss.pos.copy().sub(p.pos).mag();
+          if (pDist < this.boss.radius + p.radius) {
+            this.boss.takeDamage(10);
+            p.active = false;
+            this.sound.playHit();
+          }
+        }
+        if (!this.boss.active) {
+          this.score += this.boss.scoreValue;
+          this.nextBossScore = this.score + 200;
+          this.bossKillCount++;
+          this.boss = null;
+          this.sound.playExplosion();
+        }
+      } else {
+        this.enemySpawnTimer -= dt;
+        if (this.enemySpawnTimer <= 0) {
+          this.spawnEnemy();
+          this.enemySpawnTimer = this.enemySpawnRate;
+          this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.05); // increases difficulty
+        }
       }
 
       // Update Projectiles
@@ -978,6 +1035,7 @@ class GameEngine {
       for (let ep of this.enemyProjectiles) ep.draw(this.ctx);
       for (let h of this.hazards) h.draw(this.ctx);
       for (let e of this.enemies) e.draw(this.ctx);
+      if (this.boss) this.boss.draw(this.ctx);
 
       let aimDir = this.input.getAimDir(this.player.pos);
       this.player.draw(this.ctx, aimDir);
@@ -992,6 +1050,17 @@ class GameEngine {
       let dashReady = this.player.dashTimer <= 0;
       this.ctx.fillStyle = dashReady ? '#00ffff' : '#888';
       this.ctx.fillText(`Dash: ${dashReady ? 'READY' : Math.ceil(this.player.dashTimer)}`, 20, 90);
+
+      if (this.bossWarningTimer > 0) {
+        if (Math.floor(performance.now() / 200) % 2 === 0) {
+          this.ctx.fillStyle = '#f44336';
+          this.ctx.font = 'bold 40px monospace';
+          this.ctx.textAlign = 'center';
+          this.ctx.fillText('WARNING: BOSS APPROACHING!', this.canvas.width / 2, this.canvas.height / 3);
+        }
+      } else if (this.boss) {
+        this.boss.drawHpBar(this.ctx, this.canvas.width, this.canvas.height);
+      }
 
     } else if (this.state === 'PAUSED') {
       this.ctx.fillStyle = '#0a1a0f';
