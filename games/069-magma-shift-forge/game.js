@@ -89,6 +89,19 @@ class SoundEngine {
     constructor() {
         this.ctx = null;
         this.initialized = false;
+
+        // Synths and nodes
+        this.masterGain = null;
+        this.bgmNodes = [];
+        this.activeNodes = [];
+
+        // BGM state
+        this.bpm = 120;
+        this.nextNoteTime = 0;
+        this.current16thNote = 0;
+        this.isBossTheme = false;
+        this.bgmFilter = null;
+        this.wasBossActive = false;
     }
 
     init() {
@@ -96,13 +109,223 @@ class SoundEngine {
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             this.ctx = new AudioContext();
+
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = 0.5; // Default volume
+            this.masterGain.connect(this.ctx.destination);
+
+            this.bgmFilter = this.ctx.createBiquadFilter();
+            this.bgmFilter.type = 'lowpass';
+            this.bgmFilter.frequency.value = 2000;
+            this.bgmFilter.connect(this.masterGain);
+
             this.initialized = true;
+            this.nextNoteTime = this.ctx.currentTime + 0.1;
         } catch(e) { console.error("Web Audio not supported", e); }
     }
 
     resume() {
         if(this.ctx && this.ctx.state === 'suspended') {
             this.ctx.resume();
+        }
+    }
+
+    updateBGM(dt, game) {
+        if (!this.initialized || !this.ctx) return;
+
+        // Clean up old nodes
+        const now = this.ctx.currentTime;
+        this.activeNodes = this.activeNodes.filter(nodeInfo => {
+            if (nodeInfo.endTime < now) {
+                try { nodeInfo.osc.stop(); } catch(e) {}
+                try { nodeInfo.osc.disconnect(); } catch(e) {}
+                try { nodeInfo.gain.disconnect(); } catch(e) {}
+                return false;
+            }
+            return true;
+        });
+
+        // Adaptive logic
+        let targetBpm = 120;
+        let targetFilterFreq = 2000;
+
+        // Check proxy for low HP (proximity to enemy or hazards)
+        let closeToEnemy = false;
+        for (let e of game.enemies) {
+            if (Math.hypot(game.player.x - e.x, game.player.y - e.y) < 150) {
+                closeToEnemy = true;
+                break;
+            }
+        }
+        for (let h of game.enemyHazards || []) {
+            if (Math.hypot(game.player.x - h.x, game.player.y - h.y) < 100) {
+                closeToEnemy = true;
+                break;
+            }
+        }
+
+        if (game.bossActive) {
+            targetBpm = 160;
+            targetFilterFreq = 5000;
+            if (!this.wasBossActive) {
+                // Just became boss
+                this.wasBossActive = true;
+            }
+        } else {
+            this.wasBossActive = false;
+            if (closeToEnemy) {
+                targetBpm = 135;
+                targetFilterFreq = 3000;
+            }
+        }
+
+        // Smoothly adjust bpm and filter
+        this.bpm += (targetBpm - this.bpm) * dt * 2;
+        this.bgmFilter.frequency.setTargetAtTime(targetFilterFreq, this.ctx.currentTime, 0.5);
+
+        // BGM Sequencer
+        const secondsPerBeat = 60.0 / this.bpm;
+        while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+            this.scheduleNote(this.current16thNote, this.nextNoteTime);
+            this.nextNoteTime += 0.25 * secondsPerBeat;
+            this.current16thNote++;
+            if (this.current16thNote === 16) {
+                this.current16thNote = 0;
+            }
+        }
+    }
+
+    scheduleNote(step, time) {
+        // Kick on 0, 4, 8, 12
+        if (step % 4 === 0) {
+            this.playDrum(time, 150, 0.01, 0.5, 'sine');
+        }
+        // Hihat on odd 8ths
+        if (step % 2 !== 0) {
+            this.playDrum(time, 8000, 0.05, 0.1, 'square');
+        }
+        // Snare on 4, 12
+        if (step === 4 || step === 12) {
+            this.playDrum(time, 300, 0.1, 0.3, 'triangle');
+        }
+
+        // Bass/Arp
+        let root = this.wasBossActive ? 30 : 40;
+        const scale = [0, 3, 5, 7, 10]; // Minor pentatonic
+
+        if (step % 2 === 0) {
+            let note = root + scale[(step/2) % scale.length];
+            let freq = 440 * Math.pow(2, (note - 69) / 12);
+            this.playTone(freq, 'sawtooth', 0.1, 0.2, time, true);
+        }
+    }
+
+    playDrum(time, freq, dur, vol, type) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, time);
+        if (type === 'sine') {
+            osc.frequency.exponentialRampToValueAtTime(0.01, time + dur);
+        }
+
+        gain.gain.setValueAtTime(vol, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + dur);
+
+        osc.connect(gain);
+        gain.connect(this.bgmFilter);
+
+        osc.start(time);
+        osc.stop(time + dur);
+
+        this.activeNodes.push({ osc, gain, endTime: time + dur });
+    }
+
+    playTone(freq, type, dur, vol, time = this.ctx.currentTime, isBgm = false) {
+        if (!this.initialized || !this.ctx) return;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.value = freq;
+
+        gain.gain.setValueAtTime(vol, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + dur);
+
+        osc.connect(gain);
+        if (isBgm) {
+            gain.connect(this.bgmFilter);
+        } else {
+            gain.connect(this.masterGain);
+        }
+
+        osc.start(time);
+        osc.stop(time + dur);
+
+        this.activeNodes.push({ osc, gain, endTime: time + dur });
+    }
+
+    playSFX(name) {
+        if (!this.initialized || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        switch(name) {
+            case 'shoot':
+                this.playTone(600, 'square', 0.1, 0.1, now);
+                this.playTone(400, 'sawtooth', 0.15, 0.1, now);
+                break;
+            case 'dash':
+                this.playTone(200, 'sine', 0.2, 0.3, now);
+                // Sweep up
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start(now);
+                osc.stop(now + 0.2);
+                this.activeNodes.push({osc, gain, endTime: now + 0.2});
+                break;
+            case 'enemyHit':
+                this.playTone(150, 'sawtooth', 0.1, 0.2, now);
+                break;
+            case 'enemyDie':
+                this.playTone(100, 'square', 0.2, 0.3, now);
+                this.playTone(80, 'sawtooth', 0.3, 0.2, now);
+                break;
+            case 'playerHit':
+                this.playTone(50, 'sawtooth', 0.5, 0.5, now);
+                break;
+            case 'gameOver':
+                this.playTone(100, 'triangle', 1.0, 0.4, now);
+                this.playTone(80, 'sine', 1.5, 0.4, now);
+                break;
+            case 'bossWarning':
+                this.playTone(800, 'square', 0.5, 0.3, now);
+                setTimeout(() => this.playTone(800, 'square', 0.5, 0.3, now + 0.6), 600);
+                break;
+            case 'bossSpawn':
+                this.playTone(50, 'sawtooth', 2.0, 0.6, now);
+                break;
+            case 'upgradeSelect':
+                this.playTone(600, 'sine', 0.2, 0.3, now);
+                this.playTone(800, 'sine', 0.4, 0.3, now + 0.1);
+                break;
+            case 'uiSelect':
+                this.playTone(400, 'sine', 0.1, 0.2, now);
+                break;
+            case 'pickup':
+                this.playTone(800, 'triangle', 0.1, 0.2, now);
+                this.playTone(1200, 'triangle', 0.2, 0.2, now + 0.1);
+                break;
+            case 'bossHit':
+                this.playTone(120, 'square', 0.1, 0.3, now);
+                break;
         }
     }
 }
@@ -270,6 +493,7 @@ class Game {
                         if (unscaledMouseX >= bx && unscaledMouseX <= bx + boxW) {
                             if (this.progression && this.progression.draftChoices[i]) {
                                 this.progression.applyUpgrade(this.progression.draftChoices[i], this);
+                                if (this.sound) this.sound.playSFX('upgradeSelect');
                                 this.state = 'PLAYING';
                                 this.input.mouse.down = false;
                                 return;
@@ -282,6 +506,7 @@ class Game {
         }
 
         if(this.state === 'PLAYING') {
+            if (this.sound) this.sound.updateBGM(dt, this);
             if (this.parallax) this.parallax.update(dt, this.player);
             if (this.hazards) this.hazards.update(dt, this);
             if (this.bossWarning) this.bossWarning.update(dt);
@@ -290,6 +515,7 @@ class Game {
             if (this.score >= this.nextBossScore && !this.bossActive && !this.bossWarning.active) {
                 this.bossWarning.trigger("WARNING: BOSS APPROACHING");
                 this.bossActive = true;
+                if(this.sound) this.sound.playSFX('bossWarning');
             } else if (this.bossActive && !this.bossWarning.active && !this.enemies.find(e => e.isBoss)) {
                 // Spawn boss after warning finishes
                 const angle = Math.random() * Math.PI * 2;
@@ -298,6 +524,7 @@ class Game {
                 const y = this.targetHeight/2 + Math.sin(angle) * dist;
                 let boss = Math.random() > 0.5 ? new MagmaCoreBoss(x, y) : new ForgeOverseerBoss(x, y);
                 this.enemies.push(boss);
+                if(this.sound) this.sound.playSFX('bossSpawn');
             }
 
             this.player.update(dt, this.input, this);
@@ -427,6 +654,7 @@ class Game {
 
                 if(Math.hypot(this.player.x - p.x, this.player.y - p.y) < this.player.radius + p.radius) {
                     if (this.player.invulnerabilityTime <= 0) {
+                        if(this.sound) this.sound.playSFX('playerHit');
                         this.vfx.triggerShake(20, 0.5);
                         this.gameOver();
                     }
@@ -471,6 +699,7 @@ class Game {
                 // Collision with player
                 if(Math.hypot(this.player.x - e.x, this.player.y - e.y) < this.player.radius + e.radius) {
                     if (this.player.invulnerabilityTime <= 0) {
+                        if(this.sound) this.sound.playSFX('playerHit');
                         this.vfx.triggerShake(20, 0.5);
                         this.gameOver();
                     }
@@ -531,6 +760,7 @@ class Game {
     }
 
     gameOver() {
+        if(this.sound) this.sound.playSFX('gameOver');
         this.state = 'GAME_OVER';
         if(this.score > this.saveManager.data.highScore) {
             this.saveManager.data.highScore = this.score;

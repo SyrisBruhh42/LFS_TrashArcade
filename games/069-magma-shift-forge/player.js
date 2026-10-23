@@ -47,7 +47,8 @@ class Player {
 
         if((input.keys['ShiftLeft'] || input.keys['ShiftRight']) && this.dashCooldown <= 0) {
             this.dashCooldown = this.dashCooldownMax;
-            this.dashTimer = 0.2; // 0.2s duration
+            this.dashTimer = 0.2;
+            if(game && game.sound) game.sound.playSFX('dash'); // 0.2s duration
             this.invulnerabilityTime = 0.2;
 
             // Spawn dash particles
