@@ -109,7 +109,8 @@ class ProgressionManager {
                     this.addCombo(1);
                 }
                 p.active = false;
-                game.sound.hit(); // reuse sound
+                if (game.sound && game.sound.weaponUpgrade) game.sound.weaponUpgrade();
+                else game.sound.hit(); // reuse sound
             }
         }
 

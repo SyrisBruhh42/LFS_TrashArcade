@@ -19,7 +19,10 @@ class BossManager {
             } else {
                 this.boss = new OmegaSwarmBoss(game.width / 2, -100);
             }
-            if(game.sound) game.sound.echoSpawn();
+            if(game.sound) {
+                if (game.sound.bossSpawn) game.sound.bossSpawn();
+                else game.sound.echoSpawn();
+            }
         }
 
         if (this.warningTimer > 0) {
