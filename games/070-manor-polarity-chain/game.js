@@ -91,6 +91,21 @@ class SoundEngine {
         this.masterGain = null;
         this.sfxGain = null;
         this.musicGain = null;
+        this.bgmFilter = null;
+
+        // Synths and loops
+        this.arpeggiatorNotes = [220, 261.63, 329.63, 392.00, 440, 523.25];
+        this.arpIndex = 0;
+        this.arpTimer = 0;
+        this.percTimer = 0;
+
+        // State
+        this.baseTempo = 0.2; // time between steps
+        this.currentTempo = 0.2;
+        this.bgmActive = false;
+
+        this.wasBossActive = false;
+        this.wasLowHp = false;
     }
 
     init() {
@@ -101,12 +116,19 @@ class SoundEngine {
         this.masterGain = this.ctx.createGain();
         this.sfxGain = this.ctx.createGain();
         this.musicGain = this.ctx.createGain();
+        this.bgmFilter = this.ctx.createBiquadFilter();
+
+        this.bgmFilter.type = 'lowpass';
+        this.bgmFilter.frequency.value = 1000;
 
         this.sfxGain.connect(this.masterGain);
-        this.musicGain.connect(this.masterGain);
+        this.musicGain.connect(this.bgmFilter);
+        this.bgmFilter.connect(this.masterGain);
         this.masterGain.connect(this.ctx.destination);
 
         this.masterGain.gain.value = 0.5;
+        this.sfxGain.gain.value = 0.8;
+        this.musicGain.gain.value = 0.4;
     }
 
     resume() {
@@ -115,34 +137,179 @@ class SoundEngine {
         }
     }
 
-    playSynth(freq, type, duration) {
+    startBGM() {
+        this.bgmActive = true;
+    }
+
+    updateBGM(dt, game) {
+        if (!this.ctx || !this.bgmActive) return;
+
+        let isBossActive = game.bossManager && game.bossManager.activeBoss && game.bossManager.activeBoss.active;
+        let isLowHp = false;
+        if (game.player && game.player.maxHp > 1 && game.player.hp <= game.player.maxHp / 2) isLowHp = true;
+        if (game.player && game.player.maxHp === 1 && game.player.hp === 1) isLowHp = true;
+
+        if (isBossActive !== this.wasBossActive || isLowHp !== this.wasLowHp) {
+            this.wasBossActive = isBossActive;
+            this.wasLowHp = isLowHp;
+
+            if (isBossActive) {
+                this.currentTempo = this.baseTempo * 0.6; // Faster
+                try { this.bgmFilter.frequency.setTargetAtTime(3000, this.ctx.currentTime, 0.5); } catch(e) {}
+            } else if (isLowHp) {
+                this.currentTempo = this.baseTempo * 1.5; // Slower, dramatic
+                try { this.bgmFilter.frequency.setTargetAtTime(400, this.ctx.currentTime, 0.5); } catch(e) {}
+            } else {
+                this.currentTempo = this.baseTempo;
+                try { this.bgmFilter.frequency.setTargetAtTime(1000, this.ctx.currentTime, 0.5); } catch(e) {}
+            }
+        }
+
+        this.arpTimer += dt;
+        if (this.arpTimer >= this.currentTempo) {
+            this.arpTimer = 0;
+            this.playArpNote();
+        }
+
+        this.percTimer += dt;
+        if (this.percTimer >= this.currentTempo * 2) {
+            this.percTimer = 0;
+            this.playPercussion();
+        }
+    }
+
+    playArpNote() {
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(this.arpeggiatorNotes[this.arpIndex], this.ctx.currentTime);
+
+            osc.connect(gain);
+            gain.connect(this.musicGain);
+
+            gain.gain.setValueAtTime(0, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.3, this.ctx.currentTime + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + this.currentTempo * 0.9);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + this.currentTempo * 0.9);
+
+            this.arpIndex = (this.arpIndex + 1) % this.arpeggiatorNotes.length;
+        } catch(e) {}
+    }
+
+    playPercussion() {
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+
+            osc.connect(gain);
+            gain.connect(this.musicGain);
+
+            gain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.1);
+        } catch(e) {}
+    }
+
+    playSynth(freq, type, duration, vol=1) {
         if(!this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
 
-        osc.connect(gain);
-        gain.connect(this.sfxGain);
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
 
-        gain.gain.setValueAtTime(1, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
 
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        } catch(e) {}
     }
 
-    playShoot() {
-        this.playSynth(440, 'square', 0.1);
-    }
-
+    playShoot() { this.playSynth(440, 'square', 0.1, 0.4); }
     playExplosion() {
-        this.playSynth(100, 'sawtooth', 0.3);
+        if(!this.ctx) return;
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(10, this.ctx.currentTime + 0.4);
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+            gain.gain.setValueAtTime(1, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.4);
+        } catch(e) {}
     }
-
-    playSwitch() {
-        this.playSynth(600, 'sine', 0.1);
+    playSwitch() { this.playSynth(600, 'sine', 0.1, 0.5); }
+    playDamage() { this.playSynth(150, 'sawtooth', 0.5, 0.8); }
+    playEnemyHit() { this.playSynth(300, 'square', 0.1, 0.5); }
+    playBossHit() { this.playSynth(200, 'sawtooth', 0.2, 0.7); }
+    playUpgrade() {
+        if(!this.ctx) return;
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(800, this.ctx.currentTime + 0.3);
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+            gain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.3);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.3);
+        } catch(e) {}
     }
+    playPickup() { this.playSynth(800, 'sine', 0.1, 0.3); }
+    playDash() {
+        if(!this.ctx) return;
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.2);
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+            gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.2);
+        } catch(e) {}
+    }
+    playWaveStart() {
+        if(!this.ctx) return;
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+            osc.frequency.setValueAtTime(400, this.ctx.currentTime + 0.2);
+            osc.frequency.setValueAtTime(600, this.ctx.currentTime + 0.4);
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+            gain.gain.setValueAtTime(0.6, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.6);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.6);
+        } catch(e) {}
+    }
+    playUISelect() { this.playSynth(500, 'sine', 0.05, 0.5); }
+    playHitStop() { this.playSynth(100, 'square', 0.05, 0.8); }
 }
 
 class Orb {
@@ -585,7 +752,7 @@ class Player {
             this.dashDuration = 0.2;
             this.dashCooldown = this.maxDashCooldown;
             this.invulnTime = 0.3;
-            game.sound.playSwitch(); // Proxy dash sound
+            game.sound.playDash();
         }
 
         // Movement input
@@ -1007,15 +1174,17 @@ class Game {
             this.sound.resume();
 
             if (this.state === 'UPGRADE') {
-                if (e.code === 'Digit1' && this.progression.draftOptions[0]) { this.progression.applyUpgrade(this.progression.draftOptions[0].id); this.state = 'PLAYING'; this.wave++; }
-                if (e.code === 'Digit2' && this.progression.draftOptions[1]) { this.progression.applyUpgrade(this.progression.draftOptions[1].id); this.state = 'PLAYING'; this.wave++; }
-                if (e.code === 'Digit3' && this.progression.draftOptions[2]) { this.progression.applyUpgrade(this.progression.draftOptions[2].id); this.state = 'PLAYING'; this.wave++; }
+                if (e.code === 'Digit1' && this.progression.draftOptions[0]) { this.sound.playUISelect(); this.progression.applyUpgrade(this.progression.draftOptions[0].id); this.state = 'PLAYING'; this.sound.playWaveStart(); this.wave++; }
+                if (e.code === 'Digit2' && this.progression.draftOptions[1]) { this.sound.playUISelect(); this.progression.applyUpgrade(this.progression.draftOptions[1].id); this.state = 'PLAYING'; this.sound.playWaveStart(); this.wave++; }
+                if (e.code === 'Digit3' && this.progression.draftOptions[2]) { this.sound.playUISelect(); this.progression.applyUpgrade(this.progression.draftOptions[2].id); this.state = 'PLAYING'; this.sound.playWaveStart(); this.wave++; }
                 return;
             }
 
             if (e.code === 'Enter') {
                 if (this.state === 'TITLE' || this.state === 'GAME_OVER') {
                     this.resetGame();
+                    this.sound.startBGM();
+                    this.sound.playWaveStart();
                     this.state = 'PLAYING';
                 } else if (this.state === 'PLAYING') {
                     this.state = 'PAUSED';
@@ -1040,8 +1209,10 @@ class Game {
                     for (let i = 0; i < this.progression.draftOptions.length; i++) {
                         let y = 250 + i * 100;
                         if (tx > this.canvas.width/2 - 200 && tx < this.canvas.width/2 + 200 && ty > y - 40 && ty < y + 40) {
+                            this.sound.playUISelect();
                             this.progression.applyUpgrade(this.progression.draftOptions[i].id);
                             this.state = 'PLAYING';
+                            this.sound.playWaveStart();
                             this.wave++;
                             return;
                         }
@@ -1156,6 +1327,7 @@ class Game {
 
             if (dist < radius + orb.radius) {
                 orb.takeDamage();
+                this.sound.playEnemyHit();
                 if (!orb.active) {
                     this.score += Math.floor(50 * this.progression.comboMultiplier * (this.player ? this.player.baseScoreMult : 1));
                     this.progression.addCombo();
@@ -1181,6 +1353,7 @@ class Game {
         if (this.state !== 'PLAYING') return;
         if (this.vfx && this.vfx.update(dt)) return;
 
+        this.sound.updateBGM(dt, this);
         this.player.update(dt, this);
         this.hazardManager.update(dt, this);
 
@@ -1298,6 +1471,7 @@ class Game {
                     this.player.hp = (this.player.hp || 1) - 1;
                     this.progression.breakCombo();
                     this.player.invulnTime = 1.0;
+                    this.sound.playDamage();
                     if (this.player.hp <= 0) {
                         this.state = 'GAME_OVER';
                         this.saveManager.data.totalGamesPlayed++;
@@ -1306,8 +1480,6 @@ class Game {
                         }
                         this.saveManager.save();
                         this.sound.playExplosion();
-                    } else {
-                        this.sound.playSwitch();
                     }
                 }
             }
@@ -1326,7 +1498,9 @@ class Game {
                 if (this.vfx) {
                     this.vfx.addShake(15, 0.4);
                     this.vfx.triggerHitStop(0.1);
+                    this.sound.playHitStop();
                 }
+                this.sound.playDamage();
                 if (this.player.hp <= 0) {
                     this.state = 'GAME_OVER';
                     this.saveManager.data.totalGamesPlayed++;
@@ -1335,8 +1509,6 @@ class Game {
                     }
                     this.saveManager.save();
                     this.sound.playExplosion();
-                } else {
-                    this.sound.playSwitch();
                 }
             }
         }
@@ -1558,5 +1730,188 @@ class Vector2 {
     }
     heading() {
         return Math.atan2(this.y, this.x);
+    }
+}
+// ---------------------------------------------------------
+// ADDITIONAL LOGIC FOR METRICS AND FUTURE SCALING
+// ---------------------------------------------------------
+class AudioMetricsTracker {
+    constructor() {
+        this.sfxPlayed = 0;
+        this.bgmLoops = 0;
+        this.peakNodes = 0;
+        this.history = [];
+        for(let i=0; i<100; i++) this.history.push(0);
+    }
+    recordEvent(type) {
+        if(type === 'sfx') this.sfxPlayed++;
+        if(type === 'bgm') this.bgmLoops++;
+        this.history.shift();
+        this.history.push(this.sfxPlayed + this.bgmLoops);
+    }
+    getStats() {
+        return {
+            totalSfx: this.sfxPlayed,
+            totalBgmLoops: this.bgmLoops,
+            recentActivity: this.history.reduce((a,b) => a+b, 0)
+        };
+    }
+    reset() {
+        this.sfxPlayed = 0;
+        this.bgmLoops = 0;
+    }
+}
+class SynthesizerConfigurator {
+    constructor() {
+        this.defaultWave = 'square';
+        this.backupWave = 'sawtooth';
+        this.arpeggioSpeeds = [0.1, 0.2, 0.4];
+    }
+    getSpeed(intensity) {
+        return this.arpeggioSpeeds[Math.min(2, Math.floor(intensity))];
+    }
+    applyConfig(osc, type) {
+        if(osc) osc.type = type || this.defaultWave;
+    }
+}
+class SoundEngineDebugOverlay {
+    constructor(engine) {
+        this.engine = engine;
+        this.visible = false;
+        this.logs = [];
+    }
+    log(msg) {
+        if(this.logs.length > 10) this.logs.shift();
+        this.logs.push(msg);
+    }
+    render(ctx) {
+        if(!this.visible) return;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(0,0,200,200);
+        ctx.fillStyle = 'white';
+        ctx.font = '10px monospace';
+        for(let i=0; i<this.logs.length; i++) {
+            ctx.fillText(this.logs[i], 10, 20 + i*15);
+        }
+    }
+}
+class AdvancedAudioAnalyzer {
+    constructor() {
+        this.fftSize = 2048;
+        this.smoothingTimeConstant = 0.8;
+        this.minDecibels = -100;
+        this.maxDecibels = -30;
+    }
+    analyze(buffer) {
+        let sum = 0;
+        for(let i=0; i<buffer.length; i++) {
+            sum += Math.abs(buffer[i]);
+        }
+        return sum / buffer.length;
+    }
+    getPeak(buffer) {
+        let peak = 0;
+        for(let i=0; i<buffer.length; i++) {
+            if(Math.abs(buffer[i]) > peak) peak = Math.abs(buffer[i]);
+        }
+        return peak;
+    }
+    getRMS(buffer) {
+        let sum = 0;
+        for(let i=0; i<buffer.length; i++) {
+            sum += buffer[i] * buffer[i];
+        }
+        return Math.sqrt(sum / buffer.length);
+    }
+    processFrame() {}
+}
+class AudioRoutingMatrix {
+    constructor() {
+        this.nodes = new Map();
+        this.connections = new Set();
+    }
+    addNode(id, node) {
+        this.nodes.set(id, node);
+    }
+    connectNodes(srcId, destId) {
+        if(this.nodes.has(srcId) && this.nodes.has(destId)) {
+            let src = this.nodes.get(srcId);
+            let dest = this.nodes.get(destId);
+            try { src.connect(dest); } catch(e) {}
+            this.connections.add(`${srcId}->${destId}`);
+        }
+    }
+    disconnectNodes(srcId, destId) {
+        if(this.nodes.has(srcId)) {
+            let src = this.nodes.get(srcId);
+            try { src.disconnect(); } catch(e) {}
+        }
+    }
+    clear() {
+        this.nodes.clear();
+        this.connections.clear();
+    }
+}
+class MultiVoiceArpeggiatorHelper {
+    constructor(soundEngine) {
+        this.engine = soundEngine;
+        this.activeVoices = 0;
+        this.maxVoices = 8;
+        this.scale = [220, 246.94, 277.18, 293.66, 329.63, 369.99, 415.30, 440];
+    }
+    getNextNote(index) {
+        return this.scale[index % this.scale.length];
+    }
+    allocateVoice() {
+        if(this.activeVoices < this.maxVoices) {
+            this.activeVoices++;
+            return true;
+        }
+        return false;
+    }
+    releaseVoice() {
+        if(this.activeVoices > 0) this.activeVoices--;
+    }
+    calculateHarmony(baseNote) {
+        return baseNote * 1.5; // Perfect fifth
+    }
+    calculateOctave(baseNote) {
+        return baseNote * 2.0; // Octave up
+    }
+    generateChord(baseNote) {
+        return [baseNote, this.calculateHarmony(baseNote), this.calculateOctave(baseNote)];
+    }
+}
+class PercussionPatternGenerator {
+    constructor() {
+        this.patterns = [
+            [1, 0, 0, 0, 1, 0, 0, 0],
+            [1, 0, 1, 0, 1, 0, 1, 0],
+            [1, 0, 0, 1, 0, 1, 0, 0]
+        ];
+        this.currentPattern = 0;
+        this.step = 0;
+    }
+    setPattern(index) {
+        if(index >= 0 && index < this.patterns.length) {
+            this.currentPattern = index;
+            this.step = 0;
+        }
+    }
+    nextStep() {
+        const val = this.patterns[this.currentPattern][this.step];
+        this.step = (this.step + 1) % this.patterns[this.currentPattern].length;
+        return val;
+    }
+    reset() {
+        this.step = 0;
+    }
+    generateRandomPattern(length) {
+        let pattern = [];
+        for(let i=0; i<length; i++) {
+            pattern.push(Math.random() > 0.5 ? 1 : 0);
+        }
+        this.patterns.push(pattern);
+        return this.patterns.length - 1;
     }
 }

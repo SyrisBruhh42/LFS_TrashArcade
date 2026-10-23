@@ -9,6 +9,7 @@ class Boss extends Orb {
     }
     takeDamage(amount = 1) {
         this.hp -= amount;
+        if (window.game && window.game.sound) window.game.sound.playBossHit();
         if (this.hp <= this.maxHp / 2 && this.phase === 1) {
             this.phase = 2;
             this.onPhaseChange();
