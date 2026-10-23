@@ -133,6 +133,11 @@ class SoundEngine {
     playHurt() { this.playTone(150, 'square', 0.3, 0.5); }
     playTetherGrow() { this.playTone(600, 'triangle', 0.05, 0.1); }
     playDash() { this.playTone(300, 'square', 0.2, 0.5); }
+    playLevelUp() {
+        this.playTone(400, 'square', 0.2, 0.2);
+        setTimeout(() => this.playTone(600, 'square', 0.2, 0.3), 100);
+        setTimeout(() => this.playTone(800, 'square', 0.2, 0.4), 200);
+    }
 }
 
 class InputManager {
@@ -817,6 +822,15 @@ class Engine {
         this.bosses = [];
         this.enemySpawnTimer = 3.0;
 
+        this.upgradeSystem = new UpgradeSystem();
+        this.upgradeDraft = null;
+        this.waveCount = 1;
+        this.comboMultiplier = 1;
+        this.comboTimer = 0;
+        this.baseScoreMultiplier = 1;
+        this.comboDecayRate = 1;
+        this.pickups = [];
+
         this.env = new ParallaxEnvironment(this);
         this.steamVents = [];
         this.conveyors = [];
@@ -877,6 +891,15 @@ class Engine {
         this.grapplePoints = [];
         this.hazards = [];
         this.enemies = [];
+        this.pickups = [];
+        this.waveCount = 1;
+        this.comboMultiplier = 1;
+        this.comboTimer = 0;
+        this.upgradeDraft = null;
+        this.nextBossScore = 500;
+        this.bossesKilled = 0;
+        this.bossActive = false;
+        this.bosses = [];
 
         // Generate procedural steampunk factory layout
         for (let i = 0; i < 15; i++) {
@@ -1089,13 +1112,42 @@ class Engine {
                 this.bossActive = false;
                 this.bossesKilled++;
                 this.nextBossScore = this.score + 500 + (this.bossesKilled * 300);
-                this.score += 500;
+                this.score += 500 * (this.comboMultiplier || 1);
+
+                this.state = 'UPGRADE';
+                this.upgradeDraft = this.upgradeSystem.getDraft(3);
+                this.waveCount++;
+                this.sound.playLevelUp();
+            }
+
+            for (let i = 0; i < this.pickups.length; i++) {
+                this.pickups[i].update(dt, this);
+            }
+            this.pickups = this.pickups.filter(p => !p.dead);
+
+            if (this.comboTimer > 0) {
+                this.comboTimer -= dt * (this.comboDecayRate || 1);
+                if (this.comboTimer <= 0) {
+                    this.comboTimer = 0;
+                    this.comboMultiplier = 1;
+                }
             }
 
             for (const en of this.enemies) {
                 en.update(dt, this);
             }
+            const beforeLen = this.enemies.length;
             this.enemies = this.enemies.filter(en => !en.dead);
+
+            // Spawn pickup on some enemy deaths
+            if (this.enemies.length < beforeLen) {
+                let killed = beforeLen - this.enemies.length;
+                for (let i = 0; i < killed; i++) {
+                    if (Math.random() < 0.3) {
+                        this.pickups.push(new Pickup(this.width/2 + (Math.random()-0.5)*200, this.height/2 + (Math.random()-0.5)*200));
+                    }
+                }
+            }
 
             // Floor death
             if (this.player.y >= this.height - this.player.radius - 5) {
@@ -1103,7 +1155,55 @@ class Engine {
             }
 
             // Gain passive score for staying alive
-            this.score += 5 * dt;
+            this.score += 5 * dt * (this.baseScoreMultiplier || 1);
+        } else if (this.state === 'UPGRADE') {
+            if (this.upgradeDraft) {
+                // Draft selection logic (handled in bindEvents typically, but can be done via input check here)
+                for (let i = 0; i < this.upgradeDraft.length; i++) {
+                    const btnX = this.width / 2 - 150;
+                    const btnY = this.height / 2 - 100 + i * 80;
+                    const btnW = 300;
+                    const btnH = 60;
+
+                    if (this.input.mouse.justDown) {
+                        let mx = this.input.mouse.x || this.width/2;
+                        let my = this.input.mouse.y || this.height/2;
+                        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+                            this.upgradeSystem.applyUpgrade(this, this.upgradeDraft[i].id);
+                            this.sound.playLevelUp(); // reuse sound
+                            this.state = 'PLAYING';
+                            this.upgradeDraft = null;
+                            this.input.mouse.justDown = false; // consume
+
+                            // Heal slightly
+                            this.player.invulnerableTimer = 2.0;
+                        }
+                    }
+                }
+
+                // Or number keys
+                if (this.input.isKeyJustPressed('Digit1') && this.upgradeDraft.length > 0) {
+                    this.upgradeSystem.applyUpgrade(this, this.upgradeDraft[0].id);
+                    this.sound.playLevelUp();
+                    this.state = 'PLAYING';
+                    this.upgradeDraft = null;
+                    this.player.invulnerableTimer = 2.0;
+                } else if (this.input.isKeyJustPressed('Digit2') && this.upgradeDraft.length > 1) {
+                    this.upgradeSystem.applyUpgrade(this, this.upgradeDraft[1].id);
+                    this.sound.playLevelUp();
+                    this.state = 'PLAYING';
+                    this.upgradeDraft = null;
+                    this.player.invulnerableTimer = 2.0;
+                } else if (this.input.isKeyJustPressed('Digit3') && this.upgradeDraft.length > 2) {
+                    this.upgradeSystem.applyUpgrade(this, this.upgradeDraft[2].id);
+                    this.sound.playLevelUp();
+                    this.state = 'PLAYING';
+                    this.upgradeDraft = null;
+                    this.player.invulnerableTimer = 2.0;
+                }
+            } else {
+                this.state = 'PLAYING'; // Fallback
+            }
         }
     }
 
@@ -1133,6 +1233,7 @@ class Engine {
         if (this.state === 'TITLE') this.drawTitle();
         else if (this.state === 'PLAYING') this.drawPlaying();
         else if (this.state === 'PAUSED') this.drawPaused();
+        else if (this.state === 'UPGRADE') this.drawUpgrade();
         else if (this.state === 'GAME_OVER') this.drawGameOver();
     }
 
@@ -1157,6 +1258,7 @@ class Engine {
 
         for (const gp of this.grapplePoints) gp.draw(this.ctx);
         for (const hz of this.hazards) hz.draw(this.ctx);
+        for (let i = 0; i < this.pickups.length; i++) this.pickups[i].draw(this.ctx);
         for (const en of this.enemies) en.draw(this.ctx);
         for (const b of this.bosses) {
             b.draw(this.ctx);
@@ -1195,8 +1297,21 @@ class Engine {
         this.ctx.textAlign = 'left';
         this.ctx.fillText(`Score: ${Math.floor(this.score)}`, 20, 30);
 
+        if (this.comboMultiplier > 1) {
+            this.ctx.fillStyle = '#00ffff';
+            this.ctx.fillText(`Combo x${this.comboMultiplier.toFixed(1)}`, 20, 60);
+
+            // Combo bar
+            this.ctx.fillStyle = '#333';
+            this.ctx.fillRect(20, 70, 100, 5);
+            this.ctx.fillStyle = '#00ffff';
+            this.ctx.fillRect(20, 70, 100 * (this.comboTimer / 5.0), 5);
+        }
+
+        this.ctx.fillStyle = '#fff';
         this.ctx.textAlign = 'right';
         this.ctx.fillText(`High: ${this.saveManager.data.highScore}`, this.width - 20, 30);
+        this.ctx.fillText(`Wave: ${this.waveCount}`, this.width - 20, 60);
     }
 
     drawTitle() {
@@ -1214,6 +1329,51 @@ class Engine {
         this.ctx.font = '16px monospace';
         this.ctx.fillStyle = '#777';
         this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, this.height/2 + 80);
+    }
+
+    drawUpgrade() {
+        this.drawPlaying();
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = 'bold 40px monospace';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(`WAVE ${this.waveCount} CLEARED`, this.width / 2, 100);
+        this.ctx.font = '20px monospace';
+        this.ctx.fillStyle = '#aaa';
+        this.ctx.fillText('Select an Upgrade:', this.width / 2, 150);
+
+        if (this.upgradeDraft) {
+            for (let i = 0; i < this.upgradeDraft.length; i++) {
+                const upg = this.upgradeDraft[i];
+                const btnX = this.width / 2 - 150;
+                const btnY = this.height / 2 - 100 + i * 80;
+                const btnW = 300;
+                const btnH = 60;
+
+                let isHovered = false;
+                if (this.input.mouse.x >= btnX && this.input.mouse.x <= btnX + btnW &&
+                    this.input.mouse.y >= btnY && this.input.mouse.y <= btnY + btnH) {
+                    isHovered = true;
+                }
+
+                this.ctx.fillStyle = isHovered ? '#a04e7e' : '#333';
+                this.ctx.fillRect(btnX, btnY, btnW, btnH);
+                this.ctx.strokeStyle = '#fff';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(btnX, btnY, btnW, btnH);
+
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '16px monospace';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(`[${i+1}] ${upg.name}`, this.width / 2, btnY + 25);
+
+                this.ctx.font = '12px monospace';
+                this.ctx.fillStyle = '#ddd';
+                this.ctx.fillText(upg.desc, this.width / 2, btnY + 45);
+            }
+        }
     }
 
     drawPaused() {
