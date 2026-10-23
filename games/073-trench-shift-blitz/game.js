@@ -352,6 +352,98 @@ class Orb extends GridEntity {
 
 
 // --- Game Engine ---
+class ParallaxEnvironment {
+    constructor(width, height) {
+        this.width = width;
+        this.height = height;
+        this.layers = [];
+        this.initLayers();
+    }
+    initLayers() {
+        this.layers = [
+            { depth: 0.2, color: '#09152b', elements: this.gen(40, 1, 3, -15, 5) },
+            { depth: 0.5, color: '#0f274a', elements: this.gen(20, 5, 12, -30, 10) },
+            { depth: 1.0, color: '#1a3c6b', elements: this.gen(15, 2, 6, -60, 20) }
+        ];
+    }
+    gen(count, minSize, maxSize, sy, sx) {
+        let arr = [];
+        for(let i=0; i<count; i++) {
+            arr.push({ x: Math.random(), y: Math.random(), size: minSize + Math.random()*(maxSize-minSize), sy: sy, sx: sx });
+        }
+        return arr;
+    }
+    resize(w, h) { this.width = w; this.height = h; }
+    update(dt) {
+        for (let layer of this.layers) {
+            for (let el of layer.elements) {
+                el.x += (el.sx * dt * layer.depth) / 1000;
+                el.y += (el.sy * dt * layer.depth) / 1000;
+                if (el.x > 1) el.x -= 1; if (el.x < 0) el.x += 1;
+                if (el.y > 1) el.y -= 1; if (el.y < 0) el.y += 1;
+            }
+        }
+    }
+    draw(ctx) {
+        for (let layer of this.layers) {
+            ctx.fillStyle = layer.color;
+            for (let el of layer.elements) {
+                ctx.beginPath();
+                ctx.arc(el.x * this.width, el.y * this.height, el.size * (Math.min(this.width, this.height) / 800), 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+    }
+}
+class CoralCover extends GridEntity {
+    constructor(x, y) { super(x, y, "#008855"); this.isHazard = true; this.hp = 2; }
+    draw(ctx, cellSize, offset) {
+        ctx.fillStyle = this.color;
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - cellSize*0.4, cy + cellSize*0.4); ctx.lineTo(cx - cellSize*0.2, cy - cellSize*0.2);
+        ctx.lineTo(cx + cellSize*0.1, cy - cellSize*0.4); ctx.lineTo(cx + cellSize*0.4, cy + cellSize*0.3);
+        ctx.closePath(); ctx.fill();
+        if (this.hp < 2) {
+            ctx.strokeStyle = "#00ffaa"; ctx.lineWidth = 2; ctx.beginPath();
+            ctx.moveTo(cx - cellSize*0.3, cy + cellSize*0.1); ctx.lineTo(cx + cellSize*0.3, cy + cellSize*0.1); ctx.stroke();
+        }
+    }
+}
+class HydroVent extends GridEntity {
+    constructor(x, y) { super(x, y, "#222222"); this.isHazard = true; this.hp = 9999; this.activeTimer = 0; this.turnCounter = Math.floor(Math.random() * 3); }
+    onTurnEnd() {
+        this.turnCounter++;
+        if (this.turnCounter >= 4) { this.turnCounter = 0; this.activeTimer = 1.0; } else { this.activeTimer = 0; }
+    }
+    draw(ctx, cellSize, offset) {
+        let cx = offset.x + this.visualPos.x * cellSize + cellSize / 2;
+        let cy = offset.y + this.visualPos.y * cellSize + cellSize / 2;
+        ctx.fillStyle = "#333"; ctx.beginPath(); ctx.arc(cx, cy, cellSize * 0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(cx, cy, cellSize * 0.15, 0, Math.PI * 2); ctx.fill();
+        if (this.activeTimer > 0) { ctx.fillStyle = "rgba(255, 100, 0, 0.7)"; ctx.beginPath(); ctx.arc(cx, cy, cellSize * 0.4 * (1 + Math.random()*0.2), 0, Math.PI * 2); ctx.fill(); }
+        else if (this.turnCounter === 3) { ctx.fillStyle = "rgba(255, 200, 0, 0.3)"; ctx.beginPath(); ctx.arc(cx, cy, cellSize * 0.35, 0, Math.PI * 2); ctx.fill(); }
+    }
+}
+class OceanCurrent extends GridEntity {
+    constructor(x, y, dx, dy) { super(x, y, "rgba(0, 150, 255, 0.2)"); this.isHazard = true; this.hp = 9999; this.pushDir = new Vector2(dx, dy); }
+    draw(ctx, cellSize, offset) {
+        ctx.fillStyle = this.color;
+        let rx = offset.x + this.visualPos.x * cellSize;
+        let ry = offset.y + this.visualPos.y * cellSize;
+        ctx.fillRect(rx, ry, cellSize, cellSize);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.5)"; ctx.lineWidth = 2;
+        let cx = rx + cellSize / 2; let cy = ry + cellSize / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - this.pushDir.x * cellSize*0.2, cy - this.pushDir.y * cellSize*0.2); ctx.lineTo(cx + this.pushDir.x * cellSize*0.2, cy + this.pushDir.y * cellSize*0.2);
+        let px = -this.pushDir.y * cellSize*0.1; let py = this.pushDir.x * cellSize*0.1;
+        ctx.lineTo(cx + this.pushDir.x * cellSize*0.1 + px, cy + this.pushDir.y * cellSize*0.1 + py);
+        ctx.moveTo(cx + this.pushDir.x * cellSize*0.2, cy + this.pushDir.y * cellSize*0.2);
+        ctx.lineTo(cx + this.pushDir.x * cellSize*0.1 - px, cy + this.pushDir.y * cellSize*0.1 - py); ctx.stroke();
+    }
+}
+
 class Engine {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -366,6 +458,7 @@ class Engine {
         this.saveManager = new SaveManager('arcade_game_073_073-trench-shift-blitz_v1');
         this.sound = new SoundEngine(this.saveManager);
 
+        this.env = new ParallaxEnvironment(this.width, this.height);
         this.state = 'TITLE'; // TITLE, PLAYING, GAME_OVER, PAUSED
         this.lastTime = performance.now();
 
@@ -399,6 +492,7 @@ class Engine {
                     this.height = window.innerHeight;
                     this.canvas.width = this.width;
                     this.canvas.height = this.height;
+                    this.env.resize(this.width, this.height);
                     this.updateGridTransform();
                 }
             }
@@ -463,6 +557,7 @@ class Engine {
         this.spawnEnemy();
         this.spawnEnemy();
         this.spawnOrb();
+        this.spawnHazards();
 
         this.updateGridTransform();
         this.state = 'PLAYING';
@@ -470,6 +565,26 @@ class Engine {
 
         this.saveManager.data.totalGamesPlayed++;
         this.saveManager.save();
+    }
+
+    spawnHazards() {
+        for(let i=0; i<3; i++) {
+            let pos = this.getRandomEmptyPos();
+            if(pos) this.entities.push(new CoralCover(pos.x, pos.y));
+        }
+        for(let i=0; i<2; i++) {
+            let pos = this.getRandomEmptyPos();
+            if(pos) this.entities.push(new HydroVent(pos.x, pos.y));
+        }
+        for(let i=0; i<2; i++) {
+            let pos = this.getRandomEmptyPos();
+            if(pos) {
+                let dx = Math.random() < 0.5 ? 1 : -1;
+                let dy = Math.random() < 0.5 ? 1 : -1;
+                if (Math.random() < 0.5) dx = 0; else dy = 0;
+                this.entities.push(new OceanCurrent(pos.x, pos.y, dx, dy));
+            }
+        }
     }
 
     spawnEnemy() {
@@ -519,6 +634,7 @@ class Engine {
     }
 
     update(dt) {
+        this.env.update(dt);
         for (let e of this.entities) {
             if (e.update) e.update(dt);
         }
@@ -600,13 +716,13 @@ class Engine {
                 }
 
                 let targetEntities = this.getEntitiesAt(nextX, nextY);
-                let hitEnemy = targetEntities.find(e => e instanceof Enemy);
+                let hitEnemy = targetEntities.find(e => e instanceof Enemy || e instanceof CoralCover);
 
                 if (hitEnemy) {
                     hitEnemy.hp--;
                     if (hitEnemy.hp <= 0) {
                         this.entities = this.entities.filter(e => e !== hitEnemy);
-                        this.score += 10;
+                        if (hitEnemy instanceof Enemy) this.score += 10;
                         this.sound.playHit();
                     } else {
                         this.sound.playShoot();
@@ -669,6 +785,32 @@ class Engine {
         for (let e of this.entities) {
             if (e instanceof Enemy) {
                 this.updateEnemyAI(e);
+            }
+        }
+
+        for (let e of this.entities) {
+            if (e instanceof HydroVent) e.onTurnEnd();
+        }
+        for (let e of this.entities) {
+            if (e instanceof HydroVent && e.activeTimer > 0) {
+                let hit = this.getEntitiesAt(e.gridPos.x, e.gridPos.y).find(t => t instanceof Enemy || t === this.player);
+                if (hit) {
+                    hit.hp--;
+                    if(hit === this.player) { this.sound.playExplosion(); this.player.invulnTimer = 0.3; if(this.player.hp<=0) { this.gameOver(); return; } }
+                    else if(hit.hp <= 0) { this.entities = this.entities.filter(x => x !== hit); this.sound.playHit(); this.score+=10; }
+                }
+            }
+            if (e instanceof OceanCurrent) {
+                let t = this.getEntitiesAt(e.gridPos.x, e.gridPos.y).find(x => x instanceof Enemy || x === this.player);
+                if (t) {
+                    let nextX = t.gridPos.x + e.pushDir.x; let nextY = t.gridPos.y + e.pushDir.y;
+                    if (nextX >= this.activeRect.minX && nextX <= this.activeRect.maxX && nextY >= this.activeRect.minY && nextY <= this.activeRect.maxY) {
+                        let blocked = this.getEntityAt(nextX, nextY);
+                        if (!blocked || blocked instanceof OceanCurrent || blocked instanceof HydroVent || blocked.isItem) {
+                            t.gridPos.x = nextX; t.gridPos.y = nextY;
+                        }
+                    }
+                }
             }
         }
 
@@ -785,6 +927,7 @@ class Engine {
     draw() {
         this.ctx.fillStyle = "#050a15";
         this.ctx.fillRect(0, 0, this.width, this.height);
+        this.env.draw(this.ctx);
 
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = "#b67083";
@@ -819,8 +962,9 @@ class Engine {
             this.ctx.strokeRect(ax, ay, aw, ah);
 
             // Draw entities
-            // Draw items first, then enemies, then player
+            // Draw items first, then hazards, then enemies, then player
             for (let e of this.entities.filter(e => e.isItem)) e.draw(this.ctx, this.cellSize, this.gridOffset);
+            for (let e of this.entities.filter(e => e.isHazard)) e.draw(this.ctx, this.cellSize, this.gridOffset);
             for (let e of this.entities.filter(e => e instanceof Enemy)) e.draw(this.ctx, this.cellSize, this.gridOffset);
             if (this.player && this.state !== 'GAME_OVER') this.player.draw(this.ctx, this.cellSize, this.gridOffset);
 
