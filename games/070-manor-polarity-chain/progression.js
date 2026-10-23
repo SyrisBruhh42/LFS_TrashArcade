@@ -98,6 +98,7 @@ class ProgressionManager {
                 let dy = p.y - this.game.player.y;
                 if (Math.sqrt(dx*dx + dy*dy) < p.radius + this.game.player.radius) {
                     p.active = false;
+                    this.game.sound.playPickup();
                     if (p.type === 'COMBO') this.comboBar = 100;
                     else if (p.type === 'SCORE') this.game.score += 500 * Math.floor(this.comboMultiplier);
                     else if (p.type === 'SHIELD') this.game.player.hp = Math.min(this.game.player.maxHp + 1, this.game.player.hp + 1);
@@ -119,6 +120,7 @@ class ProgressionManager {
     }
 
     applyUpgrade(id) {
+        this.game.sound.playUpgrade();
         if (id === 'SPEED') this.game.player.speed += 50;
         else if (id === 'DASH_CD') this.game.player.maxDashCooldown = Math.max(1, this.game.player.maxDashCooldown - 0.5);
         else if (id === 'EXP_RAD') this.game.player.expRadMult += 0.5;
