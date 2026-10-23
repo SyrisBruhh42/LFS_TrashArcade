@@ -639,6 +639,8 @@ class Game {
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
 
+        this.world = new World(this.width, this.height);
+
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
         this.score = 0;
         this.wave = 1;
@@ -726,6 +728,7 @@ class Game {
         this.wave = 1;
         this.isRecording = true; // Always recording in phase 1
         this.echoCooldown = 0;
+        this.world.reset();
     }
 
     deployEcho() {
@@ -769,6 +772,8 @@ class Game {
     }
 
     update(dt) {
+        if (this.world) this.world.update(dt, this);
+
         if (this.state !== 'PLAYING') return;
 
         if (this.echoCooldown > 0) this.echoCooldown -= dt;
@@ -874,17 +879,14 @@ class Game {
         this.ctx.scale(this.canvas.width / this.width, this.canvas.height / this.height);
         this.ctx.translate(-this.camera.x, -this.camera.y);
 
-        // Grid background
-        this.ctx.strokeStyle = 'rgba(255, 98, 172, 0.1)';
-        this.ctx.lineWidth = 1;
-        for (let x = 0; x < this.width; x += 50) {
-            this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.height); this.ctx.stroke();
-        }
-        for (let y = 0; y < this.height; y += 50) {
-            this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.width, y); this.ctx.stroke();
+        if (this.world) {
+            this.world.drawBackground(this.ctx);
         }
 
         if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+            if (this.world) {
+                this.world.drawHazards(this.ctx);
+            }
             this.core.draw(this.ctx);
             this.echoes.forEach(e => e.draw(this.ctx));
             if (this.state !== 'GAME_OVER') {
