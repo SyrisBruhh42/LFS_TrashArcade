@@ -867,6 +867,7 @@ class Game {
         this.input = new InputManager();
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
+        this.progression = new ProgressionManager();
 
         this.world = new World(this.width, this.height);
         this.bossManager = new BossManager();
@@ -900,7 +901,18 @@ class Game {
 
         // Ensure keys trigger things
         window.addEventListener('keydown', (e) => {
-            if (this.state === 'TITLE' && e.code === 'Enter') {
+            if (this.state === 'UPGRADE') {
+                if (e.code === 'Digit1' && this.progression.selectUpgrade(this, 0)) {
+                    this.wave++;
+                    this.state = 'PLAYING';
+                } else if (e.code === 'Digit2' && this.progression.selectUpgrade(this, 1)) {
+                    this.wave++;
+                    this.state = 'PLAYING';
+                } else if (e.code === 'Digit3' && this.progression.selectUpgrade(this, 2)) {
+                    this.wave++;
+                    this.state = 'PLAYING';
+                }
+            } else if (this.state === 'TITLE' && e.code === 'Enter') {
                 this.sound.init();
                 this.sound.resume();
                 this.sound.start();
@@ -1006,9 +1018,17 @@ class Game {
 
         if (this.state !== 'PLAYING') return;
 
-        if (this.echoCooldown > 0) this.echoCooldown -= dt;
+        if (this.echoCooldown > 0) {
+            let reduction = this.player.echoCooldownReduction || 0;
+            this.echoCooldown -= dt * (1 + reduction * 0.1);
+        }
+
+        if (this.core.regenRate) {
+            this.core.hp = Math.min(this.core.maxHp, this.core.hp + this.core.regenRate * dt);
+        }
 
         this.player.update(dt, this.input, this);
+        this.progression.update(dt, this);
 
         // Camera follow core, static for now
         this.camera.x = 0;
@@ -1069,8 +1089,13 @@ class Game {
                             e.active = false;
                             this.score += e.value;
                             this.spawnParticles(e.pos.x, e.pos.y, e.color, 15);
+
+                            if (Math.random() < 0.2) this.progression.spawnPickup(e.pos.x, e.pos.y);
+                            this.progression.addCombo(1);
+
                             if (this.score > this.wave * 200) {
-                                this.wave++;
+                                this.state = 'UPGRADE';
+                                this.progression.triggerDraft();
                             }
                         }
                         break;
@@ -1127,7 +1152,7 @@ class Game {
             this.world.drawBackground(this.ctx);
         }
 
-        if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+        if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER' || this.state === 'UPGRADE') {
             if (this.world) {
                 this.world.drawHazards(this.ctx);
             }
@@ -1164,6 +1189,8 @@ class Game {
                 this.ctx.fillStyle = 'gray';
                 this.ctx.fillText(`DASH: ${Math.ceil(this.player.dashTimer)}s`, 10, 90);
             }
+
+            this.progression.draw(this.ctx, this);
 
             // Draw Virtual Joysticks if active
             this.drawJoysticks();
