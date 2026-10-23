@@ -21,8 +21,20 @@ class SoundEngine {
         this.ctx = null;
         this.masterGain = null;
         this.sfxGain = null;
+        this.musicGain = null;
         this.enabled = true;
         this.initStarted = false;
+
+        // Synth state
+        this.musicTime = 0;
+        this.beatTimer = 0;
+        this.beatInterval = 0.5; // 120 BPM base
+        this.measure = 0;
+        this.arpeggioNotes = [220, 261.63, 329.63, 392.00]; // A min7
+        this.arpIndex = 0;
+
+        // Filter for dynamic music
+        this.synthFilter = null;
     }
     init() {
         if (this.initStarted) return;
@@ -33,12 +45,147 @@ class SoundEngine {
             this.ctx = new AudioContext();
             this.masterGain = this.ctx.createGain();
             this.masterGain.connect(this.ctx.destination);
+
             this.sfxGain = this.ctx.createGain();
             this.sfxGain.connect(this.masterGain);
-            this.sfxGain.gain.value = 0.5;
+            this.sfxGain.gain.value = 0.6;
+
+            this.musicGain = this.ctx.createGain();
+            this.musicGain.connect(this.masterGain);
+            this.musicGain.gain.value = 0.3;
+
+            this.synthFilter = this.ctx.createBiquadFilter();
+            this.synthFilter.type = 'lowpass';
+            this.synthFilter.frequency.value = 2000;
+            this.synthFilter.connect(this.musicGain);
         } catch (e) { this.enabled = false; }
     }
     resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
+
+    update(dt, game) {
+        if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+
+        // Dynamic music scaling based on game state
+        let targetBPM = 120;
+        let filterFreq = 1000;
+
+        if (game.boss) {
+            targetBPM = 160;
+            filterFreq = 3000;
+            this.arpeggioNotes = [277.18, 329.63, 415.30, 493.88]; // C# min7
+        } else {
+            this.arpeggioNotes = [220, 261.63, 329.63, 392.00]; // A min7
+            if (game.player && game.player.hp < game.player.maxHp * 0.3) {
+                targetBPM = 140;
+                filterFreq = 4000;
+                this.musicGain.gain.setTargetAtTime(0.4, this.ctx.currentTime, 0.1);
+            } else {
+                this.musicGain.gain.setTargetAtTime(0.3, this.ctx.currentTime, 0.1);
+            }
+        }
+
+        if (game.player && game.player.overdrive) {
+            targetBPM *= 1.2;
+            filterFreq = 5000;
+        }
+
+        this.beatInterval = 60 / targetBPM;
+        this.synthFilter.frequency.setTargetAtTime(filterFreq, this.ctx.currentTime, 0.5);
+
+        this.musicTime += dt;
+        this.beatTimer -= dt;
+
+        if (this.beatTimer <= 0) {
+            this.beatTimer = this.beatInterval / 2; // 8th notes
+            this.playSynthNote();
+
+            if (this.measure % 4 === 0) {
+                this.playKick();
+            } else if (this.measure % 4 === 2) {
+                this.playSnare();
+            }
+            this.playHihat(this.measure % 2 === 0 ? 0.8 : 0.4);
+
+            this.measure++;
+            if (this.measure >= 16) this.measure = 0;
+        }
+    }
+
+    playSynthNote() {
+        if (!this.enabled || !this.ctx) return;
+        const freq = this.arpeggioNotes[this.arpIndex];
+        this.arpIndex = (this.arpIndex + 1) % this.arpeggioNotes.length;
+
+        // Add random octave leaps
+        const finalFreq = freq * (Math.random() < 0.2 ? 2 : 1);
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(finalFreq, this.ctx.currentTime);
+
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + this.beatInterval * 0.8);
+
+        osc.connect(gain);
+        gain.connect(this.synthFilter);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + this.beatInterval);
+    }
+
+    playKick() {
+        if (!this.enabled || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+        gain.gain.setValueAtTime(1, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+        osc.connect(gain); gain.connect(this.musicGain);
+        osc.start(); osc.stop(this.ctx.currentTime + 0.5);
+    }
+
+    playSnare() {
+        if (!this.enabled || !this.ctx) return;
+        const noise = this.ctx.createBufferSource();
+        const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.1, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
+        noise.buffer = buffer;
+
+        const noiseFilter = this.ctx.createBiquadFilter();
+        noiseFilter.type = 'highpass';
+        noiseFilter.frequency.value = 1000;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.7, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+
+        noise.connect(noiseFilter); noiseFilter.connect(gain); gain.connect(this.musicGain);
+        noise.start();
+    }
+
+    playHihat(vol) {
+        if (!this.enabled || !this.ctx) return;
+        const noise = this.ctx.createBufferSource();
+        const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.05, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
+        noise.buffer = buffer;
+
+        const noiseFilter = this.ctx.createBiquadFilter();
+        noiseFilter.type = 'highpass';
+        noiseFilter.frequency.value = 7000;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(vol * 0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+
+        noise.connect(noiseFilter); noiseFilter.connect(gain); gain.connect(this.musicGain);
+        noise.start();
+    }
+
     playTone(freq, type, duration, vol = 1) {
         if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
         const osc = this.ctx.createOscillator();
@@ -52,10 +199,24 @@ class SoundEngine {
         osc.start();
         osc.stop(this.ctx.currentTime + duration);
     }
+
+    // SFX (10+ distinct sounds)
     playHit() { this.playTone(150, 'square', 0.1, 0.8); }
     playSlash() { this.playTone(800, 'sine', 0.1, 0.6); }
     playOverdrive() { this.playTone(400, 'sawtooth', 0.5, 1); }
     playDamage() { this.playTone(100, 'sawtooth', 0.3, 1.2); }
+    playDash() { this.playTone(600, 'triangle', 0.15, 0.5); }
+    playHeal() { this.playTone(600, 'sine', 0.3, 0.7); } // Original pickup sound
+    playScorePickup() { this.playTone(800, 'square', 0.1, 0.5); } // Original pickup sound
+    playLevelUp() {
+        this.playTone(440, 'sine', 0.1, 0.6);
+        setTimeout(() => this.playTone(554, 'sine', 0.1, 0.6), 100);
+        setTimeout(() => this.playTone(659, 'sine', 0.2, 0.6), 200);
+    }
+    playSpawn() { this.playTone(200, 'square', 0.2, 0.4); }
+    playExplosion() { this.playTone(80, 'sawtooth', 0.4, 1.0); }
+    playMenuHover() { this.playTone(1000, 'sine', 0.05, 0.3); }
+    playMenuSelect() { this.playTone(1200, 'triangle', 0.1, 0.5); }
 }
 class InputManager {
     constructor(canvas) {
@@ -387,6 +548,7 @@ class Game {
 
         this.player.update(dt, this.input);
         this.progression.update(dt, this);
+        this.sound.update(dt, this);
 
         if (this.world) {
             this.world.update(dt, this.player, this.enemies, this.sound);
