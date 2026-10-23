@@ -524,6 +524,7 @@ class Game {
         for (let i = 0; i < 5; i++) {
             this.islands.push(new Island(this.width, this.height));
         }
+        this.worldManager = new WorldManager(this.width, this.height);
         this.score = 0;
         this.wave = 1;
     }
@@ -571,6 +572,7 @@ class Game {
         }
 
         this.islands.forEach(i => i.update(dt, this.height));
+        if (this.worldManager) this.worldManager.update(dt, this);
         this.player.update(dt, this);
         if (this.boss && this.boss.active) {
             this.boss.update(dt, this);
@@ -647,7 +649,9 @@ class Game {
         this.ctx.fillStyle = '#000810';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
+        if (this.worldManager) this.worldManager.drawBackground(this.ctx);
         this.islands.forEach(i => i.draw(this.ctx));
+        if (this.worldManager) this.worldManager.drawForeground(this.ctx);
 
         if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
             this.particles.forEach(p => p.draw(this.ctx));
