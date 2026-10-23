@@ -995,6 +995,8 @@ class Engine {
         this.sound = new SoundEngine();
         this.input = new InputManager(this.canvas);
 
+        this.ui = new UI(this);
+
         this.lastTime = 0;
         this.score = 0;
 
@@ -1053,7 +1055,13 @@ class Engine {
             }
             if (e.code === 'Escape' || e.code === 'KeyP') {
                 if (this.state === 'PLAYING') this.state = 'PAUSED';
-                else if (this.state === 'PAUSED') this.state = 'PLAYING';
+                else if (this.state === 'PAUSED') {
+                    if (this.ui && this.ui.showSettings) {
+                        this.ui.showSettings = false;
+                    } else {
+                        this.state = 'PLAYING';
+                    }
+                }
             }
         });
 
@@ -1156,6 +1164,7 @@ class Engine {
         this.lastTime = timestamp;
         if (dt > 0.1) dt = 0.1;
 
+        this.lastDt = dt;
         this.update(dt);
         this.draw();
         this.input.update();
@@ -1167,6 +1176,8 @@ class Engine {
         if (this.sound && this.sound.musicUpdate) {
             this.sound.musicUpdate(dt, this);
         }
+        if (this.ui) this.ui.update(dt);
+
         this.vfx.update(dt, this);
         if (this.vfx.hitStop > 0) return;
 
@@ -1351,6 +1362,7 @@ class Engine {
             // Spawn pickup on some enemy deaths
             if (this.enemies.length < beforeLen) {
                 let killed = beforeLen - this.enemies.length;
+                this.saveManager.data.enemiesKilled = (this.saveManager.data.enemiesKilled || 0) + killed;
                 this.vfx.freeze(0.05);
                 this.vfx.shake(3, 0.1);
                 this.vfx.addText(this.player.x, this.player.y - 20, '+Combo!', '#00ffaa');
@@ -1434,6 +1446,8 @@ class Engine {
         this.ctx.fillStyle = '#1a1a24';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
+        if (this.ui) this.ui.drawPreVFX(this.ctx);
+
         let cameraX = 0;
         let cameraY = 0;
         if (this.player) {
@@ -1452,6 +1466,8 @@ class Engine {
         else if (this.state === 'GAME_OVER') this.drawGameOver();
 
         this.vfx.restoreShake(this.ctx);
+
+        if (this.ui) this.ui.drawPostVFX(this.ctx);
     }
 
     drawPlaying() {
@@ -1603,11 +1619,23 @@ class Engine {
         this.ctx.fillStyle = '#fff';
         this.ctx.textAlign = 'center';
         this.ctx.font = '40px monospace';
-        this.ctx.fillText('PAUSED', this.width/2, this.height/2);
+        this.ctx.fillText('PAUSED', this.width/2, this.height/2 - 20);
 
         this.ctx.font = '20px monospace';
         this.ctx.fillStyle = '#aaa';
-        this.ctx.fillText('Press P or Esc to Resume', this.width/2, this.height/2 + 40);
+        this.ctx.fillText('Press P or Esc to Resume', this.width/2, this.height/2 + 20);
+
+        // Settings Button
+        let sY = this.height/2 + 60;
+        let hovered = Math.abs((this.input.mouse.y || 0) - sY) < 15;
+        this.ctx.fillStyle = hovered ? '#a04e7e' : '#fff';
+        this.ctx.fillText('[ Settings ]', this.width/2, sY);
+        if (hovered && this.input.mouse.justDown) {
+             this.input.mouse.justDown = false;
+             if (this.ui) this.ui.toggleSettings();
+        }
+
+        this.ctx.fillStyle = '#aaa';
         this.ctx.fillText('Back to Arcade (../../index.html)', this.width/2, this.height - 40);
     }
 

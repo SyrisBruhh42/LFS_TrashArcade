@@ -128,7 +128,11 @@ class VFXManager {
         ctx.restore();
     }
     emit(x, y, count, color, speedBase = 5) {
-        for (let i = 0; i < count; i++) {
+        let actualCount = count;
+        if (window.game && window.game.saveManager.data.options.particleDensity === 'Low') {
+            actualCount = Math.max(1, Math.floor(count * 0.3));
+        }
+        for (let i = 0; i < actualCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = Math.random() * speedBase;
             const vx = Math.cos(angle) * speed;
@@ -139,8 +143,12 @@ class VFXManager {
         }
     }
     emitDirectional(x, y, count, color, dirX, dirY, spread = 0.5, speedBase = 5) {
+        let actualCount = count;
+        if (window.game && window.game.saveManager.data.options.particleDensity === 'Low') {
+            actualCount = Math.max(1, Math.floor(count * 0.3));
+        }
         const baseAngle = Math.atan2(dirY, dirX);
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < actualCount; i++) {
             const angle = baseAngle + (Math.random() - 0.5) * spread;
             const speed = (0.5 + Math.random()) * speedBase;
             const vx = Math.cos(angle) * speed;
