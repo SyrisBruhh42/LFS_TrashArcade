@@ -75,6 +75,9 @@ class ProgressionManager {
     addCombo(amount) {
         this.combo += amount;
         this.comboTimer = this.maxComboTimer;
+        if (window.game && window.game.vfx && window.game.player) {
+            window.game.vfx.spawnFloatingText(window.game.player.pos.x, window.game.player.pos.y - 30, `COMBO x${this.combo}`, "#ff62ac");
+        }
     }
 
     spawnPickup(x, y) {

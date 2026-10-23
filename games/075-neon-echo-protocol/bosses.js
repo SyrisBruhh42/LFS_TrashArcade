@@ -102,6 +102,11 @@ class BaseBoss extends BaseEnemy {
 
     onPhaseChange() {
         this.color = '#ff0000';
+        if (window.game && window.game.vfx) {
+            window.game.vfx.hitStop(0.1);
+            window.game.vfx.shakeScreen(15, 0.5);
+            window.game.vfx.spawnFloatingText(this.pos.x, this.pos.y, "PHASE 2", "#ff0000");
+        }
     }
 
     update(dt, game) {
@@ -131,6 +136,12 @@ class BaseBoss extends BaseEnemy {
     die(game) {
         for(let i=0; i<50; i++) {
             game.spawnParticles(this.pos.x, this.pos.y, this.color, 1);
+        }
+        if (game.vfx) {
+            game.vfx.spawnExplosion(this.pos.x, this.pos.y, this.color, 100);
+            game.vfx.shakeScreen(25, 0.8);
+            game.vfx.hitStop(0.2);
+            game.vfx.spawnFloatingText(this.pos.x, this.pos.y, "DESTROYED", "#ff00ff");
         }
         if(game.sound) {
             game.sound.hit();
