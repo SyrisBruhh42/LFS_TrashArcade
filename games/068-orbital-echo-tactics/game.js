@@ -338,9 +338,17 @@ const SoundEngine = {
       this.arpeggiatorInterval = null;
   },
 
+  cleanupAudio: function() {
+      this.bgmOscillators.forEach(o => {
+          try { o.stop(); o.disconnect(); } catch(e){}
+      });
+      this.bgmOscillators.length = 0;
+  },
+
   stopBgm: function() {
     this.isPlayingBgm = false;
     this.stopBgmLoops();
+    this.cleanupAudio();
   },
 
   playSynthNote: function(freq, duration) {
@@ -358,6 +366,12 @@ const SoundEngine = {
       gain.connect(this.musicFilter);
       osc.start();
       osc.stop(this.ctx.currentTime + duration);
+
+      this.bgmOscillators.push(osc);
+      if (this.bgmOscillators.length > 50) {
+          const oldOsc = this.bgmOscillators.shift();
+          try { oldOsc.disconnect(); } catch(e){}
+      }
   },
 
   playKick: function() {
@@ -1203,6 +1217,12 @@ class OrbitalWarden extends Boss {
                  break;
              }
           }
+
+          if (Math.random() < 0.3) {
+             let l = new LaserTrap(this.x, this.y, Math.random() > 0.5);
+             engine.lasers.push(l);
+          }
+
           if (placed) {
               // drop a laser trap here before or after moving? Let's drop it at old pos
               // Actually drop it at random empty spot
@@ -1391,6 +1411,12 @@ const Engine = {
     const saveDataIO = document.getElementById('saveDataIO');
     let resetClicks = 0;
 
+    // Tutorial Binding
+    document.getElementById('btn-dismiss-tutorial').addEventListener('click', () => {
+      document.getElementById('screen-tutorial').classList.add('hidden');
+      this.state = 'PLAYING';
+    });
+
     document.getElementById('btn-settings').addEventListener('click', () => {
        settingsScreen.classList.remove('hidden');
        document.getElementById('masterVol').value = SaveManager.data.options.masterVol ?? 1.0;
@@ -1554,6 +1580,11 @@ const Engine = {
     this.initLevel();
     this.updateHUD();
     this.lastTime = performance.now();
+
+    if (this.wave === 1) {
+      this.state = 'TUTORIAL';
+      document.getElementById('screen-tutorial').classList.remove('hidden');
+    }
   },
 
   initLevel: function() {
@@ -1568,6 +1599,7 @@ const Engine = {
     this.lasers = [];
     this.acidPools = [];
     this.pickups = [];
+    this.damagePopups = [];
 
     // Border walls
     for(let i=0; i<COLS; i++) {
@@ -1581,7 +1613,7 @@ const Engine = {
 
 
     // Spawn enemies
-    const numEnemies = 2 + this.wave;
+    const numEnemies = 2 + Math.floor(this.wave * 1.5);
     const enemyTypes = [Swarmer, ShieldBruiser, RangedSniper, Splitter, AreaDenialHazard];
 
     for(let i=0; i<numEnemies; i++) {
@@ -1595,16 +1627,39 @@ const Engine = {
       );
 
       // Pick random enemy type
-      let EType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
-      // First wave mostly swarmers
-      if (this.wave === 1) EType = Swarmer;
+      let EType = Swarmer;
+      if (this.wave > 1) {
+         let maxIndex = Math.min(enemyTypes.length, 1 + Math.floor(this.wave / 2));
+         EType = enemyTypes[Math.floor(Math.random() * maxIndex)];
+      }
 
-      this.enemies.push(new EType(ex, ey));
+      let enemy = new EType(ex, ey);
+      // Give enemies a tiny bit of extra hp later on
+      if (this.wave >= 5 && Math.random() < 0.2) {
+          enemy.hp += 1;
+      }
+      this.enemies.push(enemy);
+    }
+
+    // Additional Enemies for later waves
+    if (this.wave >= 4) {
+       for(let i=0; i<Math.floor(this.wave / 3); i++) {
+          let ex, ey;
+          do {
+            ex = 1 + Math.floor(Math.random() * (COLS-2));
+            ey = 1 + Math.floor(Math.random() * (ROWS-2));
+          } while(
+            this.isSolid(ex, ey) ||
+            (Math.abs(ex - this.player.x) < 3 && Math.abs(ey - this.player.y) < 3)
+          );
+          let extraEnemy = new Swarmer(ex, ey);
+          this.enemies.push(extraEnemy);
+       }
     }
 
 
     // Spawn Hazards
-    const numHazards = Math.min(2 + Math.floor(this.wave / 2), 5);
+    const numHazards = Math.min(2 + Math.floor(this.wave / 1.5), 8);
 
     // Boss Spawning Logic
     if (this.wave % 5 === 0) {
@@ -1615,7 +1670,22 @@ const Engine = {
        while(this.isSolid(bX, bY)) { bX++; if (bX >= COLS) { bX=1; bY++; } }
 
        let BossClass = (this.wave % 10 === 0) ? EchoNullifier : OrbitalWarden;
-       this.enemies.push(new BossClass(bX, bY));
+       let boss = new BossClass(bX, bY);
+       boss.maxHp += this.wave * 2;
+       boss.hp = boss.maxHp;
+       this.enemies.push(boss);
+
+       // Spawn some protective minions for the boss
+       let minionType = (this.wave % 10 === 0) ? Splitter : ShieldBruiser;
+       for (let i = 0; i < 2; i++) {
+           let mx, my;
+           do {
+               mx = 1 + Math.floor(Math.random() * (COLS-2));
+               my = 1 + Math.floor(Math.random() * (ROWS-2));
+           } while(this.isSolid(mx, my) || (mx === boss.x && my === boss.y));
+           let minion = new minionType(mx, my);
+           this.enemies.push(minion);
+       }
     }
 
     for(let i=0; i<numHazards; i++) {
@@ -1645,6 +1715,16 @@ const Engine = {
         laser.turnCounter = Math.floor(Math.random() * 3); // Random phase
         this.lasers.push(laser);
       }
+    }
+
+    // Additional Hazards for late game
+    if (this.wave > 5) {
+        let lx, ly;
+        lx = COLS - 1; // Emitter on right wall
+        ly = 1 + Math.floor(Math.random() * (ROWS-2));
+        let laser = new LaserTrap(lx, ly, true);
+        laser.turnCounter = Math.floor(Math.random() * 3);
+        this.lasers.push(laser);
     }
 
     // Spawn Pickups
