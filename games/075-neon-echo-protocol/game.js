@@ -344,6 +344,9 @@ class SoundEngine {
     hit() { this.playTone(150, 'sawtooth', 0.15, 0.5, 50); }
     echoSpawn() { this.playTone(800, 'sine', 0.3, 0.4, 1200); }
     gameOver() { this.playTone(100, 'sawtooth', 1.5, 0.8, 20); }
+
+
+
     start() {
         this.playTone(600, 'square', 0.2, 0.5);
         setTimeout(() => this.playTone(800, 'square', 0.3, 0.5), 200);
@@ -381,6 +384,18 @@ class InputManager {
             this.mouse.y = e.clientY;
         });
         window.addEventListener('mousedown', e => {
+            // Map mouse to internal resolution
+            let rect = window.game.canvas.getBoundingClientRect();
+            let canvasWidth = window.game.width;
+            let canvasHeight = window.game.height;
+            let scaleX = canvasWidth / rect.width;
+            let scaleY = canvasHeight / rect.height;
+
+
+            let mappedX = (e.clientX - rect.left) * scaleX;
+            let mappedY = (e.clientY - rect.top) * scaleY;
+            if (window.game && window.game.uiManager && window.game.uiManager.handleClick(mappedX, mappedY)) return;
+            if (window.game && window.game.uiManager && window.game.uiManager.handleClick(e.clientX, e.clientY)) return;
             this.mouse.down = true;
             if(window.game && window.game.sound) { window.game.sound.init(); window.game.sound.resume(); }
         });
@@ -388,6 +403,9 @@ class InputManager {
 
         // Touch events
         const handleTouch = (e) => {
+            if (window.game && window.game.uiManager && window.game.uiManager.optionsOpen && e.touches.length > 0) {
+                if (window.game.uiManager.handleClick(e.touches[0].clientX, e.touches[0].clientY)) return;
+            }
             e.preventDefault();
             this.touches = Array.from(e.touches);
             if(window.game && window.game.sound) { window.game.sound.init(); window.game.sound.resume(); }
@@ -1120,6 +1138,8 @@ class Game {
 
         this.world = new World(this.width, this.height);
         this.bossManager = new BossManager();
+        this.uiManager = new UIManager(this);
+        this.applyOptions();
 
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
         this.score = 0;
@@ -1194,6 +1214,16 @@ class Game {
         }, {passive: false});
 
         requestAnimationFrame((t) => this.loop(t));
+    }
+
+
+    applyOptions() {
+        let opts = this.saveManager.data.options;
+        if (this.sound && this.sound.initialized) {
+            this.sound.masterGain.gain.value = opts.masterMute ? 0 : 1.0;
+            this.sound.sfxGain.gain.value = opts.sfxVol !== undefined ? opts.sfxVol : 1.0;
+            this.sound.musicGain.gain.value = opts.musicVol !== undefined ? opts.musicVol : 0.5;
+        }
     }
 
     resize() {
@@ -1294,6 +1324,7 @@ class Game {
 
         this.player.update(dt, this.input, this);
         this.progression.update(dt, this);
+        this.uiManager.update(dt);
 
         // Camera follow core, static for now
         this.camera.x = 0;
@@ -1473,6 +1504,7 @@ class Game {
             }
 
             this.progression.draw(this.ctx, this);
+            if (this.uiManager) this.uiManager.draw(this.ctx);
 
             // Draw Virtual Joysticks if active
             this.drawJoysticks();
@@ -1489,6 +1521,7 @@ class Game {
             this.ctx.fillText('Press ENTER or Tap to Start', this.width/2, this.height/2 + 20);
             this.ctx.fillText('WASD/Arrows to Move, Mouse/Arrows to Aim/Shoot', this.width/2, this.height/2 + 60);
             this.ctx.fillText('Press E to deploy an Echo of your past actions', this.width/2, this.height/2 + 90);
+            if (this.uiManager) this.uiManager.draw(this.ctx);
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(11, 11, 26, 0.8)';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -1498,6 +1531,7 @@ class Game {
             this.ctx.fillText('PAUSED', this.width/2, this.height/2);
             this.ctx.font = '20px Courier New';
             this.ctx.fillText('Back to Arcade (../../index.html)', this.width/2, this.height/2 + 40);
+            if (this.uiManager) this.uiManager.draw(this.ctx);
         } else if (this.state === 'GAME_OVER') {
             this.ctx.fillStyle = 'rgba(11, 11, 26, 0.8)';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -1511,6 +1545,7 @@ class Game {
             this.ctx.fillText(`HIGH SCORE: ${this.saveManager.data.highScore}`, this.width/2, this.height/2 + 30);
             this.ctx.fillText('Press ENTER or Tap to Return to Title', this.width/2, this.height/2 + 70);
             this.ctx.fillText('Back to Arcade (../../index.html)', this.width/2, this.height/2 + 110);
+            if (this.uiManager) this.uiManager.draw(this.ctx);
         }
 
         this.ctx.textAlign = 'left';
@@ -1518,6 +1553,14 @@ class Game {
     }
 
     drawJoysticks() {
+        let opts = this.saveManager.data.options;
+        let mode = opts.touchMode || 'Auto';
+        let isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        if (mode === 'Off') return;
+        if (mode === 'Auto' && !isTouch && this.input.touches.length === 0) return;
+
+        let leftH = opts.leftHanded || false;
+
         if (this.input.leftStick.active) {
             this.ctx.beginPath();
             this.ctx.arc(this.input.leftStick.base.x * (this.width / this.canvas.width), this.input.leftStick.base.y * (this.height / this.canvas.height), 50, 0, Math.PI * 2);
@@ -1544,18 +1587,22 @@ class Game {
         this.input.dashTouched = false;
         // Touch button for echo and dash if touch is active
         if (this.input.touches.length > 0) {
+            // Swap if leftHanded is true
+            let echoX = leftH ? this.width/2 - 100 : this.width/2 + 20;
+            let dashX = leftH ? this.width/2 + 20 : this.width/2 - 100;
+
             this.ctx.fillStyle = this.echoCooldown <= 0 ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 0, 0, 0.5)';
-            this.ctx.fillRect(this.width/2 + 20, this.height - 80, 80, 60);
+            this.ctx.fillRect(echoX, this.height - 80, 80, 60);
             this.ctx.fillStyle = 'white';
             this.ctx.textAlign = 'center';
-            this.ctx.fillText('ECHO', this.width/2 + 60, this.height - 45);
+            this.ctx.fillText('ECHO', echoX + 40, this.height - 45);
 
             let dashTimer = this.player ? this.player.dashTimer : 0;
             this.ctx.fillStyle = dashTimer <= 0 ? 'rgba(0, 255, 255, 0.5)' : 'rgba(128, 128, 128, 0.5)';
-            this.ctx.fillRect(this.width/2 - 100, this.height - 80, 80, 60);
+            this.ctx.fillRect(dashX, this.height - 80, 80, 60);
             this.ctx.fillStyle = 'white';
             this.ctx.textAlign = 'center';
-            this.ctx.fillText('DASH', this.width/2 - 60, this.height - 45);
+            this.ctx.fillText('DASH', dashX + 40, this.height - 45);
 
             this.ctx.textAlign = 'left';
 
@@ -1563,12 +1610,12 @@ class Game {
             for(let t of this.input.touches) {
                 let tx = t.clientX * (this.width / this.canvas.width);
                 let ty = t.clientY * (this.height / this.canvas.height);
-                if (tx > this.width/2 + 20 && tx < this.width/2 + 100 && ty > this.height - 80 && ty < this.height - 20) {
+                if (tx > echoX && tx < echoX + 80 && ty > this.height - 80 && ty < this.height - 20) {
                     if (this.echoCooldown <= 0) {
                         this.deployEcho();
                     }
                 }
-                if (tx > this.width/2 - 100 && tx < this.width/2 - 20 && ty > this.height - 80 && ty < this.height - 20) {
+                if (tx > dashX && tx < dashX + 80 && ty > this.height - 80 && ty < this.height - 20) {
                     this.input.dashTouched = true;
                 }
             }
