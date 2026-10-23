@@ -391,30 +391,364 @@ class Projectile {
   }
 }
 
-class Enemy {
+class EnemyProjectile {
+  constructor(x, y, dir, speed, radius, color) {
+    this.pos = new Vector2(x, y);
+    this.vel = dir.copy().mult(speed);
+    this.radius = radius;
+    this.color = color;
+    this.active = true;
+  }
+  update(dt, game) {
+    this.pos.add(this.vel.copy().mult(dt));
+    if (this.pos.x < -100 || this.pos.x > game.canvas.width + 100 ||
+        this.pos.y < -100 || this.pos.y > game.canvas.height + 100) {
+      this.active = false;
+    }
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = this.color;
+    ctx.fill();
+  }
+}
+
+class HazardZone {
+  constructor(x, y) {
+    this.pos = new Vector2(x, y);
+    this.radius = 1;
+    this.maxRadius = 30;
+    this.life = 5;
+    this.active = true;
+    this.color = 'rgba(255, 0, 0, 0.5)';
+  }
+  update(dt) {
+    if (this.radius < this.maxRadius) {
+      this.radius += 20 * dt;
+    }
+    this.life -= dt;
+    if (this.life <= 0) this.active = false;
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = this.color;
+    ctx.fill();
+    ctx.strokeStyle = '#f00';
+    ctx.stroke();
+  }
+}
+
+class BaseEnemy {
   constructor(x, y) {
     this.pos = new Vector2(x, y);
     this.radius = 12;
+    this.hp = 10;
+    this.maxHp = 10;
     this.speed = 100;
     this.activeSpeed = 100;
     this.active = true;
     this.color = '#8bc34a';
+    this.scoreValue = 10;
   }
-  update(dt, targetPos) {
-    let dir = targetPos.copy().sub(this.pos);
-    if (dir.mag() > 0) {
-      dir.normalize();
-      this.pos.add(dir.mult(this.activeSpeed * dt));
-    }
+  takeDamage(amt) {
+    this.hp -= amt;
+    if (this.hp <= 0) this.active = false;
+  }
+  update(dt, game) {
     this.activeSpeed = this.speed;
   }
+  draw(ctx) {}
+  onDeath(game) {
+    game.score += this.scoreValue;
+  }
+}
+
+class SwarmerEnemy extends BaseEnemy {
+  constructor(x, y) {
+    super(x, y);
+    this.radius = 10;
+    this.hp = 10;
+    this.speed = 80;
+    this.activeSpeed = 80;
+    this.color = '#ff5722';
+    this.burstTimer = 2;
+    this.isBursting = false;
+    this.burstDuration = 0.5;
+    this.scoreValue = 15;
+  }
+  update(dt, game) {
+    let dir = game.player.pos.copy().sub(this.pos);
+    let dist = dir.mag();
+    if (dist > 0) dir.normalize();
+
+    this.burstTimer -= dt;
+    if (this.burstTimer <= 0) {
+      this.isBursting = true;
+      this.burstTimer = 3;
+    }
+
+    if (this.isBursting) {
+      this.burstDuration -= dt;
+      this.pos.add(dir.mult(this.activeSpeed * 3 * dt));
+      if (this.burstDuration <= 0) {
+        this.isBursting = false;
+        this.burstDuration = 0.5;
+      }
+    } else {
+      this.pos.add(dir.mult(this.activeSpeed * dt));
+    }
+    super.update(dt, game);
+  }
   draw(ctx) {
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    ctx.rotate(performance.now() * 0.005);
     ctx.beginPath();
-    ctx.rect(this.pos.x - this.radius, this.pos.y - this.radius, this.radius * 2, this.radius * 2);
+    ctx.moveTo(0, -this.radius);
+    ctx.lineTo(this.radius, this.radius);
+    ctx.lineTo(-this.radius, this.radius);
+    ctx.closePath();
+    ctx.fillStyle = (this.burstTimer < 0.5) ? '#fff' : this.color;
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class SniperEnemy extends BaseEnemy {
+  constructor(x, y) {
+    super(x, y);
+    this.radius = 14;
+    this.hp = 20;
+    this.speed = 50;
+    this.activeSpeed = 50;
+    this.color = '#03a9f4';
+    this.shootTimer = 3;
+    this.scoreValue = 20;
+    this.aimDir = new Vector2();
+  }
+  update(dt, game) {
+    let dir = game.player.pos.copy().sub(this.pos);
+    let dist = dir.mag();
+    if (dist > 0) dir.normalize();
+
+    if (dist < 250) {
+      this.pos.sub(dir.mult(this.activeSpeed * dt));
+    } else if (dist > 350) {
+      this.pos.add(dir.mult(this.activeSpeed * dt));
+    }
+
+    this.shootTimer -= dt;
+    if (this.shootTimer < 1.0) {
+      if (this.shootTimer > 0.8) {
+          this.aimDir = dir.copy();
+      }
+    }
+
+    if (this.shootTimer <= 0) {
+      game.enemyProjectiles.push(new EnemyProjectile(this.pos.x, this.pos.y, this.aimDir, 250, 4, '#f00'));
+      this.shootTimer = 3;
+    }
+    super.update(dt, game);
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    ctx.beginPath();
+    ctx.moveTo(0, -this.radius);
+    ctx.lineTo(this.radius, 0);
+    ctx.lineTo(0, this.radius);
+    ctx.lineTo(-this.radius, 0);
+    ctx.closePath();
     ctx.fillStyle = this.color;
     ctx.fill();
     ctx.strokeStyle = '#333';
     ctx.stroke();
+    ctx.restore();
+
+    if (this.shootTimer < 1.0) {
+      ctx.beginPath();
+      ctx.moveTo(this.pos.x, this.pos.y);
+      ctx.lineTo(this.pos.x + this.aimDir.x * 500, this.pos.y + this.aimDir.y * 500);
+      ctx.strokeStyle = `rgba(255, 0, 0, ${1.0 - this.shootTimer})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+}
+
+class BruiserEnemy extends BaseEnemy {
+  constructor(x, y) {
+    super(x, y);
+    this.radius = 24;
+    this.hp = 60;
+    this.maxHp = 60;
+    this.speed = 30;
+    this.activeSpeed = 30;
+    this.color = '#9c27b0';
+    this.chargeTimer = 5;
+    this.isCharging = false;
+    this.chargeDuration = 1.0;
+    this.chargeDir = new Vector2();
+    this.scoreValue = 30;
+  }
+  update(dt, game) {
+    let dir = game.player.pos.copy().sub(this.pos);
+    if (dir.mag() > 0) dir.normalize();
+
+    this.chargeTimer -= dt;
+    if (this.chargeTimer <= 0) {
+      this.isCharging = true;
+      this.chargeDir = dir.copy();
+      this.chargeTimer = 5;
+    }
+
+    if (this.isCharging) {
+      this.chargeDuration -= dt;
+      this.pos.add(this.chargeDir.copy().mult(this.activeSpeed * 5 * dt));
+      if (this.chargeDuration <= 0) {
+        this.isCharging = false;
+        this.chargeDuration = 1.0;
+      }
+    } else {
+      this.pos.add(dir.mult(this.activeSpeed * dt));
+    }
+    super.update(dt, game);
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    ctx.rotate(performance.now() * 0.002);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      let angle = (Math.PI * 2 / 6) * i;
+      let px = Math.cos(angle) * this.radius;
+      let py = Math.sin(angle) * this.radius;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = (this.chargeTimer < 1.0 && Math.floor(this.chargeTimer * 10) % 2 === 0) ? '#fff' : this.color;
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius - 4, 0, Math.PI * 2 * (Math.max(0, this.hp) / this.maxHp));
+    ctx.strokeStyle = '#0f0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class SplitterEnemy extends BaseEnemy {
+  constructor(x, y) {
+    super(x, y);
+    this.radius = 18;
+    this.hp = 30;
+    this.speed = 60;
+    this.activeSpeed = 60;
+    this.color = '#e91e63';
+    this.scoreValue = 25;
+    this.angle = 0;
+  }
+  update(dt, game) {
+    let dir = game.player.pos.copy().sub(this.pos);
+    if (dir.mag() > 0) dir.normalize();
+
+    this.angle += dt * 5;
+    let erraticDir = new Vector2(Math.cos(this.angle), Math.sin(this.angle));
+    this.pos.add(dir.mult(this.activeSpeed * dt * 0.5)).add(erraticDir.mult(this.activeSpeed * dt * 0.5));
+    super.update(dt, game);
+  }
+  onDeath(game) {
+    super.onDeath(game);
+    for (let i = 0; i < 3; i++) {
+      let angle = (Math.PI * 2 / 3) * i;
+      let offset = new Vector2(Math.cos(angle), Math.sin(angle)).mult(20);
+      game.enemies.push(new SwarmerEnemy(this.pos.x + offset.x, this.pos.y + offset.y));
+    }
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    let scale = 1.0 + Math.sin(performance.now() * 0.01) * 0.1;
+    ctx.scale(scale, scale);
+
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      let angle = (Math.PI * 2 / 8) * i;
+      let px = Math.cos(angle) * this.radius;
+      let py = Math.sin(angle) * this.radius;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = this.color;
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class HazardEnemy extends BaseEnemy {
+  constructor(x, y) {
+    super(x, y);
+    this.radius = 16;
+    this.hp = 20;
+    this.speed = 40;
+    this.activeSpeed = 40;
+    this.color = '#ff9800';
+    this.dropTimer = 4;
+    this.scoreValue = 20;
+    this.time = Math.random() * 100;
+  }
+  update(dt, game) {
+    this.time += dt;
+    let dir = game.player.pos.copy().sub(this.pos);
+    if (dir.mag() > 0) dir.normalize();
+
+    let perp = new Vector2(-dir.y, dir.x);
+    this.pos.add(dir.mult(this.activeSpeed * dt)).add(perp.mult(Math.sin(this.time * 3) * 50 * dt));
+
+    this.dropTimer -= dt;
+    if (this.dropTimer <= 0) {
+      game.hazards.push(new HazardZone(this.pos.x, this.pos.y));
+      this.dropTimer = 4;
+    }
+    super.update(dt, game);
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    if (this.dropTimer < 1.0) {
+      ctx.rotate(performance.now() * 0.02);
+      ctx.scale(1.2, 1.2);
+    } else {
+      ctx.rotate(performance.now() * 0.005);
+    }
+
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      let angle = (Math.PI * 2 / 10) * i;
+      let r = i % 2 === 0 ? this.radius : this.radius / 2;
+      let px = Math.cos(angle) * r;
+      let py = Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = (this.dropTimer < 0.5) ? '#fff' : this.color;
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -434,6 +768,8 @@ class GameEngine {
     this.player = null;
     this.projectiles = [];
     this.enemies = [];
+    this.enemyProjectiles = [];
+    this.hazards = [];
 
     this.score = 0;
     this.wave = 1;
@@ -470,6 +806,8 @@ class GameEngine {
     this.player = new Player(this.canvas.width / 2, this.canvas.height / 2);
     this.projectiles = [];
     this.enemies = [];
+    this.enemyProjectiles = [];
+    this.hazards = [];
     this.score = 0;
     this.wave = 1;
     this.enemySpawnTimer = 2;
@@ -487,7 +825,12 @@ class GameEngine {
       x = Math.random() * this.canvas.width;
       y = Math.random() < 0.5 ? -20 : this.canvas.height + 20;
     }
-    this.enemies.push(new Enemy(x, y));
+    let r = Math.random();
+    if (r < 0.2) this.enemies.push(new SwarmerEnemy(x, y));
+    else if (r < 0.4) this.enemies.push(new SniperEnemy(x, y));
+    else if (r < 0.6) this.enemies.push(new BruiserEnemy(x, y));
+    else if (r < 0.8) this.enemies.push(new SplitterEnemy(x, y));
+    else this.enemies.push(new HazardEnemy(x, y));
   }
 
   loop(timestamp) {
@@ -527,10 +870,42 @@ class GameEngine {
         }
       }
 
+      // Update Enemy Projectiles
+      for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
+        let p = this.enemyProjectiles[i];
+        p.update(dt, this);
+        if (!p.active) {
+          this.enemyProjectiles.splice(i, 1);
+          continue;
+        }
+        let dist = p.pos.copy().sub(this.player.pos).mag();
+        if (dist < p.radius + this.player.radius && this.player.invulnerableTimer <= 0) {
+          this.sound.playExplosion();
+          this.gameOver();
+          return;
+        }
+      }
+
+      // Update Hazards
+      for (let i = this.hazards.length - 1; i >= 0; i--) {
+        let h = this.hazards[i];
+        h.update(dt);
+        if (!h.active) {
+          this.hazards.splice(i, 1);
+          continue;
+        }
+        let dist = h.pos.copy().sub(this.player.pos).mag();
+        if (dist < h.radius + this.player.radius && this.player.invulnerableTimer <= 0) {
+          this.sound.playExplosion();
+          this.gameOver();
+          return;
+        }
+      }
+
       // Update Enemies
       for (let i = this.enemies.length - 1; i >= 0; i--) {
         let e = this.enemies[i];
-        e.update(dt, this.player.pos);
+        e.update(dt, this);
 
         // Collision with player
         let dist = e.pos.copy().sub(this.player.pos).mag();
@@ -545,15 +920,15 @@ class GameEngine {
           let p = this.projectiles[j];
           let pDist = e.pos.copy().sub(p.pos).mag();
           if (pDist < e.radius + p.radius) {
-            e.active = false;
+            e.takeDamage(10);
             p.active = false;
-            this.score += 10;
             this.sound.playHit();
             break;
           }
         }
 
         if (!e.active) {
+          e.onDeath(this);
           this.enemies.splice(i, 1);
         }
       }
@@ -600,6 +975,8 @@ class GameEngine {
       }
 
       for (let p of this.projectiles) p.draw(this.ctx);
+      for (let ep of this.enemyProjectiles) ep.draw(this.ctx);
+      for (let h of this.hazards) h.draw(this.ctx);
       for (let e of this.enemies) e.draw(this.ctx);
 
       let aimDir = this.input.getAimDir(this.player.pos);
