@@ -478,6 +478,8 @@ class Engine {
         this.shrinksPending = 0;
         this.turnsUntilShrink = 5;
 
+        this.progression = new ProgressionSystem();
+
         this.setupResize();
         this.bindEvents();
 
@@ -546,6 +548,8 @@ class Engine {
         this.turns = 0;
         this.wave = 1;
         this.turnsUntilShrink = 8;
+
+        this.progression.reset();
 
         this.entities = [];
 
@@ -656,11 +660,19 @@ class Engine {
             if (e.update) e.update(dt);
         }
 
+        if (this.state === 'PLAYING') {
+            this.progression.update(dt);
+        }
+
         if (this.state === 'TITLE') {
             if (this.input.wasKeyPressed('Space') || this.input.wasKeyPressed('Enter') || this.input.pointers.length > 0) {
                 this.initGame();
             }
         } else if (this.state === 'PLAYING') {
+            if (this.progression.inDraft) {
+                this.progression.handleDraftInput(this, this.input);
+                return;
+            }
             if (this.input.wasKeyPressed('Escape') || this.input.wasKeyPressed('KeyP')) {
                 this.state = 'PAUSED';
                 this.sound.playSelect();
@@ -740,7 +752,8 @@ class Engine {
                         hitEnemy.takeDamage(1, this);
                         if (hitEnemy.hp <= 0) {
                             this.entities = this.entities.filter(e => e !== hitEnemy);
-                            this.score += 500;
+                            this.score += 500 * this.progression.getMultiplier();
+                            this.progression.addCombo(5);
                             this.sound.playExplosion();
                         } else {
                             this.sound.playShoot();
@@ -749,7 +762,13 @@ class Engine {
                         hitEnemy.hp--;
                         if (hitEnemy.hp <= 0) {
                             this.entities = this.entities.filter(e => e !== hitEnemy);
-                            if (hitEnemy instanceof Enemy) this.score += 10;
+                            if (hitEnemy instanceof Enemy) {
+                                this.score += 10 * this.progression.getMultiplier();
+                                this.progression.addCombo(1);
+                                if (Math.random() < 0.2) {
+                                    this.entities.push(new Pickup(hitEnemy.gridPos.x, hitEnemy.gridPos.y));
+                                }
+                            }
                             this.sound.playHit();
                         } else {
                             this.sound.playShoot();
@@ -804,9 +823,13 @@ class Engine {
         let items = this.getEntitiesAt(this.player.gridPos.x, this.player.gridPos.y).filter(e => e.isItem);
         for (let item of items) {
             this.entities = this.entities.filter(e => e !== item);
-            this.score += 50;
+            let multi = this.progression.getMultiplier();
+            this.score += 50 * multi;
+            this.progression.addCombo(1);
             this.sound.playScore();
-            this.spawnOrb(); // Spawn another
+            if (!item.isPickup) {
+                this.spawnOrb(); // Spawn another
+            }
         }
 
         // Enemy AI
@@ -864,6 +887,7 @@ class Engine {
             this.shrinkArena();
             this.turnsUntilShrink = 8 + Math.floor(this.wave / 2);
             this.wave++;
+            this.progression.triggerDraft();
             if (this.wave % 5 === 0) {
                 this.spawnBoss();
             } else {
@@ -1032,6 +1056,9 @@ class Engine {
             if (boss && this.state !== 'GAME_OVER') {
                 boss.drawBossUI(this.ctx, this.width, this.height);
             }
+
+            this.progression.drawComboUI(this.ctx, this.width, this.height);
+            this.progression.drawDraftUI(this.ctx, this.width, this.height);
 
             // On-screen Dash Button for Mobile
             let bx = this.width / 2;
