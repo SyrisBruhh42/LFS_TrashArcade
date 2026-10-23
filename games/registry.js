@@ -1009,7 +1009,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to attack in directions, Space to sacrifice HP for Overdrive, Mouse/Touch to swipe/tap.",
     "createdAt": "2024-10-25",
     "accentColor": "#8b5ecb",
-    "phase": "1",
+    "phase": "2",
     "path": "./games/076-blood-oath-overdrive/index.html"
   }
 ];
