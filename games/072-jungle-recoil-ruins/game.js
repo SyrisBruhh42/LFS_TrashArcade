@@ -396,6 +396,7 @@ class Enemy {
     this.pos = new Vector2(x, y);
     this.radius = 12;
     this.speed = 100;
+    this.activeSpeed = 100;
     this.active = true;
     this.color = '#8bc34a';
   }
@@ -403,8 +404,9 @@ class Enemy {
     let dir = targetPos.copy().sub(this.pos);
     if (dir.mag() > 0) {
       dir.normalize();
-      this.pos.add(dir.mult(this.speed * dt));
+      this.pos.add(dir.mult(this.activeSpeed * dt));
     }
+    this.activeSpeed = this.speed;
   }
   draw(ctx) {
     ctx.beginPath();
@@ -472,6 +474,7 @@ class GameEngine {
     this.wave = 1;
     this.enemySpawnTimer = 2;
     this.enemySpawnRate = 2;
+    this.environment = new Environment(this);
     this.state = 'PLAYING';
   }
 
@@ -505,6 +508,7 @@ class GameEngine {
       }
     } else if (this.state === 'PLAYING') {
       this.player.update(dt, this.input, this);
+      if (this.environment) this.environment.update(dt, this);
 
       // Spawner
       this.enemySpawnTimer -= dt;
@@ -590,14 +594,9 @@ class GameEngine {
       this.ctx.fillText('Back to Arcade (../../index.html)', this.canvas.width / 2, this.canvas.height - 40);
 
     } else if (this.state === 'PLAYING') {
-      // Draw grid/ruins background elements (procedural)
-      this.ctx.strokeStyle = '#14301d';
-      this.ctx.lineWidth = 2;
-      for(let i=0; i<this.canvas.width; i+=50) {
-        this.ctx.beginPath(); this.ctx.moveTo(i, 0); this.ctx.lineTo(i, this.canvas.height); this.ctx.stroke();
-      }
-      for(let i=0; i<this.canvas.height; i+=50) {
-        this.ctx.beginPath(); this.ctx.moveTo(0, i); this.ctx.lineTo(this.canvas.width, i); this.ctx.stroke();
+      if (this.environment) {
+         this.environment.drawBackground(this.ctx, this.player);
+         this.environment.drawHazards(this.ctx);
       }
 
       for (let p of this.projectiles) p.draw(this.ctx);
@@ -730,5 +729,222 @@ class GameMath {
   }
   static radToDeg(radians) {
     return radians * (180 / Math.PI);
+  }
+}
+class DestructibleCover {
+  constructor(x, y) {
+    this.pos = new Vector2(x, y);
+    this.width = 60;
+    this.height = 40;
+    this.hp = 3;
+    this.active = true;
+    this.color = '#795548';
+  }
+  draw(ctx) {
+    if (!this.active) return;
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.pos.x, this.pos.y, this.width, this.height);
+    ctx.strokeStyle = '#3e2723';
+    ctx.strokeRect(this.pos.x, this.pos.y, this.width, this.height);
+    // crack details based on hp
+    ctx.beginPath();
+    ctx.strokeStyle = '#4e342e';
+    if (this.hp <= 2) {
+      ctx.moveTo(this.pos.x + 10, this.pos.y);
+      ctx.lineTo(this.pos.x + 20, this.pos.y + 20);
+    }
+    if (this.hp <= 1) {
+      ctx.moveTo(this.pos.x + 50, this.pos.y + 10);
+      ctx.lineTo(this.pos.x + 30, this.pos.y + 30);
+    }
+    ctx.stroke();
+  }
+}
+
+class MudZone {
+  constructor(x, y, r) {
+    this.pos = new Vector2(x, y);
+    this.radius = r;
+    this.color = 'rgba(93, 64, 55, 0.5)';
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = this.color;
+    ctx.fill();
+  }
+}
+
+class SpikeTrap {
+  constructor(x, y) {
+    this.pos = new Vector2(x, y);
+    this.width = 50;
+    this.height = 50;
+    this.timer = GameMath.randomRange(0, 2);
+    this.active = false;
+  }
+  update(dt) {
+    this.timer += dt;
+    if (this.timer > 3) {
+       this.timer = 0;
+    }
+    this.active = this.timer > 2; // active for 1 second every 3 seconds
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#424242';
+    ctx.fillRect(this.pos.x, this.pos.y, this.width, this.height);
+    if (this.active) {
+       ctx.fillStyle = '#ff5252';
+       for(let i=0; i<3; i++) {
+         for(let j=0; j<3; j++) {
+            ctx.beginPath();
+            ctx.arc(this.pos.x + 10 + i*15, this.pos.y + 10 + j*15, 4, 0, Math.PI * 2);
+            ctx.fill();
+         }
+       }
+    }
+  }
+}
+
+class Environment {
+  constructor(game) {
+    this.game = game;
+    this.covers = [];
+    this.mudZones = [];
+    this.spikeTraps = [];
+    this.generateHazards();
+
+    // Parallax layers
+    this.canopy = [];
+    for(let i=0; i<5; i++) {
+      this.canopy.push({ x: GameMath.randomRange(0, game.canvas.width), y: GameMath.randomRange(0, game.canvas.height), s: GameMath.randomRange(100, 200) });
+    }
+    this.ruins = [];
+    for(let i=0; i<8; i++) {
+      this.ruins.push({ x: GameMath.randomRange(0, game.canvas.width), y: GameMath.randomRange(0, game.canvas.height), w: GameMath.randomRange(40, 100), h: GameMath.randomRange(40, 100) });
+    }
+    this.vines = [];
+    for(let i=0; i<10; i++) {
+      this.vines.push({ x: GameMath.randomRange(0, game.canvas.width), len: GameMath.randomRange(50, 150) });
+    }
+  }
+
+  generateHazards() {
+    for(let i=0; i<4; i++) {
+      this.covers.push(new DestructibleCover(GameMath.randomRange(50, this.game.canvas.width-100), GameMath.randomRange(50, this.game.canvas.height-100)));
+    }
+    for(let i=0; i<3; i++) {
+      this.mudZones.push(new MudZone(GameMath.randomRange(100, this.game.canvas.width-100), GameMath.randomRange(100, this.game.canvas.height-100), GameMath.randomRange(60, 100)));
+    }
+    for(let i=0; i<3; i++) {
+      this.spikeTraps.push(new SpikeTrap(GameMath.randomRange(50, this.game.canvas.width-100), GameMath.randomRange(50, this.game.canvas.height-100)));
+    }
+  }
+
+  update(dt, game) {
+    for (let t of this.spikeTraps) t.update(dt);
+
+    // Mud Zone interactions
+    for (let m of this.mudZones) {
+       let distToPlayer = game.player.pos.copy().sub(m.pos).mag();
+       if (distToPlayer < m.radius + game.player.radius) {
+          game.player.vel.mult(0.9); // Slow player heavily
+       }
+       for (let e of game.enemies) {
+          let distToEnemy = e.pos.copy().sub(m.pos).mag();
+          if (distToEnemy < m.radius + e.radius) {
+             e.activeSpeed = e.speed * 0.3; // Slow enemy
+          }
+       }
+    }
+
+    // Spike Trap interactions
+    for (let t of this.spikeTraps) {
+       if (t.active) {
+         let cx = t.pos.x + t.width/2;
+         let cy = t.pos.y + t.height/2;
+         let trapCenter = new Vector2(cx, cy);
+
+         let distToPlayer = game.player.pos.copy().sub(trapCenter).mag();
+         if (distToPlayer < 30 + game.player.radius && game.player.invulnerableTimer <= 0) {
+            game.sound.playExplosion();
+            game.gameOver();
+         }
+
+         for (let e of game.enemies) {
+            let distToEnemy = e.pos.copy().sub(trapCenter).mag();
+            if (distToEnemy < 30 + e.radius) {
+               e.active = false;
+            }
+         }
+       }
+    }
+
+    // Cover interactions
+    for (let c of this.covers) {
+       if (!c.active) continue;
+       for (let p of game.projectiles) {
+         if (!p.active) continue;
+         if (p.pos.x > c.pos.x && p.pos.x < c.pos.x + c.width &&
+             p.pos.y > c.pos.y && p.pos.y < c.pos.y + c.height) {
+             p.active = false;
+             c.hp--;
+             if (c.hp <= 0) {
+                 c.active = false;
+                 game.sound.playExplosion(); // Reusing explosion for break
+             } else {
+                 game.sound.playHit();
+             }
+         }
+       }
+    }
+  }
+
+  drawBackground(ctx, player) {
+    let px = player ? player.pos.x : 0;
+    let py = player ? player.pos.y : 0;
+
+    // Layer 1: Canopy (Far, moves opposite slightly)
+    ctx.fillStyle = '#0a140d';
+    for (let c of this.canopy) {
+       let ox = (c.x - px * 0.05) % (this.game.canvas.width + c.s);
+       let oy = (c.y - py * 0.05) % (this.game.canvas.height + c.s);
+       if (ox < -c.s) ox += this.game.canvas.width + c.s * 2;
+       if (oy < -c.s) oy += this.game.canvas.height + c.s * 2;
+       ctx.beginPath();
+       ctx.arc(ox, oy, c.s, 0, Math.PI*2);
+       ctx.fill();
+    }
+
+    // Layer 2: Ruins (Mid, moves normally)
+    ctx.fillStyle = '#1a241b';
+    ctx.strokeStyle = '#233225';
+    for (let r of this.ruins) {
+       let ox = (r.x - px * 0.1) % (this.game.canvas.width + r.w);
+       let oy = (r.y - py * 0.1) % (this.game.canvas.height + r.h);
+       if (ox < -r.w) ox += this.game.canvas.width + r.w * 2;
+       if (oy < -r.h) oy += this.game.canvas.height + r.h * 2;
+       ctx.fillRect(ox, oy, r.w, r.h);
+       ctx.strokeRect(ox, oy, r.w, r.h);
+    }
+
+    // Layer 3: Vines (Near, moves fast)
+    ctx.strokeStyle = '#2b4731';
+    ctx.lineWidth = 4;
+    for (let v of this.vines) {
+       let ox = (v.x - px * 0.2) % (this.game.canvas.width + 20);
+       if (ox < -20) ox += this.game.canvas.width + 40;
+       ctx.beginPath();
+       ctx.moveTo(ox, 0);
+       ctx.lineTo(ox + 10, v.len / 2);
+       ctx.lineTo(ox, v.len);
+       ctx.stroke();
+    }
+  }
+
+  drawHazards(ctx) {
+     for(let m of this.mudZones) m.draw(ctx);
+     for(let t of this.spikeTraps) t.draw(ctx);
+     for(let c of this.covers) c.draw(ctx);
   }
 }
