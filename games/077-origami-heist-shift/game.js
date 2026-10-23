@@ -431,6 +431,8 @@ class Game {
         this.sound = new SoundEngine();
         this.input = new InputManager(this.canvas);
 
+        this.world = new WorldManager(this.baseWidth, this.baseHeight);
+
         this.state = STATES.TITLE;
         this.lastTime = performance.now();
 
@@ -482,6 +484,7 @@ class Game {
         this.score = 0;
         this.arenaRadius = 380;
         this.arenaShrinkRate = 5;
+        this.world.reset();
         this.spawnTreasure();
         this.spawnTreasure();
         this.spawnTreasure();
@@ -514,6 +517,8 @@ class Game {
                 this.state = STATES.PLAYING;
             }
         } else if (this.state === STATES.PLAYING) {
+            this.world.update(dt, this);
+
             if (this.input.isDown('Escape') || this.input.isDown('KeyP')) {
                 this.sound.playClick();
                 this.state = STATES.PAUSED;
@@ -596,6 +601,8 @@ class Game {
         this.ctx.fillStyle = '#2b2b2b';
         this.ctx.fillRect(0, 0, this.baseWidth, this.baseHeight);
 
+        this.world.drawBackground(this.ctx);
+
         if (this.state === STATES.PLAYING || this.state === STATES.PAUSED || this.state === STATES.GAME_OVER) {
             // Draw Arena (Paper cutout hole)
             this.ctx.save();
@@ -625,6 +632,8 @@ class Game {
             this.ctx.beginPath();
             this.ctx.arc(this.baseWidth/2, this.baseHeight/2, this.arenaRadius, 0, Math.PI*2);
             this.ctx.clip();
+
+            this.world.drawHazards(this.ctx);
 
             this.treasures.forEach(t => t.draw(this.ctx));
             this.guards.forEach(g => g.draw(this.ctx));
