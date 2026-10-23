@@ -995,7 +995,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Desktop: WASD/Arrows to move, Mouse/Arrows to aim, Click/Space to shoot, E to deploy echo. Touch: On-screen joysticks.",
     "createdAt": "2024-05-24",
     "accentColor": "#ff62ac",
-    "phase": "1",
+    "phase": "2",
     "path": "./games/075-neon-echo-protocol/index.html"
   }
 ];
