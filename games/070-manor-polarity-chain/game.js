@@ -967,6 +967,9 @@ class Game {
         this.hazardManager.spawnHazards(this.canvas.width, this.canvas.height);
         this.particles = []; // For future use
 
+        this.bossManager = new BossManager();
+        this.nextBossScore = 500;
+
         this.spawnTimer = 0;
         this.spawnInterval = 2;
 
@@ -1041,6 +1044,10 @@ class Game {
         this.hazardManager.spawnHazards(this.canvas.width, this.canvas.height);
         this.spawnTimer = 0;
 
+        this.bossManager.activeBoss = null;
+        this.bossManager.warningTimer = 0;
+        this.nextBossScore = 500;
+
         // Initial Orbs
         for(let i=0; i<5; i++) {
             this.spawnOrb();
@@ -1110,6 +1117,16 @@ class Game {
                 }
             }
         }
+
+        if (this.bossManager && this.bossManager.activeBoss && this.bossManager.activeBoss.active) {
+            const b = this.bossManager.activeBoss;
+            const dx = b.x - x;
+            const dy = b.y - y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < radius + b.radius) {
+                b.takeDamage(10);
+            }
+        }
     }
 
     update(dt) {
@@ -1118,12 +1135,23 @@ class Game {
         this.player.update(dt, this);
         this.hazardManager.update(dt, this);
 
+        // Boss Logic
+        if (this.score >= this.nextBossScore && !this.bossManager.activeBoss && this.bossManager.warningTimer <= 0) {
+            this.bossManager.warningTimer = 3;
+            // Clear current wave orbs
+            this.orbs = [];
+        }
+
+        this.bossManager.update(dt, this);
+
         // Spawner
-        this.spawnTimer += dt;
-        if (this.spawnTimer >= this.spawnInterval) {
-            this.spawnTimer = 0;
-            this.spawnOrb();
-            this.spawnInterval = Math.max(0.5, this.spawnInterval - 0.05); // Faster spawns
+        if (!this.bossManager.activeBoss && this.bossManager.warningTimer <= 0) {
+            this.spawnTimer += dt;
+            if (this.spawnTimer >= this.spawnInterval) {
+                this.spawnTimer = 0;
+                this.spawnOrb();
+                this.spawnInterval = Math.max(0.5, this.spawnInterval - 0.05); // Faster spawns
+            }
         }
 
         // Update Orbs
@@ -1217,6 +1245,23 @@ class Game {
             }
         }
 
+        // Player vs Boss collision
+        if (this.bossManager.activeBoss && this.bossManager.activeBoss.active) {
+            const b = this.bossManager.activeBoss;
+            const dx = b.x - this.player.x;
+            const dy = b.y - this.player.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (this.player.invulnTime <= 0 && dist < b.radius + this.player.radius) {
+                this.state = 'GAME_OVER';
+                this.saveManager.data.totalGamesPlayed++;
+                if (this.score > this.saveManager.data.highScore) {
+                    this.saveManager.data.highScore = this.score;
+                }
+                this.saveManager.save();
+                this.sound.playExplosion();
+            }
+        }
+
         // Cleanup
         this.orbs = this.orbs.filter(o => o.active);
         this.explosions = this.explosions.filter(e => e.active);
@@ -1250,6 +1295,7 @@ class Game {
         for (const exp of this.explosions) exp.draw(this.ctx);
         for (const orb of this.orbs) orb.draw(this.ctx);
         if (this.player) this.player.draw(this.ctx);
+        this.bossManager.draw(this.ctx, this.canvas);
 
         // HUD
         this.ctx.fillStyle = '#fff';
