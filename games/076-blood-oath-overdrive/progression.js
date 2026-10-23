@@ -106,7 +106,12 @@ class ProgressionManager {
         this.draftActive = false;
         this.wave++;
         this.killsInWave = 0;
-        this.targetKills = 10 + this.wave * 5;
+
+        // Balance Tuning: Upgrade scaling so late waves require more kills but not overwhelmingly so.
+        // Base is 10, then increases by a slightly exponential factor for late game.
+        const waveScaling = Math.floor(Math.pow(this.wave, 1.2) * 5);
+        this.targetKills = 10 + waveScaling;
+
         game.state = 'PLAYING';
     }
     applyPerk(id, player) {

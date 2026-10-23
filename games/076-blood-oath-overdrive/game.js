@@ -595,7 +595,11 @@ class Game {
                 this.saveManager.data.bossesDefeated = (this.saveManager.data.bossesDefeated || 0) + 1;
                 this.bossWave++;
                 this.score += 500;
-                this.nextBossScore = this.score + 500;
+
+                // Increase the gap between bosses for later waves to allow for more normal wave progression
+                const bossScoreGap = 500 + (this.bossWave * 200);
+                this.nextBossScore = this.score + bossScoreGap;
+
                 this.shake.trigger(30, 0.7, 0, 1);
                 this.sound.playDamage(); // use damage sound for explosion
             }
@@ -603,17 +607,30 @@ class Game {
             this.enemySpawnTimer += dt;
             if (this.enemySpawnTimer >= this.enemySpawnRate) {
                 this.enemySpawnTimer = 0;
-                this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.05); // gets faster
+
+                // Dynamic wave pacing: early waves spawn slower, late waves are thrilling
+                const wave = this.progression ? this.progression.wave : 1;
+                const minSpawnRate = Math.max(0.2, 1.0 - (wave * 0.1));
+                this.enemySpawnRate = Math.max(minSpawnRate, this.enemySpawnRate - 0.02);
+
                 this.spawnEnemy();
             }
 
             if (this.score >= this.nextBossScore) {
                 this.enemies = [];
                 this.projectiles = [];
+
+                const bossHpMult = 1 + ((this.bossWave - 1) * 0.6); // Boss HP scaling
+
                 if (this.bossWave % 2 !== 0) {
                     this.boss = new CyberSamuraiBoss(this.canvas.width / 2, -100);
                 } else {
                     this.boss = new OniTankBoss(this.canvas.width / 2, -100);
+                }
+
+                if (this.boss && this.boss.maxHp) {
+                    this.boss.maxHp = Math.floor(this.boss.maxHp * bossHpMult);
+                    this.boss.hp = this.boss.maxHp;
                 }
             }
         }
@@ -741,10 +758,35 @@ class Game {
             x = Math.random() * this.canvas.width;
             y = Math.random() < 0.5 ? -30 : this.canvas.height + 30;
         }
-        const speed = 100 + Math.random() * 50;
-        const types = [EnemySwarmer, EnemySniper, EnemyBruiser, EnemySplitter, EnemyHazard];
-        const EnemyClass = types[Math.floor(Math.random() * types.length)];
-        this.enemies.push(new EnemyClass(x, y, speed));
+
+        const wave = this.progression ? this.progression.wave : 1;
+        const speedMultiplier = 1 + ((wave - 1) * 0.05);
+        const hpMultiplier = 1 + ((wave - 1) * 0.2);
+
+        const speed = (100 + Math.random() * 50) * speedMultiplier;
+
+        let pool = [];
+        if (wave === 1) {
+            pool = [EnemySwarmer, EnemySwarmer, EnemySwarmer];
+        } else if (wave === 2) {
+            pool = [EnemySwarmer, EnemySwarmer, EnemySniper];
+        } else if (wave === 3) {
+            pool = [EnemySwarmer, EnemySniper, EnemyBruiser];
+        } else if (wave === 4) {
+            pool = [EnemySwarmer, EnemySniper, EnemyBruiser, EnemySplitter];
+        } else {
+            pool = [EnemySwarmer, EnemySniper, EnemyBruiser, EnemySplitter, EnemyHazard];
+        }
+
+        const EnemyClass = pool[Math.floor(Math.random() * pool.length)];
+        let enemy = new EnemyClass(x, y, speed);
+
+        // Apply HP scaling for late game balance
+        if (enemy.hp) {
+            enemy.hp = Math.floor(enemy.hp * hpMultiplier);
+        }
+
+        this.enemies.push(enemy);
     }
     draw() {
         if (this.state !== 'PLAYING') {
@@ -792,6 +834,38 @@ class Game {
             this.ctx.textAlign = 'left';
             this.ctx.fillText('Score: ' + this.score, 10, 30);
             this.ctx.fillText('High Score: ' + this.saveManager.data.highScore, 10, 60);
+
+            // Tutorial Overlay for Wave 1
+            if (this.progression && this.progression.wave === 1 && !this.boss) {
+                this.ctx.save();
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                this.ctx.textAlign = 'center';
+
+                if (this.score < 30) {
+                    this.ctx.font = '18px monospace';
+                    this.ctx.fillText("TUTORIAL: Enemies approach from all sides.", this.canvas.width/2, this.canvas.height - 120);
+                    this.ctx.font = '14px monospace';
+                    this.ctx.fillText("Press WASD or Swipe to attack in that direction.", this.canvas.width/2, this.canvas.height - 95);
+                    this.ctx.fillText("Use attacks to defeat enemies without taking damage.", this.canvas.width/2, this.canvas.height - 75);
+                } else if (this.score < 100) {
+                    this.ctx.font = '18px monospace';
+                    this.ctx.fillStyle = '#ff88ff';
+                    this.ctx.fillText("TUTORIAL: Overdrive Mode", this.canvas.width/2, this.canvas.height - 120);
+                    this.ctx.font = '14px monospace';
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    this.ctx.fillText("Press SPACE or Tap Center to sacrifice HP for OVERDRIVE.", this.canvas.width/2, this.canvas.height - 95);
+                    this.ctx.fillText("Overdrive increases attack range and damage!", this.canvas.width/2, this.canvas.height - 75);
+                } else if (this.score < 150) {
+                    this.ctx.font = '18px monospace';
+                    this.ctx.fillStyle = '#88ffff';
+                    this.ctx.fillText("TUTORIAL: Dash & Dodge", this.canvas.width/2, this.canvas.height - 120);
+                    this.ctx.font = '14px monospace';
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    this.ctx.fillText("Swipe far or use movement keys to Dash (i-frames).", this.canvas.width/2, this.canvas.height - 95);
+                    this.ctx.fillText("Prepare yourself... a Boss is approaching!", this.canvas.width/2, this.canvas.height - 75);
+                }
+                this.ctx.restore();
+            }
 
             // Dash Cooldown HUD
             this.ctx.fillText('Dash:', 10, 90);
@@ -983,6 +1057,10 @@ class ParticleSystem {
             this.particles[i].update(dt);
             if (this.particles[i].life <= 0) this.particles.splice(i, 1);
         }
+        // QA Audit: Prevent memory leak from too many particles
+        if (this.particles.length > 300) {
+            this.particles.splice(0, this.particles.length - 300);
+        }
     }
     draw(ctx) { for (let p of this.particles) p.draw(ctx); }
 }
@@ -1060,6 +1138,10 @@ class TrailSystem {
         for (let i = this.trails.length - 1; i >= 0; i--) {
             this.trails[i].update(dt);
             if (this.trails[i].life <= 0) this.trails.splice(i, 1);
+        }
+        // QA Audit: Prevent memory leak from too many trails
+        if (this.trails.length > 100) {
+            this.trails.splice(0, this.trails.length - 100);
         }
     }
     draw(ctx) {
