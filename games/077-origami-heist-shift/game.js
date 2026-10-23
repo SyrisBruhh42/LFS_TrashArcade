@@ -412,10 +412,26 @@ class Game {
         this.score = 0;
         this.arenaRadius = 380;
         this.arenaShrinkRate = 5;
+        this.bossMode = false;
+        this.currentBoss = null;
+        this.bossMilestone = 50;
+        this.bossCount = 0;
         this.world.reset();
         this.spawnTreasure();
         this.spawnTreasure();
         this.spawnTreasure();
+    }
+
+    spawnBoss() {
+        this.bossMode = true;
+        this.sound.playAlert();
+        this.guards = [];
+        if (this.bossCount % 2 === 0) {
+            this.currentBoss = new OrigamiDragon(this.baseWidth/2, 100);
+        } else {
+            this.currentBoss = new ShiftingShogun(this.baseWidth/2, 100);
+        }
+        this.bossCount++;
     }
 
     spawnTreasure() {
@@ -474,20 +490,40 @@ class Game {
                 }
             }
 
+            if (!this.bossMode && this.score >= this.bossMilestone) {
+                this.bossMilestone += 50;
+                this.spawnBoss();
+            }
+
             // Shrink arena
             this.arenaRadius -= this.arenaShrinkRate * dt;
             if (this.arenaRadius < 50) this.arenaRadius = 50;
 
-            this.guards.forEach(g => {
-                g.update(dt, this.player, this);
-                if ((g.canSee(this.player) || (g instanceof Sniper && g.alerted)) && this.player.invulnerableTimer <= 0) {
-                    g.alerted = true;
-                    this.sound.playAlert();
-                    this.gameOver();
-                } else if (!(g instanceof Sniper)) {
-                    g.alerted = false;
+            if (this.bossMode && this.currentBoss) {
+                this.currentBoss.update(dt, this.player, this);
+                if (this.currentBoss.hp <= 0) {
+                    this.bossMode = false;
+                    this.currentBoss = null;
+                    this.score += 20;
+                    this.arenaRadius = 380;
+                    this.sound.playPickup();
+                    this.guards = [
+                        new StandardGuard(200, 200, [{x: 200, y: 200}, {x: 600, y: 200}, {x: 600, y: 400}, {x: 200, y: 400}]),
+                        new Spawner(400, 400)
+                    ];
                 }
-            });
+            } else {
+                this.guards.forEach(g => {
+                    g.update(dt, this.player, this);
+                    if ((g.canSee(this.player) || (g instanceof Sniper && g.alerted)) && this.player.invulnerableTimer <= 0) {
+                        g.alerted = true;
+                        this.sound.playAlert();
+                        this.gameOver();
+                    } else if (!(g instanceof Sniper)) {
+                        g.alerted = false;
+                    }
+                });
+            }
 
             this.treasures.forEach(t => {
                 if (!t.active) return;
@@ -496,9 +532,13 @@ class Game {
                 const tdy = this.player.y - t.y;
                 if (Math.hypot(tdx, tdy) < this.player.radius + t.radius) {
                     t.active = false;
-                    this.score += 10;
                     this.sound.playPickup();
-                    this.arenaRadius = Math.min(380, this.arenaRadius + 20); // Reward: expand arena
+                    if (this.bossMode && this.currentBoss) {
+                        if (this.currentBoss.active) this.currentBoss.takeDamage(1);
+                    } else {
+                        this.score += 10;
+                        this.arenaRadius = Math.min(380, this.arenaRadius + 20); // Reward: expand arena
+                    }
                     this.spawnTreasure();
                 }
             });
@@ -564,7 +604,11 @@ class Game {
             this.world.drawHazards(this.ctx);
 
             this.treasures.forEach(t => t.draw(this.ctx));
-            this.guards.forEach(g => g.draw(this.ctx));
+            if (this.bossMode && this.currentBoss) {
+                this.currentBoss.draw(this.ctx);
+            } else {
+                this.guards.forEach(g => g.draw(this.ctx));
+            }
             this.player.draw(this.ctx);
 
             this.ctx.restore();
@@ -574,6 +618,28 @@ class Game {
             this.ctx.font = '24px sans-serif';
             this.ctx.textAlign = 'left';
             this.ctx.fillText('Score: ' + this.score, 20, 40);
+
+            if (this.bossMode && this.currentBoss) {
+                if (this.currentBoss.warningTimer > 0) {
+                    this.ctx.fillStyle = 'rgba(255, 0, 0, ' + (Math.sin(Date.now()/100)*0.5+0.5) + ')';
+                    this.ctx.fillRect(0, this.baseHeight/2 - 40, this.baseWidth, 80);
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.font = '36px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText(`WARNING: ${this.currentBoss.name} APPROACHING!`, this.baseWidth/2, this.baseHeight/2 + 10);
+                } else {
+                    this.ctx.fillStyle = '#333';
+                    this.ctx.fillRect(this.baseWidth/2 - 200, 20, 400, 20);
+                    this.ctx.fillStyle = '#f00';
+                    this.ctx.fillRect(this.baseWidth/2 - 200, 20, 400 * (this.currentBoss.displayHp / this.currentBoss.maxHp), 20);
+                    this.ctx.strokeStyle = '#fff';
+                    this.ctx.strokeRect(this.baseWidth/2 - 200, 20, 400, 20);
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.font = '16px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText(`${this.currentBoss.name} - Phase ${this.currentBoss.phase}`, this.baseWidth/2, 35);
+                }
+            }
 
             // Dash Cooldown UI
             const cdRatio = Math.max(0, this.player.dashCooldown / this.player.dashCooldownMax);
