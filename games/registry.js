@@ -969,5 +969,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#b67083",
     "phase": "3",
     "path": "./games/073-trench-shift-blitz/index.html"
+  },
+  {
+    "id": "074",
+    "slug": "074-magnetic-sky-duel",
+    "title": "Magnetic Sky Duel",
+    "genre": "Bullet-Hell Boss Rush",
+    "coreMechanic": "Polarity/Magnetism Switching",
+    "setting": "Floating Sky Islands",
+    "description": "Switch your polarity to absorb enemy fire, attract power, and unleash hell on the sky bosses.",
+    "controls": "WASD/Arrows/Drag to move. Space/Tap to shoot. Shift/E to switch polarity.",
+    "createdAt": "2024-05-18",
+    "accentColor": "#7751ef",
+    "phase": "1",
+    "path": "./games/074-magnetic-sky-duel/index.html"
   }
 ];
