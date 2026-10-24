@@ -476,6 +476,158 @@ class Particle {
     }
 }
 
+
+class ParallaxLayer {
+    constructor(speedX, speedY, density, radiusMin, radiusMax, color) {
+        this.speedX = speedX;
+        this.speedY = speedY;
+        this.density = density;
+        this.radiusMin = radiusMin;
+        this.radiusMax = radiusMax;
+        this.color = color;
+        this.elements = [];
+    }
+
+    init(width, height) {
+        this.elements = [];
+        for (let i = 0; i < this.density; i++) {
+            this.elements.push({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                r: MathUtils.randomRange(this.radiusMin, this.radiusMax)
+            });
+        }
+    }
+
+    update(dt, playerMoveVector, width, height) {
+        for (let el of this.elements) {
+            el.x -= playerMoveVector.x * this.speedX * dt;
+            el.y -= playerMoveVector.y * this.speedY * dt;
+
+            if (el.x < -el.r) el.x = width + el.r;
+            if (el.x > width + el.r) el.x = -el.r;
+            if (el.y < -el.r) el.y = height + el.r;
+            if (el.y > height + el.r) el.y = -el.r;
+        }
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        for (let el of this.elements) {
+            ctx.beginPath();
+            ctx.arc(el.x, el.y, el.r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+}
+
+class CytoskeletonConveyor {
+    constructor(x, y, width, height, dirX, dirY, strength) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.dir = new Vector(dirX, dirY).normalize();
+        this.strength = strength;
+        this.time = 0;
+    }
+
+    update(dt) {
+        this.time += dt;
+    }
+
+    applyForce(entity, dt) {
+        if (entity.pos.x > this.x && entity.pos.x < this.x + this.width &&
+            entity.pos.y > this.y && entity.pos.y < this.y + this.height) {
+            let force = this.dir.copy().mult(this.strength * dt);
+            if (entity.vel) entity.vel.add(force);
+            else entity.pos.add(force);
+        }
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = 'rgba(0, 150, 150, 0.15)';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        ctx.strokeStyle = 'rgba(0, 200, 200, 0.4)';
+        ctx.lineWidth = 1;
+
+        let step = 30;
+        let offset = (this.time * this.strength * 0.5) % step;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(this.x, this.y, this.width, this.height);
+        ctx.clip();
+
+        let startX = this.dir.x > 0 ? this.x - step : this.x;
+        let startY = this.dir.y > 0 ? this.y - step : this.y;
+
+        for (let ix = startX; ix <= this.x + this.width + step; ix += step) {
+            for (let iy = startY; iy <= this.y + this.height + step; iy += step) {
+                let px = ix + this.dir.x * offset;
+                let py = iy + this.dir.y * offset;
+
+                ctx.beginPath();
+                ctx.moveTo(px, py);
+                ctx.lineTo(px + this.dir.x * 10 - this.dir.y * 5, py + this.dir.y * 10 + this.dir.x * 5);
+                ctx.lineTo(px + this.dir.x * 10 + this.dir.y * 5, py + this.dir.y * 10 - this.dir.x * 5);
+                ctx.closePath();
+                ctx.stroke();
+            }
+        }
+
+        ctx.restore();
+    }
+}
+
+class DestructibleCover {
+    constructor(x, y, radius) {
+        this.pos = new Vector(x, y);
+        this.radius = radius;
+        this.hp = 3;
+        this.markedForDeletion = false;
+        this.wobble = 0;
+    }
+
+    hit() {
+        this.hp--;
+        this.wobble = 1.0;
+        if (this.hp <= 0) {
+            this.markedForDeletion = true;
+        }
+    }
+
+    update(dt) {
+        if (this.wobble > 0) {
+            this.wobble -= dt * 5;
+            if (this.wobble < 0) this.wobble = 0;
+        }
+    }
+
+    draw(ctx) {
+        let r = this.radius + Math.sin(this.wobble * Math.PI * 4) * 3;
+        ctx.fillStyle = '#8b4513';
+        if (this.hp === 2) ctx.fillStyle = '#a0522d';
+        if (this.hp === 1) ctx.fillStyle = '#cd853f';
+
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+            let angle = (i * Math.PI * 2) / 8;
+            let offsetR = r * (0.9 + 0.1 * Math.sin(angle * 3 + this.hp));
+            let x = this.pos.x + Math.cos(angle) * offsetR;
+            let y = this.pos.y + Math.sin(angle) * offsetR;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#5c4033';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -497,6 +649,9 @@ class Game {
         this.particles = [];
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
+        this.bgLayers = [];
+        this.streams = [];
+        this.hazards = [];
         this.resizeObserver = new ResizeObserver(() => this.resize());
         this.resizeObserver.observe(this.canvas);
         this.resize();
@@ -530,6 +685,28 @@ class Game {
                 MathUtils.randomRange(20, 40)
             ));
         }
+
+        this.bgLayers = [
+            new ParallaxLayer(0.2, 0.2, 40, 2, 4, 'rgba(46, 74, 59, 0.4)'),
+            new ParallaxLayer(0.5, 0.5, 20, 4, 8, 'rgba(68, 139, 111, 0.3)'),
+            new ParallaxLayer(0.8, 0.8, 10, 8, 15, 'rgba(100, 180, 140, 0.2)')
+        ];
+        for (let layer of this.bgLayers) layer.init(this.width, this.height);
+
+        this.streams = [
+            new CytoskeletonConveyor(this.width * 0.2, 0, 100, this.height, 0, 1, 80),
+            new CytoskeletonConveyor(0, this.height * 0.7, this.width, 100, 1, 0, 80)
+        ];
+
+        this.hazards = [];
+        for (let i = 0; i < 4; i++) {
+            this.hazards.push(new DestructibleCover(
+                MathUtils.randomRange(100, this.width - 100),
+                MathUtils.randomRange(100, this.height - 100),
+                30
+            ));
+        }
+
         this.sound.init();
         this.sound.start();
         this.state = STATES.PLAYING;
@@ -556,6 +733,19 @@ class Game {
             return;
         }
         this.player.update(dt, this.input, this.width, this.height);
+
+        let pMove = new Vector(0, 0);
+        if (this.player.vel) {
+            pMove = this.player.vel.copy().mult(dt);
+        }
+        for (let layer of this.bgLayers) layer.update(dt, pMove, this.width, this.height);
+
+        for (let stream of this.streams) {
+            stream.update(dt);
+            stream.applyForce(this.player, dt);
+            if (this.ammo) stream.applyForce(this.ammo, dt);
+            for (let e of this.enemies) stream.applyForce(e, dt);
+        }
 
         for (let b of this.bumpers) {
             let dist = MathUtils.distance(this.player.pos.x, this.player.pos.y, b.pos.x, b.pos.y);
@@ -648,6 +838,47 @@ class Game {
         }
         this.enemies = this.enemies.filter(e => !e.markedForDeletion);
 
+        for (let h of this.hazards) {
+            h.update(dt);
+
+            let distP = MathUtils.distance(this.player.pos.x, this.player.pos.y, h.pos.x, h.pos.y);
+            if (distP < this.player.radius + h.radius) {
+                let dx = this.player.pos.x - h.pos.x;
+                let dy = this.player.pos.y - h.pos.y;
+                let n = new Vector(dx, dy).normalize();
+                let overlap = (this.player.radius + h.radius) - distP;
+                this.player.pos.add(n.copy().mult(overlap));
+
+                if (this.player.isDashing) {
+                    h.hit();
+                    this.sound.hit();
+                    this.spawnParticles(h.pos.x, h.pos.y, '#8b4513', 5);
+                } else {
+                    let dot = this.player.vel.dot(n);
+                    if (dot < 0) {
+                        this.player.vel.sub(n.copy().mult(2 * dot));
+                        this.player.vel.mult(0.8);
+                    }
+                }
+            }
+
+            if (this.ammo && this.ammo.active) {
+                let distA = MathUtils.distance(this.ammo.pos.x, this.ammo.pos.y, h.pos.x, h.pos.y);
+                if (distA < this.ammo.radius + h.radius) {
+                    h.hit();
+                    this.sound.hit();
+                    this.spawnParticles(h.pos.x, h.pos.y, '#8b4513', 5);
+
+                    let dx = this.ammo.pos.x - h.pos.x;
+                    let dy = this.ammo.pos.y - h.pos.y;
+                    let n = new Vector(dx, dy).normalize();
+                    let dot = this.ammo.vel.dot(n);
+                    if (dot < 0) this.ammo.vel.sub(n.copy().mult(2 * dot));
+                }
+            }
+        }
+        this.hazards = this.hazards.filter(h => !h.markedForDeletion);
+
         for (let p of this.particles) p.update(dt);
         this.particles = this.particles.filter(p => p.life > 0);
 
@@ -656,14 +887,9 @@ class Game {
     draw() {
         this.ctx.fillStyle = '#1a2a22';
         this.ctx.fillRect(0, 0, this.width, this.height);
-        this.ctx.strokeStyle = '#2e4a3b';
-        this.ctx.lineWidth = 1;
-        for(let x=0; x<this.width; x+=50) {
-            this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.height); this.ctx.stroke();
-        }
-        for(let y=0; y<this.height; y+=50) {
-            this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.width, y); this.ctx.stroke();
-        }
+
+        for (let layer of this.bgLayers) layer.draw(this.ctx);
+        for (let stream of this.streams) stream.draw(this.ctx);
 
         if (this.state === STATES.TITLE) {
             this.drawText("CYTOPLASM RECOIL", this.width/2, this.height/3, 50, '#448b6f');
@@ -677,6 +903,7 @@ class Game {
         }
 
         for (let b of this.bumpers) b.draw(this.ctx);
+        for (let h of this.hazards) h.draw(this.ctx);
         if (this.ammo) this.ammo.draw(this.ctx);
         for (let e of this.enemies) e.draw(this.ctx);
         for (let p of this.particles) p.draw(this.ctx);
