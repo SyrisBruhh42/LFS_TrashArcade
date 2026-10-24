@@ -177,7 +177,8 @@ class RealBrowserFaultTests(unittest.TestCase):
     def test_cdp_catches_exception_before_html_head_observer(self):
         result=self.exercise("window.game={state:'TITLE'}; document.querySelector('#start').onclick=()=>game.state='PLAYING';", early="<script>throw new Error('before head')</script>")
         self.assertEqual("FAIL",result["status"],result)
-        self.assertTrue(any("before head" in e for e in result["evidence"]["errors"]))
+        self.assertIn("evidence",result,result)
+        self.assertTrue(any("before head" in e for e in result["evidence"]["errors"]),result)
 
     def test_console_error_is_not_silently_ignored(self):
         result=self.exercise("window.game={state:'TITLE'}; document.querySelector('#start').onclick=()=>game.state='PLAYING'; console.error('fixture browser error');")

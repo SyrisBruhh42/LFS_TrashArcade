@@ -25,9 +25,12 @@ async function main() {
   child.on('error',error=>{launchError=error;});
   child.on('exit',()=>{browserExited=true;});
   child.stderr.on('data',chunk=>{stderr=(stderr+chunk).slice(-8000);});
-  const deadline=performance.now()+(contract.behavior_profile?80000:20000);
+  // Browser startup must not consume the game's observation window. Both stages
+  // remain inside the original 80s driver ceiling and Python's 90s process cap.
+  const startedAt=performance.now(),deadline=startedAt+80000;
+  let stage='startup',stageDeadline=startedAt+30000;
   const bounded=()=>{
-    if(performance.now()>deadline)throw new Error('CDP real-time deadline exceeded');
+    if(performance.now()>deadline||performance.now()>stageDeadline)throw new Error('CDP '+stage+' real-time deadline exceeded');
     if(launchError)throw launchError;
     if(browserExited)throw new Error('Chrome exited before positive completion: '+stderr.slice(-1000));
   };
@@ -103,6 +106,9 @@ async function main() {
       }
       Object.defineProperty(globalThis,'__arcadePoint',{value:point});
     })();`},sessionId);
+    bounded(); // A late startup cannot reset an already expired stage deadline.
+    stage='observation';
+    stageDeadline=Math.min(deadline,performance.now()+(contract.behavior_profile?80000:20000));
     const navigation=await send('Page.navigate',{url},sessionId);
     if(navigation.errorText)throw new Error('Navigation failed: '+navigation.errorText);
     mainFrame=navigation.frameId;

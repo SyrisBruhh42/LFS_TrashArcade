@@ -47,7 +47,8 @@ function harness() {
         requestAnimationFrame() {}, setTimeout() {}, console: { warn() {} },
         ResizeObserver: class { observe() {} }
     });
-    for (const file of ['world.js', 'game.js']) {
+    const optionalVfx = fs.existsSync(path.join(__dirname, '..', 'games', '084-echo-forge-fusion', 'vfx.js')) ? ['vfx.js'] : [];
+    for (const file of ['world.js', ...optionalVfx, 'game.js']) {
         const filename = path.join(__dirname, '..', 'games', '084-echo-forge-fusion', file);
         vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
     }

@@ -15,9 +15,21 @@ function eventTarget(extra = {}) {
             if (!listeners.has(name)) listeners.set(name, []);
             listeners.get(name).push(callback);
         },
+        dispatchEvent(event) {
+            event.currentTarget = this;
+            for (const callback of listeners.get(event.type) || []) callback(event);
+            if (event.bubbles && !event.cancelBubble) {
+                const parent = this.parentElement?.dispatchEvent ? this.parentElement : this.eventParent;
+                parent?.dispatchEvent(event);
+            }
+            return !event.defaultPrevented;
+        },
         emit(name, values = {}) {
-            const event = { type: name, preventDefault() {}, ...values };
-            for (const callback of listeners.get(name) || []) callback(event);
+            const event = { type: name, target: this, bubbles: true, defaultPrevented: false,
+                preventDefault() { this.defaultPrevented = true; },
+                stopPropagation() { this.cancelBubble = true; }, ...values };
+            this.dispatchEvent(event);
+            return event;
         }
     };
 }
@@ -61,22 +73,39 @@ function harness(slug, files = ['game.js'], initialStorage = {}) {
     }
     const drawing = new Proxy({}, { get: (target, key) => target[key] || (() => {}), set: (target, key, value) => { target[key] = value; return true; } });
     const elements = new Map();
-    function element(id) {
-        if (!elements.has(id)) elements.set(id, eventTarget({
+    let document;
+    function createElement(tag = 'div') {
+        return eventTarget({
+            tagName: tag.toUpperCase(), children: [], open: false, hidden: false,
             width: 800, height: 600, clientWidth: 800, clientHeight: 600,
             parentElement: { clientWidth: 800, clientHeight: 600 },
+            eventParent: window,
             style: {}, classList: { add() {}, remove() {} }, value: '', checked: false,
+            append(...children) {
+                for (const child of children) { this.children.push(child); child.parentElement = this; }
+            },
+            showModal() { this.open = true; },
+            close() { this.open = false; },
+            focus() { document.activeElement = this; },
+            closest(selectors) {
+                return selectors.split(',').some(selector => selector.trim().toUpperCase() === this.tagName)
+                    ? this : this.parentElement?.closest?.(selectors) || null;
+            },
             getContext: () => drawing,
             getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 })
-        }));
+        });
+    }
+    function element(id) {
+        if (!elements.has(id)) elements.set(id, createElement());
         return elements.get(id);
     }
     let reloads = 0;
     const window = eventTarget({ innerWidth: 800, innerHeight: 600, AudioContext, location: { reload: () => reloads++ } });
     const storage = { getItem: key => stored.get(key) || null, setItem: (key, value) => stored.set(key, value) };
+    document = eventTarget({ getElementById: element, createElement, querySelectorAll: () => [], body: element('body') });
     const context = vm.createContext({
         window, localStorage: storage, navigator: { maxTouchPoints: 1 },
-        document: eventTarget({ getElementById: element, querySelectorAll: () => [], body: element('body') }),
+        document,
         performance: { now: () => 0 }, requestAnimationFrame() {},
         ResizeObserver: class { observe() {} },
         setTimeout(callback) { const id = nextTimer++; timers.set(id, callback); return id; },
