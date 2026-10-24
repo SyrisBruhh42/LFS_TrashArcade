@@ -116,6 +116,37 @@ class InputManager {
         this.joystick = { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 };
         this.pointers = {};
         this.tapQueued = false;
+        this.dashButtonDown = false;
+
+        const dashBtn = document.getElementById('dash-button');
+        if (dashBtn) {
+            const pressDash = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.dashButtonDown = true;
+            };
+            const releaseDash = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.dashButtonDown = false;
+            };
+            dashBtn.addEventListener('touchstart', pressDash, { passive: false });
+            dashBtn.addEventListener('touchend', releaseDash, { passive: false });
+            dashBtn.addEventListener('touchcancel', releaseDash, { passive: false });
+            dashBtn.addEventListener('mousedown', pressDash);
+            dashBtn.addEventListener('mouseup', releaseDash);
+            dashBtn.addEventListener('mouseleave', releaseDash);
+            dashBtn.addEventListener('keydown', (e) => {
+                if (e.code === 'Enter' || e.code === 'Space') {
+                    pressDash(e);
+                }
+            });
+            dashBtn.addEventListener('keyup', (e) => {
+                if (e.code === 'Enter' || e.code === 'Space') {
+                    releaseDash(e);
+                }
+            });
+        }
 
         window.addEventListener('keydown', e => {
             if (e.repeat) return;
@@ -265,6 +296,7 @@ class InputManager {
         this.pointers = {};
         this.tapQueued = false;
         this.joystick.active = false;
+        this.dashButtonDown = false;
     }
 
     isActionPressed() {
@@ -275,7 +307,7 @@ class InputManager {
     }
 
     isSecondaryPressed() {
-        return this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.mouse.rightDown;
+        return this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.mouse.rightDown || this.dashButtonDown;
     }
 }
 
@@ -976,7 +1008,8 @@ class Game {
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
 
-        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+        this.state = 'TITLE';
+        const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none';
         this.lastTime = performance.now();
         this.score = 0;
 
@@ -1027,7 +1060,7 @@ class Game {
             }
             if (!e.repeat && (e.code === 'Space' || e.code === 'Enter')) {
                 if (this.state === 'TITLE') this.startGame();
-                else if (this.state === 'GAME_OVER') this.state = 'TITLE';
+                else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none'; }
             }
         });
 
@@ -1037,7 +1070,7 @@ class Game {
             this.sound.resume();
             if (this.state === 'TITLE') this.startGame();
             else if (this.state === 'PAUSED') this.resumeGame();
-            else if (this.state === 'GAME_OVER') this.state = 'TITLE';
+            else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none'; }
         });
 
         window.addEventListener('touchstart', e => {
@@ -1046,7 +1079,7 @@ class Game {
             this.sound.resume();
             if (this.state === 'TITLE') this.startGame();
             else if (this.state === 'PAUSED') this.resumeGame();
-            else if (this.state === 'GAME_OVER') this.state = 'TITLE';
+            else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none'; }
         });
 
         document.addEventListener('visibilitychange', () => {
@@ -1058,13 +1091,13 @@ class Game {
 
     pauseGame() {
         this.input.clear();
-        if (this.state === 'PLAYING') this.state = 'PAUSED';
+        if (this.state === 'PLAYING') { this.state = 'PAUSED'; const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none'; }
     }
 
     resumeGame() {
         // The resume gesture must never become a shot or a held movement.
         this.input.clear();
-        if (this.state === 'PAUSED') this.state = 'PLAYING';
+        if (this.state === 'PAUSED') { this.state = 'PLAYING'; const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'block'; }
     }
 
     startGame() {
@@ -1072,6 +1105,7 @@ class Game {
         // gameplay action must be a fresh gesture, not the held title control.
         this.input.clear();
         this.state = 'PLAYING';
+        const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'block';
         this.score = 0;
         this.wave = 1;
         this.saveManager.data.totalGamesPlayed++;
@@ -1127,6 +1161,7 @@ class Game {
 
     gameOver() {
         this.state = 'GAME_OVER';
+        const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none';
         if (this.score > this.saveManager.data.highScore) {
             this.saveManager.data.highScore = this.score;
         }
