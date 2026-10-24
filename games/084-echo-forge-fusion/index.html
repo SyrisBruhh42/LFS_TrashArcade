@@ -2,17 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Echo Forge Fusion</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #111; overflow: hidden; touch-action: none; font-family: monospace; }
         #gameCanvas { display: block; width: 100%; height: 100%; }
+        button { position: fixed; z-index: 1; right: max(12px, env(safe-area-inset-right)); min-height: 48px; min-width: 96px; padding: 10px 16px; border: 2px solid #e857ce; border-radius: 12px; background: #21101f; color: #fff; font: bold 16px monospace; touch-action: manipulation; cursor: pointer; }
+        #pause-button { bottom: max(88px, calc(env(safe-area-inset-bottom) + 88px)); }
+        #dash-button { bottom: max(16px, calc(env(safe-area-inset-bottom) + 16px)); min-height: 60px; }
+        button:disabled { color: #c6bac4; border-color: #756471; cursor: default; }
+        button:focus-visible, #gameCanvas:focus-visible { outline: 3px solid #00ffff; outline-offset: -4px; }
+        [hidden] { display: none !important; }
     </style>
     <script defer src="world.js"></script>
     <script defer src="vfx.js"></script>
     <script defer src="game.js"></script>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
+    <canvas id="gameCanvas" tabindex="0" aria-label="Echo Forge Fusion. Press Space to start. Move with WASD or arrows, or hold and drag on the arena. Blasts fire on the beat. Shift to dash. Escape to pause or resume."></canvas>
+    <button id="pause-button" type="button" hidden>Pause</button>
+    <button id="dash-button" type="button" hidden>Dash</button>
 </body>
 </html>

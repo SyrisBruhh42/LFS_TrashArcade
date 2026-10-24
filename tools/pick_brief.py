@@ -5,8 +5,8 @@ Priority order on each 15-minute tick:
   1. If any existing v2 game on `main` (id >= 052) has `1 <= int(phase) < 10` AND is not in `exclude_ids`
      (not currently in-flight or quarantined), pick the lowest-id ready game and generate its next sequential
      Phase (phase + 1) brief.
-  2. Otherwise (no unfinished v2 game is idle, or all unfinished v2 games already have a session in flight),
-     assign a brand-new game id and generate a Phase 1/10 brief using a curated compatible Genre x Twist x Setting.
+  2. Otherwise create only below the configured unfinished-game WIP limit; if
+     existing work fills the limit, return a hold instead of expanding the backlog.
 
 Usage:
   python3 tools/pick_brief.py [--id NNN] [--advance-slug SLUG] [--exclude-json '[[g,t,s],...]']
@@ -26,37 +26,17 @@ ROOT = Path(__file__).resolve().parent.parent
 AXES = json.loads((ROOT / "factory" / "axes.json").read_text(encoding="utf-8"))
 V1_MAX_ID = 51
 TOTAL_PHASES = 10
-SCRIPT_RE = re.compile(r"<script\b([^>]*)>([\s\S]*?)</script\s*>", re.I)
 
 
-def existing_games() -> list[tuple[Path, dict]]:
+def existing_games(source_root: Path | None = None) -> list[tuple[Path, dict]]:
+    """Malformed manifests cannot silently disappear from uniqueness or WIP counts."""
     out = []
-    for manifest in sorted((ROOT / "games").glob("*/game.json")):
-        try:
-            out.append((manifest.parent, json.loads(manifest.read_text(encoding="utf-8"))))
-        except ValueError:
-            pass
+    for manifest in sorted(((source_root or ROOT) / "games").glob("*/game.json")):
+        meta = json.loads(manifest.read_text(encoding="utf-8"))
+        if not isinstance(meta, dict) or not str(meta.get("id", "")).isdigit():
+            raise ValueError(f"Invalid game manifest: {manifest.parent.name}")
+        out.append((manifest.parent, meta))
     return out
-
-
-def count_js_lines(folder: Path) -> int:
-    js_blobs: list[str] = []
-    index = folder / "index.html"
-    if index.is_file():
-        html = index.read_text(encoding="utf-8", errors="replace")
-        for m in SCRIPT_RE.finditer(html):
-            attrs, body = m.group(1) or "", m.group(2) or ""
-            if not re.search(r"""\bsrc\s*=""", attrs, re.I) and body.strip():
-                js_blobs.append(body)
-    for jsf in sorted(folder.glob("*.js")):
-        js_blobs.append(jsf.read_text(encoding="utf-8", errors="replace"))
-    total = 0
-    for blob in js_blobs:
-        for line in blob.splitlines():
-            s = line.strip()
-            if s and not s.startswith("//"):
-                total += 1
-    return total
 
 
 def next_id(games: list[tuple[Path, dict]], extra_ids: list[str]) -> str:
@@ -65,15 +45,14 @@ def next_id(games: list[tuple[Path, dict]], extra_ids: list[str]) -> str:
     return f"{(max(ids) if ids else 0) + 1:03d}"
 
 
-def build_advance_brief(folder: Path, meta: dict) -> dict:
+def build_advance_brief(folder: Path, meta: dict, baseline_sha: str = "") -> dict:
     gid = str(meta["id"])
     slug = folder.name
     cur_phase = int(meta.get("phase", "1"))
     target_phase = cur_phase + 1
+    if not 1 <= cur_phase < TOTAL_PHASES:
+        raise ValueError("Only unfinished phased games can advance")
     p_spec = AXES["phases"][str(target_phase)]
-    cur_js = count_js_lines(folder)
-    min_delta = 60 if target_phase == TOTAL_PHASES else 120
-    req_js = max(int(p_spec["min_js_lines"]), cur_js + min_delta)
     files_summary = ", ".join(f"`{p.name}` ({p.stat().st_size} B)" for p in sorted(folder.iterdir()) if p.is_file())
 
     genre = meta["genre"]
@@ -84,15 +63,18 @@ def build_advance_brief(folder: Path, meta: dict) -> dict:
     md = "\n".join([
         f"## SESSION DESIGN BRIEF — PHASE {target_phase} OF {TOTAL_PHASES} UPGRADE (assigned by the factory; do not re-roll)",
         f"- **Mode:** IN-PLACE MULTI-SESSION GAME EXPANSION (`Phase {cur_phase}` -> `Phase {target_phase}` of `{TOTAL_PHASES}`).",
-        f"- **Existing game folder:** `games/{slug}/` (DO NOT create a new folder; edit/add files ONLY inside `games/{slug}/`).",
+        f"- **Existing game folder:** `games/{slug}/` (DO NOT create a new folder; edit/add game files ONLY inside `games/{slug}/`; include only the exact output of `python3 tools/build_registry.py` as the registry exception).",
         f"- **Game id:** `{gid}` | **Slug:** `{slug}` | **Title:** `{meta.get('title')}`",
         f"- **Axis A sub-genre** (`genre`): {genre}",
         f"- **Axis B mechanical twist** (`coreMechanic`): {twist}",
         f"- **Axis C setting / visual theme** (`setting`): {setting}",
         f"- **Save key:** `arcade_game_{gid}_{slug}_v1` (preserve existing save compatibility).",
         f"- **Current files in `games/{slug}/`:** {files_summary}",
-        f"- **Current non-empty JS lines:** `{cur_js}` lines -> **Required after Phase {target_phase}:** at least `{req_js}` non-empty JS lines (must add at least `+{req_js - cur_js}` net lines of real, working JavaScript).",
         f"- **Phase {target_phase} Deliverable ({p_spec['title']}):** {p_spec['focus']}",
+        f"- **Observed baseline commit:** `{baseline_sha or 'not supplied; local preview only'}`. The provider checks out a branch, not a pinned commit. Verify the assigned folder against this baseline; if the folder or phase changed, stop and report.",
+        "- **Generated registry:** Run `python3 tools/build_registry.py`; include only its exact `games/registry.js` output, then run `python3 tools/preflight.py`. Never hand-edit registry content.",
+        "- **Acceptance:** Demonstrate the assigned behavior, keyboard and touch start/restart, one complete core action loop, save/load/reset compatibility, and audio controls where present. Report exact checks and unverified behavior.",
+        "- **Efficiency:** Make the smallest coherent change. Reuse existing systems; remove redundant code where safe. Code length and number of new features are not acceptance criteria.",
         f"- **Manifest update required:** Update `\"phase\": \"{target_phase}\"` inside `games/{slug}/game.json` while keeping `id`, `slug`, `genre`, `coreMechanic`, and `setting` unchanged.",
         "- **Modular code guidance:** You may either add a dedicated module script (e.g. `<script defer src=\"./module.js\"></script>` in `index.html`) or cleanly expand the existing script(s) in `games/" + slug + "/`. Never leave `TODO` or `To be implemented` stubs, and ensure the game boots and plays in Chrome with zero runtime errors.",
     ])
@@ -109,7 +91,7 @@ def build_advance_brief(folder: Path, meta: dict) -> dict:
     }
 
 
-def pick_new_game(gid: str, games: list[tuple[Path, dict]], exclude_triples: list[list[str]], rng: random.Random) -> dict:
+def pick_new_game(gid: str, games: list[tuple[Path, dict]], exclude_triples: list[list[str]], rng: random.Random, baseline_sha: str = "") -> dict:
     used = [(g.get("genre"), g.get("coreMechanic"), g.get("setting")) for _, g in games] + [tuple(t) for t in exclude_triples]
     used_triples = set(used)
     pair_n = Counter((g, t) for g, t, _ in used)
@@ -140,29 +122,37 @@ def pick_new_game(gid: str, games: list[tuple[Path, dict]], exclude_triples: lis
     candidates.sort(key=lambda c: (pair_n[(c[0], c[1])], genre_n[c[0]] + twist_n[c[1]], setting_n[c[2]]))
     genre, twist, setting = candidates[0]
 
-    titles = sorted({str(g.get("title", "")) for _, g in games if g.get("title")})
+    # The assigned numeric suffix guarantees deterministic title uniqueness without
+    # repeating the entire catalog in each paid session prompt.
+    title = f"{setting} {genre}"[:55 - len(gid)].rstrip() + f" {gid}"
+    slug = gid + "-" + re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:44].rstrip("-")
+    if title.casefold() in {str(g.get("title", "")).strip().casefold() for _, g in games}:
+        raise ValueError("Assigned title already exists; reconcile game ID allocation")
     accent = "#%02x%02x%02x" % tuple(rng.randint(64, 255) for _ in range(3))
     p_spec = AXES["phases"]["1"]
     label = f"[Phase 1/{TOTAL_PHASES}] {genre} x {twist} in {setting}"
     md = "\n".join([
         f"## SESSION DESIGN BRIEF — PHASE 1 OF {TOTAL_PHASES} FOUNDATION (assigned by the factory; do not re-roll)",
         f"- **Mode:** NEW 10-SESSION PHASED GAME (`Phase 1` of `{TOTAL_PHASES}`).",
-        f"- **Game id:** `{gid}`. Create a new folder `games/{gid}-<kebab-case-title>/` and set `slug` to `{gid}-<kebab-case-title>` (max 48 chars).",
+        f"- **Game id:** `{gid}`. Create game files only in `games/{slug}/`; set `slug` to `{slug}` and `title` to `{title}` exactly.",
         f"- **Manifest phase:** Set `\"phase\": \"1\"` in `game.json`.",
         f"- **Axis A sub-genre** (`genre`): {genre}",
         f"- **Axis B mechanical twist** (`coreMechanic`): {twist}",
         f"- **Axis C setting / visual theme** (`setting`): {setting}",
-        f"- **Save key:** `arcade_game_{gid}_<slug>_v1` (exactly this pattern).",
+        f"- **Save key:** `arcade_game_{gid}_{slug}_v1` (exactly this pattern).",
         f"- **Suggested accentColor:** `{accent}` (change it if it clashes with your palette).",
-        f"- **Minimum non-empty JS lines for Phase 1:** `{p_spec['min_js_lines']}` lines.",
         f"- **Phase 1 Deliverable ({p_spec['title']}):** {p_spec['focus']}",
-        "- **Existing titles (yours must differ):** " + (", ".join(titles) if titles else "none yet"),
+        f"- **Observed baseline commit:** `{baseline_sha or 'not supplied; local preview only'}`. The provider checks out a branch, not a pinned commit. If the assigned ID or folder already exists, stop and report.",
+        "- **Generated registry:** Run `python3 tools/build_registry.py`; include only its exact `games/registry.js` output, then run `python3 tools/preflight.py`. Never hand-edit registry content.",
+        "- **Acceptance:** Demonstrate keyboard and touch start/restart, repeated core actions, win/loss transitions, and durable save/load/reset. Report exact commands and any behavior not verified.",
+        "- **Efficiency:** Implement one complete playable loop. Code length is not an acceptance criterion; reuse small existing patterns without copying unrelated systems.",
         "- Copy the three axis strings and `\"phase\": \"1\"` into `game.json` exactly as written above.",
     ])
     return {
         "mode": "new",
         "id": gid,
-        "slug": None,
+        "slug": slug,
+        "title": title,
         "phase": "1",
         "genre": genre,
         "twist": twist,
@@ -175,21 +165,29 @@ def pick_new_game(gid: str, games: list[tuple[Path, dict]], exclude_triples: lis
 def main() -> int:
     ap = argparse.ArgumentParser(description="Print a phase-aware, coverage-weighted design brief.")
     ap.add_argument("--id", default=None, help="Assigned 3-digit id for a new game.")
+    ap.add_argument("--source-root", type=Path, default=ROOT, help="Accepted game-data snapshot; code and phase policy stay in the pinned controller.")
     ap.add_argument("--advance-slug", default=None, help="Force advancing a specific existing game folder slug.")
     ap.add_argument("--exclude-json", default="[]", help="JSON list of [genre, twist, setting] already in flight.")
     ap.add_argument("--exclude-ids", default="[]", help="JSON list of 3-digit game ids currently in flight or quarantined.")
+    ap.add_argument("--inflight-new-ids", default="[]", help="New-game IDs already assigned but not necessarily merged; they occupy WIP.")
     ap.add_argument("--json", action="store_true", help="Machine-readable output for the factory.")
     ap.add_argument("--seed", type=int, default=None, help="Deterministic seed (default: OS entropy).")
+    ap.add_argument("--baseline-sha", default="", help="Accepted main commit assigned by the controller.")
+    ap.add_argument("--max-unfinished-games", type=int, default=2, help="Do not start a new game at this unfinished-game limit.")
     args = ap.parse_args()
 
-    games = existing_games()
+    if args.baseline_sha and not re.fullmatch(r"[0-9a-f]{40}", args.baseline_sha):
+        raise SystemExit("pick_brief: baseline must be a full commit SHA")
+    if args.max_unfinished_games < 1:
+        raise SystemExit("pick_brief: max unfinished games must be positive")
+    games = existing_games(args.source_root)
     exclude_ids = {str(x) for x in json.loads(args.exclude_ids)}
 
     if args.advance_slug:
         match = next(((f, m) for f, m in games if f.name == args.advance_slug), None)
         if not match:
             raise SystemExit(f"pick_brief: game folder {args.advance_slug} not found.")
-        brief = build_advance_brief(match[0], match[1])
+        brief = build_advance_brief(match[0], match[1], args.baseline_sha)
         print(json.dumps(brief) if args.json else brief["markdown"])
         return 0
 
@@ -201,8 +199,8 @@ def main() -> int:
             continue
         try:
             ph = int(meta.get("phase", str(TOTAL_PHASES)))
-        except ValueError:
-            ph = TOTAL_PHASES
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid phase for game {gid_str}") from None
         if 1 <= ph < TOTAL_PHASES:
             ready_to_advance.append((int(gid_str), ph, folder, meta))
 
@@ -210,10 +208,18 @@ def main() -> int:
         # Advance the lowest-id unfinished game first so started games finish promptly in 10 sessions
         ready_to_advance.sort(key=lambda item: (item[0], -item[1]))
         _, _, folder, meta = ready_to_advance[0]
-        brief = build_advance_brief(folder, meta)
+        brief = build_advance_brief(folder, meta, args.baseline_sha)
     else:
-        gid = args.id or next_id(games, list(exclude_ids))
-        brief = pick_new_game(gid, games, json.loads(args.exclude_json), random.Random(args.seed))
+        unfinished_ids = {str(meta["id"]) for _, meta in games if 1 <= int(meta.get("phase", TOTAL_PHASES)) < TOTAL_PHASES}
+        known_ids = {str(meta["id"]) for _, meta in games}
+        pending_ids = {str(gid) for gid in json.loads(args.inflight_new_ids)} - known_ids
+        unfinished = len(unfinished_ids | pending_ids)
+        if unfinished >= args.max_unfinished_games:
+            brief = {"mode": "hold", "reason": "unfinished_game_limit", "unfinished": unfinished,
+                     "markdown": "Existing unfinished games are active or quarantined; do not create another game."}
+        else:
+            gid = args.id or next_id(games, list(exclude_ids))
+            brief = pick_new_game(gid, games, json.loads(args.exclude_json), random.Random(args.seed), args.baseline_sha)
 
     print(json.dumps(brief) if args.json else brief["markdown"])
     return 0

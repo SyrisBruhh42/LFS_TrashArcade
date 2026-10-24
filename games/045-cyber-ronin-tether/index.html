@@ -1097,8 +1097,6 @@ class GameEngine {
 
 }
 
-const engine = new GameEngine();
-
 class InputManager {
     constructor(canvas, ui) {
         this.canvas = canvas;
@@ -1327,6 +1325,8 @@ class SoundEngine {
     }
 }
 
+// Instantiate only after every constructor dependency has initialized.
+const engine = new GameEngine();
 window.engine = engine;
 engine.startLoop();
 

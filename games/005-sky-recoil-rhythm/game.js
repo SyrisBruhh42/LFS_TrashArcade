@@ -34,6 +34,10 @@ class Game {
 
         this.entities = [];
         this.particles = [];
+        // The title screen renders before startGame initializes a run.
+        this.camera = { x: 0, y: 0 };
+        this.islands = [];
+        this.screenShake = 0;
 
         // Screens
         this.screens = {

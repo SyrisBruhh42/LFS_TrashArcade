@@ -1,6 +1,9 @@
 class VFXManager {
     constructor(game) {
         this.game = game;
+        this.reset();
+    }
+    reset() {
         this.particles = [];
         this.floatingTexts = [];
         this.trails = [];

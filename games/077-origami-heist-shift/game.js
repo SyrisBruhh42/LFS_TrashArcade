@@ -403,7 +403,8 @@ class Game {
     }
 
     resetGame() {
-        this.player = new Player(400, 500);
+        // Start outside every initial guard sight cone, with room to choose a route.
+        this.player = new Player(200, 500);
         this.guards = [
             new StandardGuard(200, 200, [{x: 200, y: 200}, {x: 600, y: 200}, {x: 600, y: 400}, {x: 200, y: 400}]),
             new Sniper(400, 200, Math.PI/2),

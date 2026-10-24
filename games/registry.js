@@ -1062,7 +1062,7 @@ window.ARCADE_REGISTRY = [
     "coreMechanic": "Time-Dilation on Stillness",
     "setting": "Frozen Arctic Research Base",
     "description": "Navigate a frozen research base using momentum grappling, and stand still to dilate time.",
-    "controls": "A/D or Arrows to Move. W/Up/Space to Jump. Click to Grapple.",
+    "controls": "A/D or Arrows to move. W/Up/Space to jump. Click to grapple, or hold touch movement and Jump/Grapple pads together. Settings/Pause button or Esc opens settings.",
     "createdAt": "2023-10-24",
     "accentColor": "#769a87",
     "phase": "10",
@@ -1104,7 +1104,7 @@ window.ARCADE_REGISTRY = [
     "coreMechanic": "Risk/Reward Tether or Tail Growth",
     "setting": "Haunted Victorian Manor",
     "description": "Drill through the haunted manor, grow your tether with collected ectoplasm, and return it for points before enemies snap it.",
-    "controls": "WASD/Arrows to move and drill. Click or Space to dash. Touch to drag and steer.",
+    "controls": "WASD/Arrows to move and drill. Click or Space to dash. Touch to drag and steer. Options button, or O from title/pause; Tab or arrows navigate settings.",
     "createdAt": "2024-10-24",
     "accentColor": "#65bb98",
     "phase": "10",
@@ -1118,10 +1118,10 @@ window.ARCADE_REGISTRY = [
     "coreMechanic": "Echo/Ghost Self-Cooperation",
     "setting": "Microscopic Cell Interior",
     "description": "Cooperate with your rhythmic echoes inside a microscopic cell.",
-    "controls": "WASD to move, Space/Click to blast.",
+    "controls": "Space/Click/Tap to start. WASD/Arrows or hold/drag to move and aim. Blasts fire on the beat. Shift/Dash to dash. Esc or Pause/Resume to pause and resume.",
     "createdAt": "2023-10-27",
     "accentColor": "#e857ce",
-    "phase": "6",
+    "phase": "7",
     "path": "./games/084-echo-forge-fusion/index.html"
   },
   {
@@ -1135,7 +1135,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move, Space/Click to shoot. Touch joystick and tap.",
     "createdAt": "2023-10-24",
     "accentColor": "#4ad5c0",
-    "phase": "3",
+    "phase": "4",
     "path": "./games/085-scrap-heist-retrieval/index.html"
   },
   {
@@ -1146,7 +1146,7 @@ window.ARCADE_REGISTRY = [
     "coreMechanic": "Time-Dilation on Stillness",
     "setting": "Deep Ocean Trench",
     "description": "Navigate the deep ocean trench in tactical turn-based blitz combat, where time slows down to a crawl when you are still.",
-    "controls": "WASD/Arrows to move, Space/Click to attack. Touch controls supported.",
+    "controls": "Enter/Space/Tap to start. WASD/Arrows or drag to move. Space/Click/Tap to attack. Esc or Pause/Resume for pause.",
     "createdAt": "2024-03-20",
     "accentColor": "#cdc3b9",
     "phase": "1",

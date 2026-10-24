@@ -2,6 +2,7 @@ class UIManager {
     constructor(game) {
         this.game = game;
         this.resetClicks = 0;
+        this.saveActionEpoch = 0;
         this.initDOM();
         this.bindEvents();
     }
@@ -27,7 +28,9 @@ class UIManager {
             btnResetSave: document.getElementById('btn-reset-save'),
             btnCloseSettings: document.getElementById('btn-close-settings'),
             btnCloseMilestones: document.getElementById('btn-close-milestones'),
-            milestonesList: document.getElementById('milestones-list')
+            milestonesList: document.getElementById('milestones-list'),
+            saveStatus: document.getElementById('save-status'),
+            exportText: document.getElementById('save-export-text')
         };
         this.updateSettingsUI();
     }
@@ -75,22 +78,15 @@ class UIManager {
         this.els.selTouch.addEventListener('change', () => this.applySettings());
         this.els.chkTouchSwap.addEventListener('change', () => this.applySettings());
 
-        this.els.btnExportSave.addEventListener('click', () => {
-            const b64 = btoa(JSON.stringify(this.game.saveManager.data));
-            navigator.clipboard.writeText(b64).then(() => alert('Save copied to clipboard!'));
-        });
+        this.els.btnExportSave.addEventListener('click', () => this.exportSave());
         this.els.btnImportSave.addEventListener('click', () => {
-            try {
-                const json = JSON.parse(atob(this.els.inpImportSave.value));
-                if(json && json.options) {
-                    this.game.saveManager.data = json;
-                    this.game.saveManager.save();
-                    this.updateSettingsUI();
-                    this.applySettings();
-                    alert('Save imported successfully!');
-                }
-            } catch(e) {
-                alert('Invalid save string.');
+            ++this.saveActionEpoch;
+            this.els.exportText.hidden = true;
+            const result = this.game.saveManager.importData(this.els.inpImportSave.value);
+            this.els.saveStatus.textContent = result.message;
+            if (result.ok) {
+                this.updateSettingsUI();
+                this.refreshPresentation();
             }
         });
         this.els.btnResetSave.addEventListener('click', () => {
@@ -104,6 +100,30 @@ class UIManager {
             }
         });
     }
+    async exportSave() {
+        const epoch = ++this.saveActionEpoch;
+        let text;
+        try {
+            text = this.game.saveManager.exportData();
+        } catch (error) {
+            this.els.exportText.hidden = true;
+            this.els.saveStatus.textContent = 'Save could not be exported: size limit exceeded.';
+            return;
+        }
+        this.els.exportText.value = text;
+        this.els.exportText.hidden = false;
+        try {
+            if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+            await navigator.clipboard.writeText(text);
+            if (epoch !== this.saveActionEpoch) return;
+            this.els.saveStatus.textContent = 'Save copied to clipboard.';
+        } catch (error) {
+            if (epoch !== this.saveActionEpoch) return;
+            this.els.saveStatus.textContent = 'Clipboard unavailable. Select and copy the save text below.';
+            this.els.exportText.focus();
+            this.els.exportText.select();
+        }
+    }
     applySettings() {
         const opts = this.game.saveManager.data.options;
         opts.mute = this.els.chkMute.checked;
@@ -116,9 +136,12 @@ class UIManager {
         opts.touchMode = this.els.selTouch.value;
         opts.touchSwap = this.els.chkTouchSwap.checked;
         this.game.saveManager.save();
-
-        if(this.game.sound && this.game.sound.masterGain) {
-            this.game.sound.masterGain.gain.value = opts.mute ? 0 : 0.3; // Default in code was 0.3
+        this.refreshPresentation();
+    }
+    refreshPresentation() {
+        const opts = this.game.saveManager.data.options;
+        if(this.game.sound) {
+            this.game.sound.setVolumes(opts);
         }
 
         const fpsDisplay = document.getElementById('fps-display');

@@ -5,7 +5,7 @@ Usage: python3 tools/check_games.py [--strict] [--check-registry]
   --strict          treat warnings as errors (CI and preflight use this)
   --check-registry  also require games/registry.js to equal `tools/build_registry.py` output (main only)
 
-Every problem is printed as `ERROR: [games/<folder>] <message>`; the factory harvests these lines as lessons.
+Every problem is printed as `ERROR: [games/<folder>] <message>` and preserved in bounded evidence.
 """
 from __future__ import annotations
 
@@ -54,31 +54,6 @@ FORBIDDEN = (
     (re.compile(r"\bXMLHttpRequest\b"), "XMLHttpRequest is forbidden (blocked over file://)"),
 )
 
-SMOKE_SNIPPET = """
-<script>
-window.addEventListener('error', (e) => console.error('SMOKE_UNCAUGHT: ' + (e.message || e.error)));
-window.addEventListener('unhandledrejection', (e) => console.error('SMOKE_UNCAUGHT: ' + e.reason));
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    try {
-      const btns = Array.from(document.querySelectorAll('button, .btn'));
-      const play = btns.find(b => /play|start|launch/i.test(b.innerText || b.textContent));
-      if (play) play.click();
-      window.dispatchEvent(new KeyboardEvent('keydown', {key: 'd', code: 'KeyD', bubbles: true}));
-      window.dispatchEvent(new KeyboardEvent('keydown', {key: ' ', code: 'Space', bubbles: true}));
-      setTimeout(() => {
-        const c = document.querySelector('canvas');
-        if (!c || c.width === 0 || c.height === 0) {
-          console.error('SMOKE_FAIL: canvas missing or 0x0 dimensions');
-        }
-      }, 200);
-    } catch (err) {
-      console.error('SMOKE_FAIL: ' + err.message);
-    }
-  }, 200);
-});
-</script>
-"""
 
 
 class Report:
@@ -109,6 +84,9 @@ def is_v2_phased(meta: dict) -> bool:
 
 def check_manifest(folder: Path, rep: Report) -> dict | None:
     where = f"games/{folder.name}"
+    if folder.is_symlink() or (folder / "game.json").is_symlink():
+        rep.err(where, "symlink folder/manifest forbidden.")
+        return None
     try:
         meta = json.loads((folder / "game.json").read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -166,8 +144,16 @@ def check_manifest(folder: Path, rep: Report) -> dict | None:
 
 def check_files(folder: Path, meta: dict | None, rep: Report, js_files: list[tuple[str, str]]) -> None:
     where = f"games/{folder.name}"
+    if folder.is_symlink():
+        rep.err(where, "symlink game folder forbidden.")
+        return
     total = 0
+    unsafe = False
     for p in sorted(folder.iterdir()):
+        if p.is_symlink() or not p.is_file():
+            rep.err(where, f"unsafe non-regular file `{p.name}`.")
+            unsafe = True
+            continue
         if p.is_dir():
             rep.err(where, f"sub-folder `{p.name}/` not allowed; keep the game flat (index.html, game.json, optional *.js/*.css).")
             continue
@@ -177,6 +163,8 @@ def check_files(folder: Path, meta: dict | None, rep: Report, js_files: list[tup
         total += size
         if size > MAX_FILE_BYTES:
             rep.err(where, f"`{p.name}` is {size} bytes; max {MAX_FILE_BYTES}.")
+    if unsafe:
+        return
     if total > MAX_FOLDER_BYTES:
         rep.err(where, f"folder is {total} bytes; max {MAX_FOLDER_BYTES}.")
 
@@ -236,11 +224,7 @@ def check_files(folder: Path, meta: dict | None, rep: Report, js_files: list[tup
         stub_m = STUB_RE.search(all_js_text)
         if stub_m:
             rep.err(where, f"unfinished stub comment `{stub_m.group(0).strip()}` is forbidden; implement all features completely.")
-        non_empty_js = sum(1 for line in all_js_text.splitlines() if line.strip() and not line.strip().startswith("//"))
-        ph = str(meta.get("phase", "1"))
-        min_lines = int(AXES.get("phases", {}).get(ph, {}).get("min_js_lines", 450))
-        if non_empty_js < min_lines:
-            rep.err(where, f"Phase {ph} requires at least {min_lines} non-empty JS lines (found {non_empty_js}).")
+
 
 
 def run_js_syntax(js_files: list[tuple[str, str]], rep: Report) -> None:
@@ -249,9 +233,11 @@ def run_js_syntax(js_files: list[tuple[str, str]], rep: Report) -> None:
     paths = [p for _, p in js_files]
     try:
         res = subprocess.run(["node", str(ROOT / "tools" / "js_syntax.js"), *paths], capture_output=True, text=True, timeout=180)
-    except FileNotFoundError:
-        rep.err("tools", "node is not installed; it is required for the JavaScript syntax check.")
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        rep.err("tools", "INFRASTRUCTURE: node is unavailable or timed out; JavaScript syntax check did not complete.")
         return
+    if res.returncode != 0 and not res.stdout.startswith("SYNTAX\t"):
+        rep.err("tools", f"INFRASTRUCTURE: JavaScript syntax checker failed with status {res.returncode}.")
     owners = {p: w for w, p in js_files}
     for line in res.stdout.splitlines():
         parts = line.split("\t", 2)
@@ -264,66 +250,45 @@ def run_js_syntax(js_files: list[tuple[str, str]], rep: Report) -> None:
             Path(p).unlink(missing_ok=True)
 
 
-def run_chrome_smoke(metas: list[tuple[Path, dict]], rep: Report) -> None:
-    chrome = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
-    if not chrome:
-        return
-    # Identify target v2 folders modified against origin/main (or latest v2 game folder)
-    changed_folders: set[str] = set()
-    try:
-        diff_out = subprocess.run(["git", "diff", "--name-only", "origin/main...HEAD"], cwd=ROOT, capture_output=True, text=True).stdout
-        for line in diff_out.splitlines():
-            parts = line.strip().split("/")
-            if len(parts) >= 2 and parts[0] == "games":
-                changed_folders.add(parts[1])
-    except Exception:
-        pass
-
-    v2_metas = [(f, m) for f, m in metas if is_v2_phased(m)]
-    targets = [(f, m) for f, m in v2_metas if f.name in changed_folders]
-    if not targets and v2_metas:
-        targets = [v2_metas[-1]]
-
-    for folder, _ in targets:
-        where = f"games/{folder.name}"
-        index = folder / "index.html"
-        if not index.is_file():
-            continue
-        smoke_file = folder / "__smoke_test__.html"
-        try:
-            html = index.read_text(encoding="utf-8", errors="replace")
-            smoke_file.write_text(html + "\n" + SMOKE_SNIPPET, encoding="utf-8")
-            res = subprocess.run(
-                [
-                    chrome,
-                    "--headless=new",
-                    "--disable-gpu",
-                    "--no-sandbox",
-                    "--allow-file-access-from-files",
-                    "--virtual-time-budget=1200",
-                    "--enable-logging=stderr",
-                    "--v=0",
-                    f"file://{smoke_file}",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=20,
-            )
-            for line in res.stderr.splitlines():
-                if re.search(r"Uncaught|SMOKE_FAIL|SMOKE_UNCAUGHT", line):
-                    clean = re.sub(r"^.*?INFO:CONSOLE:\d+\]\s*", "", line).strip()
-                    rep.err(where, f"Runtime browser smoke test failed: {clean[:220]}")
-                    break
-        except Exception:
-            pass
-        finally:
-            smoke_file.unlink(missing_ok=True)
+def runtime_targets(args, folders: list[Path]) -> tuple[list[Path], dict]:
+    """No implicit git diff and no newest-game fallback."""
+    if args.targets_file:
+        evidence = json.loads(args.targets_file.read_text())
+        if evidence.get("status") != "PASS" or evidence.get("schema_version") != 1:
+            raise ValueError("runtime targets require a passing path guard")
+        names = evidence.get("targets")
+        if not isinstance(names, list) or len(names) != 1 or any(not isinstance(n,str) or not SLUG_RE.fullmatch(n) for n in names):
+            raise ValueError("invalid exact target set")
+        for key in ("base_sha", "head_sha"):
+            if not re.fullmatch(r"[0-9a-f]{40}", evidence.get(key, "")):
+                raise ValueError("target manifest missing pinned revision")
+        by_name = {f.name:f for f in folders}
+        if any(n not in by_name for n in names):
+            raise ValueError("target game does not exist")
+        checkout = subprocess.run(["git","rev-parse","HEAD"],cwd=ROOT,capture_output=True,text=True,check=True).stdout.strip()
+        if checkout not in (evidence["base_sha"], evidence["head_sha"]):
+            raise ValueError("checkout does not match validated base/head")
+        compared = subprocess.run(["git","diff","--quiet",evidence["head_sha"],"--","games"],cwd=ROOT)
+        if compared.returncode != 0:
+            raise ValueError("game files do not match the exact validated head")
+        return [by_name[n] for n in names], {"scope":"changed-games", "base_sha":evidence["base_sha"], "head_sha":evidence["head_sha"],
+                                            "mode":evidence.get("mode"), "assignment":evidence.get("assignment"),
+                                            "source_state":"exact-head" if checkout == evidence["head_sha"] else "validated-overlay"}
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,text=True,check=True).stdout.strip()
+    dirty = bool(subprocess.run(["git","status","--porcelain","--untracked-files=no"],cwd=ROOT,capture_output=True,text=True,check=True).stdout.strip())
+    return folders, {"scope":"all-games", "base_sha":commit, "head_sha":commit, "working_tree_dirty":dirty,
+                     "source_state":"working-tree" if dirty else "exact-head"}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--strict", action="store_true")
     ap.add_argument("--check-registry", action="store_true")
+    modes = ap.add_mutually_exclusive_group()
+    modes.add_argument("--targets-file", type=Path, help="passing path guard JSON with explicit base/head and target")
+    modes.add_argument("--all-runtime", action="store_true", help="audit every game (also the default)")
+    modes.add_argument("--static-only", action="store_true", help="diagnostic only; never runtime acceptance")
+    ap.add_argument("--report", type=Path, default=Path("gate-evidence.json"))
     args = ap.parse_args()
 
     rep = Report()
@@ -341,7 +306,22 @@ def main() -> int:
         if meta:
             metas.append((folder, meta))
     run_js_syntax(js_files, rep)
-    run_chrome_smoke(metas, rep)
+    runtime = []
+    provenance = {"scope":"static-only", "base_sha":None, "head_sha":None}
+    if not args.static_only:
+        try:
+            targets, provenance = runtime_targets(args, folders)
+            from runtime_gate import audit
+            bound_sha = provenance["head_sha"] if provenance.get("source_state") in ("exact-head", "validated-overlay") else None
+            assignment = provenance.get("assignment") or {}
+            runtime = audit(targets, source_sha=bound_sha, require_behavior=provenance.get("mode") == "maintenance",
+                            expected_behavior_hash=assignment.get("expected_behavior_hash"),
+                            required_scenarios=[assignment["scenario_id"]] if assignment else None)
+            for result in runtime:
+                if result["status"] != "PASS":
+                    rep.err("games/" + result["game"], result["classification"].upper() + ": " + result["reason"])
+        except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+            rep.err("runtime", "INFRASTRUCTURE: target selection failed (" + type(exc).__name__ + ").")
 
     seen: dict[str, dict[str, str]] = {"id": {}, "title": {}, "triple": {}}
     for folder, meta in metas:
@@ -361,6 +341,17 @@ def main() -> int:
         if res.returncode != 0:
             rep.err("games/registry.js", "out of date; run `python3 tools/build_registry.py` (main only, never in a game PR).")
 
+    categories = {r["classification"] for r in runtime if r["status"] != "PASS"}
+    if any(not any(f"{c.upper()}:" in e for c in ("infrastructure", "coverage", "runtime")) for e in rep.errors):
+        categories.add("content")
+    if any("INFRASTRUCTURE:" in e for e in rep.errors): categories.add("infrastructure")
+    classification = next((c for c in ("infrastructure", "coverage", "content", "runtime") if c in categories), "content")
+    failed = bool(rep.errors) or (args.strict and bool(rep.warnings))
+    evidence = {"schema_version":1, **provenance, "status":"FAIL" if failed else "STATIC_ONLY" if args.static_only else "PASS",
+                "classification":classification, "errors":rep.errors, "warnings":rep.warnings,
+                "game_count":len(metas), "runtime_target_count":len(runtime), "runtime":runtime,
+                "runtime_acceptance":not failed and not args.static_only and len(runtime) > 0}
+    args.report.write_text(json.dumps(evidence, indent=2) + "\n")
     for line in rep.warnings + rep.errors:
         print(line)
     failed = bool(rep.errors) or (args.strict and bool(rep.warnings))

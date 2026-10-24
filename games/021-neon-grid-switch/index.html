@@ -718,6 +718,8 @@ class GameWorld {
 
   processMagnetism() {
     let moved = false;
+    let pushed = false;
+    let pulled = false;
     let newEnemies = [];
     let toDestroy = [];
 
@@ -785,6 +787,8 @@ class GameWorld {
           } else {
              e.moveTo(nx, ny);
              moved = true;
+             if (push) pushed = true;
+             else pulled = true;
           }
         }
       }
@@ -794,8 +798,8 @@ class GameWorld {
       if (toDestroy.length > 0) {
         this.engine.audio.playTone(800, 'square', 0.1, 0.5); // bonus sound
       } else {
-        if(push) this.engine.audio.sfxPush();
-        else this.engine.audio.sfxPull();
+        if (pushed) this.engine.audio.sfxPush();
+        if (pulled) this.engine.audio.sfxPull();
       }
     }
 

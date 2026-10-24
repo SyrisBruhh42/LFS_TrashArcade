@@ -59,6 +59,10 @@
         .screen.active {
             display: flex;
         }
+        #settings-screen { box-sizing:border-box; overflow-y:auto; justify-content:flex-start; padding:24px 12px; touch-action:pan-y; }
+        #settings-screen input, #settings-screen select { max-width:100%; }
+        #save-status { max-width:36rem; text-align:center; }
+        #save-export-text { width:min(90%,36rem); min-height:5rem; }
         h1 { margin: 0 0 20px 0; color: #fdc2b9; text-shadow: 2px 2px 0 #000; font-size: 3em; text-align: center; }
         h2 { margin: 0 0 20px 0; color: #fff; text-shadow: 1px 1px 0 #000; }
         button {
@@ -150,11 +154,13 @@
                     </label>
                     <label><input type="checkbox" id="chk-touch-swap"> Swap L/R Touch Controls</label>
                     <button id="btn-export-save">Export Save</button>
-                    <div style="display:flex; gap:10px;">
-                        <input type="text" id="inp-import-save" placeholder="Paste Base64 Save">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+                        <input type="text" id="inp-import-save" aria-label="Save data to import" placeholder="Paste Base64 Save">
                         <button id="btn-import-save">Import Save</button>
                     </div>
                     <button id="btn-reset-save">Reset Save (Click 2x)</button>
+                    <p id="save-status" role="status" aria-live="polite"></p>
+                    <textarea id="save-export-text" aria-label="Exported save data" readonly hidden></textarea>
                 </div>
                 <button id="btn-close-settings">Back</button>
             </div>

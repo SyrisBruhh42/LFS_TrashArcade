@@ -502,7 +502,7 @@ class Player {
         if (this.dashCooldown > 0) this.dashCooldown -= dt;
         if (this.dashActive > 0) {
             this.dashActive -= dt;
-            this.invulnerableTimer = 0.1;
+            this.invulnerableTimer = Math.max(this.invulnerableTimer, 0.1);
         }
         if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
 
@@ -1163,6 +1163,9 @@ class Engine {
     resetGame() {
         this.score = 0;
         this.player = new Player(this.width / 2, 50);
+        // Moving gears can enter the spawn area immediately. Give each new run
+        // one second to react, using the existing blinking protection effect.
+        this.player.invulnerableTimer = 1.0;
 
         this.grapplePoints = [];
         this.hazards = [];
