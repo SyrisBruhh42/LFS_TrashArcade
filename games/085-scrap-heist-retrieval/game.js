@@ -725,8 +725,12 @@ class Projectile extends Entity {
             if (e.active && e.state !== 'STUNNED') {
                 const dist = Math.hypot(this.x - e.x, this.y - e.y);
                 if (dist < this.radius + e.radius) {
-                    e.state = 'STUNNED';
-                    e.stunTimer = 3.0;
+                    if (e instanceof BruiserEnemy && e.shield > 0) {
+                        e.shield--;
+                    } else {
+                        e.state = 'STUNNED';
+                        e.stunTimer = 3.0;
+                    }
                     this.state = 'GROUNDED';
                     this.vx = 0;
                     this.vy = 0;
@@ -1061,10 +1065,12 @@ class Game {
         }
 
         // Enemies
+        const enemyClasses = [Enemy, SwarmerEnemy, SniperEnemy, BruiserEnemy, SpawnerEnemy, HazardEnemy];
         for (let i = 0; i < Math.min(3 + this.wave, 10); i++) {
             const x = 100 + Math.random() * (this.width - 200);
             const y = 100 + Math.random() * (this.height - 300);
-            this.enemies.push(new Enemy(x, y));
+            const EClass = enemyClasses[Math.floor(Math.random() * enemyClasses.length)];
+            this.enemies.push(new EClass(x, y));
         }
 
         // Collectibles (Scrap to retrieve)
@@ -1249,3 +1255,511 @@ class Game {
 window.onload = () => {
     window.game = new Game();
 };
+
+
+
+
+
+class SwarmerEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.radius = 10;
+        this.speed = 80;
+        this.viewRadius = 100;
+        this.color = '#ff8800';
+        this.telegraphTimer = 0;
+        this.erraticTimer = 0;
+    }
+    update(dt, game) {
+        if (this.state === 'STUNNED') {
+            this.telegraphTimer = 0;
+            super.update(dt, game);
+            return;
+        }
+
+        if (this.state === 'PATROL') {
+            this.erraticTimer -= dt;
+            if (this.erraticTimer <= 0) {
+                this.angle = Math.random() * Math.PI * 2;
+                this.erraticTimer = 0.5 + Math.random();
+            }
+            this.facing.x = Math.cos(this.angle);
+            this.facing.y = Math.sin(this.angle);
+            this.vx = this.facing.x * this.speed * 0.5;
+            this.vy = this.facing.y * this.speed * 0.5;
+        } else if (this.state === 'ALERT') {
+            if (this.telegraphTimer === 0) {
+                this.telegraphTimer = 0.5; // 0.5s telegraph
+                this.vx = 0; this.vy = 0; // stop to telegraph
+            }
+            if (this.telegraphTimer > 0) {
+                this.telegraphTimer -= dt;
+                // Face player
+                const dx = game.player.x - this.x;
+                const dy = game.player.y - this.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 0) {
+                    this.facing.x = dx / dist;
+                    this.facing.y = dy / dist;
+                }
+                if (this.telegraphTimer <= 0) {
+                    this.telegraphTimer = -1; // Charge!
+                }
+            } else {
+                // Charging
+                this.vx = this.facing.x * this.speed * 2;
+                this.vy = this.facing.y * this.speed * 2;
+            }
+        }
+
+        let oldX = this.x;
+        let oldY = this.y;
+        Entity.prototype.update.call(this, dt); // bypass base enemy update to use our custom vx/vy
+
+        // World bounds & collision (copied from Enemy)
+        if (this.x < this.radius) this.x = this.radius;
+        if (this.x > game.width - this.radius) this.x = game.width - this.radius;
+        if (this.y < this.radius) this.y = this.radius;
+        if (this.y > game.height - this.radius) this.y = game.height - this.radius;
+
+        for (let obs of game.obstacles) {
+            const rx = Math.max(obs.x, Math.min(this.x, obs.x + obs.width));
+            const ry = Math.max(obs.y, Math.min(this.y, obs.y + obs.height));
+            if (Math.hypot(this.x - rx, this.y - ry) < this.radius) {
+                this.x = oldX; this.y = oldY; break;
+            }
+        }
+        this.checkVision(game);
+        if (this.state !== 'STUNNED' && this.active && Math.hypot(this.x - game.player.x, this.y - game.player.y) < this.radius + game.player.radius) {
+            game.gameOver();
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        let ox = 0, oy = 0;
+        if (this.state === 'ALERT' && this.telegraphTimer > 0) {
+            ox = (Math.random() - 0.5) * 4;
+            oy = (Math.random() - 0.5) * 4;
+        }
+        ctx.translate(this.x + ox, this.y + oy);
+        const angle = Math.atan2(this.facing.y, this.facing.x);
+        ctx.rotate(angle);
+
+        if (this.state !== 'STUNNED') {
+            ctx.fillStyle = this.state === 'ALERT' ? 'rgba(255, 0, 0, 0.2)' : 'rgba(255, 255, 0, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, this.viewRadius, -this.viewAngle/2, this.viewAngle/2);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        ctx.fillStyle = (this.state === 'ALERT' && this.telegraphTimer > 0 && Math.floor(this.telegraphTimer * 20) % 2 === 0) ? '#fff' : (this.state === 'STUNNED' ? '#888' : this.color);
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(-this.radius, this.radius);
+        ctx.lineTo(-this.radius, -this.radius);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class SniperEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.speed = 0;
+        this.viewRadius = 300;
+        this.viewAngle = Math.PI / 8;
+        this.color = '#8800ff';
+        this.sweepDir = 1;
+        this.chargeTimer = 0;
+    }
+    update(dt, game) {
+        if (this.state === 'STUNNED') {
+            this.chargeTimer = 0;
+            super.update(dt, game);
+            return;
+        }
+
+        if (this.state === 'PATROL') {
+            this.vx = 0; this.vy = 0;
+            this.angle += dt * 0.3 * this.sweepDir;
+            if (Math.random() < 0.01) this.sweepDir *= -1;
+            this.facing.x = Math.cos(this.angle);
+            this.facing.y = Math.sin(this.angle);
+        } else if (this.state === 'ALERT') {
+            this.vx = 0; this.vy = 0; // always stationary
+            const dx = game.player.x - this.x;
+            const dy = game.player.y - this.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (this.chargeTimer === 0) this.chargeTimer = 2.0; // 2s charge
+
+            if (this.chargeTimer > 0) {
+                this.chargeTimer -= dt;
+                // lock on slowly
+                if (dist > 0) {
+                    const targetAngle = Math.atan2(dy, dx);
+                    // simple lerp for angle
+                    this.angle += (targetAngle - this.angle) * dt * 2;
+                    this.facing.x = Math.cos(this.angle);
+                    this.facing.y = Math.sin(this.angle);
+                }
+
+                if (this.chargeTimer <= 0) {
+                    // Fire projectile
+                    game.projectiles.push(new Projectile(this.x + this.facing.x * 20, this.y + this.facing.y * 20, this.facing.x, this.facing.y));
+                    game.sound.playShoot();
+                    this.state = 'PATROL'; // reset state after firing
+                    this.chargeTimer = 0;
+                }
+            }
+        }
+
+        Entity.prototype.update.call(this, dt); // bypass base enemy update
+        this.checkVision(game);
+        if (this.state !== 'STUNNED' && this.active && Math.hypot(this.x - game.player.x, this.y - game.player.y) < this.radius + game.player.radius) {
+            game.gameOver();
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const angle = Math.atan2(this.facing.y, this.facing.x);
+        ctx.rotate(angle);
+
+        if (this.state !== 'STUNNED') {
+            ctx.fillStyle = this.state === 'ALERT' ? 'rgba(255, 0, 0, 0.2)' : 'rgba(255, 255, 0, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, this.viewRadius, -this.viewAngle/2, this.viewAngle/2);
+            ctx.closePath();
+            ctx.fill();
+
+            if (this.state === 'ALERT' && this.chargeTimer > 0) {
+                // Draw targeting laser
+                ctx.strokeStyle = `rgba(255, 0, 0, ${1 - this.chargeTimer/2.0})`;
+                ctx.lineWidth = Math.max(1, this.chargeTimer * 2);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(this.viewRadius, 0);
+                ctx.stroke();
+            }
+        }
+
+        ctx.fillStyle = this.state === 'STUNNED' ? '#888' : this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.radius, 0);
+        ctx.lineTo(0, this.radius);
+        ctx.lineTo(-this.radius, 0);
+        ctx.lineTo(0, -this.radius);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class BruiserEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.radius = 20;
+        this.speed = 30;
+        this.viewRadius = 180;
+        this.shield = 1;
+        this.color = '#ff0044';
+        this.telegraphTimer = 0;
+    }
+    update(dt, game) {
+        if (this.state === 'STUNNED') {
+            this.telegraphTimer = 0;
+            super.update(dt, game);
+            return;
+        }
+
+        if (this.state === 'PATROL') {
+            // standard patrol
+            this.angle += dt * 0.2;
+            const tx = this.patrolCenter.x + Math.cos(this.angle) * this.patrolRadius;
+            const ty = this.patrolCenter.y + Math.sin(this.angle) * this.patrolRadius;
+            const dx = tx - this.x; const dy = ty - this.y; const dist = Math.hypot(dx, dy);
+            if (dist > 1) {
+                this.vx = (dx / dist) * this.speed; this.vy = (dy / dist) * this.speed;
+                this.facing.x = dx / dist; this.facing.y = dy / dist;
+            }
+        } else if (this.state === 'ALERT') {
+            const dx = game.player.x - this.x;
+            const dy = game.player.y - this.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (this.telegraphTimer === 0) {
+                this.telegraphTimer = 1.0;
+                this.vx = 0; this.vy = 0;
+            }
+            if (this.telegraphTimer > 0) {
+                this.telegraphTimer -= dt;
+                if (dist > 0) {
+                    this.facing.x = dx / dist;
+                    this.facing.y = dy / dist;
+                }
+                if (this.telegraphTimer <= 0) {
+                    this.telegraphTimer = -1;
+                }
+            } else {
+                if (dist > 1) {
+                    this.vx = (dx / dist) * this.speed * 2.5; // charge!
+                    this.vy = (dy / dist) * this.speed * 2.5;
+                    this.facing.x = dx / dist;
+                    this.facing.y = dy / dist;
+                }
+            }
+        }
+
+        let oldX = this.x; let oldY = this.y;
+        Entity.prototype.update.call(this, dt);
+
+        if (this.x < this.radius) this.x = this.radius;
+        if (this.x > game.width - this.radius) this.x = game.width - this.radius;
+        if (this.y < this.radius) this.y = this.radius;
+        if (this.y > game.height - this.radius) this.y = game.height - this.radius;
+
+        for (let obs of game.obstacles) {
+            const rx = Math.max(obs.x, Math.min(this.x, obs.x + obs.width));
+            const ry = Math.max(obs.y, Math.min(this.y, obs.y + obs.height));
+            if (Math.hypot(this.x - rx, this.y - ry) < this.radius) {
+                this.x = oldX; this.y = oldY; break;
+            }
+        }
+        this.checkVision(game);
+        if (this.state !== 'STUNNED' && this.active && Math.hypot(this.x - game.player.x, this.y - game.player.y) < this.radius + game.player.radius) {
+            game.gameOver();
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const angle = Math.atan2(this.facing.y, this.facing.x);
+        ctx.rotate(angle);
+
+        if (this.state !== 'STUNNED') {
+            ctx.fillStyle = this.state === 'ALERT' ? 'rgba(255, 0, 0, 0.2)' : 'rgba(255, 255, 0, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, this.viewRadius, -this.viewAngle/2, this.viewAngle/2);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        let drawColor = this.color;
+        if (this.state === 'ALERT' && this.telegraphTimer > 0 && Math.floor(this.telegraphTimer * 10) % 2 === 0) {
+            drawColor = '#ff8800'; // flash orange
+        }
+        ctx.fillStyle = this.state === 'STUNNED' ? '#888' : drawColor;
+        ctx.fillRect(-this.radius, -this.radius, this.radius*2, this.radius*2);
+
+        if (this.shield > 0) {
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-this.radius-2, -this.radius-2, this.radius*2+4, this.radius*2+4);
+        } else if (this.state !== 'STUNNED') {
+             // visually show shield broken telegraph
+             ctx.strokeStyle = '#ff0000';
+             ctx.lineWidth = 1;
+             ctx.beginPath(); ctx.moveTo(-this.radius, -this.radius); ctx.lineTo(this.radius, this.radius); ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+}
+
+class SpawnerEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.speed = 40;
+        this.viewRadius = 150;
+        this.color = '#00aa00';
+        this.spawnTimer = 0;
+        this.pulsePhase = 0;
+    }
+    update(dt, game) {
+        if (this.state === 'STUNNED') {
+            super.update(dt, game);
+            return;
+        }
+
+        if (this.state === 'PATROL') {
+            // standard patrol
+            this.angle += dt * 0.5;
+            const tx = this.patrolCenter.x + Math.cos(this.angle) * this.patrolRadius;
+            const ty = this.patrolCenter.y + Math.sin(this.angle) * this.patrolRadius;
+            const dx = tx - this.x; const dy = ty - this.y; const dist = Math.hypot(dx, dy);
+            if (dist > 1) {
+                this.vx = (dx / dist) * this.speed; this.vy = (dy / dist) * this.speed;
+                this.facing.x = dx / dist; this.facing.y = dy / dist;
+            }
+        } else if (this.state === 'ALERT') {
+            const dx = game.player.x - this.x;
+            const dy = game.player.y - this.y;
+            const dist = Math.hypot(dx, dy);
+
+            // Flee from player
+            if (dist > 0) {
+                this.vx = -(dx / dist) * this.speed;
+                this.vy = -(dy / dist) * this.speed;
+                this.facing.x = -(dx / dist);
+                this.facing.y = -(dy / dist);
+            }
+
+            this.spawnTimer -= dt;
+            if (this.spawnTimer <= 0) {
+                this.spawnTimer = 5.0; // spawn every 5 seconds
+                const swarmer = new SwarmerEnemy(this.x, this.y);
+                swarmer.state = 'ALERT';
+                game.enemies.push(swarmer);
+                game.sound.playAlert();
+            }
+        }
+
+        let oldX = this.x; let oldY = this.y;
+        Entity.prototype.update.call(this, dt);
+
+        if (this.x < this.radius) this.x = this.radius;
+        if (this.x > game.width - this.radius) this.x = game.width - this.radius;
+        if (this.y < this.radius) this.y = this.radius;
+        if (this.y > game.height - this.radius) this.y = game.height - this.radius;
+
+        for (let obs of game.obstacles) {
+            const rx = Math.max(obs.x, Math.min(this.x, obs.x + obs.width));
+            const ry = Math.max(obs.y, Math.min(this.y, obs.y + obs.height));
+            if (Math.hypot(this.x - rx, this.y - ry) < this.radius) {
+                this.x = oldX; this.y = oldY; break;
+            }
+        }
+        this.checkVision(game);
+        if (this.state !== 'STUNNED' && this.active && Math.hypot(this.x - game.player.x, this.y - game.player.y) < this.radius + game.player.radius) {
+            game.gameOver();
+        }
+
+        this.pulsePhase += dt * 5;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const angle = Math.atan2(this.facing.y, this.facing.x);
+        ctx.rotate(angle);
+
+        if (this.state !== 'STUNNED') {
+            ctx.fillStyle = this.state === 'ALERT' ? 'rgba(255, 0, 0, 0.2)' : 'rgba(255, 255, 0, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, this.viewRadius, -this.viewAngle/2, this.viewAngle/2);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Size pulsating telegraph before spawn
+        let drawRadius = this.radius;
+        if (this.state === 'ALERT' && this.spawnTimer < 1.0) {
+            drawRadius += Math.sin(this.pulsePhase) * 3;
+        }
+
+        ctx.fillStyle = this.state === 'STUNNED' ? '#888' : this.color;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const a = i * Math.PI / 3;
+            ctx.lineTo(Math.cos(a) * drawRadius, Math.sin(a) * drawRadius);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class HazardEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.speed = 0;
+        this.patrolRadius = 0;
+        this.color = '#ffaa00';
+        this.hazardTimer = 0;
+        this.telegraphTimer = 0;
+    }
+    update(dt, game) {
+        if (this.state === 'STUNNED') {
+            this.telegraphTimer = 0;
+            super.update(dt, game);
+            return;
+        }
+
+        if (this.state === 'PATROL') {
+            this.angle += dt;
+            this.facing.x = Math.cos(this.angle);
+            this.facing.y = Math.sin(this.angle);
+            this.vx = 0; this.vy = 0;
+        } else if (this.state === 'ALERT') {
+            this.vx = 0; this.vy = 0;
+            if (this.telegraphTimer === 0) {
+                this.telegraphTimer = 1.5;
+            }
+            if (this.telegraphTimer > 0) {
+                this.telegraphTimer -= dt;
+                // Face player while telegraphing
+                const dx = game.player.x - this.x;
+                const dy = game.player.y - this.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 0) {
+                    this.facing.x = dx / dist;
+                    this.facing.y = dy / dist;
+                }
+
+                if (this.telegraphTimer <= 0) {
+                    game.hazards.push(new HazardTrap(this.x, this.y, 40)); // Fixed bug: added radius
+                    game.sound.playShoot();
+                    this.telegraphTimer = -1;
+                    this.state = 'PATROL'; // back to spinning
+                }
+            }
+        }
+
+        Entity.prototype.update.call(this, dt);
+        this.checkVision(game);
+        if (this.state !== 'STUNNED' && this.active && Math.hypot(this.x - game.player.x, this.y - game.player.y) < this.radius + game.player.radius) {
+            game.gameOver();
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const angle = Math.atan2(this.facing.y, this.facing.x);
+        ctx.rotate(angle);
+
+        if (this.state !== 'STUNNED') {
+            ctx.fillStyle = this.state === 'ALERT' ? 'rgba(255, 0, 0, 0.2)' : 'rgba(255, 255, 0, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, this.viewRadius, -this.viewAngle/2, this.viewAngle/2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw area denial telegraph
+            if (this.state === 'ALERT' && this.telegraphTimer > 0) {
+                const progress = 1 - (this.telegraphTimer / 1.5);
+                ctx.strokeStyle = 'rgba(255, 170, 0, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, 40 * progress, 0, Math.PI*2);
+                ctx.stroke();
+            }
+        }
+
+        ctx.fillStyle = this.state === 'STUNNED' ? '#888' : this.color;
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+            const a = i * Math.PI / 4;
+            ctx.lineTo(Math.cos(a) * this.radius, Math.sin(a) * this.radius);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+}
