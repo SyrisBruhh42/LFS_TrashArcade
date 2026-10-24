@@ -1065,7 +1065,7 @@ window.ARCADE_REGISTRY = [
     "controls": "A/D or Arrows to Move. W/Up/Space to Jump. Click to Grapple.",
     "createdAt": "2023-10-24",
     "accentColor": "#769a87",
-    "phase": "9",
+    "phase": "10",
     "path": "./games/080-frozen-tether/index.html"
   },
   {
