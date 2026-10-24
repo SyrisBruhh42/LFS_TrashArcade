@@ -24,6 +24,7 @@ class UIManager {
         ];
 
         this.loadMilestones();
+        this.initSettingsControls();
     }
 
     initSettingsUI() {
@@ -31,9 +32,9 @@ class UIManager {
         this.sliders = [];
 
         // Left Col
-        this.sliders.push({ id: 'masterVolume', x: 200, y: 150, w: 150, h: 20, val: this.game.saveManager.data.options.masterVolume || 1.0, label: "Master Vol" });
-        this.sliders.push({ id: 'sfxVolume', x: 200, y: 200, w: 150, h: 20, val: this.game.saveManager.data.options.sfxVolume || 1.0, label: "SFX Vol" });
-        this.sliders.push({ id: 'musicVolume', x: 200, y: 250, w: 150, h: 20, val: this.game.saveManager.data.options.musicVolume || 1.0, label: "Music Vol" });
+        this.sliders.push({ id: 'masterVolume', x: 200, y: 150, w: 150, h: 20, val: this.game.saveManager.data.options.masterVolume ?? 1.0, label: "Master Vol" });
+        this.sliders.push({ id: 'sfxVolume', x: 200, y: 200, w: 150, h: 20, val: this.game.saveManager.data.options.sfxVolume ?? 1.0, label: "SFX Vol" });
+        this.sliders.push({ id: 'musicVolume', x: 200, y: 250, w: 150, h: 20, val: this.game.saveManager.data.options.musicVolume ?? 1.0, label: "Music Vol" });
 
         this.buttons.push({ id: 'mute', x: 200, y: 300, w: 150, h: 30, text: "Toggle Mute" });
 
@@ -55,6 +56,72 @@ class UIManager {
         this.updateButtonLabels();
     }
 
+    initSettingsControls() {
+        this.settingsDialog = document.getElementById('settings-dialog');
+        this.settingsButton = document.getElementById('settings-button');
+        if (!this.settingsDialog || !this.settingsButton) return;
+        this.status = document.getElementById('settings-status');
+        this.settingsFields = new Map();
+        const fields = document.getElementById('settings-fields');
+        for (const slider of this.sliders) {
+            const label = document.createElement('label');
+            label.textContent = slider.label;
+            const control = document.createElement('input');
+            control.type='range'; control.min='0'; control.max='1'; control.step='0.1';
+            control.id='option-'+slider.id;
+            control.addEventListener('input', () => {
+                const value=Number(control.value);
+                this.game.saveManager.data.options[slider.id]=value;
+                this.sliders.find(s => s.id===slider.id).val=value;
+                this.game.saveManager.save();
+            });
+            label.append(control); fields.append(label);
+            this.settingsFields.set(slider.id,control);
+        }
+        for (const item of this.buttons) {
+            const control=document.createElement('button');
+            control.type='button'; control.id='option-'+item.id;
+            control.addEventListener('click', () => this.handleButtonClick(this.buttons.find(b => b.id===item.id)));
+            fields.append(control); this.settingsFields.set(item.id,control);
+        }
+        this.settingsButton.addEventListener('click', () => this.openSettings());
+        document.getElementById('settings-close').addEventListener('click', () => this.closeSettings());
+        this.settingsDialog.addEventListener('cancel', e => { e.preventDefault(); this.closeSettings(); });
+        this.syncSettingsValues();
+    }
+
+    openSettings() {
+        if (!['TITLE','PLAYING','PAUSED','GAME_OVER'].includes(this.game.state)) return;
+        this.settingsPreviousState=this.game.state==='PAUSED'?'PLAYING':this.game.state;
+        this.game.input.clear();
+        this.game.state='PAUSED';
+        this.syncSettingsControls();
+    }
+
+    closeSettings() {
+        this.game.input.clear();
+        this.game.state=this.settingsPreviousState || 'PLAYING';
+        this.settingsPreviousState=null;
+        this.syncSettingsControls();
+        this.game.canvas.focus({preventScroll:true});
+    }
+
+    syncSettingsValues() {
+        if (!this.settingsFields) return;
+        for (const slider of this.sliders) this.settingsFields.get(slider.id).value=slider.val;
+        for (const button of this.buttons) this.settingsFields.get(button.id).textContent=button.text;
+    }
+
+    syncSettingsControls() {
+        if (!this.settingsDialog) return;
+        this.settingsButton.hidden=!['TITLE','PLAYING','PAUSED','GAME_OVER'].includes(this.game.state);
+        if (this.game.state==='PAUSED' && !this.settingsDialog.open) {
+            this.game.input.clear();
+            this.syncSettingsValues();
+            this.settingsDialog.showModal();
+        } else if (this.game.state!=='PAUSED' && this.settingsDialog.open) this.settingsDialog.close();
+    }
+
     updateButtonLabels() {
         let opts = this.game.saveManager.data.options;
         for (let b of this.buttons) {
@@ -70,9 +137,7 @@ class UIManager {
     loadMilestones() {
         let saved = this.game.saveManager.data.unlockedMilestones || [];
         for (let m of this.milestones) {
-            if (saved.includes(m.id)) {
-                m.achieved = true;
-            }
+            m.achieved = saved.includes(m.id);
         }
     }
 
@@ -174,23 +239,28 @@ class UIManager {
         } else if (b.id === 'swap') {
             opts.touchSwap = !opts.touchSwap;
         } else if (b.id === 'export') {
-            let str = btoa(JSON.stringify(this.game.saveManager.data));
-            this.lastExportBase64 = str;
-            console.log("Exported Save:", str);
+            try {
+                const str = this.game.saveManager.exportData();
+                this.lastExportBase64 = str;
+                prompt('Copy your save data:', str);
+            } catch (error) {
+                const message='Save could not be exported: size limit exceeded.';
+                if (this.status) this.status.textContent=message; else alert(message);
+            }
+            return;
         } else if (b.id === 'import') {
-            let str = prompt("Paste your Base64 save string:");
-            if (str) {
-                try {
-                    let parsed = JSON.parse(atob(str));
-                    if (parsed && parsed.options) {
-                        this.game.saveManager.data = parsed;
-                        this.game.saveManager.save();
-                        this.initSettingsUI();
-                    }
-                } catch(e) {
-                    console.error("Invalid save string");
+            const str = prompt('Paste your Base64 save string:');
+            if (str !== null) {
+                const result = this.game.saveManager.importData(str);
+                if (this.status) this.status.textContent = result.message;
+                else alert(result.message);
+                if (result.ok) {
+                    this.initSettingsUI();
+                    this.loadMilestones();
+                    this.syncSettingsValues();
                 }
             }
+            return;
         } else if (b.id === 'reset') {
             if (b.state === 0) {
                 b.text = "Are you sure?";
@@ -209,9 +279,11 @@ class UIManager {
 
         this.updateButtonLabels();
         this.game.saveManager.save();
+        this.syncSettingsValues();
     }
 
     update(dt) {
+        this.syncSettingsControls();
         for (let i = this.milestonePopups.length - 1; i >= 0; i--) {
             this.milestonePopups[i].timer -= dt;
             if (this.milestonePopups[i].timer <= 0) {
@@ -222,7 +294,7 @@ class UIManager {
 
     draw(ctx) {
         // Draw Settings Menu if PAUSED
-        if (this.game.state === 'PAUSED') {
+        if (this.game.state === 'PAUSED' && !this.settingsDialog) {
             ctx.fillStyle = 'rgba(0,0,0,0.8)';
             ctx.fillRect(0,0, this.game.logicalWidth, this.game.logicalHeight);
 
@@ -260,7 +332,7 @@ class UIManager {
             if (this.lastExportBase64) {
                 ctx.font = '12px monospace';
                 ctx.fillStyle = '#aaa';
-                ctx.fillText("Copied to console: " + this.lastExportBase64.substring(0, 20) + "...", this.game.logicalWidth/2, 450);
+                ctx.fillText("Save export ready to copy: " + this.lastExportBase64.substring(0, 20) + "...", this.game.logicalWidth/2, 450);
             }
         }
 
@@ -346,28 +418,23 @@ class UIManager {
         return (tx >= checkX && tx <= checkX + z.w && ty >= z.y && ty <= z.y + z.h);
     }
 
+    touchActionDown(action) {
+        const opts = this.game.saveManager.data.options;
+        return !this.game.input.pointerConsumed && opts.touchControls !== 'off' &&
+            this.game.input.touches.some(t => this.isTouchInZone(t.x,t.y,action));
+    }
+    worldTouch() {
+        const off=this.game.saveManager.data.options.touchControls==='off';
+        return this.game.input.touches.find(t => off || !Object.keys(this.touchZones).some(k => this.isTouchInZone(t.x,t.y,k)));
+    }
     isActionDown(action) {
-        let opts = this.game.saveManager.data.options;
-        let useTouch = !this.game.input.pointerConsumed && (opts.touchControls === 'always' || (opts.touchControls === 'auto' && this.game.input.touch.active));
-
-        if (action === 'left') {
-            if (this.game.input.isKeyDown('KeyA') || this.game.input.isKeyDown('ArrowLeft')) return true;
-            if (useTouch && this.game.input.touch.active && this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'left')) return true;
-        }
-        if (action === 'right') {
-            if (this.game.input.isKeyDown('KeyD') || this.game.input.isKeyDown('ArrowRight')) return true;
-            if (useTouch && this.game.input.touch.active && this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'right')) return true;
-        }
-        if (action === 'jump') {
-            if (this.game.input.isKeyDown('KeyW') || this.game.input.isKeyDown('ArrowUp') || this.game.input.isKeyDown('Space')) return true;
-            if (useTouch && this.game.input.touch.active && this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'jump')) return true;
-        }
-        if (action === 'grapple') {
-            if (!this.game.input.pointerConsumed && this.game.input.mouse.down && !this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'left') &&
-                !this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'right') &&
-                !this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'jump') &&
-                !this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'grapple')) return true;
-            if (useTouch && this.game.input.touch.active && this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'grapple')) return true;
+        const input = this.game.input;
+        const keys = {left:['KeyA','ArrowLeft'],right:['KeyD','ArrowRight'],jump:['KeyW','ArrowUp','Space']};
+        if (keys[action]?.some(code => input.isKeyDown(code))) return true;
+        if (this.touchActionDown(action)) return true;
+        if (action === 'grapple' && !input.pointerConsumed) {
+            if (input.touch.active) return !!this.worldTouch();
+            return input.mouse.down;
         }
         return false;
     }

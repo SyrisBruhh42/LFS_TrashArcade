@@ -13,7 +13,8 @@ function target(extra={}) {
 function load(slug,files,extra={}) {
     let clock=0;
     const window=target();
-    const context=vm.createContext({window,performance:{now:()=>clock},localStorage:{getItem(){return null;},setItem(){},removeItem(){}},...extra});
+    const document=target({getElementById(){return null;},activeElement:null,hidden:false});
+    const context=vm.createContext({window,document,performance:{now:()=>clock},localStorage:{getItem(){return null;},setItem(){},removeItem(){}},...extra});
     for(const file of files)vm.runInContext(fs.readFileSync(path.join(root,'games',slug,file),'utf8'),context,{filename:file});
     return {window,context,evaluate:code=>vm.runInContext(code,context),advance:ms=>clock+=ms};
 }

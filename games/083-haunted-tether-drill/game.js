@@ -495,6 +495,7 @@ class InputManager {
     bindEvents() {
         window.addEventListener('keydown', (e) => {
             if (e.repeat) return; // A held key cannot reactivate after focus-loss cleanup.
+            if (e.target?.closest?.('button,input,textarea,select,dialog')) return;
             this.keys[e.code] = true;
         });
         window.addEventListener('keyup', (e) => {
@@ -1869,29 +1870,29 @@ class Game {
 
     spawnHazards() {
         this.hazards = [];
-
-        // Spawn Vortexes
-        for (let i = 0; i < 3; i++) {
-            this.hazards.push(new GhostlyVortex(
-                Math.random() * this.width,
-                Math.random() * this.height
-            ));
-        }
-
-        // Spawn Crumbling Pillars
-        for (let i = 0; i < 6; i++) {
-            this.hazards.push(new CrumblingPillar(
-                Math.random() * this.width,
-                Math.random() * this.height
-            ));
-        }
-
-        // Spawn Spectral Spikes
-        for (let i = 0; i < 4; i++) {
-            this.hazards.push(new SpectralSpikes(
-                Math.random() * this.width,
-                Math.random() * this.height
-            ));
+        // Camp is a safe starting area. Hazard influence must not overlap it;
+        // this also prevents a random pillar from pinning the player at spawn.
+        const place = Type => {
+            const hazard = new Type(0,0);
+            const reach = hazard instanceof GhostlyVortex ? hazard.radius*2 :
+                hazard instanceof CrumblingPillar ? hazard.radius*Math.SQRT2 : hazard.radius;
+            const clearance = this.baseCamp.radius + this.player.radius + reach;
+            const safe = (x,y) => Math.hypot(x-this.baseCamp.x,y-this.baseCamp.y)>clearance;
+            for (let attempt=0;attempt<32;attempt++) {
+                const x=Math.random()*this.width,y=Math.random()*this.height;
+                if (safe(x,y)) {hazard.x=x;hazard.y=y;return hazard;}
+            }
+            // Bounded fallback for small viewports or an unlucky random sequence.
+            const corners=[[0,0],[this.width,0],[0,this.height],[this.width,this.height]];
+            const point=corners.find(([x,y]) => safe(x,y));
+            if (!point) return null;
+            [hazard.x,hazard.y]=point;return hazard;
+        };
+        for (const [Type,count] of [[GhostlyVortex,3],[CrumblingPillar,6],[SpectralSpikes,4]]) {
+            for (let i=0;i<count;i++) {
+                const hazard=place(Type);
+                if (hazard) this.hazards.push(hazard);
+            }
         }
     }
 
@@ -2778,6 +2779,93 @@ class UIManager {
             { id: 'tail_growth', label: 'Tail Growth', desc: 'Max tail length', req: (s) => s.maxTailReached >= 50 },
             { id: 'boss_slayer', label: 'Boss Slayer', desc: 'Defeat a boss', req: (s) => s.bossesDefeated >= 1 }
         ];
+        this.initOptionsControls();
+    }
+
+    initOptionsControls() {
+        this.optionsDialog=document.getElementById('options-dialog');
+        this.optionsButton=document.getElementById('options-button');
+        if (!this.optionsDialog || !this.optionsButton) return;
+        const fields=document.getElementById('options-fields');
+        this.optionControls=[];
+        this.optionsMenu.items.forEach((item,index) => {
+            const control=document.createElement(item.type==='toggle'||item.type==='slider'?'input':'button');
+            control.id='option-'+(item.key||item.action);
+            if (item.type==='toggle'||item.type==='slider') {
+                const label=document.createElement('label');label.textContent=item.label;
+                control.type=item.type==='toggle'?'checkbox':'range';
+                if (item.type==='slider') {control.min=item.min;control.max=item.max;control.step=item.step;}
+                control.addEventListener(item.type==='slider'?'input':'change', () => {
+                    this.game.saveManager.data.options[item.key]=item.type==='toggle'?control.checked:Number(control.value);
+                    this.game.saveManager.save();
+                });
+                label.append(control);fields.append(label);
+            } else {
+                control.type='button';
+                control.addEventListener('click', () => {
+                    if (item.type==='choice') this.adjustOption(item,this.game.saveManager.data.options,1);
+                    else this.activateOption(item,this.game.saveManager.data.options);
+                    this.syncOptionsControls();
+                });
+                fields.append(control);
+            }
+            control.addEventListener('focus', () => { this.optionsMenu.selectedIdx=index; });
+            this.optionControls.push(control);
+        });
+        this.optionsButton.addEventListener('click', () => this.openOptions());
+        this.optionsDialog.addEventListener('cancel', e => { e.preventDefault(); this.closeOptions(); });
+        this.optionsDialog.addEventListener('keydown', e => {
+            const index=this.optionsMenu.selectedIdx,item=this.optionsMenu.items[index];
+            if (['ArrowUp','ArrowDown','KeyW','KeyS'].includes(e.code)) {
+                e.preventDefault();
+                const direction=['ArrowUp','KeyW'].includes(e.code)?-1:1;
+                this.optionsMenu.selectedIdx=(index+direction+this.optionControls.length)%this.optionControls.length;
+                this.optionsMenu.resetState=0;
+                this.optionControls[this.optionsMenu.selectedIdx].focus();
+            } else if ((item.type==='choice'&&['ArrowLeft','ArrowRight'].includes(e.code)) || ['KeyA','KeyD'].includes(e.code)) {
+                e.preventDefault();this.adjustOption(item,this.game.saveManager.data.options,['ArrowLeft','KeyA'].includes(e.code)?-1:1);
+            } else if (e.code==='Enter'&&item.type==='toggle') {
+                e.preventDefault();this.activateOption(item,this.game.saveManager.data.options);
+            }
+            this.syncOptionsValues();
+        });
+        this.syncOptionsValues();
+    }
+
+    openOptions() {
+        if (!['TITLE','PLAYING','PAUSED'].includes(this.game.state)) return;
+        this.game.previousState=this.game.state==='PLAYING'?'PAUSED':this.game.state;
+        this.game.inputManager.releaseAll();
+        this.game.state='OPTIONS';
+        this.syncOptionsControls();
+    }
+
+    closeOptions() {
+        this.game.state=this.game.previousState||'TITLE';
+        this.game.inputManager.releaseAll();
+        this.optionsMenu.resetState=0;
+        this.syncOptionsControls();
+        document.getElementById('gameCanvas')?.focus?.({preventScroll:true});
+    }
+
+    syncOptionsValues() {
+        if (!this.optionControls) return;
+        const data=this.game.saveManager.data.options;
+        this.optionsMenu.items.forEach((item,index) => {
+            const control=this.optionControls[index];
+            if (item.type==='toggle') control.checked=data[item.key];
+            else if (item.type==='slider') control.value=data[item.key];
+            else control.textContent=item.type==='choice'?`${item.label}: ${data[item.key]}`:
+                item.action==='reset'&&this.optionsMenu.resetState===1?'Are you sure? Activate Reset again':item.label;
+        });
+    }
+
+    syncOptionsControls() {
+        if (!this.optionsDialog) return;
+        this.optionsButton.hidden=!['TITLE','PLAYING','PAUSED'].includes(this.game.state);
+        this.syncOptionsValues();
+        if (this.game.state==='OPTIONS'&&!this.optionsDialog.open) this.optionsDialog.showModal();
+        else if (this.game.state!=='OPTIONS'&&this.optionsDialog.open) this.optionsDialog.close();
     }
 
     checkMilestones() {
@@ -2810,10 +2898,10 @@ class UIManager {
             this.updateOptionsMenu();
         } else if (this.game.state === 'TITLE' || this.game.state === 'PAUSED') {
             if (this.game.inputManager.justPressed('KeyO')) {
-                this.game.previousState = this.game.state;
-                this.game.state = 'OPTIONS';
+                this.openOptions();
             }
         }
+        this.syncOptionsControls();
 
         // FPS Counter
         this.frameCount++;
@@ -2825,6 +2913,7 @@ class UIManager {
     }
 
     updateOptionsMenu() {
+        if (this.optionsDialog?.open) return;
         const input = this.game.inputManager;
 
         if (input.justPressed('ArrowUp') || input.justPressed('KeyW')) {
@@ -2873,8 +2962,7 @@ class UIManager {
             if (this.game.soundEngine) this.game.soundEngine.playMenuClick();
         } else if (item.type === 'action') {
             if (item.action === 'back') {
-                this.game.state = this.game.previousState || 'TITLE';
-                this.optionsMenu.resetState = 0;
+                this.closeOptions();
                 if (this.game.soundEngine) this.game.soundEngine.playMenuClick();
             } else if (item.action === 'export') {
                 const saveString = btoa(JSON.stringify(this.game.saveManager.data));
@@ -2899,7 +2987,7 @@ class UIManager {
     draw(ctx) {
         const data = this.game.saveManager.data.options;
 
-        if (this.game.state === 'OPTIONS') {
+        if (this.game.state === 'OPTIONS' && !this.optionsDialog) {
             ctx.fillStyle = 'rgba(0,0,0,0.9)';
             ctx.fillRect(0, 0, this.game.width, this.game.height);
             ctx.fillStyle = '#fff';

@@ -5,7 +5,8 @@ class SaveManager {
         this.data = this.defaultData();
         this.load();
     }
-    defaultData() {
+    defaultData() { return SaveManager.defaults(); }
+    static defaults() {
         return {
             highScore: 0,
             bestWaveOrCombo: 0,
@@ -17,6 +18,7 @@ class SaveManager {
                 sfxVolume: 1.0,
                 musicVolume: 1.0,
                 screenShake: 1.0,
+                shakeIntensity: 1.0,
                 particleDensity: 1.0,
                 highContrast: false,
                 showFPS: false,
@@ -29,15 +31,73 @@ class SaveManager {
         this.data = this.defaultData();
         this.save();
     }
+    static validate(candidate) {
+        const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+        if (!object(candidate)) throw new Error('Save must be an object');
+        const data = SaveManager.defaults();
+        if (!Object.keys(data).some(key => Object.hasOwn(candidate, key))) throw new Error('No recognized save fields');
+        for (const key of Object.keys(data)) {
+            if (!Object.hasOwn(candidate, key) || key === 'options') continue;
+            const value = candidate[key];
+            if (key === 'unlockedMilestones') {
+                if (!Array.isArray(value) || value.length > 1000 || !value.every(id => typeof id === 'string' && id.length > 0 && id.length <= 128)) throw new Error('Invalid milestones');
+                data[key] = [...new Set(value)];
+            } else {
+                if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) throw new Error('Invalid statistic');
+                data[key] = value;
+            }
+        }
+        if (Object.hasOwn(candidate, 'options')) {
+            if (!object(candidate.options)) throw new Error('Invalid options');
+            const choices = {touchControls:['auto','always','off']};
+            for (const key of Object.keys(data.options)) {
+                if (!Object.hasOwn(candidate.options, key)) continue;
+                const value = candidate.options[key];
+                const valid = choices[key] ? choices[key].includes(value)
+                    : typeof data.options[key] === 'boolean' ? typeof value === 'boolean'
+                    : typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+                if (!valid) throw new Error('Invalid option: ' + key);
+                data.options[key] = value;
+            }
+        }
+        return data;
+    }
+    static encode(data) {
+        const bytes = new TextEncoder().encode(JSON.stringify(data));
+        let binary = '';
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        const encoded = btoa(binary);
+        if (encoded.length > 100000) throw new Error('Save exceeds export size limit');
+        return encoded;
+    }
+    exportData() { return SaveManager.encode(this.data); }
+    importData(encoded) {
+        let candidate;
+        try {
+            if (typeof encoded !== 'string' || encoded.length > 100000) throw new Error('Invalid save text');
+            const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0));
+            candidate = SaveManager.validate(JSON.parse(new TextDecoder('utf-8', {fatal:true}).decode(bytes)));
+            SaveManager.encode(candidate); // Normalized saves must fit the same round-trip budget.
+        } catch (error) {
+            return {ok:false, message:'Invalid save data. Your previous save was kept.'};
+        }
+        try {
+            localStorage.setItem(this.saveKey, JSON.stringify(candidate));
+        } catch (error) {
+            return {ok:false, message:'Storage unavailable. Your previous save was kept.'};
+        }
+        this.data = candidate;
+        return {ok:true, message:'Save imported successfully.'};
+    }
     load() {
         try {
             const stored = localStorage.getItem(this.saveKey);
             if (stored) {
                 const parsed = JSON.parse(stored);
-                this.data = { ...this.data, ...parsed, options: { ...this.data.options, ...parsed.options } };
+                this.data = SaveManager.validate(parsed);
             }
         } catch (e) {
-            console.error('SaveLoad error:', e);
+            console.warn('SaveLoad error; using safe defaults:', e);
         }
     }
     save() {
@@ -70,9 +130,13 @@ class InputManager {
         this.keys = {};
         this.mouse = { x: 0, y: 0, down: false, justPressed: false };
         this.touch = { active: false, x: 0, y: 0 };
+        this.touches = [];
+        this.blockedTouches = new Set();
         this.pointerConsumed = false;
 
         window.addEventListener('keydown', (e) => {
+            if (e.repeat || e.target?.closest?.('button,input,textarea,select,dialog')) return;
+            if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
             this.keys[e.code] = true;
             this.soundEngine.init();
             this.soundEngine.resume();
@@ -90,7 +154,7 @@ class InputManager {
             this.soundEngine.init();
             this.soundEngine.resume();
         });
-        this.canvas.addEventListener('mouseup', (e) => {
+        window.addEventListener('mouseup', (e) => {
             this.mouse.down = false;
             this.pointerConsumed = false;
         });
@@ -98,29 +162,46 @@ class InputManager {
         this.canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             if (this.pointerConsumed) return;
-            this.touch.active = true;
-            this.updateTouch(e.touches[0]);
-            this.mouse.down = true;
-            this.mouse.justPressed = true;
+            this.readTouches(e.touches);
+            this.mouse.justPressed = this.touch.active;
             this.soundEngine.init();
             this.soundEngine.resume();
         }, { passive: false });
         this.canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            this.updateTouch(e.touches[0]);
+            this.readTouches(e.touches);
         }, { passive: false });
         const endTouch = (e) => {
+            if (e.target && e.target !== this.canvas) return;
             e.preventDefault();
-            if (e.touches.length > 0) {
-                this.updateTouch(e.touches[0]);
-                return;
-            }
-            this.touch.active = false;
-            this.mouse.down = false;
-            this.pointerConsumed = false;
+            this.readTouches(e.touches);
+            if (!e.touches.length) this.pointerConsumed = false;
         };
-        this.canvas.addEventListener('touchend', endTouch, { passive: false });
-        this.canvas.addEventListener('touchcancel', endTouch, { passive: false });
+        window.addEventListener('touchend', endTouch, { passive: false });
+        window.addEventListener('touchcancel', endTouch, { passive: false });
+        window.addEventListener('blur', () => this.clear());
+        document.addEventListener('visibilitychange', () => { if (document.hidden) this.clear(); });
+    }
+    clear() {
+        for (const touch of this.touches) this.blockedTouches.add(touch.id);
+        this.keys = {};
+        this.touches = [];
+        this.touch.active = this.mouse.down = this.mouse.justPressed = false;
+        this.pointerConsumed = false;
+    }
+    readTouches(touches) {
+        const points = Array.from(touches);
+        const ids = new Set(points.map(t => t.identifier));
+        for (const id of this.blockedTouches) if (!ids.has(id)) this.blockedTouches.delete(id);
+        this.touches = points.filter(t => !this.blockedTouches.has(t.identifier)).map(t => {
+            this.updatePointer(t.clientX, t.clientY);
+            return {id:t.identifier,x:this.mouse.x,y:this.mouse.y};
+        });
+        this.touch.active = this.mouse.down = this.touches.length > 0;
+        if (this.touch.active) {
+            Object.assign(this.mouse, {x:this.touches[0].x,y:this.touches[0].y});
+            this.touch.x=this.mouse.x; this.touch.y=this.mouse.y;
+        }
     }
     consumePointer() {
         // A menu activation gesture must be released before it can control the player.
@@ -284,9 +365,12 @@ class Player {
             let ty = input.mouse.y;
 
             // If using touch grapple button, shoot straight up or towards nearest platform
-            if (window.game && window.game.uiManager.isTouchInZone(tx, ty, 'grapple') && input.touch.active) {
+            if (window.game && window.game.uiManager.touchActionDown('grapple')) {
                tx = this.x;
                ty = this.y - 300; // shoot straight up as fallback
+            } else if (window.game && input.touch.active) {
+                const target = window.game.uiManager.worldTouch();
+                if (target) { tx = target.x; ty = target.y; }
             }
 
             this.shootGrapple(tx, ty, platforms, sound);
@@ -878,11 +962,13 @@ class Game {
         window.addEventListener('visibilitychange', () => {
             if (document.hidden && this.state === 'PLAYING') {
                 this.state = 'PAUSED';
+                this.input.clear();
             }
         });
         window.addEventListener('blur', () => {
             if (this.state === 'PLAYING') {
                 this.state = 'PAUSED';
+                this.input.clear();
             }
         });
 
@@ -957,7 +1043,7 @@ class Game {
             }
             if (this.input.isKeyDown('Escape')) {
                 this.state = 'PAUSED';
-                this.input.keys['Escape'] = false; // consume to prevent rapid toggle
+                this.input.clear();
                 return;
             }
 
@@ -1169,8 +1255,7 @@ class Game {
             // Only unpause if Escape is pressed, or mouse is clicked OUTSIDE the UI bounds.
             if (this.input.isKeyDown('Escape')) {
                 this.sound.playUI();
-                this.state = 'PLAYING';
-                this.input.keys['Escape'] = false; // consume
+                this.uiManager.closeSettings();
             } else if (this.input.mouse.justPressed) {
                 // If it was a touch OR mouse click outside the UI, resume
                 if (!this.uiManager.isClickInUI(this.input.mouse.x, this.input.mouse.y)) {

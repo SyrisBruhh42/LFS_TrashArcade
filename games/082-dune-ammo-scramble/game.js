@@ -2,7 +2,11 @@ const SAVE_KEY = 'arcade_game_082_082-dune-ammo-scramble_v1';
 
 class SaveManager {
     constructor() {
-        this.data = {
+        this.data = SaveManager.defaults();
+        this.load();
+    }
+    static defaults() {
+        return {
             highScore: 0,
             bestWaveOrCombo: 0,
             totalGamesPlayed: 0,
@@ -10,14 +14,71 @@ class SaveManager {
             unlockedMilestones: [],
             options: { mute: false, sfxVolume: 1.0, musicVolume: 1.0, shakeIntensity: 1, particleDensity: 'high', highContrast: false, showFPS: false, touchMode: 'auto', touchSwap: false },
         };
-        this.load();
+    }
+    static validate(candidate) {
+        const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+        if (!object(candidate)) throw new Error('Save must be an object');
+        const data = SaveManager.defaults();
+        if (!Object.keys(data).some(key => Object.hasOwn(candidate, key))) throw new Error('No recognized save fields');
+        for (const key of Object.keys(data)) {
+            if (!Object.hasOwn(candidate, key) || key === 'options') continue;
+            const value = candidate[key];
+            if (key === 'unlockedMilestones') {
+                if (!Array.isArray(value) || value.length > 1000 || !value.every(id => typeof id === 'string' && id.length > 0 && id.length <= 128)) throw new Error('Invalid milestones');
+                data[key] = [...new Set(value)];
+            } else {
+                if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) throw new Error('Invalid statistic');
+                data[key] = value;
+            }
+        }
+        if (Object.hasOwn(candidate, 'options')) {
+            if (!object(candidate.options)) throw new Error('Invalid options');
+            const choices = {touchMode:['auto','always','off'],particleDensity:['high','low'],shakeIntensity:[0,0.5,1]};
+            for (const key of Object.keys(data.options)) {
+                if (!Object.hasOwn(candidate.options, key)) continue;
+                const value = candidate.options[key];
+                const valid = choices[key] ? choices[key].includes(value)
+                    : typeof data.options[key] === 'boolean' ? typeof value === 'boolean'
+                    : typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+                if (!valid) throw new Error('Invalid option: ' + key);
+                data.options[key] = value;
+            }
+        }
+        return data;
+    }
+    static encode(data) {
+        const bytes = new TextEncoder().encode(JSON.stringify(data));
+        let binary = '';
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        const encoded = btoa(binary);
+        if (encoded.length > 100000) throw new Error('Save exceeds export size limit');
+        return encoded;
+    }
+    exportData() { return SaveManager.encode(this.data); }
+    importData(encoded) {
+        let candidate;
+        try {
+            if (typeof encoded !== 'string' || encoded.length > 100000) throw new Error('Invalid save text');
+            const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0));
+            candidate = SaveManager.validate(JSON.parse(new TextDecoder('utf-8', {fatal:true}).decode(bytes)));
+            SaveManager.encode(candidate); // Normalized saves must fit the same round-trip budget.
+        } catch (error) {
+            return {ok:false, message:'Invalid save data. Your previous save was kept.'};
+        }
+        try {
+            localStorage.setItem(SAVE_KEY, JSON.stringify(candidate));
+        } catch (error) {
+            return {ok:false, message:'Storage unavailable. Your previous save was kept.'};
+        }
+        this.data = candidate;
+        return {ok:true, message:'Save imported successfully.'};
     }
     load() {
         try {
             const saved = localStorage.getItem(SAVE_KEY);
             if (saved) {
                 const parsed = JSON.parse(saved);
-                this.data = { ...this.data, ...parsed, options: { ...this.data.options, ...parsed.options } };
+                this.data = SaveManager.validate(parsed);
             }
         } catch (e) {
             console.warn('Failed to load save data', e);
