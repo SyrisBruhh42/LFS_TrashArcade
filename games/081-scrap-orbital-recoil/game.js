@@ -18,7 +18,9 @@ class SaveManager {
         screenShake: 1.0,
         particles: 'High',
         highContrast: false,
-        showFps: true
+        showFps: true,
+        touchControls: 'Auto',
+        touchHand: 'Right'
       }
     };
     this.load();
@@ -604,6 +606,7 @@ class InputManager {
 
   onMouseDown(e) {
     this.updateMousePos(e);
+    if (window.game && window.game.ui && window.game.ui.handleInput(e)) return;
     if (e.button === 2) {
       this.mouse.rightDown = true;
     } else {
@@ -629,6 +632,7 @@ class InputManager {
 
   onTouchStart(e) {
     e.preventDefault();
+    if (window.game && window.game.ui && window.game.ui.handleInput(e)) return;
     this.touches = Array.from(e.touches);
     if (this.touches.length > 0) {
       const rect = this.canvas.getBoundingClientRect();
@@ -1214,8 +1218,12 @@ class Game {
     this.sound = new SoundEngine();
     this.worldManager = new WorldManager(this);
     this.vfxManager = new VFXManager(this);
+    this.ui = new UI(this);
 
     this.width = 800;
+    this.fps = 0;
+    this.frames = 0;
+    this.lastFpsTime = performance.now();
     this.height = 600;
 
     this.state = 'TITLE'; // TITLE, PLAYING, GAME_OVER, PAUSED
@@ -1403,6 +1411,11 @@ class Game {
       }
     }
 
+    if (this.ui) {
+      this.ui.update(dt);
+      this.ui.checkMilestones();
+    }
+
     // Every 1000 points, wave increases
     // Check for wave transition to trigger draft
     const targetWave = Math.floor(this.score / 1000) + 1;
@@ -1506,7 +1519,7 @@ class Game {
   }
 
   draw() {
-    this.ctx.fillStyle = '#0a0a0c'; // space background
+    this.ctx.fillStyle = this.saveManager.data.options.highContrast ? '#000000' : '#0a0a0c'; // space background
     this.ctx.fillRect(0, 0, this.width, this.height);
 
     this.ctx.save();
@@ -1650,10 +1663,17 @@ class Game {
       this.ctx.fillStyle = '#aaa';
       this.ctx.fillText("Click or Press Escape to Resume", this.width / 2, this.height / 2 + 40);
     }
+    if (this.ui) this.ui.draw(this.ctx);
   }
 
   loop(now) {
     requestAnimationFrame(this.loop);
+    this.frames++;
+    if (now - this.lastFpsTime >= 1000) {
+      this.fps = this.frames;
+      this.frames = 0;
+      this.lastFpsTime = now;
+    }
     let dt = (now - this.lastTime) / 1000;
     if (dt > 0.1) dt = 0.1;
     this.lastTime = now;
