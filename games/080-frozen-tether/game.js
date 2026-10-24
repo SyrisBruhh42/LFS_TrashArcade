@@ -50,80 +50,6 @@ class SaveManager {
     }
 }
 
-class SoundEngine {
-    constructor() {
-        this.ctx = null;
-        this.masterGain = null;
-        this.sfxGain = null;
-        this.musicGain = null;
-        this.initialized = false;
-    }
-    init() {
-        if (this.initialized) return;
-        try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.ctx = new AudioContext();
-
-            this.masterGain = this.ctx.createGain();
-            this.sfxGain = this.ctx.createGain();
-            this.musicGain = this.ctx.createGain();
-
-            this.sfxGain.connect(this.masterGain);
-            this.musicGain.connect(this.masterGain);
-            this.masterGain.connect(this.ctx.destination);
-
-            this.masterGain.gain.value = 1.0;
-            this.sfxGain.gain.value = 1.0;
-            this.musicGain.gain.value = 1.0;
-
-            this.initialized = true;
-        } catch (e) {
-            console.error('Web Audio API not supported', e);
-        }
-    }
-    resume() {
-        if (this.ctx && this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
-    }
-    playTone(freq, type, duration, vol) {
-        if (!this.initialized || !this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-
-        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-
-        osc.connect(gain);
-        gain.connect(this.sfxGain);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
-    }
-    playJump() {
-        this.playTone(400, 'sine', 0.2, 0.5);
-    }
-    playGrappleShoot() {
-        this.playTone(800, 'square', 0.1, 0.3);
-    }
-    playGrappleHit() {
-        this.playTone(600, 'triangle', 0.1, 0.4);
-    }
-    playDash() {
-        this.playTone(400, 'triangle', 0.15, 0.4);
-    }
-    playEnemyHit() {
-        this.playTone(150, 'sawtooth', 0.3, 0.6);
-    }
-    playScore() {
-        this.playTone(1200, 'sine', 0.1, 0.3);
-    }
-    playGameOver() {
-        this.playTone(100, 'sawtooth', 1.0, 0.8);
-    }
-}
 
 class InputManager {
     constructor(canvas, soundEngine) {
@@ -945,6 +871,8 @@ class Game {
     update(dt) {
         if (this.state === 'TITLE') {
             if (this.input.isKeyDown('Enter') || this.input.mouse.justPressed) {
+                this.sound.playUI();
+                this.sound.playSpawn();
                 this.start();
             }
         } else if (this.state === 'PLAYING') {
@@ -958,6 +886,8 @@ class Game {
                 this.state = 'PAUSED';
                 return;
             }
+
+            this.sound.update(dt, this);
 
             // Time dilation twist
             let timeScale = this.player ? this.player.timeDilationFactor : 1.0;
@@ -1007,6 +937,7 @@ class Game {
                         if (e.isBoss) {
                             if (this.player.invulnTime <= 0) {
                                 e.takeDamage(100);
+                                this.sound.playBossHit();
                                 this.player.invulnTime = 0.5; // IFrames after hitting boss
                                 if (!this.player.dashActive) {
                                     this.player.vy = this.player.jumpForce * 1.2; // Higher bounce on boss
@@ -1138,6 +1069,7 @@ class Game {
                     let bx = startX + i * (boxWidth + spacing);
                     if (mx > bx && mx < bx + boxWidth && my > startY && my < startY + boxHeight) {
                         this.upgradeChoices[i].apply(this.player);
+                        this.sound.playUpgrade();
                         this.state = 'PLAYING';
                         for(let j = 0; j < 5; j++) {
                             this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50));
@@ -1148,10 +1080,13 @@ class Game {
             }
         } else if (this.state === 'PAUSED') {
             if (this.input.isKeyDown('Enter') || this.input.mouse.justPressed) {
+                this.sound.playUI();
                 this.state = 'PLAYING';
             }
         } else if (this.state === 'GAME_OVER') {
             if (this.input.isKeyDown('Enter') || this.input.mouse.justPressed) {
+                this.sound.playUI();
+                this.sound.playSpawn();
                 this.start();
             }
         }
