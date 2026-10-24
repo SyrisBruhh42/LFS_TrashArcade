@@ -12,6 +12,8 @@ This audit includes concrete local repairs, described in the companion qualifica
 
 Initial audited source: `6c9e25f321ad0ab0ffa79c67ae0bd852200c29a8`, branch `codex/repair-jules-pipeline-20261024`. Three independent partitions inspected provider guidance, controller failure paths, and UX acceptance. The integrator reviewed the changes and retained falsification evidence. During repair, incoming main through `0b14fff` was reconciled locally at `dd24a78`, preserving game084 phase5 bosses and game085 phase3 environments while retaining prior input/cooldown repairs. Later remote activity is outside that integration checkpoint.
 
+Final remote readback reached `fed9c5bf53fb1474a19b90c02e2ae23ba8503276` (registry rebuild after PR393, commit time 19:27:53Z): four further commits changed 084, added game086 and regenerated registry. Those later changes are **not integrated or qualified by this candidate**. The live factory continued publishing during the isolated audit. Refresh/reconcile and rerun affected acceptance before publication; the 85-game candidate results do not cover the new game086.
+
 The earlier five-day census covers **2026-10-19 17:13:01Z through 2026-10-24 17:13:01Z**, not a moving real-time total:
 
 | Observed record | Result | Interpretation boundary |
@@ -54,6 +56,8 @@ Cross-review also found two defects in the first repair draft: held-key autorepe
 The tentative suspicion that REST workflow `head_sha` necessarily referred to the base was **falsified and discarded**: observed records used the PR head. Do not weaken validation to accommodate an unsupported theory.
 
 The existing process lock and observed account inventory are not a distributed reservation shared with manual tasks, schedules or other controllers. Preserve reserves and immediate admission checks, but do not call them a hard account-wide spend cap.
+
+The current phase/maintenance PR lane runs static checks and changed-game browser smoke; the full Python/Node regression suites run in the main/infrastructure lanes. Thus adding a regression file does not automatically make it pre-merge game acceptance. Wire trusted behavioral expectations into a sandboxed browser/isolated test path before relying on them for autonomous integration. Do not simply execute arbitrary PR game JavaScript inside Node's `vm` and call that a security sandbox; the current browser boundary deliberately keeps candidate code out of the trusted Node driver.
 
 ## Analyze: usability and input findings
 
