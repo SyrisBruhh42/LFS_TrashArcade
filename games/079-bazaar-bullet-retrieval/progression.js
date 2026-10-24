@@ -19,6 +19,12 @@ class ComboSystem {
         if (this.barValue >= this.maxBar) {
             this.barValue = this.maxBar;
             this.multiplier++;
+            if (this.multiplier >= 10 && window.game) {
+                if (!window.game.saveManager.data.milestones.comboMaster) {
+                    window.game.saveManager.data.milestones.comboMaster = true;
+                    window.game.saveManager.save();
+                }
+            }
         }
     }
     draw(ctx, canvasWidth) {

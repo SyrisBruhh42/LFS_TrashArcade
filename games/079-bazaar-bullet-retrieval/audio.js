@@ -43,6 +43,13 @@ class SoundEngine {
     update(dt, game) {
         if (!this.initialized) return;
 
+        let settings = window.game?.saveManager?.data?.settings;
+        if (settings) {
+            this.master.gain.value = settings.masterMute ? 0 : 0.4;
+            this.musicGain.gain.value = settings.musicVolume;
+            this.sfxGain.gain.value = settings.sfxVolume;
+        }
+
         this.isBoss = game.enemies.some(e => e.type === 'boss');
         this.isLowHp = this.isBoss && game.enemies.some(e => e.type === 'boss' && e.hp <= e.maxHp / 2);
 

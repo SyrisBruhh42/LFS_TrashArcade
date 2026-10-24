@@ -17,9 +17,12 @@ class VFXSystem {
     }
 
     triggerShake(duration, intensity) {
-        if (intensity >= this.shakeIntensity) {
+        let mult = window.game?.saveManager?.data?.settings?.screenShake ?? 1.0;
+        if (mult === 0) return;
+        let finalIntensity = intensity * mult;
+        if (finalIntensity >= this.shakeIntensity) {
             this.shakeTimer = duration;
-            this.shakeIntensity = intensity;
+            this.shakeIntensity = finalIntensity;
         }
     }
 
@@ -28,7 +31,10 @@ class VFXSystem {
     }
 
     emitParticles(x, y, count, color, speed, dirX, dirY, spread) {
-        for (let i = 0; i < count; i++) {
+        let density = window.game?.saveManager?.data?.settings?.particleDensity ?? 'High';
+        let finalCount = density === 'High' ? count : Math.ceil(count * 0.3);
+        if (finalCount === 0 && count > 0) finalCount = 1;
+        for (let i = 0; i < finalCount; i++) {
             let angle = Math.atan2(dirY, dirX) + (Math.random() - 0.5) * spread;
             let currentSpeed = speed * (0.5 + Math.random() * 0.5);
             this.particles.push({

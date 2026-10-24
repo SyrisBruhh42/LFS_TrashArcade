@@ -5,17 +5,23 @@ class SaveManager {
         this.data = this.load();
     }
     load() {
+        let data = { highScore: 0, gamesPlayed: 0, settings: { masterMute: false, sfxVolume: 0.8, musicVolume: 0.5, screenShake: 1.0, particleDensity: 'High', highContrast: false, fpsCounter: false, touchMode: 'Auto', touchSwap: false }, milestones: { firstBlood: false, ammoHoarder: false, bossSlayer: false, comboMaster: false, survivor: false, rich: false } };
         try {
             const raw = localStorage.getItem(this.saveKey);
-            if (raw) return JSON.parse(raw);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                data = { ...data, ...parsed, settings: { ...data.settings, ...(parsed.settings || {}) }, milestones: { ...data.milestones, ...(parsed.milestones || {}) } };
+            }
         } catch (e) { console.error('Save load failed', e); }
-        return { highScore: 0, gamesPlayed: 0 };
+        return data;
     }
     save() {
         try {
             localStorage.setItem(this.saveKey, JSON.stringify(this.data));
         } catch (e) { console.error('Save failed', e); }
     }
+    exportBase64() { return btoa(JSON.stringify(this.data)); }
+    importBase64(str) { try { const parsed = JSON.parse(atob(str)); this.data = { ...this.data, ...parsed, settings: { ...this.data.settings, ...(parsed.settings || {}) }, milestones: { ...this.data.milestones, ...(parsed.milestones || {}) } }; this.save(); return true; } catch(e) { return false; } }
 }
 
 
@@ -73,9 +79,10 @@ class InputManager {
         if (this.keys['KeyD'] || this.keys['ArrowRight']) dx += 1;
 
         // Touch joystick logic (left side of screen)
-        const leftTouch = this.touches.find(t => t.x < this.canvas.width / 2);
+        let swap = window.game?.saveManager?.data?.settings?.touchSwap;
+        const leftTouch = this.touches.find(t => swap ? t.x > this.canvas.width / 2 : t.x < this.canvas.width / 2);
         if (leftTouch) {
-            const centerX = this.canvas.width / 4;
+            const centerX = swap ? this.canvas.width * 0.75 : this.canvas.width / 4;
             const centerY = this.canvas.height * 0.75;
             dx = (leftTouch.x - centerX) / 50;
             dy = (leftTouch.y - centerY) / 50;
@@ -91,13 +98,15 @@ class InputManager {
 
     isShooting() {
         if (this.mouse.down) return true;
+        let swap = window.game?.saveManager?.data?.settings?.touchSwap;
         // Touch shoot button (right side of screen)
-        return this.touches.some(t => t.x > this.canvas.width / 2);
+        return this.touches.some(t => swap ? t.x < this.canvas.width / 2 : t.x > this.canvas.width / 2);
     }
 
     getAim(playerX, playerY) {
-        if (this.touches.some(t => t.x > this.canvas.width / 2)) {
-            const rightTouch = this.touches.find(t => t.x > this.canvas.width / 2);
+        let swap = window.game?.saveManager?.data?.settings?.touchSwap;
+        let rightTouch = this.touches.find(t => swap ? t.x < this.canvas.width / 2 : t.x > this.canvas.width / 2);
+        if (rightTouch) {
             return { x: rightTouch.x, y: rightTouch.y };
         }
         return { x: this.mouse.x, y: this.mouse.y };
@@ -527,6 +536,7 @@ class Game {
         this.sound = new SoundEngine();
         this.world = new World(this.canvas);
         this.vfx = new VFXSystem();
+        if (typeof UIManager !== 'undefined') this.uiManager = new UIManager(this);
 
         this.state = 'TITLE';
         this.lastTime = performance.now();
@@ -536,6 +546,7 @@ class Game {
         this.observer.observe(document.body);
 
         this.reset();
+        this.ammoCollected = 0;
 
         window.addEventListener('visibilitychange', () => {
             if (document.hidden && this.state === 'PLAYING') this.state = 'PAUSED';
@@ -590,7 +601,12 @@ class Game {
 
     update(dt) {
         if (this.sound) this.sound.update(dt, this);
+        if (this.state === 'SETTINGS' && this.uiManager) {
+            this.uiManager.update(this.input);
+            return;
+        }
         if (this.state === 'TITLE') {
+            if (this.uiManager && this.uiManager.updateTitle(this.input)) return;
             if (this.input.isShooting() || this.input.keys['Enter']) {
                 this.sound.init();
                 this.reset();
@@ -680,6 +696,11 @@ class Game {
                 if (dx * dx + dy * dy < (this.player.radius + b.radius + 10) ** 2) {
                     if (this.player.ammo < this.player.maxAmmo) {
                         this.player.ammo++;
+                        this.ammoCollected++;
+                        if (this.ammoCollected >= 50 && !this.saveManager.data.milestones.ammoHoarder) {
+                            this.saveManager.data.milestones.ammoHoarder = true;
+                            this.saveManager.save();
+                        }
                         this.bullets.splice(i, 1);
                         if (this.player.ammo >= this.player.maxAmmo) {
                             this.sound.playReload();
@@ -716,6 +737,11 @@ class Game {
         if (this.waveTimer > 10) {
             this.wave++;
             this.waveTimer = 0;
+
+            if (this.wave >= 5 && !this.saveManager.data.milestones.survivor) {
+                this.saveManager.data.milestones.survivor = true;
+                this.saveManager.save();
+            }
 
             // Trigger upgrade draft when surviving a wave
             this.state = 'UPGRADE';
@@ -816,6 +842,16 @@ class Game {
                 this.score += pts;
                 this.combo.add(e.type === 'boss' ? 50 : 15);
 
+                if (!this.saveManager.data.milestones.firstBlood) {
+                    this.saveManager.data.milestones.firstBlood = true;
+                    this.saveManager.save();
+                }
+
+                if (e.type === 'boss' && !this.saveManager.data.milestones.bossSlayer) {
+                    this.saveManager.data.milestones.bossSlayer = true;
+                    this.saveManager.save();
+                }
+
                 if (this.vfx) {
                     this.vfx.triggerShake(e.type === 'boss' ? 0.3 : 0.05, e.type === 'boss' ? 8 : 2);
                     if (e.type === 'boss') this.vfx.triggerHitStop(0.2);
@@ -870,12 +906,16 @@ class Game {
         this.saveManager.data.gamesPlayed++;
         if (this.score > this.saveManager.data.highScore) {
             this.saveManager.data.highScore = this.score;
+            if (this.score >= 50000 && !this.saveManager.data.milestones.rich) {
+                this.saveManager.data.milestones.rich = true;
+            }
         }
         this.saveManager.save();
     }
 
     draw() {
-        this.ctx.fillStyle = '#1a1515'; // Desert night
+        let hc = this.saveManager.data.settings.highContrast;
+        this.ctx.fillStyle = hc ? '#000' : '#1a1515'; // Desert night
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         this.ctx.save();
@@ -903,7 +943,7 @@ class Game {
         this.ctx.restore();
 
         // UI
-        this.ctx.fillStyle = '#e2fc7a';
+        this.ctx.fillStyle = hc ? '#fff' : '#e2fc7a';
         this.ctx.font = '20px monospace';
         this.ctx.textAlign = 'left';
 
@@ -916,6 +956,9 @@ class Game {
             this.ctx.font = '16px monospace';
             this.ctx.fillText('Move: WASD / Joystick. Shoot: Mouse / Button.', this.canvas.width / 2, this.canvas.height / 2 + 60);
             this.ctx.fillText('RETRIEVE YOUR DROPPED AMMO!', this.canvas.width / 2, this.canvas.height / 2 + 90);
+            if (this.uiManager) this.uiManager.drawTitleOverlay(this.ctx, this.canvas);
+        } else if (this.state === 'SETTINGS') {
+            if (this.uiManager) this.uiManager.drawSettings(this.ctx, this.canvas);
         } else if (this.state === 'PLAYING' || this.state === 'PAUSED') {
             this.ctx.fillText(`Score: ${this.score}`, 20, 30);
             this.ctx.fillText(`Wave: ${this.wave}`, 20, 60);
@@ -968,6 +1011,26 @@ class Game {
 
             this.combo.draw(this.ctx, this.canvas.width);
 
+            if (this.saveManager.data.settings.fpsCounter) {
+                const fps = Math.round(1000 / (performance.now() - this.lastTime || 16));
+                this.ctx.textAlign = 'right';
+                this.ctx.fillText(`FPS: ${fps}`, this.canvas.width - 20, 20);
+                this.ctx.textAlign = 'left';
+            }
+
+            // Draw Touch Controls based on mode
+            let tm = this.saveManager.data.settings.touchMode;
+            if (tm === 'Always' || (tm === 'Auto' && 'ontouchstart' in window)) {
+                let swap = this.saveManager.data.settings.touchSwap;
+                this.ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                this.ctx.beginPath();
+                this.ctx.arc(swap ? this.canvas.width * 0.75 : this.canvas.width * 0.25, this.canvas.height * 0.75, 50, 0, Math.PI*2);
+                this.ctx.fill();
+                this.ctx.beginPath();
+                this.ctx.arc(swap ? this.canvas.width * 0.25 : this.canvas.width * 0.75, this.canvas.height * 0.75, 50, 0, Math.PI*2);
+                this.ctx.fill();
+            }
+
             if (this.state === 'PAUSED') {
                 this.ctx.textAlign = 'center';
                 this.ctx.font = '40px monospace';
@@ -987,6 +1050,7 @@ class Game {
             if (this.gameOverTimer > 1) {
                 this.ctx.fillText('Click or Press Enter to Restart', this.canvas.width / 2, this.canvas.height / 2 + 80);
             }
+            if (this.uiManager) this.uiManager.drawMilestones(this.ctx, this.canvas);
         }
     }
 }
