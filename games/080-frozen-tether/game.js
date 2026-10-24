@@ -268,6 +268,9 @@ class Player {
         // Thrust logic for visuals
         if (Math.abs(ax) > 0) {
             this.thrustIntensity = Math.min(1, this.thrustIntensity + dt * 5);
+            if (this.thrustIntensity > 0 && Math.random() < 0.3 && window.game) {
+                 window.game.vfxManager.addParticle(this.x - ax * 5, this.y + this.radius, '#ffff00', -ax * 100, 50, 0.5, 3);
+            }
         } else {
             this.thrustIntensity = Math.max(0, this.thrustIntensity - dt * 5);
         }
@@ -290,6 +293,9 @@ class Player {
         if (this.dashActive) {
             if (this.dashTimer > this.dashCooldown - this.dashDuration) {
                 this.vy = 0; // lock y during dash
+                if (Math.random() < 0.5 && window.game) {
+                    window.game.vfxManager.addAfterimage(this.x, this.y, this.radius, '#00ffff', 0.2);
+                }
             } else {
                 this.dashActive = false;
             }
@@ -870,11 +876,13 @@ class Game {
         this.resizeObserver = new ResizeObserver(() => this.resize());
         this.resizeObserver.observe(canvas.parentElement);
         this.resize();
+        window.game = this;
 
         this.logicalWidth = 800;
         this.logicalHeight = 600;
 
         this.worldEnv = new WorldEnvironment(this.logicalWidth, this.logicalHeight);
+        this.vfxManager = new VFXManager(this.saveManager);
 
         window.addEventListener('visibilitychange', () => {
             if (document.hidden && this.state === 'PLAYING') {
@@ -940,6 +948,12 @@ class Game {
                 this.start();
             }
         } else if (this.state === 'PLAYING') {
+            this.vfxManager.update(dt);
+            if (this.vfxManager.hitStopTimer > 0) {
+                this.vfxManager.hitStopTimer -= dt;
+                this.input.update();
+                return;
+            }
             if (this.input.isKeyDown('Escape')) {
                 this.state = 'PAUSED';
                 return;
@@ -997,9 +1011,10 @@ class Game {
                                 if (!this.player.dashActive) {
                                     this.player.vy = this.player.jumpForce * 1.2; // Higher bounce on boss
                                 }
-                                for (let k = 0; k < 15; k++) {
-                                    this.particles.push(new Particle(e.x, e.y, '#ffffff'));
-                                }
+                                this.vfxManager.triggerShake(10, 0, 1);
+                                this.vfxManager.emitDirectional(e.x, e.y, '#ffffff', 0, 1, 0.5, 15, 200);
+                                this.vfxManager.addFloatingText(e.x, e.y, 100, '#ff0000', true);
+                                this.vfxManager.triggerHitStop(0.1);
                                 this.sound.playEnemyHit();
 
                                 if (e.hp <= 0) {
@@ -1007,13 +1022,13 @@ class Game {
                                     this.score += 500 * (1 + this.player.comboCount * 0.1);
                                     this.player.comboCount++;
                                     this.player.comboTimer = this.player.comboMaxTimer;
+                                    this.vfxManager.triggerHitStop(0.5);
+                                    this.vfxManager.triggerShake(30, 0, -1);
+                                    this.vfxManager.emitExplosion(e.x, e.y, e.color, 40, 500);
+                                    this.vfxManager.addFloatingText(e.x, e.y, "BOSS DEFEATED", "#ffff00", true);
                                     this.sound.playScore();
                                     this.enemies.splice(i, 1);
                                     this.bossActive = false;
-
-                                    for (let k = 0; k < 30; k++) {
-                                        this.particles.push(new Particle(e.x, e.y, e.color));
-                                    }
 
                                     this.state = 'UPGRADE';
                                     this.upgradeChoices = WaveDirector.getUpgrades(3);
@@ -1026,9 +1041,8 @@ class Game {
                             if (!this.player.dashActive) {
                                 this.player.vy = this.player.jumpForce * 0.8;
                             }
-                            for (let k = 0; k < 10; k++) {
-                                this.particles.push(new Particle(e.x, e.y, '#00ffff'));
-                            }
+                            this.vfxManager.triggerShake(5, 0, -1);
+                            this.vfxManager.emitDirectional(e.x, e.y, '#00ffff', 0, -1, 1.0, 10, 150);
                             this.sound.playEnemyHit();
                         } else {
                             e.active = false;
@@ -1038,16 +1052,16 @@ class Game {
                             this.score += 100 * (1 + this.player.comboCount * 0.1);
                             this.player.comboCount++;
                             this.player.comboTimer = this.player.comboMaxTimer;
+                            this.vfxManager.triggerShake(10, 0, -1);
+                            this.vfxManager.triggerHitStop(0.1);
+                            this.vfxManager.emitExplosion(e.x, e.y, e.color, 20, 300);
+                            this.vfxManager.addFloatingText(e.x, e.y, 100, '#ffffff', false);
                             this.sound.playEnemyHit();
                             this.sound.playScore();
                             this.enemies.splice(i, 1);
 
                             if (Math.random() < 0.3) {
                                 this.pickups.push(new Pickup(e.x, e.y));
-                            }
-
-                            for (let k = 0; k < 10; k++) {
-                                this.particles.push(new Particle(e.x, e.y, e.color));
                             }
 
                             // Spawner logic: spawns 2 swarmers on death
@@ -1096,8 +1110,11 @@ class Game {
                 if (dist < p.radius + this.player.radius) {
                     if (p.type === 'combo') {
                         this.player.comboTimer = this.player.comboMaxTimer;
+                        this.vfxManager.addFloatingText(this.player.x, this.player.y - 20, "COMBO MAX", "#00ffff", false);
                     } else {
-                        this.score += 50 * (1 + this.player.comboCount * 0.1);
+                        let gain = Math.floor(50 * (1 + this.player.comboCount * 0.1));
+                        this.score += gain;
+                        this.vfxManager.addFloatingText(this.player.x, this.player.y - 20, `+${gain}`, "#ffff00", false);
                     }
                     this.sound.playScore();
                     this.pickups.splice(i, 1);
@@ -1176,6 +1193,10 @@ class Game {
             this.ctx.fillText('Back to Arcade: ../../index.html', this.logicalWidth / 2, this.logicalHeight - 30);
 
         } else if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+            this.ctx.save();
+            if (this.state === 'PLAYING' && this.vfxManager) {
+                this.vfxManager.applyShake(this.ctx);
+            }
 
             let camX = this.player ? this.player.x - this.logicalWidth / 2 : 0;
             this.worldEnv.drawBackground(this.ctx, camX);
@@ -1209,6 +1230,11 @@ class Game {
             for (let p of this.particles) {
                 p.draw(this.ctx);
             }
+
+            if (this.vfxManager) {
+                this.vfxManager.draw(this.ctx);
+            }
+            this.ctx.restore();
 
             // Draw Boss Warning
             if (this.bossWarningTimer > 0) {
