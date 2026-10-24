@@ -896,24 +896,63 @@ class Boss extends Enemy {
     onPhaseTransition() {}
     drawHpBar(ctx, width) {
         let barWidth = width * 0.6;
-        let barHeight = 20;
+        let barHeight = 24;
         let x = (width - barWidth) / 2;
         let y = 30;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(x, y, barWidth, barHeight);
+
+        // Background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(x - 2, y - 2, barWidth + 4, barHeight + 4);
 
         let hpRatio = Math.max(0, this.hp / this.maxHp);
-        ctx.fillStyle = this.phase === 1 ? '#e91e63' : '#d50000';
+
+        // Animated damage flash overlay concept (static for now, can be expanded)
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+        ctx.fillRect(x, y, barWidth, barHeight);
+
+        // Main health fill
+        let gradient = ctx.createLinearGradient(x, y, x, y + barHeight);
+        gradient.addColorStop(0, this.phase === 1 ? '#ff4081' : '#ff1744');
+        gradient.addColorStop(1, this.phase === 1 ? '#c2185b' : '#b71c1c');
+
+        ctx.fillStyle = gradient;
         ctx.fillRect(x, y, barWidth * hpRatio, barHeight);
 
+        // Border and segments
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.strokeRect(x, y, barWidth, barHeight);
 
+        // Draw segments to visualize chunk of HP
+        let numSegments = 10;
+        let segmentWidth = barWidth / numSegments;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < numSegments; i++) {
+            ctx.beginPath();
+            ctx.moveTo(x + (i * segmentWidth), y);
+            ctx.lineTo(x + (i * segmentWidth), y + barHeight);
+            ctx.stroke();
+        }
+
         ctx.fillStyle = '#fff';
-        ctx.font = '16px monospace';
+        ctx.font = '18px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(this.name + (this.phase === 2 ? " (ENRAGED)" : ""), width / 2, y + 15);
+
+        // Name shadow
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+
+        let title = this.name + (this.phase === 2 ? " (ENRAGED)" : "");
+        let hpText = ` ${Math.floor(this.hp)}/${this.maxHp}`;
+        ctx.fillText(title + hpText, width / 2, y + 17);
+
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
     }
 }
 
@@ -1032,6 +1071,49 @@ class Bumper {
         ctx.beginPath();
         ctx.arc(this.pos.x - this.radius*0.3, this.pos.y - this.radius*0.3, this.radius*0.3, 0, Math.PI*2);
         ctx.fill();
+    }
+}
+
+class TutorialOverlay {
+    constructor(game) {
+        this.game = game;
+        this.texts = [
+            "WASD / Arrows to Move",
+            "Mouse / Touch to aim and shoot Ribosome",
+            "Ricochet to destroy viruses",
+            "Retrieve Ribosome to fire again!"
+        ];
+        this.yOffset = 25;
+        this.baseYOffset = 60;
+    }
+    update(dt) {
+        // Future expansion: dynamic text changes based on events
+    }
+    draw(ctx) {
+        if (this.game.bossEncounterCounter === 1 && this.game.score < 500) {
+            let opacity = Math.max(0, 1 - (this.game.score / 500));
+            if (opacity > 0) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+                ctx.font = '16px monospace';
+                ctx.textAlign = 'center';
+
+                // Add a subtle text shadow for better readability
+                ctx.shadowColor = `rgba(0, 0, 0, ${opacity * 0.8})`;
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+
+                for (let i = 0; i < this.texts.length; i++) {
+                    ctx.fillText(this.texts[i], this.game.width / 2, this.game.height - this.baseYOffset - ((this.texts.length - 1 - i) * this.yOffset));
+                }
+
+                // Reset shadow
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+            }
+        }
     }
 }
 
@@ -1329,6 +1411,8 @@ class Game {
         this.hazards = [];
         this.enemyProjectiles = [];
         this.enemyPuddles = [];
+        this.floatingTexts = [];
+        this.tutorial = new TutorialOverlay(this);
         this.resizeObserver = new ResizeObserver(() => this.resize());
         this.resizeObserver.observe(this.canvas);
         this.resize();
@@ -1385,6 +1469,7 @@ class Game {
         this.warningTimer = 0;
         this.enemyProjectiles = [];
         this.enemyPuddles = [];
+        this.floatingTexts = [];
         this.bumpers = [];
         for (let i = 0; i < 6; i++) {
             this.bumpers.push(new Bumper(
@@ -1626,6 +1711,9 @@ class Game {
                 } else {
                     this.activeBoss = new BossViralConstruct(ex, ey);
                 }
+                let hpMultiplier = 1 + (this.bossEncounterCounter - 1) * 0.5;
+                this.activeBoss.maxHp = Math.floor(this.activeBoss.maxHp * hpMultiplier);
+                this.activeBoss.hp = this.activeBoss.maxHp;
                 this.enemies.push(this.activeBoss);
             }
         }
@@ -1641,15 +1729,23 @@ class Game {
                 if (side === 3) { ex = this.width + 20; ey = Math.random() * this.height; }
 
                 let rand = Math.random();
-                if (rand < 0.2) this.enemies.push(new Swarmer(ex, ey));
-                else if (rand < 0.4) this.enemies.push(new RangedSniper(ex, ey));
-                else if (rand < 0.6) this.enemies.push(new ShieldedBruiser(ex, ey));
-                else if (rand < 0.8) this.enemies.push(new SplitterSpawner(ex, ey));
-                else if (rand < 0.9) this.enemies.push(new AreaDenialHazard(ex, ey));
-                else this.enemies.push(new Enemy(ex, ey));
+                if (this.bossEncounterCounter < 3) {
+                    if (rand < 0.4) this.enemies.push(new Swarmer(ex, ey));
+                    else if (rand < 0.6) this.enemies.push(new RangedSniper(ex, ey));
+                    else if (rand < 0.8) this.enemies.push(new ShieldedBruiser(ex, ey));
+                    else this.enemies.push(new Enemy(ex, ey));
+                } else {
+                    if (rand < 0.2) this.enemies.push(new Swarmer(ex, ey));
+                    else if (rand < 0.4) this.enemies.push(new RangedSniper(ex, ey));
+                    else if (rand < 0.6) this.enemies.push(new ShieldedBruiser(ex, ey));
+                    else if (rand < 0.8) this.enemies.push(new SplitterSpawner(ex, ey));
+                    else if (rand < 0.9) this.enemies.push(new AreaDenialHazard(ex, ey));
+                    else this.enemies.push(new Enemy(ex, ey));
+                }
 
                 this.enemySpawnTimer = this.enemySpawnRate;
-                this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.02);
+                let scaleRate = 2.0 - (this.bossEncounterCounter - 1) * 0.15;
+                this.enemySpawnRate = Math.max(0.4, scaleRate);
             }
         }
 
@@ -1806,6 +1902,15 @@ class Game {
         for (let p of this.particles) p.update(dt);
         this.particles = this.particles.filter(p => p.life > 0);
 
+        if (this.floatingTexts) {
+            for (let ft of this.floatingTexts) ft.update(dt);
+            this.floatingTexts = this.floatingTexts.filter(ft => ft.life > 0);
+        }
+
+        if (this.tutorial) {
+            this.tutorial.update(dt);
+        }
+
         if (this.shakeTimer > 0) this.shakeTimer -= dt;
         this.input.update();
     }
@@ -1848,7 +1953,14 @@ class Game {
         for (let e of this.enemies) e.draw(this.ctx);
         for (let ep of this.enemyProjectiles) ep.draw(this.ctx);
         for (let p of this.particles) p.draw(this.ctx);
+        if (this.floatingTexts) {
+            for (let ft of this.floatingTexts) ft.draw(this.ctx);
+        }
         if (this.player) this.player.draw(this.ctx);
+
+        if (this.tutorial) {
+            this.tutorial.draw(this.ctx);
+        }
 
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '24px monospace';
