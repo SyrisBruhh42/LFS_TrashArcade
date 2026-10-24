@@ -1543,7 +1543,7 @@ class Boss extends Enemy {
 
 class PoltergeistBoss extends Boss {
     constructor(x, y, target, game) {
-        super(x, y, target, 'Poltergeist Alpha', 40, '#9b59b6');
+        super(x, y, target, 'Poltergeist Alpha', 40 + (game.wave * 15), '#9b59b6');
         this.game = game;
         this.attackTimer = 0;
         this.wobble = 0;
@@ -1601,7 +1601,7 @@ class PoltergeistBoss extends Boss {
 
 class SpecterKingBoss extends Boss {
     constructor(x, y, target, game) {
-        super(x, y, target, 'Specter King', 60, '#f1c40f');
+        super(x, y, target, 'Specter King', 60 + (game.wave * 20), '#f1c40f');
         this.game = game;
         this.state = 'CHARGE'; // CHARGE, SPAWN
         this.stateTimer = 2.0;
@@ -1797,7 +1797,8 @@ class Game {
         }
     }
 
-    spawnResource() {
+    spawnResource(attempts = 0) {
+        if (attempts > 10) return;
         const x = Math.random() * (this.width - 40) + 20;
         const y = Math.random() * (this.height - 40) + 20;
 
@@ -1807,7 +1808,7 @@ class Game {
         if (Math.sqrt(dx*dx + dy*dy) > 150) {
             this.resources.push(new ResourceNode(x, y));
         } else {
-            this.spawnResource();
+            this.spawnResource(attempts + 1);
         }
     }
 
@@ -1822,16 +1823,26 @@ class Game {
         }
 
         const r = Math.random();
-        if (r < 0.2) {
-            this.enemies.push(new Swarmer(x, y, this.player));
-        } else if (r < 0.4) {
-            this.enemies.push(new Bruiser(x, y, this.player));
-        } else if (r < 0.6) {
-            this.enemies.push(new Sniper(x, y, this.player));
-        } else if (r < 0.8) {
-            this.enemies.push(new Splitter(x, y, this.player, this));
+        let swarmerChance = Math.max(0.05, 0.4 - this.wave * 0.05);
+        let bruiserChance = swarmerChance + Math.max(0.1, 0.3 - this.wave * 0.02);
+        let sniperChance = bruiserChance + Math.min(0.25, 0.05 + this.wave * 0.05);
+        let splitterChance = sniperChance + Math.min(0.25, this.wave * 0.05);
+
+        if (this.wave < 2) {
+            if (r < 0.6) this.enemies.push(new Swarmer(x, y, this.player));
+            else this.enemies.push(new Bruiser(x, y, this.player));
         } else {
-            this.enemies.push(new Haunt(x, y, this.player));
+            if (r < swarmerChance) {
+                this.enemies.push(new Swarmer(x, y, this.player));
+            } else if (r < bruiserChance) {
+                this.enemies.push(new Bruiser(x, y, this.player));
+            } else if (r < sniperChance) {
+                this.enemies.push(new Sniper(x, y, this.player));
+            } else if (r < splitterChance) {
+                this.enemies.push(new Splitter(x, y, this.player, this));
+            } else {
+                this.enemies.push(new Haunt(x, y, this.player));
+            }
         }
     }
 
@@ -1909,7 +1920,7 @@ class Game {
             this.spawnTimer -= dt;
             if (this.spawnTimer <= 0) {
                 this.spawnEnemy();
-                this.spawnTimer = 2.0 - Math.min((this.score / 1000), 1.5);
+                this.spawnTimer = Math.max(0.5, 2.5 - (this.wave * 0.15) - (this.score / 2000));
             }
         }
 
@@ -2010,6 +2021,11 @@ class Game {
             this.player.history.pop();
         }
 
+        // Memory leak prevention caps
+        if (this.enemies.length > 50) this.enemies.splice(0, this.enemies.length - 50);
+        if (this.hazards.length > 30) this.hazards.splice(0, this.hazards.length - 30);
+        if (this.pickups.length > 20) this.pickups.splice(0, this.pickups.length - 20);
+
         if (this.inputManager.isDown('Escape')) {
             this.state = 'PAUSED';
             this.inputManager.keys['Escape'] = false;
@@ -2049,7 +2065,7 @@ class Game {
             this.currentUpgrades[index].apply();
         }
         this.wave++;
-        this.killsRequired += 5 + Math.floor(this.wave * 2);
+        this.killsRequired += 10 + Math.floor(Math.pow(this.wave, 1.5));
         this.killsThisWave = 0;
         this.state = 'PLAYING';
         if (this.soundEngine && this.soundEngine.playUpgradeSelect) this.soundEngine.playUpgradeSelect();
@@ -2162,6 +2178,27 @@ class Game {
                 this.ctx.fillStyle = this.player.dashCooldown <= 0 ? '#65bb98' : '#e74c3c';
                 const fillRatio = this.player.dashCooldown <= 0 ? 1 : 1 - (this.player.dashCooldown / this.player.dashCooldownMax);
                 this.ctx.fillRect(10, 120, 100 * fillRatio, 10);
+            }
+
+            // Tutorial Overlay for Wave 1
+            if (this.wave === 1 && this.state === 'PLAYING') {
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                this.ctx.fillRect(this.width / 2 - 250, 10, 500, 40);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.textAlign = 'center';
+                this.ctx.font = '16px monospace';
+
+                let hint = "Move with WASD/Arrows or Touch.";
+                if (this.player && this.player.tailLength === 0 && this.resources.length > 0) {
+                    hint = "Collect Ectoplasm to grow your tether.";
+                } else if (this.player && this.player.tailLength > 0 && !this.enemies.length) {
+                    hint = "Return to the Base Camp to bank points!";
+                } else if (this.enemies.length > 0 && this.player && this.player.dashCooldown <= 0) {
+                    hint = "Press SPACE or click/tap to dash through enemies.";
+                }
+
+                this.ctx.fillText(hint, this.width / 2, 35);
+                this.ctx.textAlign = 'left'; // reset
             }
 
             if (this.activeBoss) {
@@ -2549,6 +2586,57 @@ class VFXManager {
             this.hitStopTimer = duration;
         }
     }
+
+    spawnExplosionCluster(x, y, color) {
+        // Generates a cluster of explosions to add more impact
+        const count = 3;
+        for (let i = 0; i < count; i++) {
+            const offsetX = (Math.random() - 0.5) * 40;
+            const offsetY = (Math.random() - 0.5) * 40;
+            this.spawnExplosion(x + offsetX, y + offsetY, color);
+        }
+    }
+
+    spawnSparkles(x, y, color) {
+        // Generates small sparkles for magical effects
+        const count = this.game.saveManager.data.options.particles === 'High' ? 15 : 5;
+        for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 20 + Math.random() * 40;
+            this.particles.push({
+                x: x, y: y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 0.5 + Math.random() * 0.3,
+                color: color,
+                size: 1 + Math.random() * 2
+            });
+        }
+    }
+
+    spawnWarningRing(x, y, radius, color) {
+        // Spawns a hollow ring to warn of incoming attacks
+        this.trails.push({
+            x: x, y: y, radius: radius, color: color,
+            life: 0.5, maxLife: 0.5, hollow: true
+        });
+    }
+
+    updateAmbientVFX(dt) {
+        // Could be called in update to add ambient floating dust
+        if (Math.random() < 0.05 && this.game.saveManager.data.options.particles === 'High') {
+            this.particles.push({
+                x: Math.random() * this.game.width,
+                y: Math.random() * this.game.height,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 2.0 + Math.random(),
+                color: 'rgba(255, 255, 255, 0.3)',
+                size: 1 + Math.random()
+            });
+        }
+    }
+
 }
 
 
