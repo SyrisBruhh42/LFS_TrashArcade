@@ -386,13 +386,13 @@ class Bullet extends Entity {
 }
 
 class Enemy extends Entity {
-    constructor(x, y, type) {
-        super(x, y, 20);
-        this.type = type;
-        this.hp = type === 'boss' ? 50 : 3;
-        this.speed = type === 'boss' ? 50 : 100;
-        this.radius = type === 'boss' ? 40 : 20;
+    constructor(x, y, radius, hp, speed) {
+        super(x, y, radius);
+        this.type = 'normal';
+        this.hp = hp;
+        this.speed = speed;
         this.shootTimer = 0;
+        this.bulletsToSpawn = [];
     }
     update(dt, playerX, playerY) {
         const dx = playerX - this.x;
@@ -403,21 +403,173 @@ class Enemy extends Entity {
             this.vx = (dx / dist) * this.speed;
             this.vy = (dy / dist) * this.speed;
         }
-
         super.update(dt);
-
-        if (this.type === 'boss') {
-            this.shootTimer -= dt;
-            if (this.shootTimer <= 0) {
-                this.shootTimer = 2;
-                return true; // Indicates boss shot
-            }
-        }
         return false;
     }
     draw(ctx) {
-        ctx.fillStyle = this.type === 'boss' ? '#f55' : '#a5f';
+        ctx.fillStyle = '#a5f';
         ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+    }
+}
+
+class SwarmerEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 15, 2, 140);
+        this.type = 'swarmer';
+        this.wobbleTime = Math.random() * Math.PI * 2;
+    }
+    update(dt, playerX, playerY) {
+        const dx = playerX - this.x;
+        const dy = playerY - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        this.wobbleTime += dt * 5;
+
+        if (dist > 0) {
+            const angle = Math.atan2(dy, dx) + Math.sin(this.wobbleTime) * 0.5;
+            this.vx = Math.cos(angle) * this.speed;
+            this.vy = Math.sin(angle) * this.speed;
+        }
+        Entity.prototype.update.call(this, dt);
+        return false;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#f0f';
+        ctx.beginPath();
+        ctx.moveTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y - this.radius);
+        ctx.fill();
+    }
+}
+
+class SniperEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 20, 2, 60);
+        this.type = 'sniper';
+        this.shootTimer = 3;
+        this.state = 'move'; // move, aim, shoot
+    }
+    update(dt, playerX, playerY) {
+        const dx = playerX - this.x;
+        const dy = playerY - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        this.shootTimer -= dt;
+
+        if (this.shootTimer > 1) {
+            this.state = 'move';
+            if (dist > 200) {
+                this.vx = (dx / dist) * this.speed;
+                this.vy = (dy / dist) * this.speed;
+            } else if (dist < 150) {
+                this.vx = -(dx / dist) * this.speed;
+                this.vy = -(dy / dist) * this.speed;
+            } else {
+                this.vx = 0;
+                this.vy = 0;
+            }
+        } else if (this.shootTimer > 0) {
+            this.state = 'aim';
+            this.vx = 0;
+            this.vy = 0;
+            this.aimAngle = Math.atan2(dy, dx);
+        } else {
+            this.state = 'shoot';
+            this.bulletsToSpawn.push(new EnemyBullet(this.x, this.y, Math.cos(this.aimAngle) * 300, Math.sin(this.aimAngle) * 300));
+            this.shootTimer = 4;
+        }
+
+        Entity.prototype.update.call(this, dt);
+        return false;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#0ff';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        if (this.state === 'aim') {
+            ctx.strokeStyle = '#f00';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x + Math.cos(this.aimAngle) * 50, this.y + Math.sin(this.aimAngle) * 50);
+            ctx.stroke();
+        }
+    }
+}
+
+class BruiserEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 30, 8, 40);
+        this.type = 'bruiser';
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#888';
+        ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+    }
+}
+
+class SplitterEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 25, 4, 80);
+        this.type = 'splitter';
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#0f0';
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y);
+        ctx.fill();
+    }
+}
+
+class HazardEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 20, 3, 50);
+        this.type = 'hazard';
+        this.shootTimer = 2;
+    }
+    update(dt, playerX, playerY) {
+        this.shootTimer -= dt;
+        if (this.shootTimer <= 0) {
+            this.shootTimer = 3;
+            this.bulletsToSpawn.push(new HazardBullet(this.x, this.y));
+        }
+        return super.update(dt, playerX, playerY);
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#ff0';
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+            ctx.lineTo(this.x + Math.cos((18 + i * 72) / 180 * Math.PI) * this.radius,
+                       this.y - Math.sin((18 + i * 72) / 180 * Math.PI) * this.radius);
+            ctx.lineTo(this.x + Math.cos((54 + i * 72) / 180 * Math.PI) * (this.radius / 2),
+                       this.y - Math.sin((54 + i * 72) / 180 * Math.PI) * (this.radius / 2));
+        }
+        ctx.closePath();
+        ctx.fill();
+    }
+}
+
+
+class HazardBullet extends Entity {
+    constructor(x, y) {
+        super(x, y, 15);
+        this.life = 5;
+    }
+    update(dt) {
+        this.life -= dt;
+    }
+    draw(ctx) {
+        ctx.fillStyle = `rgba(255, 100, 0, ${Math.max(0, this.life) / 5})`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
     }
 }
 
@@ -477,9 +629,14 @@ class Game {
         this.wave = 1;
         this.waveTimer = 0;
         this.spawnTimer = 0;
+        this.bossWarningTimer = 0;
         this.particles = [];
         this.gameOverTimer = 0;
         this.world.reset(this.canvas.width, this.canvas.height);
+
+        this.combo = new ComboSystem();
+        this.upgradeSys = new UpgradeSystem();
+        this.pickups = [];
     }
 
     loop(time) {
@@ -499,6 +656,13 @@ class Game {
                 this.reset();
                 this.state = 'PLAYING';
             }
+            return;
+        }
+
+        if (this.state === 'UPGRADE') {
+            if (this.input.keys['Digit1']) { this.upgradeSys.applyChoice(0, this.player); this.state = 'PLAYING'; this.input.keys['Digit1'] = false; }
+            if (this.input.keys['Digit2']) { this.upgradeSys.applyChoice(1, this.player); this.state = 'PLAYING'; this.input.keys['Digit2'] = false; }
+            if (this.input.keys['Digit3']) { this.upgradeSys.applyChoice(2, this.player); this.state = 'PLAYING'; this.input.keys['Digit3'] = false; }
             return;
         }
 
@@ -573,6 +737,24 @@ class Game {
             }
         }
 
+        this.combo.update(dt);
+
+        for (let i = this.pickups.length - 1; i >= 0; i--) {
+            const p = this.pickups[i];
+            p.update(dt);
+            if (p.life <= 0) {
+                this.pickups.splice(i, 1);
+                continue;
+            }
+            const dx = p.x - this.player.x;
+            const dy = p.y - this.player.y;
+            if (dx * dx + dy * dy < (this.player.radius + p.radius) ** 2) {
+                this.combo.add(30);
+                this.pickups.splice(i, 1);
+                this.sound.playPickup();
+            }
+        }
+
         // Spawn Enemies
         this.waveTimer += dt;
         this.spawnTimer -= dt;
@@ -580,10 +762,22 @@ class Game {
         if (this.waveTimer > 10) {
             this.wave++;
             this.waveTimer = 0;
+
+            // Trigger upgrade draft when surviving a wave
+            this.state = 'UPGRADE';
+            this.upgradeSys.rollChoices();
+            this.bullets = [];
+
             if (this.wave % 5 === 0) {
                 // Spawn boss
-                this.enemies.push(new Enemy(this.canvas.width / 2, -50, 'boss'));
+                this.bossWarningTimer = 3;
+                const bossClass = Math.random() < 0.5 ? SandstormDjinn : BazaarOgre;
+                this.enemies.push(new bossClass(this.canvas.width / 2, -50));
             }
+        }
+
+        if (this.bossWarningTimer > 0) {
+            this.bossWarningTimer -= dt;
         }
 
         if (this.spawnTimer <= 0 && this.enemies.length < 5 + this.wave) {
@@ -597,13 +791,23 @@ class Game {
                 sx = Math.random() * this.canvas.width;
                 sy = Math.random() < 0.5 ? -30 : this.canvas.height + 30;
             }
-            this.enemies.push(new Enemy(sx, sy, 'normal'));
+
+            const r = Math.random();
+            if (r < 0.2) this.enemies.push(new SwarmerEnemy(sx, sy));
+            else if (r < 0.4) this.enemies.push(new SniperEnemy(sx, sy));
+            else if (r < 0.6) this.enemies.push(new BruiserEnemy(sx, sy));
+            else if (r < 0.8) this.enemies.push(new SplitterEnemy(sx, sy));
+            else this.enemies.push(new HazardEnemy(sx, sy));
         }
 
         // Update Enemies & Collisions
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
             const bossShot = e.update(dt, this.player.x, this.player.y);
+
+            while(e.bulletsToSpawn && e.bulletsToSpawn.length > 0) {
+                this.enemyBullets.push(e.bulletsToSpawn.pop());
+            }
 
             if (bossShot) {
                 for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
@@ -636,7 +840,16 @@ class Game {
             }
 
             if (e.hp <= 0) {
-                this.score += e.type === 'boss' ? 500 : 10;
+                this.score += (e.type === 'boss' ? 500 : 10) * this.combo.multiplier;
+                this.combo.add(e.type === 'boss' ? 50 : 15);
+                if (Math.random() < 0.3) {
+                    this.pickups.push(new ComboPickup(e.x, e.y));
+                }
+                if (e.type === 'splitter') {
+                    const s1 = new SwarmerEnemy(e.x - 20, e.y);
+                    const s2 = new SwarmerEnemy(e.x + 20, e.y);
+                    this.enemies.push(s1, s2);
+                }
                 this.enemies.splice(i, 1);
             }
         }
@@ -645,6 +858,11 @@ class Game {
         for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
             const eb = this.enemyBullets[i];
             eb.update(dt);
+
+            if (eb.life !== undefined && eb.life <= 0) {
+                this.enemyBullets.splice(i, 1);
+                continue;
+            }
 
             if (this.player.invulnTimer <= 0) {
                 const dx = eb.x - this.player.x;
@@ -676,6 +894,7 @@ class Game {
 
         this.world.drawBackground(this.ctx, this.canvas);
 
+        this.pickups.forEach(p => p.draw(this.ctx));
         this.bullets.forEach(b => b.draw(this.ctx));
         this.enemies.forEach(e => e.draw(this.ctx));
         this.enemyBullets.forEach(eb => eb.draw(this.ctx));
@@ -716,11 +935,46 @@ class Game {
                 this.ctx.fillRect(20, 130, 100 * (1 - this.player.dashCooldown / this.player.dashCooldownMax), 10);
             }
 
+            // Boss Warning Banner
+            if (this.bossWarningTimer > 0) {
+                if (Math.floor(this.bossWarningTimer * 10) % 2 === 0) {
+                    this.ctx.fillStyle = '#f00';
+                    this.ctx.fillRect(0, this.canvas.height / 2 - 40, this.canvas.width, 80);
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.font = '30px monospace';
+                    this.ctx.fillText('WARNING: BOSS APPROACHING', this.canvas.width / 2, this.canvas.height / 2 + 10);
+                }
+            }
+
+            // Boss Health Bar
+            const activeBoss = this.enemies.find(e => e.type === 'boss');
+            if (activeBoss) {
+                const barWidth = this.canvas.width * 0.6;
+                const barHeight = 20;
+                const barX = (this.canvas.width - barWidth) / 2;
+                const barY = 30;
+
+                this.ctx.fillStyle = '#444';
+                this.ctx.fillRect(barX, barY, barWidth, barHeight);
+                this.ctx.fillStyle = activeBoss.phase === 2 ? '#f00' : '#f55';
+                this.ctx.fillRect(barX, barY, barWidth * (activeBoss.hp / activeBoss.maxHp), barHeight);
+
+                this.ctx.fillStyle = '#fff';
+                this.ctx.textAlign = 'center';
+                this.ctx.font = '16px monospace';
+                this.ctx.fillText(activeBoss.name, this.canvas.width / 2, barY + 15);
+            }
+
+            this.combo.draw(this.ctx, this.canvas.width);
+
             if (this.state === 'PAUSED') {
                 this.ctx.textAlign = 'center';
                 this.ctx.font = '40px monospace';
                 this.ctx.fillText('PAUSED', this.canvas.width / 2, this.canvas.height / 2);
             }
+        } else if (this.state === 'UPGRADE') {
+            this.upgradeSys.draw(this.ctx, this.canvas.width, this.canvas.height);
         } else if (this.state === 'GAME_OVER') {
             this.ctx.textAlign = 'center';
             this.ctx.font = '40px monospace';
