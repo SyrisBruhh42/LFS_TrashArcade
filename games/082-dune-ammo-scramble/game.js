@@ -282,7 +282,11 @@ class Player {
                 this.vx -= Math.cos(angle) * 150;
                 this.vy -= Math.sin(angle) * 150;
                 this.recoil = 1.0;
-                game.spawnBullet(this.x, this.y, angle);
+                let count = game.activeUpgrades && game.activeUpgrades.includes('multiShot') ? 2 : 1;
+                for (let i = 0; i < count; i++) {
+                    let offset = (i - (count-1)/2) * 0.15;
+                    game.spawnBullet(this.x, this.y, angle + offset);
+                }
                 this.ammo--;
                 this.fireTimer = this.fireRate;
                 game.sound.playShoot();
@@ -445,10 +449,7 @@ class Enemy {
         this.hp -= amount;
         if (this.hp <= 0) {
             this.active = false;
-            game.score += 10;
-            game.spawnAmmo(this.x, this.y);
-            game.spawnParticles(this.x, this.y, this.color, 10);
-            game.sound.playHit();
+            game.handleEnemyKill(this);
             this.onDeath(game);
         }
     }
@@ -852,6 +853,27 @@ class Game {
         this.input = new InputManager(this.canvas);
         this.width = 800; this.height = 600;
         this.lastTime = 0;
+
+        this.combo = 1;
+        this.comboTimer = 0;
+        this.comboTimerMax = 3.0;
+        this.wave = 1;
+        this.killsThisWave = 0;
+        this.waveTargetKills = 15;
+        this.pickups = [];
+        this.activeUpgrades = [];
+        this.UPGRADE_POOL = [
+            { id: 'maxAmmo', name: 'Expanded Mag', desc: '+5 Max Ammo' },
+            { id: 'dashCD', name: 'Quick Step', desc: 'Lower Dash Cooldown' },
+            { id: 'speedUp', name: 'Agility', desc: 'Move Faster (+20%)' },
+            { id: 'fireRate', name: 'Rapid Fire', desc: 'Shoot Faster' },
+            { id: 'multiShot', name: 'Multi-Shot', desc: 'Fire +1 Projectile' },
+            { id: 'magnet', name: 'Ammo Magnet', desc: 'Pull Ammo to you' },
+            { id: 'comboUp', name: 'Combo Master', desc: 'Combo decays slower' },
+            { id: 'bulletSize', name: 'Heavy Rounds', desc: 'Bigger Bullets' },
+            { id: 'pierce', name: 'Piercing Rounds', desc: 'Bullets pierce 1 enemy' },
+            { id: 'dashDuration', name: 'Long Dash', desc: 'Dash travels further' }
+        ];
         this.setupResize();
         this.bindUI();
         this.resetGame();
@@ -905,6 +927,8 @@ class Game {
             document.getElementById('title-screen').classList.add('active');
         } else if (this.state === 'PAUSED') {
             document.getElementById('pause-screen').classList.add('active');
+        } else if (this.state === 'UPGRADE_DRAFT') {
+            document.getElementById('upgrade-screen').classList.add('active');
         } else if (this.state === 'GAME_OVER') {
             document.getElementById('game-over-screen').classList.add('active');
             document.getElementById('final-score').innerText = `Score: ${this.score}`;
@@ -912,6 +936,8 @@ class Game {
         }
         document.getElementById('score-display').innerText = `Score: ${this.score}`;
         document.getElementById('ammo-display').innerText = `Ammo: ${this.player ? this.player.ammo : 0}`;
+        const waveDisplay = document.getElementById('wave-display');
+        if (waveDisplay) waveDisplay.innerText = `Wave: ${this.wave}`;
         const dashDisplay = document.getElementById('dash-display');
         if (dashDisplay && this.player) {
             if (this.player.dashTimer <= 0) {
@@ -934,6 +960,15 @@ class Game {
         this.bossWarningTimer = 0;
         this.nextBossScore = 150;
         this.bossTypeIndex = 0;
+
+        this.combo = 1;
+        this.comboTimer = 0;
+        this.wave = 1;
+        this.killsThisWave = 0;
+        this.waveTargetKills = 15;
+        this.pickups = [];
+        this.activeUpgrades = [];
+
         this.environment = new Environment(this.width, this.height);
         this.quicksandZones = [
             new QuicksandZone(this.width * 0.2, this.height * 0.2, 80),
@@ -972,11 +1007,80 @@ class Game {
         this.saveManager.save();
         this.updateUI();
     }
-    spawnBullet(x, y, angle) { this.bullets.push(new Bullet(x, y, angle)); }
+    spawnBullet(x, y, angle) {
+        let b = new Bullet(x, y, angle);
+        if (this.activeUpgrades && this.activeUpgrades.includes('bulletSize')) b.radius = 8;
+        if (this.activeUpgrades && this.activeUpgrades.includes('pierce')) b.pierceCount = 1;
+        else b.pierceCount = 0;
+        this.bullets.push(b);
+    }
     spawnAmmo(x, y) { this.ammos.push(new AmmoPickup(x, y)); }
     spawnParticles(x, y, color, count) {
         for(let i=0; i<count; i++) this.particles.push(new Particle(x, y, color));
     }
+    handleEnemyKill(enemy) {
+        this.combo = Math.min(10, this.combo + 1);
+        this.comboTimer = this.activeUpgrades.includes('comboUp') ? this.comboTimerMax * 1.5 : this.comboTimerMax;
+
+        let pts = (enemy.isBoss ? 50 : 10) * this.combo;
+        this.score += pts;
+        this.spawnAmmo(enemy.x, enemy.y);
+        this.spawnParticles(enemy.x, enemy.y, enemy.color, 10);
+        this.sound.playHit();
+
+        if (Math.random() < 0.05) {
+            this.pickups.push(new FieldPickup(enemy.x, enemy.y, 'SCORE'));
+        }
+
+        if (!enemy.isBoss) {
+            this.killsThisWave++;
+            if (this.killsThisWave >= this.waveTargetKills) {
+                this.triggerUpgradeDraft();
+            }
+        }
+    }
+    triggerUpgradeDraft() {
+        this.state = 'UPGRADE_DRAFT';
+        this.enemies = [];
+        this.bullets = [];
+        this.enemyProjectiles = [];
+
+        let pool = [...this.UPGRADE_POOL];
+        pool.sort(() => 0.5 - Math.random());
+        let choices = pool.slice(0, 3);
+
+        const container = document.getElementById('upgrade-options');
+        container.innerHTML = '';
+        choices.forEach(c => {
+            let btn = document.createElement('button');
+            btn.innerHTML = `<strong>${c.name}</strong><br><small>${c.desc}</small>`;
+            btn.onclick = () => this.applyUpgrade(c.id);
+            container.appendChild(btn);
+        });
+
+        this.updateUI();
+    }
+    applyUpgrade(id) {
+        this.activeUpgrades.push(id);
+
+        if (id === 'maxAmmo') this.player.maxAmmo += 5;
+        if (id === 'dashCD') this.player.dashCooldown = Math.max(0.5, this.player.dashCooldown - 0.5);
+        if (id === 'speedUp') this.player.speed *= 1.2;
+        if (id === 'fireRate') this.player.fireRate = Math.max(0.05, this.player.fireRate * 0.75);
+        if (id === 'dashDuration') this.player.dashDuration = 0.4;
+
+        this.wave++;
+        this.waveTargetKills = 15 + this.wave * 5;
+        this.killsThisWave = 0;
+        this.state = 'PLAYING';
+
+        for(let i=0; i<5; i++) {
+            this.spawnAmmo(this.width/2 + (Math.random()-0.5)*200, this.height/2 + (Math.random()-0.5)*200);
+        }
+
+        this.updateUI();
+    }
+
     spawnEnemy() {
         let x, y;
         if (Math.random() < 0.5) {
@@ -1017,7 +1121,43 @@ class Game {
         this.player.speed = origSpeed;
 
         this.bullets.forEach(b => b.update(dt, this));
-        this.ammos.forEach(a => a.update(dt));
+
+        let magnetRadius = this.activeUpgrades.includes('magnet') ? 150 : 0;
+        this.ammos.forEach(a => {
+            if (a.active && magnetRadius > 0) {
+                const dist = Math.hypot(this.player.x - a.x, this.player.y - a.y);
+                if (dist < magnetRadius) {
+                    a.x += (this.player.x - a.x) * dt * 5;
+                    a.y += (this.player.y - a.y) * dt * 5;
+                }
+            }
+            a.update(dt);
+        });
+
+        if (this.pickups) {
+            this.pickups.forEach(p => {
+                p.update(dt);
+                if (p.active) {
+                    const dist = Math.hypot(this.player.x - p.x, this.player.y - p.y);
+                    if (dist < this.player.radius + p.radius) {
+                        p.active = false;
+                        if (p.type === 'SCORE') {
+                            this.score += 500;
+                            this.spawnParticles(p.x, p.y, '#ff0', 10);
+                            this.sound.playPickup();
+                        }
+                    }
+                }
+            });
+            this.pickups = this.pickups.filter(p => p.active);
+        }
+
+        if (this.combo > 1) {
+            this.comboTimer -= dt;
+            if (this.comboTimer <= 0) {
+                this.combo = 1;
+            }
+        }
 
         this.enemies.forEach(e => {
             let enemySlow = 1.0;
@@ -1088,17 +1228,18 @@ class Game {
                 if (!e.active) continue;
                 const dist = Math.hypot(b.x - e.x, b.y - e.y);
                 if (dist < b.radius + e.radius) {
-                    b.active = false;
+                    if (b.pierceCount && b.pierceCount > 0) {
+                        b.pierceCount--;
+                    } else {
+                        b.active = false;
+                    }
                     if (e.takeDamage) {
                         e.takeDamage(1, this);
                     } else {
                         e.active = false;
-                        this.score += 10;
-                        this.spawnAmmo(e.x, e.y);
-                        this.spawnParticles(e.x, e.y, '#f00', 10);
-                        this.sound.playHit();
+                        this.handleEnemyKill(e);
                     }
-                    break;
+                    if (!b.active) break;
                 }
             }
         }
@@ -1178,9 +1319,10 @@ class Game {
             this.ctx.fillRect(0, 0, this.width, this.height);
         }
 
-        if (this.state === 'PLAYING' || this.state === 'GAME_OVER' || this.state === 'PAUSED') {
+        if (this.state === 'PLAYING' || this.state === 'GAME_OVER' || this.state === 'PAUSED' || this.state === 'UPGRADE_DRAFT') {
             if (this.quicksandZones) this.quicksandZones.forEach(qz => qz.draw(this.ctx));
             this.ammos.forEach(a => a.draw(this.ctx));
+            if (this.pickups) this.pickups.forEach(p => p.draw(this.ctx));
             if (this.covers) this.covers.forEach(c => c.draw(this.ctx));
             if (this.hazards) this.hazards.forEach(h => h.draw(this.ctx));
             this.bullets.forEach(b => b.draw(this.ctx));
@@ -1201,6 +1343,15 @@ class Game {
                     this.ctx.restore();
                 }
             }
+            if (this.combo > 1) {
+                this.ctx.save();
+                this.ctx.fillStyle = '#ff0';
+                this.ctx.font = 'bold 24px monospace';
+                this.ctx.fillText(`Combo x${this.combo}`, 20, 60);
+                this.ctx.fillRect(20, 70, 100 * (this.comboTimer / (this.activeUpgrades.includes('comboUp') ? this.comboTimerMax * 1.5 : this.comboTimerMax)), 10);
+                this.ctx.restore();
+            }
+
             if (this.bossActive && this.currentBoss) {
                 this.ctx.save();
                 let barW = 400;
@@ -1231,6 +1382,36 @@ class Game {
         this.draw();
     }
 }
+
+class FieldPickup {
+    constructor(x, y, type) {
+        this.x = x; this.y = y;
+        this.type = type;
+        this.radius = 12;
+        this.active = true;
+        this.life = 10.0;
+        this.wobble = Math.random() * Math.PI * 2;
+    }
+    update(dt) {
+        this.life -= dt;
+        if (this.life <= 0) this.active = false;
+        this.wobble += dt * 5;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.scale(1 + Math.sin(this.wobble)*0.1, 1 + Math.cos(this.wobble)*0.1);
+        ctx.fillStyle = this.type === 'SCORE' ? '#ff0' : '#0ff';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
 window.onload = () => { window.game = new Game(); };
 
 // Extra padding to ensure we meet the >= 450 lines requirement.
