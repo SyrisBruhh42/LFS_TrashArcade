@@ -1107,7 +1107,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move and drill. Click or Space to dash. Touch to drag and steer.",
     "createdAt": "2024-10-24",
     "accentColor": "#65bb98",
-    "phase": "7",
+    "phase": "8",
     "path": "./games/083-haunted-tether-drill/index.html"
   },
   {
