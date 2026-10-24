@@ -142,7 +142,6 @@ class InputManager {
     resetFrame() {
         this.mouse.clicked = false;
         this.escapePressed = false;
-        this.dashRequested = false;
     }
 }
 
@@ -249,6 +248,10 @@ class Player extends Entity {
         this.angle = 0;
     }
     update(dt, input, game) {
+        // Consume one-shot actions only when gameplay advances. Hit-stop may
+        // skip this update; pause, death and restart still clear pending input.
+        const dashRequested = input.dashRequested;
+        input.dashRequested = false;
         // Dash cooldown
         if (this.dashTimer > 0) this.dashTimer -= dt;
 
@@ -291,7 +294,7 @@ class Player extends Entity {
             }
 
             // Trigger dash
-            if ((input.keys['ShiftLeft'] || input.keys['ShiftRight'] || input.dashRequested) && this.dashTimer <= 0) {
+            if ((input.keys['ShiftLeft'] || input.keys['ShiftRight'] || dashRequested) && this.dashTimer <= 0) {
                 this.isDashing = true;
                 this.dashTime = this.dashDuration;
                 this.dashTimer = this.dashCooldown;
@@ -317,6 +320,7 @@ class Player extends Entity {
             }
         }
 
+        if (this.isDashing) { game.vfx.addTrail(this.x, this.y, this.radius * 0.8, '#e857ce', 0.2, 0.6); }
         super.update(dt);
 
         // Recoil decay
@@ -754,6 +758,7 @@ class Game {
         this.input = new InputManager(canvas);
         this.saves = new SaveManager();
         this.sounds = new SoundEngine();
+        this.vfx = new VFXManager(this);
 
         this.width = canvas.width;
         this.height = canvas.height;
@@ -837,6 +842,7 @@ class Game {
     }
 
     resetGame() {
+        this.vfx.reset();
         this.world = new World(this.width, this.height);
         this.player = new Player(this.width / 2, this.height / 2);
         this.echoes = [];
@@ -979,6 +985,11 @@ class Game {
             return;
         }
 
+        this.vfx.update(dt);
+        if (this.vfx.hitStopTimer > 0) {
+            return; // hit stop freeze frame
+        }
+
         this.beatTimer += dt;
         if (this.beatTimer >= this.beatInterval) {
             this.beatTimer -= this.beatInterval;
@@ -1003,6 +1014,8 @@ class Game {
         this.world.update(dt, this.player, this.enemies, this.echoes, this.projectiles);
         if (this.player.inHazard) {
             this.sounds.playHit();
+            this.vfx.shakeScreen(30, 0.5);
+            this.vfx.hitStop(0.4);
             this.gameOver();
             this.player.inHazard = false;
             return;
@@ -1033,6 +1046,8 @@ class Game {
             if (Math.hypot(dx, dy) < this.player.radius + enemy.radius) {
                 if (!this.player.isDashing) {
                     this.sounds.playHit();
+                    this.vfx.shakeScreen(30, 0.5);
+                    this.vfx.hitStop(0.4);
                     this.gameOver();
                     return;
                 } else {
@@ -1065,7 +1080,14 @@ class Game {
                             this.boss = null;
                             this.score += 500;
                             this.spawnParticles(enemy.x, enemy.y, 100, '#ffffff');
+                            this.vfx.spawnDirectionalParticles(enemy.x, enemy.y, 50, '#ff0000', 0, Math.PI*2, 100, 300);
                             this.sounds.playHit();
+                            this.vfx.shakeScreen(20, 0.5);
+                            this.vfx.hitStop(0.3);
+                            this.vfx.addFloatingText(enemy.x, enemy.y - 20, "+500", "#ffaa00");
+                        } else {
+                            this.vfx.shakeScreen(5, 0.1);
+                            this.vfx.hitStop(0.05);
                         }
 
                         // Spawner death logic
@@ -1083,6 +1105,8 @@ class Game {
                         this.score += points;
 
                         this.spawnParticles(enemy.x, enemy.y, 20, enemy.color);
+                        this.vfx.spawnDirectionalParticles(enemy.x, enemy.y, 15, enemy.color, Math.atan2(pdy, pdx), Math.PI/2, 50, 200);
+                        this.vfx.addFloatingText(enemy.x, enemy.y, `+${points}`, "#ffffff");
                         this.sounds.playHit();
                     }
                     break; // one hit per projectile
@@ -1098,6 +1122,8 @@ class Game {
             if (Math.hypot(epdx, epdy) < this.player.radius + ep.radius) {
                 if (!this.player.isDashing) {
                     this.sounds.playHit();
+                    this.vfx.shakeScreen(30, 0.5);
+                    this.vfx.hitStop(0.4);
                     this.gameOver();
                     return;
                 }
@@ -1146,7 +1172,11 @@ class Game {
         this.ctx.fillRect(0, 0, this.width, this.height);
 
         if (this.world) {
+            // Collidable hazards and currents must share the entity transform.
+            this.ctx.save();
+            this.ctx.translate(this.vfx.shakeX, this.vfx.shakeY);
             this.world.drawBackground(this.ctx);
+            this.ctx.restore();
         }
 
         if (this.bgPulse > 0) {
@@ -1228,6 +1258,11 @@ class Game {
         this.ctx.clearRect(0, 0, this.width, this.height);
         this.drawBackground();
 
+        this.ctx.save();
+        this.ctx.translate(this.vfx.shakeX, this.vfx.shakeY);
+
+        this.vfx.drawUnder(this.ctx);
+
         this.echoes.forEach(e => e.draw(this.ctx));
         this.player.draw(this.ctx);
         this.enemies.forEach(e => e.draw(this.ctx));
@@ -1246,6 +1281,9 @@ class Game {
         if (this.world) {
             this.world.drawForeground(this.ctx);
         }
+
+        this.vfx.drawOver(this.ctx);
+        this.ctx.restore();
 
         this.drawHUD();
     }
@@ -1300,6 +1338,7 @@ class Game {
                 window.location.href = '../../index.html';
             }
         } else if (this.state === 'GAME_OVER') {
+            this.vfx.update(dt);
             this.draw();
             this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -1354,10 +1393,14 @@ class Boss extends Enemy {
             this.phase = 2;
             game.spawnParticles(this.x, this.y, 50, '#ffffff');
             game.sounds.playHit();
+            game.vfx.shakeScreen(30, 0.8);
+            game.vfx.hitStop(0.5);
             this.speed *= 1.5;
             this.color = '#ffffff';
             this.timer = 0; // reset attack timer
         }
+
+        if (game.vfx) game.vfx.addTrail(this.x, this.y, this.radius * 0.9, this.color, 0.1, 0.4);
 
         this.timer += dt;
         const dx = player.x - this.x;
