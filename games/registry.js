@@ -1037,7 +1037,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move, Mouse/Touch to aim and shoot. Touch/Drag to move and tap to shoot.",
     "createdAt": "2023-10-25",
     "accentColor": "#448b6f",
-    "phase": "5",
+    "phase": "6",
     "path": "./games/078-cytoplasm-recoil/index.html"
   },
   {
