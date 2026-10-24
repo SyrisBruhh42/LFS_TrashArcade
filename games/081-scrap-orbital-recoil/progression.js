@@ -12,6 +12,7 @@ class UpgradeManager {
       { name: "Double Shot", desc: "Shoot 2 Projectiles", apply: (p) => { p.doubleShot = true; } }
     ];
     this.draftOptions = [];
+    this.lastHovered = -1;
   }
   startDraft() {
     this.game.state = 'DRAFT';
@@ -39,11 +40,19 @@ class UpgradeManager {
     const boxWidth = 200, boxHeight = 120, spacing = 40;
     const startX = width / 2 - (3 * boxWidth + 2 * spacing) / 2;
     const startY = height / 2 - 50;
+    let anyHovered = false;
     for (let i = 0; i < 3; i++) {
       const opt = this.draftOptions[i];
       const bx = startX + i * (boxWidth + spacing);
       const mx = this.game.input.mouse.x, my = this.game.input.mouse.y;
       const hovered = mx > bx && mx < bx + boxWidth && my > startY && my < startY + boxHeight;
+      if (hovered) {
+        anyHovered = true;
+        if (this.lastHovered !== i) {
+          this.game.sound.playUIHover();
+          this.lastHovered = i;
+        }
+      }
       ctx.fillStyle = hovered ? '#2a2a35' : '#151518';
       ctx.fillRect(bx, startY, boxWidth, boxHeight);
       ctx.strokeStyle = hovered ? '#b48ff0' : '#444';
@@ -56,6 +65,7 @@ class UpgradeManager {
       ctx.font = '14px sans-serif';
       ctx.fillText(opt.desc, bx + boxWidth / 2, startY + 80);
     }
+    if (!anyHovered) this.lastHovered = -1;
   }
   handleInput(input, width, height) {
     if (input.consumeAnyInput()) {
@@ -66,6 +76,8 @@ class UpgradeManager {
        for (let i = 0; i < 3; i++) {
          const bx = startX + i * (boxWidth + spacing);
          if (mx > bx && mx < bx + boxWidth && my > startY && my < startY + boxHeight) {
+           this.game.sound.playUIClick();
+           this.game.sound.playUpgrade();
            this.applyUpgrade(i);
            input.anyKeyOrClick = false;
            input.mouse.clicked = false;
