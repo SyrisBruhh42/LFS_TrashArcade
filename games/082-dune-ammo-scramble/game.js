@@ -249,6 +249,7 @@ class Player {
                 this.invulnerableTimer = 0.1;
             }
             if (Math.random() < 0.5) game.spawnParticles(this.x, this.y, '#a3d473', 1);
+            if (game.vfx && Math.random() < 0.4) game.vfx.addAfterimage(this.x, this.y, this.radius, this.color, 0.2, 0.4);
         } else {
             this.vx = this.vx * 0.8 + targetVx * 0.2;
             this.vy = this.vy * 0.8 + targetVy * 0.2;
@@ -465,6 +466,10 @@ class Enemy {
         this.wobble += dt * 5;
         if (dist < this.radius + game.player.radius) {
             if (!game.player.invulnerableTimer || game.player.invulnerableTimer <= 0) {
+                if (game.vfx) {
+                    game.vfx.shake(30, 0.5);
+                    game.vfx.hitStop(0.3);
+                }
                 game.gameOver();
             }
         }
@@ -848,6 +853,7 @@ class Game {
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d', { alpha: false });
         this.state = 'TITLE';
+        this.vfx = new VFXManager();
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
         this.input = new InputManager(this.canvas);
@@ -1016,7 +1022,11 @@ class Game {
     }
     spawnAmmo(x, y) { this.ammos.push(new AmmoPickup(x, y)); }
     spawnParticles(x, y, color, count) {
-        for(let i=0; i<count; i++) this.particles.push(new Particle(x, y, color));
+        if (this.vfx) {
+            this.vfx.emitParticles(x, y, color, count);
+        } else {
+            for(let i=0; i<count; i++) this.particles.push(new Particle(x, y, color));
+        }
     }
     handleEnemyKill(enemy) {
         this.combo = Math.min(10, this.combo + 1);
@@ -1024,6 +1034,11 @@ class Game {
 
         let pts = (enemy.isBoss ? 50 : 10) * this.combo;
         this.score += pts;
+        if (this.vfx) {
+            this.vfx.addFloatingText(enemy.x, enemy.y, `+${pts}`, '#ff0', this.combo > 5);
+            this.vfx.hitStop(enemy.isBoss ? 0.2 : 0.05);
+            if (enemy.isBoss) this.vfx.shake(20, 0.5);
+        }
         this.spawnAmmo(enemy.x, enemy.y);
         this.spawnParticles(enemy.x, enemy.y, enemy.color, 10);
         this.sound.playHit();
@@ -1105,6 +1120,11 @@ class Game {
     }
     update(dt) {
         if (this.state !== 'PLAYING') return;
+
+        if (this.vfx) {
+            this.vfx.update(dt);
+            if (this.vfx.hitStopTimer > 0) return;
+        }
 
         let playerSlow = 1.0;
         if (this.quicksandZones) {
@@ -1320,6 +1340,8 @@ class Game {
         }
 
         if (this.state === 'PLAYING' || this.state === 'GAME_OVER' || this.state === 'PAUSED' || this.state === 'UPGRADE_DRAFT') {
+            this.ctx.save();
+            if (this.vfx) this.vfx.applyShake(this.ctx, this.saveManager);
             if (this.quicksandZones) this.quicksandZones.forEach(qz => qz.draw(this.ctx));
             this.ammos.forEach(a => a.draw(this.ctx));
             if (this.pickups) this.pickups.forEach(p => p.draw(this.ctx));
@@ -1329,9 +1351,12 @@ class Game {
             this.enemies.forEach(e => e.draw(this.ctx));
             if (this.enemyProjectiles) this.enemyProjectiles.forEach(ep => ep.draw(this.ctx));
             this.particles.forEach(p => p.draw(this.ctx));
+
+            if (this.vfx) this.vfx.draw(this.ctx);
             if (this.state !== 'GAME_OVER' || (this.state === 'GAME_OVER' && Math.floor(Date.now() / 200) % 2 === 0)) {
                  this.player.draw(this.ctx);
             }
+            this.ctx.restore();
 
             if (this.bossWarningTimer > 0) {
                 if (Math.floor(Date.now() / 250) % 2 === 0) {
