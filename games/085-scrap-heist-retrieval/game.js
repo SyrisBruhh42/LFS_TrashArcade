@@ -109,8 +109,10 @@ class SoundEngine {
 class InputManager {
     constructor() {
         this.keys = {};
-        this.mouse = { x: 0, y: 0, down: false };
+        this.mouse = { x: 0, y: 0, down: false, rightDown: false };
         this.touches = [];
+
+        window.addEventListener('contextmenu', e => e.preventDefault());
         this.joystick = { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 };
         this.pointers = {};
 
@@ -131,13 +133,21 @@ class InputManager {
         });
 
         window.addEventListener('mousedown', e => {
-            this.mouse.down = true;
-            this.handlePointerDown(e.clientX, e.clientY, 'mouse');
+            if (e.button === 2) {
+                this.mouse.rightDown = true;
+            } else {
+                this.mouse.down = true;
+                this.handlePointerDown(e.clientX, e.clientY, 'mouse');
+            }
         });
 
         window.addEventListener('mouseup', e => {
-            this.mouse.down = false;
-            this.handlePointerUp('mouse');
+            if (e.button === 2) {
+                this.mouse.rightDown = false;
+            } else {
+                this.mouse.down = false;
+                this.handlePointerUp('mouse');
+            }
         });
 
         window.addEventListener('touchstart', e => {
@@ -231,7 +241,11 @@ class InputManager {
     }
 
     isActionPressed() {
-        return this.keys['Space'] || this.keys['Enter'];
+        return this.keys['Space'] || this.keys['Enter'] || this.mouse.down;
+    }
+
+    isSecondaryPressed() {
+        return this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.mouse.rightDown;
     }
 }
 
@@ -261,16 +275,70 @@ class Player extends Entity {
         this.hasAmmo = true;
         this.color = '#4ad5c0';
         this.facing = { x: 1, y: 0 };
+
+        // Phase 2: Dash ability
+        this.dashCooldown = 0;
+        this.dashTimer = 0;
+        this.isDashing = false;
+        this.dashSpeed = 450;
+        this.maxDashCooldown = 2.0;
+        this.dashDuration = 0.2;
+
+        // Phase 2: Visual properties
+        this.recoilTimer = 0;
+        this.invulnTimer = 0;
+        this.thrustTimer = 0;
     }
 
     update(dt, input, game) {
-        const axis = input.getAxis();
-        this.vx = axis.x * this.speed;
-        this.vy = axis.y * this.speed;
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+        if (this.recoilTimer > 0) this.recoilTimer -= dt;
+        if (this.invulnTimer > 0) this.invulnTimer -= dt;
 
-        if (axis.x !== 0 || axis.y !== 0) {
-            this.facing.x = axis.x;
-            this.facing.y = axis.y;
+        const axis = input.getAxis();
+
+        if (this.isDashing) {
+            this.dashTimer -= dt;
+            if (this.dashTimer <= 0) {
+                this.isDashing = false;
+            } else {
+                this.vx = this.facing.x * this.dashSpeed;
+                this.vy = this.facing.y * this.dashSpeed;
+                game.particles.push(new Particle(this.x, this.y, '#4ad5c0', 3, 0.2));
+            }
+        } else {
+            if (input.isSecondaryPressed() && this.dashCooldown <= 0) {
+                this.isDashing = true;
+                this.dashTimer = this.dashDuration;
+                this.dashCooldown = this.maxDashCooldown;
+                this.invulnTimer = this.dashDuration;
+                game.sound.playShoot(); // Reuse shoot sound for dash
+            }
+
+            // Tight momentum/acceleration tuning
+            const targetVx = axis.x * this.speed;
+            const targetVy = axis.y * this.speed;
+            const accel = 800; // Acceleration factor
+
+            if (axis.x !== 0) {
+                this.vx += Math.sign(targetVx - this.vx) * accel * dt;
+                if (Math.abs(this.vx) > this.speed) this.vx = Math.sign(this.vx) * this.speed;
+            } else {
+                this.vx *= Math.pow(0.01, dt); // Friction
+            }
+
+            if (axis.y !== 0) {
+                this.vy += Math.sign(targetVy - this.vy) * accel * dt;
+                if (Math.abs(this.vy) > this.speed) this.vy = Math.sign(this.vy) * this.speed;
+            } else {
+                this.vy *= Math.pow(0.01, dt); // Friction
+            }
+
+            if (axis.x !== 0 || axis.y !== 0) {
+                this.facing.x = axis.x;
+                this.facing.y = axis.y;
+                this.thrustTimer += dt;
+            }
         }
 
         let oldX = this.x;
@@ -283,55 +351,136 @@ class Player extends Entity {
         if (this.y < this.radius) this.y = this.radius;
         if (this.y > game.height - this.radius) this.y = game.height - this.radius;
 
-        // Collide with obstacles
+        // Improved collision (sliding along walls)
         for (let obs of game.obstacles) {
             const rx = Math.max(obs.x, Math.min(this.x, obs.x + obs.width));
             const ry = Math.max(obs.y, Math.min(this.y, obs.y + obs.height));
             const dist = Math.hypot(this.x - rx, this.y - ry);
 
             if (dist < this.radius) {
-                this.x = oldX;
-                this.y = oldY;
-                break;
+                const overlap = this.radius - dist;
+                const nx = (this.x - rx) / dist || 0;
+                const ny = (this.y - ry) / dist || 0;
+                this.x += nx * overlap;
+                this.y += ny * overlap;
+
+                // Adjust velocity to slide
+                const dot = this.vx * nx + this.vy * ny;
+                this.vx -= dot * nx;
+                this.vy -= dot * ny;
             }
         }
 
-        // Shoot
-        if (input.isActionPressed() && this.hasAmmo && !game.shootCooldown) {
+        // Generate additional sparks and debris
+        if (Math.random() < 0.05) {
+            const extraSparkX = this.x + (Math.random() - 0.5) * this.radius * 2;
+            const extraSparkY = this.y + (Math.random() - 0.5) * this.radius * 2;
+            const size = Math.random() * 2 + 1;
+            const duration = 0.3 + Math.random() * 0.2;
+            game.particles.push(new Particle(extraSparkX, extraSparkY, '#ffaa00', size, duration));
+        }
+
+        // Dynamic camera tracking smoothing values
+        this.cameraOffset = { x: 0, y: 0 };
+        this.cameraOffset.x += (this.vx * 0.1 - this.cameraOffset.x) * dt * 5;
+        this.cameraOffset.y += (this.vy * 0.1 - this.cameraOffset.y) * dt * 5;
+
+        // Engine heat management
+        if (this.isDashing) {
+            this.engineHeat = Math.min(100, (this.engineHeat || 0) + 10 * dt);
+        } else {
+            this.engineHeat = Math.max(0, (this.engineHeat || 0) - 5 * dt);
+        }
+
+
+        // Shoot (cannot shoot while dashing)
+        if (input.isActionPressed() && this.hasAmmo && !game.shootCooldown && !this.isDashing) {
             this.hasAmmo = false;
             game.shootCooldown = 0.5;
+            this.recoilTimer = 0.1;
             game.sound.playShoot();
             game.projectiles.push(new Projectile(this.x, this.y, this.facing.x, this.facing.y));
         }
     }
 
     draw(ctx) {
+        if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 20) % 2 === 0) {
+            return; // Blink effect
+        }
+
         ctx.save();
         ctx.translate(this.x, this.y);
         const angle = Math.atan2(this.facing.y, this.facing.x);
         ctx.rotate(angle);
 
+        // Recoil offset
+        if (this.recoilTimer > 0) {
+            ctx.translate(-5 * (this.recoilTimer / 0.1), 0);
+        }
+
+        // Aim telegraph
+        if (this.hasAmmo && !this.isDashing) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(this.radius, 0);
+            ctx.lineTo(200, 0);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Thrust flare
+        if ((Math.abs(this.vx) > 10 || Math.abs(this.vy) > 10) && Math.floor(this.thrustTimer * 20) % 2 === 0) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.beginPath();
+            ctx.moveTo(-this.radius, -this.radius * 0.4);
+            ctx.lineTo(-this.radius - 8 - Math.random() * 5, 0);
+            ctx.lineTo(-this.radius, this.radius * 0.4);
+            ctx.fill();
+        }
+
+        // Multi-part procedural body
+        // 1. Treads/Legs (Dark grey)
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-this.radius * 0.8, -this.radius, this.radius * 1.6, this.radius * 0.4);
+        ctx.fillRect(-this.radius * 0.8, this.radius * 0.6, this.radius * 1.6, this.radius * 0.4);
+
+        // 2. Main Chassis (Cyan)
         ctx.fillStyle = this.color;
         ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.roundRect(-this.radius * 0.9, -this.radius * 0.7, this.radius * 1.8, this.radius * 1.4, 4);
         ctx.fill();
 
+        // 3. Cockpit/Core (Darker cyan/glass)
+        ctx.fillStyle = '#2a8b7c';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 4. Gun Barrel (Grey)
+        ctx.fillStyle = '#777';
+        ctx.fillRect(this.radius * 0.2, -this.radius * 0.2, this.radius * 1.2, this.radius * 0.4);
+
+        // 5. Ammo Indicator Core
         ctx.fillStyle = '#fff';
         ctx.beginPath();
-        ctx.arc(this.radius * 0.5, 0, 4, 0, Math.PI * 2);
+        ctx.arc(this.radius * 0.3, 0, 3, 0, Math.PI * 2);
         ctx.fill();
 
         if (this.hasAmmo) {
             ctx.fillStyle = '#ffaa00';
             ctx.beginPath();
-            ctx.arc(-this.radius * 0.2, 0, 3, 0, Math.PI * 2);
+            ctx.arc(this.radius * 0.8, 0, 2, 0, Math.PI * 2);
             ctx.fill();
+
+            // Glowing chamber
+            ctx.fillStyle = '#ffaa00';
+            ctx.fillRect(this.radius * 0.4, -this.radius * 0.1, this.radius * 0.4, this.radius * 0.2);
         }
 
         ctx.restore();
     }
 }
-
 class Enemy extends Entity {
     constructor(x, y) {
         super(x, y, 14);
@@ -905,6 +1054,24 @@ class Game {
             this.ctx.fillStyle = '#ff4444';
             this.ctx.textAlign = 'center';
             this.ctx.fillText('RETRIEVE AMMO!', this.width/2, 40);
+        }
+
+        // Draw Dash Cooldown
+        this.ctx.textAlign = 'left';
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '14px monospace';
+        this.ctx.fillText('DASH', 20, this.height - 20);
+
+        this.ctx.fillStyle = '#555';
+        this.ctx.fillRect(60, this.height - 30, 100, 10);
+
+        if (this.player.dashCooldown <= 0) {
+            this.ctx.fillStyle = '#4ad5c0';
+            this.ctx.fillRect(60, this.height - 30, 100, 10);
+        } else {
+            const ratio = 1 - (this.player.dashCooldown / this.player.maxDashCooldown);
+            this.ctx.fillStyle = '#ffaa00';
+            this.ctx.fillRect(60, this.height - 30, 100 * ratio, 10);
         }
     }
 
