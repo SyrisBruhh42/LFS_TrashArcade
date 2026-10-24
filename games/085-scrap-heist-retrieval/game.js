@@ -812,17 +812,27 @@ class Projectile extends Entity {
             if (e.active && e.state !== 'STUNNED') {
                 const dist = Math.hypot(this.x - e.x, this.y - e.y);
                 if (dist < this.radius + e.radius) {
-                    if (e instanceof BruiserEnemy && e.shield > 0) {
-                        e.shield--;
+                    if (typeof e.takeDamage === 'function') {
+                        if (e.takeDamage(game)) {
+                            this.state = 'GROUNDED';
+                            this.vx = 0;
+                            this.vy = 0;
+                            game.sound.playHit();
+                            break;
+                        }
                     } else {
-                        e.state = 'STUNNED';
-                        e.stunTimer = 3.0;
+                        if (e instanceof BruiserEnemy && e.shield > 0) {
+                            e.shield--;
+                        } else {
+                            e.state = 'STUNNED';
+                            e.stunTimer = 3.0;
+                        }
+                        this.state = 'GROUNDED';
+                        this.vx = 0;
+                        this.vy = 0;
+                        game.sound.playHit();
+                        break;
                     }
-                    this.state = 'GROUNDED';
-                    this.vx = 0;
-                    this.vy = 0;
-                    game.sound.playHit();
-                    break;
                 }
             }
         }
@@ -1143,19 +1153,26 @@ class Game {
         }
 
         // Enemies
-        const enemyClasses = [Enemy, SwarmerEnemy, SniperEnemy, BruiserEnemy, SpawnerEnemy, HazardEnemy];
-        for (let i = 0; i < Math.min(3 + this.wave, 10); i++) {
-            const x = 100 + Math.random() * (this.width - 200);
-            const y = 100 + Math.random() * (this.height - 300);
-            const EClass = enemyClasses[Math.floor(Math.random() * enemyClasses.length)];
-            this.enemies.push(new EClass(x, y));
-        }
+        if (this.wave % 5 === 0) {
+            // Boss Wave
+            const BossClass = this.wave % 10 === 0 ? ScrapTitanBoss : MechaWormBoss;
+            this.enemies.push(new BossClass(this.width / 2, this.height / 2));
+            // No initial collectibles, boss drops them
+        } else {
+            const enemyClasses = [Enemy, SwarmerEnemy, SniperEnemy, BruiserEnemy, SpawnerEnemy, HazardEnemy];
+            for (let i = 0; i < Math.min(3 + this.wave, 10); i++) {
+                const x = 100 + Math.random() * (this.width - 200);
+                const y = 100 + Math.random() * (this.height - 300);
+                const EClass = enemyClasses[Math.floor(Math.random() * enemyClasses.length)];
+                this.enemies.push(new EClass(x, y));
+            }
 
-        // Collectibles (Scrap to retrieve)
-        for (let i = 0; i < 3 + this.wave; i++) {
-            const x = 100 + Math.random() * (this.width - 200);
-            const y = 100 + Math.random() * (this.height - 300);
-            this.collectibles.push(new Collectible(x, y));
+            // Collectibles (Scrap to retrieve)
+            for (let i = 0; i < 3 + this.wave; i++) {
+                const x = 100 + Math.random() * (this.width - 200);
+                const y = 100 + Math.random() * (this.height - 300);
+                this.collectibles.push(new Collectible(x, y));
+            }
         }
     }
 
@@ -1194,6 +1211,7 @@ class Game {
         for (let e of this.enemies) {
             e.update(dt, this);
         }
+        this.enemies = this.enemies.filter(e => e.active !== false);
 
         for (let h of this.hazards) {
             h.update(dt, this);
@@ -1229,7 +1247,8 @@ class Game {
             }
         }
 
-        if (this.collectibles.length === 0) {
+        const bossActive = this.enemies.some(e => typeof e.bossName !== 'undefined' && e.active);
+        if (this.collectibles.length === 0 && !bossActive) {
             this.wave++;
             this.score += 500;
             this.loadWave();
@@ -1290,6 +1309,29 @@ class Game {
             this.ctx.fillStyle = '#ff4444';
             this.ctx.textAlign = 'center';
             this.ctx.fillText('RETRIEVE AMMO!', this.width/2, 40);
+        }
+
+        // Boss HUD
+        const boss = this.enemies.find(e => typeof e.bossName !== 'undefined' && e.active);
+        if (boss) {
+            this.ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+            this.ctx.fillRect(0, 80, this.width, 40);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.textAlign = 'center';
+            this.ctx.font = '24px monospace';
+            this.ctx.fillText(`WARNING: ${boss.bossName}`, this.width / 2, 108);
+
+            // HP Bar
+            const barW = 400;
+            const barH = 20;
+            const barX = (this.width - barW) / 2;
+            const barY = 130;
+            this.ctx.fillStyle = '#333';
+            this.ctx.fillRect(barX, barY, barW, barH);
+            this.ctx.fillStyle = '#ff0000';
+            this.ctx.fillRect(barX, barY, barW * (boss.hp / boss.maxHp), barH);
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.strokeRect(barX, barY, barW, barH);
         }
 
         // Draw Dash Cooldown
