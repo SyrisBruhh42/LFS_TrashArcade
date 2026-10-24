@@ -1123,5 +1123,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#e857ce",
     "phase": "2",
     "path": "./games/084-echo-forge-fusion/index.html"
+  },
+  {
+    "id": "085",
+    "slug": "085-scrap-heist-retrieval",
+    "title": "Scrap Heist Retrieval",
+    "genre": "Stealth/Line-of-Sight Heist",
+    "coreMechanic": "Limited Ammo Must Be Physically Retrieved",
+    "setting": "Junkyard Robot Scrapheap",
+    "description": "Sneak through the scrapheap, collect scrap, and stun enemies. Don't forget to pick up your only ammo!",
+    "controls": "WASD/Arrows to move, Space/Click to shoot. Touch joystick and tap.",
+    "createdAt": "2023-10-24",
+    "accentColor": "#4ad5c0",
+    "phase": "1",
+    "path": "./games/085-scrap-heist-retrieval/index.html"
   }
 ];
