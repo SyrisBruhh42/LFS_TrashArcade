@@ -766,7 +766,13 @@ class Game {
         this.bpm = 120;
         this.beatInterval = 60 / this.bpm;
         this.beatTimer = 0;
+            // Boss
+        this.boss = null;
+        this.bossActive = false;
+        this.bossTimer = 0;
+        this.displayBossHp = 1;
     }
+
 
     spawnEcho(x, y) {
         this.echoes.push(new Echo(x, y));
@@ -785,6 +791,27 @@ class Game {
             });
         }
     }
+    spawnBossWave() {
+        this.bossActive = true;
+        this.bossTimer = 0;
+
+        const types = ['boss_echo_bane', 'boss_rhythm_core'];
+        const type = types[(Math.floor(this.wave / 5) - 1) % types.length] || types[0];
+
+        const x = this.width / 2;
+        const y = -100; // spawn above screen
+        this.boss = new Boss(x, y, type);
+        this.enemies.push(this.boss);
+
+        // Clear normal enemies to focus on boss
+        for (let e of this.enemies) {
+            if (!e.isBoss) {
+                e.active = false;
+                this.spawnParticles(e.x, e.y, 10, e.color);
+            }
+        }
+    }
+
 
     spawnEnemy() {
         let x, y;
@@ -871,11 +898,15 @@ class Game {
             this.triggerBeat();
         }
 
-        this.enemySpawnTimer += dt;
-        if (this.enemySpawnTimer >= this.enemySpawnRate) {
-            this.enemySpawnTimer = 0;
-            this.spawnEnemy();
-            this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.02); // gets faster
+                if (!this.bossActive) {
+            this.enemySpawnTimer += dt;
+            if (this.enemySpawnTimer >= this.enemySpawnRate) {
+                this.enemySpawnTimer = 0;
+                this.spawnEnemy();
+                this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.02);
+            }
+        } else {
+            this.bossTimer += dt;
         }
 
         if (this.bgPulse > 0) {
@@ -935,13 +966,23 @@ class Game {
                 const pdx = proj.x - enemy.x;
                 const pdy = proj.y - enemy.y;
                 if (Math.hypot(pdx, pdy) < proj.radius + enemy.radius) {
+
                     proj.active = false;
                     enemy.hp--;
                     this.spawnParticles(enemy.x, enemy.y, 5, enemy.color);
                     if (enemy.hp <= 0) {
                         enemy.active = false;
 
+                        if (enemy.isBoss) {
+                            this.bossActive = false;
+                            this.boss = null;
+                            this.score += 500;
+                            this.spawnParticles(enemy.x, enemy.y, 100, '#ffffff');
+                            this.sounds.playHit();
+                        }
+
                         // Spawner death logic
+
                         if (enemy.type === 'spawner') {
                             for(let s=0; s<3; s++) {
                                 this.enemies.push(new Enemy(enemy.x + (Math.random()-0.5)*20, enemy.y + (Math.random()-0.5)*20, 'swarmer'));
@@ -983,10 +1024,14 @@ class Game {
         this.enemyProjectiles = this.enemyProjectiles.filter(p => p.active);
 
         // Wave progression (simple)
-        if (this.score > this.wave * 200) {
+        if (this.score > this.wave * 200 && !this.bossActive) {
             this.wave++;
-            this.bpm = Math.min(180, this.bpm + 5);
-            this.beatInterval = 60 / this.bpm;
+            if (this.wave % 5 === 0) {
+                this.spawnBossWave();
+            } else {
+                this.bpm = Math.min(180, this.bpm + 5);
+                this.beatInterval = 60 / this.bpm;
+            }
         }
     }
 
@@ -1050,6 +1095,43 @@ class Game {
             const dashProg = 1 - (this.player.dashTimer / this.player.dashCooldown);
             this.ctx.fillStyle = '#888';
             this.ctx.fillRect(60, 120, 60 * dashProg, 10);
+        }
+
+        if (this.bossActive && this.boss) {
+            // Draw warning banner when boss spawns
+            if (this.bossTimer < 3) {
+                this.ctx.fillStyle = `rgba(255, 0, 0, ${Math.abs(Math.sin(this.bossTimer * 5))})`;
+                this.ctx.fillRect(0, this.height / 2 - 40, this.width, 80);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = 'bold 30px monospace';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText("WARNING: BOSS APPROACHING", this.width / 2, this.height / 2 + 10);
+            }
+
+            // Draw boss health bar
+            const barW = Math.min(400, this.width * 0.8);
+            const barH = 20;
+            const barX = this.width / 2 - barW / 2;
+            const barY = 30;
+
+            this.ctx.fillStyle = '#444';
+            this.ctx.fillRect(barX, barY, barW, barH);
+
+            const hpRatio = Math.max(0, this.boss.hp / this.boss.maxHp);
+            this.displayBossHp = this.displayBossHp || hpRatio;
+            this.displayBossHp += (hpRatio - this.displayBossHp) * 0.1; // animate
+
+            this.ctx.fillStyle = this.boss.phase === 1 ? '#ff0055' : '#ffffff';
+            this.ctx.fillRect(barX, barY, barW * this.displayBossHp, barH);
+
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(barX, barY, barW, barH);
+
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '14px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`BOSS - Phase ${this.boss.phase}`, this.width / 2, barY + 14);
         }
     }
 
@@ -1160,6 +1242,150 @@ class Game {
         }
 
         this.input.resetFrame();
+    }
+}
+
+
+class Boss extends Enemy {
+    constructor(x, y, type) {
+        super(x, y, type);
+        this.isBoss = true;
+        this.radius = 45;
+        this.phase = 1;
+        this.timer = 0;
+
+        if (type === 'boss_echo_bane') {
+            this.maxHp = 50; // High HP
+            this.color = '#ff3366';
+            this.speed = 80;
+        } else if (type === 'boss_rhythm_core') {
+            this.maxHp = 60;
+            this.color = '#aa33ff';
+            this.speed = 40;
+        }
+        this.hp = this.maxHp;
+        this.baseColor = this.color;
+    }
+
+    update(dt, player, game) {
+        // Phase transition check
+        if (this.hp <= this.maxHp * 0.5 && this.phase === 1) {
+            this.phase = 2;
+            game.spawnParticles(this.x, this.y, 50, '#ffffff');
+            game.sounds.playHit();
+            this.speed *= 1.5;
+            this.color = '#ffffff';
+            this.timer = 0; // reset attack timer
+        }
+
+        this.timer += dt;
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        // Enter screen gracefully
+        if (this.y < game.height * 0.2) {
+            this.vy = 100;
+            this.vx = 0;
+        } else {
+            if (this.type === 'boss_echo_bane') {
+                // Chases the player but shoots at echoes to punish self-cooperation
+                if (dist > 0) {
+                    this.vx = (dx / dist) * this.speed;
+                    this.vy = (dy / dist) * this.speed;
+                }
+
+                const fireRate = this.phase === 1 ? 2.0 : 1.0;
+                if (this.timer > fireRate) {
+                    this.timer = 0;
+                    // Shoot at all echoes
+                    for (let echo of game.echoes) {
+                        const edx = echo.x - this.x;
+                        const edy = echo.y - this.y;
+                        const edist = Math.hypot(edx, edy);
+                        if (edist > 0) {
+                            game.enemyProjectiles.push(new EnemyProjectile(
+                                this.x, this.y,
+                                (edx / edist) * 150,
+                                (edy / edist) * 150,
+                                this.color
+                            ));
+                        }
+                    }
+                    // If no echoes, shoot at player
+                    if (game.echoes.length === 0 && dist > 0) {
+                        game.enemyProjectiles.push(new EnemyProjectile(
+                            this.x, this.y,
+                            (dx / dist) * 200,
+                            (dy / dist) * 200,
+                            this.color
+                        ));
+                    }
+                }
+            } else if (this.type === 'boss_rhythm_core') {
+                // Moves slowly, spawns projectiles in a spiral
+                this.vx = 0;
+                this.vy = 0;
+                // slowly drift to center
+                const cx = game.width / 2 - this.x;
+                const cy = game.height / 2 - this.y;
+                const cdist = Math.hypot(cx, cy);
+                if (cdist > 10) {
+                    this.vx = (cx / cdist) * this.speed;
+                    this.vy = (cy / cdist) * this.speed;
+                }
+
+                const fireRate = this.phase === 1 ? 0.3 : 0.15;
+                if (this.timer > fireRate) {
+                    this.timer = 0;
+                    const angle = performance.now() / 200; // spiral
+                    game.enemyProjectiles.push(new EnemyProjectile(
+                        this.x, this.y,
+                        Math.cos(angle) * 150,
+                        Math.sin(angle) * 150,
+                        this.color
+                    ));
+                    // Fire opposite too in phase 2
+                    if (this.phase === 2) {
+                        game.enemyProjectiles.push(new EnemyProjectile(
+                            this.x, this.y,
+                            Math.cos(angle + Math.PI) * 150,
+                            Math.sin(angle + Math.PI) * 150,
+                            this.color
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Entity update - avoid super.update(dt, player, game) because Enemy.update has swarmer logic
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        // Keep within bounds somewhat
+        if (this.x < this.radius) this.x = this.radius;
+        if (this.x > game.width - this.radius) this.x = game.width - this.radius;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+
+        // pulsing core based on phase
+        const pulse = Math.sin(performance.now() / 150) * 8 * this.phase;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius / 2 + pulse, 0, Math.PI * 2);
+        ctx.fillStyle = this.baseColor;
+        ctx.fill();
+
+        ctx.restore();
     }
 }
 
