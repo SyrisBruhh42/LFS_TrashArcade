@@ -261,12 +261,24 @@ class Player extends Entity {
             // Boost velocity in dash direction
             this.vx = move.dx * this.dashSpeed;
             this.vy = move.dy * this.dashSpeed;
+
+            if (window.game && window.game.vfx) {
+                window.game.vfx.triggerShake(0.1, 3);
+            }
+        }
+
+        if (this.dashTimer > 0 && window.game && window.game.vfx) {
+            window.game.vfx.addTrail(this.x, this.y, this.radius, '#e2fc7a', 0.2);
+            window.game.vfx.emitParticles(this.x, this.y, 2, '#fff', 300, -this.vx, -this.vy, 0.5);
         }
 
         // Apply acceleration if not dashing
         if (this.dashTimer <= 0) {
             this.vx += move.dx * this.accel * dt;
             this.vy += move.dy * this.accel * dt;
+            if (mag > 0.1 && window.game && window.game.vfx) {
+                window.game.vfx.emitParticles(this.x, this.y, 1, '#f88', 100, -move.dx, -move.dy, 0.5);
+            }
 
             // Limit speed
             const speedSq = this.vx * this.vx + this.vy * this.vy;
@@ -595,6 +607,7 @@ class Game {
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
         this.world = new World(this.canvas);
+        this.vfx = new VFXSystem();
 
         this.state = 'TITLE';
         this.lastTime = performance.now();
@@ -643,7 +656,14 @@ class Game {
         const dt = Math.min((time - this.lastTime) / 1000, 0.1);
         this.lastTime = time;
 
-        this.update(dt);
+        if (this.state === 'PLAYING') {
+            if (!this.vfx.updateHitStop(dt)) {
+                this.update(dt);
+            }
+            this.vfx.update(dt);
+        } else {
+            this.update(dt);
+        }
         this.draw();
 
         requestAnimationFrame((t) => this.loop(t));
@@ -711,6 +731,11 @@ class Game {
             // Add physical recoil to player momentum
             this.player.vx -= dirX * 200;
             this.player.vy -= dirY * 200;
+
+            if (this.vfx) {
+                this.vfx.triggerShake(0.1, 2);
+                this.vfx.emitParticles(this.player.x, this.player.y, 5, '#e2fc7a', 150, dirX, dirY, 0.2);
+            }
 
             this.sound.playShoot();
         }
@@ -825,6 +850,11 @@ class Game {
                         e.hp--;
                         b.stopped = true; // Bullet drops on hit
                         this.sound.playHit();
+                        if (this.vfx) {
+                            this.vfx.triggerHitStop(0.02);
+                            this.vfx.emitParticles(e.x, e.y, 5, '#fff', 200, b.vx, b.vy, 0.5);
+                            this.vfx.addFloatingText(e.x, e.y - 10, '1', '#fff', 0.5, 12);
+                        }
                         break;
                     }
                 }
@@ -835,13 +865,27 @@ class Game {
                 const dx = e.x - this.player.x;
                 const dy = e.y - this.player.y;
                 if (dx * dx + dy * dy < (e.radius + this.player.radius) ** 2) {
+                    if (this.vfx) {
+                        this.vfx.triggerHitStop(0.5);
+                        this.vfx.triggerShake(0.5, 10);
+                        this.vfx.emitParticles(this.player.x, this.player.y, 30, '#f00', 300, 0, 0, Math.PI * 2);
+                    }
                     this.endGame();
                 }
             }
 
             if (e.hp <= 0) {
-                this.score += (e.type === 'boss' ? 500 : 10) * this.combo.multiplier;
+                const pts = (e.type === 'boss' ? 500 : 10) * this.combo.multiplier;
+                this.score += pts;
                 this.combo.add(e.type === 'boss' ? 50 : 15);
+
+                if (this.vfx) {
+                    this.vfx.triggerShake(e.type === 'boss' ? 0.3 : 0.05, e.type === 'boss' ? 8 : 2);
+                    if (e.type === 'boss') this.vfx.triggerHitStop(0.2);
+                    this.vfx.emitParticles(e.x, e.y, e.type === 'boss' ? 50 : 15, e.type === 'boss' ? '#f55' : '#aaa', 300, 0, 0, Math.PI * 2);
+                    this.vfx.addFloatingText(e.x, e.y, `+${pts}`, '#e2fc7a', 1.0, e.type === 'boss' ? 24 : 16);
+                }
+
                 if (Math.random() < 0.3) {
                     this.pickups.push(new ComboPickup(e.x, e.y));
                 }
@@ -868,6 +912,11 @@ class Game {
                 const dx = eb.x - this.player.x;
                 const dy = eb.y - this.player.y;
                 if (dx * dx + dy * dy < (eb.radius + this.player.radius) ** 2) {
+                    if (this.vfx) {
+                        this.vfx.triggerHitStop(0.5);
+                        this.vfx.triggerShake(0.5, 10);
+                        this.vfx.emitParticles(this.player.x, this.player.y, 30, '#f00', 300, 0, 0, Math.PI * 2);
+                    }
                     this.endGame();
                 }
             }
@@ -892,7 +941,16 @@ class Game {
         this.ctx.fillStyle = '#1a1515'; // Desert night
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
+        this.ctx.save();
+        if (this.state === 'PLAYING' || this.state === 'PAUSED') {
+            this.ctx.translate(this.vfx.shakeX, this.vfx.shakeY);
+        }
+
         this.world.drawBackground(this.ctx, this.canvas);
+
+        if (this.state === 'PLAYING' || this.state === 'PAUSED') {
+            this.vfx.drawBottom(this.ctx);
+        }
 
         this.pickups.forEach(p => p.draw(this.ctx));
         this.bullets.forEach(b => b.draw(this.ctx));
@@ -900,7 +958,12 @@ class Game {
         this.enemyBullets.forEach(eb => eb.draw(this.ctx));
         this.player.draw(this.ctx);
 
+        if (this.state === 'PLAYING' || this.state === 'PAUSED') {
+            this.vfx.drawTop(this.ctx);
+        }
+
         this.world.drawForeground(this.ctx, this.canvas);
+        this.ctx.restore();
 
         // UI
         this.ctx.fillStyle = '#e2fc7a';
