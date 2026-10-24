@@ -145,65 +145,6 @@ class InputManager {
     }
 }
 
-class SoundEngine {
-    constructor() {
-        this.ctx = null;
-        this.masterGain = null;
-        this.ready = false;
-    }
-
-    init() {
-        if (this.ready) return;
-        try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.ctx = new AudioContext();
-            this.masterGain = this.ctx.createGain();
-            this.masterGain.gain.value = 0.3;
-            this.masterGain.connect(this.ctx.destination);
-            this.ready = true;
-        } catch (e) {
-            console.warn('AudioContext not supported');
-        }
-    }
-
-    resume() {
-        if (this.ctx && this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
-    }
-
-    playSynth(freq, type, duration, vol = 1) {
-        if (!this.ready || !this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(this.masterGain);
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
-    }
-
-    playShoot() {
-        this.playSynth(400, 'square', 0.1, 0.3);
-        setTimeout(() => this.playSynth(200, 'square', 0.1, 0.2), 50);
-    }
-
-    playHit() {
-        this.playSynth(150, 'sawtooth', 0.2, 0.4);
-    }
-
-    playBeat() {
-        this.playSynth(100, 'sine', 0.1, 0.5);
-    }
-
-    playEcho() {
-        this.playSynth(600, 'sine', 0.2, 0.2);
-    }
-}
-
 class Entity {
     constructor(x, y, radius, color) {
         this.x = x;
@@ -758,12 +699,14 @@ class Game {
         this.input = new InputManager(canvas);
         this.saves = new SaveManager();
         this.sounds = new SoundEngine();
+        this.sounds.setGameContext(this);
         this.vfx = new VFXManager(this);
 
         this.width = canvas.width;
         this.height = canvas.height;
 
         this.state = 'TITLE';
+        this.sounds.stopMusic();
 
         this.lastTime = performance.now();
         this.resize();
@@ -800,18 +743,25 @@ class Game {
     wakeAudio() {
         this.sounds.init();
         this.sounds.resume();
+        if (this.state === "PLAYING") this.sounds.startMusic();
     }
 
     startGame() {
         this.input.clear();
         this.resetGame();
         this.state = 'PLAYING';
+        this.sounds.playUI();
+        this.sounds.startMusic();
         this.syncControls();
     }
 
     pauseGame() {
         this.input.clear();
-        if (this.state === 'PLAYING') this.state = 'PAUSED';
+        if (this.state === 'PLAYING') {
+            this.state = 'PAUSED';
+            this.sounds.stopMusic();
+            this.sounds.playUI();
+        }
         this.syncControls();
     }
 
@@ -819,6 +769,8 @@ class Game {
         if (this.state !== 'PAUSED' || document.hidden) return;
         this.input.clear();
         this.state = 'PLAYING';
+        this.sounds.playUI();
+        this.sounds.startMusic();
         this.lastTime = performance.now();
         this.syncControls();
         this.canvas.focus({ preventScroll: true });
@@ -1150,6 +1102,7 @@ class Game {
 
     gameOver() {
         this.state = 'GAME_OVER';
+        this.sounds.stopMusic();
         this.input.clear();
         this.syncControls();
         this.saves.data.totalGamesPlayed++;
