@@ -18,90 +18,6 @@ class SaveManager {
     }
 }
 
-class SoundEngine {
-    constructor() {
-        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-        this.master = this.ctx.createGain();
-        this.master.connect(this.ctx.destination);
-        this.master.gain.value = 0.5;
-        this.initialized = false;
-    }
-    init() {
-        if (this.initialized) return;
-        this.ctx.resume();
-        this.initialized = true;
-    }
-    playShoot() {
-        if (!this.initialized) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.connect(gain);
-        gain.connect(this.master);
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(400, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-        osc.start(this.ctx.currentTime);
-        osc.stop(this.ctx.currentTime + 0.1);
-    }
-    playDash() {
-        if (!this.initialized) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.connect(gain);
-        gain.connect(this.master);
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(200, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-        osc.start(this.ctx.currentTime);
-        osc.stop(this.ctx.currentTime + 0.1);
-    }
-    playError() {
-        if (!this.initialized) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.connect(gain);
-        gain.connect(this.master);
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-        osc.start(this.ctx.currentTime);
-        osc.stop(this.ctx.currentTime + 0.1);
-    }
-    playPickup() {
-        if (!this.initialized) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.connect(gain);
-        gain.connect(this.master);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(600, this.ctx.currentTime);
-        osc.frequency.linearRampToValueAtTime(1200, this.ctx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-        osc.start(this.ctx.currentTime);
-        osc.stop(this.ctx.currentTime + 0.1);
-    }
-    playHit() {
-        if (!this.initialized) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.connect(gain);
-        gain.connect(this.master);
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.2);
-        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
-        osc.start(this.ctx.currentTime);
-        osc.stop(this.ctx.currentTime + 0.2);
-    }
-}
 
 class InputManager {
     constructor(canvas) {
@@ -264,6 +180,9 @@ class Player extends Entity {
 
             if (window.game && window.game.vfx) {
                 window.game.vfx.triggerShake(0.1, 3);
+            }
+            if (window.game && window.game.sound) {
+                window.game.sound.playDash();
             }
         }
 
@@ -670,6 +589,7 @@ class Game {
     }
 
     update(dt) {
+        if (this.sound) this.sound.update(dt, this);
         if (this.state === 'TITLE') {
             if (this.input.isShooting() || this.input.keys['Enter']) {
                 this.sound.init();
@@ -680,9 +600,9 @@ class Game {
         }
 
         if (this.state === 'UPGRADE') {
-            if (this.input.keys['Digit1']) { this.upgradeSys.applyChoice(0, this.player); this.state = 'PLAYING'; this.input.keys['Digit1'] = false; }
-            if (this.input.keys['Digit2']) { this.upgradeSys.applyChoice(1, this.player); this.state = 'PLAYING'; this.input.keys['Digit2'] = false; }
-            if (this.input.keys['Digit3']) { this.upgradeSys.applyChoice(2, this.player); this.state = 'PLAYING'; this.input.keys['Digit3'] = false; }
+            if (this.input.keys['Digit1']) { this.sound.playUIButton(); this.upgradeSys.applyChoice(0, this.player); this.state = 'PLAYING'; this.input.keys['Digit1'] = false; }
+            if (this.input.keys['Digit2']) { this.sound.playUIButton(); this.upgradeSys.applyChoice(1, this.player); this.state = 'PLAYING'; this.input.keys['Digit2'] = false; }
+            if (this.input.keys['Digit3']) { this.sound.playUIButton(); this.upgradeSys.applyChoice(2, this.player); this.state = 'PLAYING'; this.input.keys['Digit3'] = false; }
             return;
         }
 
@@ -713,31 +633,36 @@ class Game {
         this.player.y = Math.max(this.player.radius, Math.min(this.canvas.height - this.player.radius, this.player.y));
 
         // Player Shooting
-        if (this.input.isShooting() && this.player.ammo > 0 && this.player.shootCooldown <= 0) {
-            const aim = this.input.getAim(this.player.x, this.player.y);
-            const dx = aim.x - this.player.x;
-            const dy = aim.y - this.player.y;
-            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            const speed = 600; // Increased bullet speed
+        if (this.input.isShooting() && this.player.shootCooldown <= 0) {
+            if (this.player.ammo <= 0) {
+                this.sound.playEmptyClip();
+                this.player.shootCooldown = 0.25;
+            } else {
+                const aim = this.input.getAim(this.player.x, this.player.y);
+                const dx = aim.x - this.player.x;
+                const dy = aim.y - this.player.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                const speed = 600; // Increased bullet speed
 
-            const dirX = dx / dist;
-            const dirY = dy / dist;
+                const dirX = dx / dist;
+                const dirY = dy / dist;
 
-            this.bullets.push(new Bullet(this.player.x, this.player.y, dirX * speed, dirY * speed));
-            this.player.ammo--;
-            this.player.shootCooldown = 0.25;
-            this.player.recoilTimer = 0.1;
+                this.bullets.push(new Bullet(this.player.x, this.player.y, dirX * speed, dirY * speed));
+                this.player.ammo--;
+                this.player.shootCooldown = 0.25;
+                this.player.recoilTimer = 0.1;
 
-            // Add physical recoil to player momentum
-            this.player.vx -= dirX * 200;
-            this.player.vy -= dirY * 200;
+                // Add physical recoil to player momentum
+                this.player.vx -= dirX * 200;
+                this.player.vy -= dirY * 200;
 
-            if (this.vfx) {
-                this.vfx.triggerShake(0.1, 2);
-                this.vfx.emitParticles(this.player.x, this.player.y, 5, '#e2fc7a', 150, dirX, dirY, 0.2);
+                if (this.vfx) {
+                    this.vfx.triggerShake(0.1, 2);
+                    this.vfx.emitParticles(this.player.x, this.player.y, 5, '#e2fc7a', 150, dirX, dirY, 0.2);
+                }
+
+                this.sound.playShoot();
             }
-
-            this.sound.playShoot();
         }
 
         // Bullet Retrieval & Update
@@ -756,7 +681,11 @@ class Game {
                     if (this.player.ammo < this.player.maxAmmo) {
                         this.player.ammo++;
                         this.bullets.splice(i, 1);
-                        this.sound.playPickup();
+                        if (this.player.ammo >= this.player.maxAmmo) {
+                            this.sound.playReload();
+                        } else {
+                            this.sound.playPickup();
+                        }
                     }
                 }
             }
@@ -790,6 +719,7 @@ class Game {
 
             // Trigger upgrade draft when surviving a wave
             this.state = 'UPGRADE';
+            this.sound.playLevelUp();
             this.upgradeSys.rollChoices();
             this.bullets = [];
 
@@ -798,6 +728,7 @@ class Game {
                 this.bossWarningTimer = 3;
                 const bossClass = Math.random() < 0.5 ? SandstormDjinn : BazaarOgre;
                 this.enemies.push(new bossClass(this.canvas.width / 2, -50));
+                this.sound.playBossSpawn();
             }
         }
 
@@ -830,14 +761,20 @@ class Game {
             const e = this.enemies[i];
             const bossShot = e.update(dt, this.player.x, this.player.y);
 
+            let spawnedBullet = false;
             while(e.bulletsToSpawn && e.bulletsToSpawn.length > 0) {
                 this.enemyBullets.push(e.bulletsToSpawn.pop());
+                spawnedBullet = true;
             }
 
             if (bossShot) {
                 for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
                     this.enemyBullets.push(new EnemyBullet(e.x, e.y, Math.cos(a) * 150, Math.sin(a) * 150));
                 }
+                spawnedBullet = true;
+            }
+            if (spawnedBullet) {
+                this.sound.playEnemyShoot();
             }
 
             // Check collision with moving bullets
