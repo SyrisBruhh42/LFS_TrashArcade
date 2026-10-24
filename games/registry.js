@@ -1079,7 +1079,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to aim, Space to fire (or tap/drag and release to shoot). Recoil propels you backward.",
     "createdAt": "2023-10-24",
     "accentColor": "#b48ff0",
-    "phase": "4",
+    "phase": "5",
     "path": "./games/081-scrap-orbital-recoil/index.html"
   }
 ];
