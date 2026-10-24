@@ -594,6 +594,8 @@ class Game {
         this.logicalWidth = 800;
         this.logicalHeight = 600;
 
+        this.worldEnv = new WorldEnvironment(this.logicalWidth, this.logicalHeight);
+
         window.addEventListener('visibilitychange', () => {
             if (document.hidden && this.state === 'PLAYING') {
                 this.state = 'PAUSED';
@@ -629,6 +631,14 @@ class Game {
             { x: 600, y: 150, w: 150, h: 20 }
         ];
 
+        // Add hazards to platforms for collision
+        for (let v of this.worldEnv.vents) {
+            this.platforms.push({x: v.x, y: v.y, w: v.w, h: v.h, isHazard: true});
+        }
+        for (let c of this.worldEnv.conveyors) {
+            this.platforms.push({x: c.x, y: c.y, w: c.w, h: c.h, isHazard: true});
+        }
+
         for(let i = 0; i < 5; i++) {
             this.enemies.push(new Enemy(100 + Math.random() * 600, 50 + Math.random() * 300));
         }
@@ -651,6 +661,8 @@ class Game {
             // Time dilation twist
             let timeScale = this.player ? this.player.timeDilationFactor : 1.0;
             let effectiveDt = dt * timeScale;
+
+            this.worldEnv.update(effectiveDt, [this.player, ...this.enemies]);
 
             this.player.update(effectiveDt, this.input, this.platforms, this.sound);
 
@@ -749,15 +761,10 @@ class Game {
             this.ctx.fillText('Back to Arcade: ../../index.html', this.logicalWidth / 2, this.logicalHeight - 30);
 
         } else if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
-            // Draw background grid
-            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-            this.ctx.lineWidth = 1;
-            for(let i = 0; i < this.logicalWidth; i += 50) {
-                this.ctx.beginPath(); this.ctx.moveTo(i, 0); this.ctx.lineTo(i, this.logicalHeight); this.ctx.stroke();
-            }
-            for(let i = 0; i < this.logicalHeight; i += 50) {
-                this.ctx.beginPath(); this.ctx.moveTo(0, i); this.ctx.lineTo(this.logicalWidth, i); this.ctx.stroke();
-            }
+
+            let camX = this.player ? this.player.x - this.logicalWidth / 2 : 0;
+            this.worldEnv.drawBackground(this.ctx, camX);
+            this.worldEnv.drawHazards(this.ctx);
 
             // Draw time dilation effect
             if (this.player && this.player.timeDilationFactor < 1.0) {
@@ -767,7 +774,9 @@ class Game {
 
             this.ctx.fillStyle = '#445566';
             for (let p of this.platforms) {
-                this.ctx.fillRect(p.x, p.y, p.w, p.h);
+                if (!p.isHazard) { // hazards are drawn by worldEnv
+                    this.ctx.fillRect(p.x, p.y, p.w, p.h);
+                }
             }
 
             for (let e of this.enemies) {
