@@ -1093,7 +1093,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD to move, Mouse to aim and shoot. Touch joystick and screen tap.",
     "createdAt": "2024-10-24",
     "accentColor": "#fdc2b9",
-    "phase": "8",
+    "phase": "9",
     "path": "./games/082-dune-ammo-scramble/index.html"
   },
   {
