@@ -1053,5 +1053,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#e2fc7a",
     "phase": "5",
     "path": "./games/079-bazaar-bullet-retrieval/index.html"
+  },
+  {
+    "id": "080",
+    "slug": "080-frozen-tether",
+    "title": "Frozen Tether",
+    "genre": "Momentum/Grapple Platformer",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Frozen Arctic Research Base",
+    "description": "Navigate a frozen research base using momentum grappling, and stand still to dilate time.",
+    "controls": "A/D or Arrows to Move. W/Up/Space to Jump. Click to Grapple.",
+    "createdAt": "2023-10-24",
+    "accentColor": "#769a87",
+    "phase": "1",
+    "path": "./games/080-frozen-tether/index.html"
   }
 ];
