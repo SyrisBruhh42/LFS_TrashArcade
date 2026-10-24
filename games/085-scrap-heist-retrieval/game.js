@@ -113,6 +113,7 @@ class InputManager {
         this.touches = [];
         this.joystick = { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 };
         this.pointers = {};
+        this.tapQueued = false;
 
         window.addEventListener('keydown', e => {
             this.keys[e.code] = true;
@@ -131,6 +132,7 @@ class InputManager {
         });
 
         window.addEventListener('mousedown', e => {
+            if (e.button !== undefined && e.button !== 0) return;
             this.mouse.down = true;
             this.handlePointerDown(e.clientX, e.clientY, 'mouse');
         });
@@ -166,6 +168,7 @@ class InputManager {
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 this.touches = this.touches.filter(tt => tt.id !== t.identifier);
+                this.handlePointerMove(t.clientX, t.clientY, t.identifier);
                 this.handlePointerUp(t.identifier);
             }
         });
@@ -174,12 +177,13 @@ class InputManager {
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 this.touches = this.touches.filter(tt => tt.id !== t.identifier);
-                this.handlePointerUp(t.identifier);
+                this.handlePointerUp(t.identifier, true);
             }
         });
     }
 
     handlePointerDown(x, y, id) {
+        this.pointers[id] = { x, y, moved: 0, started: performance.now(), suppressed: false };
         if (!this.joystick.active) {
             this.joystick.active = true;
             this.joystick.startX = x;
@@ -191,13 +195,21 @@ class InputManager {
     }
 
     handlePointerMove(x, y, id) {
+        const pointer = this.pointers[id];
+        if (pointer) pointer.moved = Math.max(pointer.moved, Math.hypot(x - pointer.x, y - pointer.y));
         if (this.joystick.active && this.joystick.id === id) {
             this.joystick.moveX = x;
             this.joystick.moveY = y;
         }
     }
 
-    handlePointerUp(id) {
+    handlePointerUp(id, cancelled = false) {
+        const pointer = this.pointers[id];
+        if (id !== 'mouse' && pointer && !cancelled && !pointer.suppressed &&
+            pointer.moved <= 10 && performance.now() - pointer.started <= 300) {
+            this.tapQueued = true;
+        }
+        delete this.pointers[id];
         if (this.joystick.active && this.joystick.id === id) {
             this.joystick.active = false;
         }
@@ -230,8 +242,16 @@ class InputManager {
         return { x: dx, y: dy };
     }
 
+    consumePointerAction() {
+        this.tapQueued = false;
+        for (const pointer of Object.values(this.pointers)) pointer.suppressed = true;
+    }
+
     isActionPressed() {
-        return this.keys['Space'] || this.keys['Enter'];
+        const tap = this.tapQueued;
+        this.tapQueued = false;
+        return !!(this.keys['Space'] || this.keys['Enter'] ||
+            (this.mouse.down && !this.pointers.mouse?.suppressed) || tap);
     }
 }
 
@@ -297,7 +317,7 @@ class Player extends Entity {
         }
 
         // Shoot
-        if (input.isActionPressed() && this.hasAmmo && !game.shootCooldown) {
+        if (input.isActionPressed() && this.hasAmmo && game.shootCooldown <= 0) {
             this.hasAmmo = false;
             game.shootCooldown = 0.5;
             game.sound.playShoot();
@@ -731,6 +751,7 @@ class Game {
     }
 
     startGame() {
+        this.input.consumePointerAction();
         this.state = 'PLAYING';
         this.score = 0;
         this.wave = 1;
@@ -740,6 +761,7 @@ class Game {
     }
 
     loadWave() {
+        this.shootCooldown = 0;
         this.player = new Player(400, 500);
         this.enemies = [];
         this.obstacles = [];
@@ -799,7 +821,7 @@ class Game {
     update(dt) {
         if (this.state !== 'PLAYING') return;
 
-        if (this.shootCooldown > 0) this.shootCooldown -= dt;
+        this.shootCooldown = Math.max(0, this.shootCooldown - dt);
 
         this.player.update(dt, this.input, this);
 

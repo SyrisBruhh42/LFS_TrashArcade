@@ -196,8 +196,9 @@ class UIManager {
                 b.text = "Are you sure?";
                 b.state = 1;
             } else {
-                localStorage.removeItem(this.game.saveManager.saveKey);
+                this.game.saveManager.reset();
                 window.location.reload();
+                return;
             }
         }
 
@@ -347,7 +348,7 @@ class UIManager {
 
     isActionDown(action) {
         let opts = this.game.saveManager.data.options;
-        let useTouch = (opts.touchControls === 'always' || (opts.touchControls === 'auto' && this.game.input.touch.active));
+        let useTouch = !this.game.input.pointerConsumed && (opts.touchControls === 'always' || (opts.touchControls === 'auto' && this.game.input.touch.active));
 
         if (action === 'left') {
             if (this.game.input.isKeyDown('KeyA') || this.game.input.isKeyDown('ArrowLeft')) return true;
@@ -362,7 +363,7 @@ class UIManager {
             if (useTouch && this.game.input.touch.active && this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'jump')) return true;
         }
         if (action === 'grapple') {
-            if (this.game.input.mouse.down && !this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'left') &&
+            if (!this.game.input.pointerConsumed && this.game.input.mouse.down && !this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'left') &&
                 !this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'right') &&
                 !this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'jump') &&
                 !this.isTouchInZone(this.game.input.mouse.x, this.game.input.mouse.y, 'grapple')) return true;

@@ -216,6 +216,8 @@ window.addEventListener('DOMContentLoaded', () => {
     // --- UI State Machine ---
     const GameState = { TITLE: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3 };
     let currentState = GameState.TITLE;
+    // Read-only state observation for the trusted browser acceptance harness.
+    Object.defineProperty(window, 'arcadeState', {get: () => Object.keys(GameState).find(key => GameState[key] === currentState)});
     let wave = 1;
     let score = 0;
 

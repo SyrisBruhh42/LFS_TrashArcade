@@ -2,7 +2,11 @@
 class SaveManager {
     constructor() {
         this.saveKey = 'arcade_game_080_080-frozen-tether_v1';
-        this.data = {
+        this.data = this.defaultData();
+        this.load();
+    }
+    defaultData() {
+        return {
             highScore: 0,
             bestWaveOrCombo: 0,
             totalGamesPlayed: 0,
@@ -20,17 +24,17 @@ class SaveManager {
                 touchSwap: false
             }
         };
-        this.load();
+    }
+    reset() {
+        this.data = this.defaultData();
+        this.save();
     }
     load() {
         try {
             const stored = localStorage.getItem(this.saveKey);
             if (stored) {
                 const parsed = JSON.parse(stored);
-                this.data = { ...this.data, ...parsed };
-                if (parsed.options) {
-                    this.data.options = { ...this.data.options, ...parsed.options };
-                }
+                this.data = { ...this.data, ...parsed, options: { ...this.data.options, ...parsed.options } };
             }
         } catch (e) {
             console.error('SaveLoad error:', e);
@@ -58,12 +62,15 @@ class SaveManager {
 
 
 class InputManager {
-    constructor(canvas, soundEngine) {
+    constructor(canvas, soundEngine, logicalWidth = 800, logicalHeight = 600) {
         this.canvas = canvas;
         this.soundEngine = soundEngine;
+        this.logicalWidth = logicalWidth;
+        this.logicalHeight = logicalHeight;
         this.keys = {};
         this.mouse = { x: 0, y: 0, down: false, justPressed: false };
         this.touch = { active: false, x: 0, y: 0 };
+        this.pointerConsumed = false;
 
         window.addEventListener('keydown', (e) => {
             this.keys[e.code] = true;
@@ -74,14 +81,10 @@ class InputManager {
             this.keys[e.code] = false;
         });
 
-        this.canvas.addEventListener('mousemove', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            const scaleX = this.canvas.width / rect.width;
-            const scaleY = this.canvas.height / rect.height;
-            this.mouse.x = (e.clientX - rect.left) * scaleX;
-            this.mouse.y = (e.clientY - rect.top) * scaleY;
-        });
+        this.canvas.addEventListener('mousemove', (e) => this.updatePointer(e.clientX, e.clientY));
         this.canvas.addEventListener('mousedown', (e) => {
+            if (this.pointerConsumed) return;
+            this.updatePointer(e.clientX, e.clientY);
             this.mouse.down = true;
             this.mouse.justPressed = true;
             this.soundEngine.init();
@@ -89,10 +92,12 @@ class InputManager {
         });
         this.canvas.addEventListener('mouseup', (e) => {
             this.mouse.down = false;
+            this.pointerConsumed = false;
         });
 
         this.canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
+            if (this.pointerConsumed) return;
             this.touch.active = true;
             this.updateTouch(e.touches[0]);
             this.mouse.down = true;
@@ -104,19 +109,41 @@ class InputManager {
             e.preventDefault();
             this.updateTouch(e.touches[0]);
         }, { passive: false });
-        this.canvas.addEventListener('touchend', (e) => {
+        const endTouch = (e) => {
             e.preventDefault();
+            if (e.touches.length > 0) {
+                this.updateTouch(e.touches[0]);
+                return;
+            }
             this.touch.active = false;
             this.mouse.down = false;
-        }, { passive: false });
+            this.pointerConsumed = false;
+        };
+        this.canvas.addEventListener('touchend', endTouch, { passive: false });
+        this.canvas.addEventListener('touchcancel', endTouch, { passive: false });
+    }
+    consumePointer() {
+        // A menu activation gesture must be released before it can control the player.
+        this.pointerConsumed = this.mouse.down || this.touch.active;
+        this.mouse.justPressed = false;
+    }
+    updatePointer(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        const scale = Math.min(this.canvas.width / this.logicalWidth, this.canvas.height / this.logicalHeight);
+        if (rect.width <= 0 || rect.height <= 0 || scale <= 0) return;
+        // Invert the same scale and letterbox translation used by Game.draw().
+        const x = (clientX - rect.left) * this.canvas.width / rect.width;
+        const y = (clientY - rect.top) * this.canvas.height / rect.height;
+        const offsetX = (this.canvas.width - this.logicalWidth * scale) / 2;
+        const offsetY = (this.canvas.height - this.logicalHeight * scale) / 2;
+        this.mouse.x = (x - offsetX) / scale;
+        this.mouse.y = (y - offsetY) / scale;
     }
     updateTouch(touchObj) {
         if (!touchObj) return;
-        const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-        this.mouse.x = (touchObj.clientX - rect.left) * scaleX;
-        this.mouse.y = (touchObj.clientY - rect.top) * scaleY;
+        this.updatePointer(touchObj.clientX, touchObj.clientY);
+        this.touch.x = this.mouse.x;
+        this.touch.y = this.mouse.y;
     }
     update() {
         this.mouse.justPressed = false;
@@ -824,9 +851,11 @@ class Game {
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
+        this.logicalWidth = 800;
+        this.logicalHeight = 600;
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
-        this.input = new InputManager(canvas, this.sound);
+        this.input = new InputManager(canvas, this.sound, this.logicalWidth, this.logicalHeight);
         this.uiManager = new UIManager(this);
 
         this.state = 'TITLE';
@@ -842,9 +871,6 @@ class Game {
         this.resizeObserver.observe(canvas.parentElement);
         this.resize();
         window.game = this;
-
-        this.logicalWidth = 800;
-        this.logicalHeight = 600;
 
         this.worldEnv = new WorldEnvironment(this.logicalWidth, this.logicalHeight);
         this.vfxManager = new VFXManager(this.saveManager);
@@ -871,6 +897,7 @@ class Game {
     }
 
     start() {
+        this.input.consumePointer();
         this.player = new Player(400, 300);
         this.score = 0;
         this.enemies = [];
@@ -916,7 +943,7 @@ class Game {
         this.uiManager.update(dt);
 
         if (this.state === 'TITLE') {
-            if (this.input.isKeyDown('Enter') || (this.input.mouse.justPressed && !this.input.touch.active)) {
+            if (this.input.isKeyDown('Enter') || this.input.mouse.justPressed) {
                 this.sound.playUI();
                 this.sound.playSpawn();
                 this.start();
@@ -1152,7 +1179,7 @@ class Game {
                 }
             }
         } else if (this.state === 'GAME_OVER') {
-            if (this.input.isKeyDown('Enter') || (this.input.mouse.justPressed && !this.input.touch.active)) {
+            if (this.input.isKeyDown('Enter') || this.input.mouse.justPressed) {
                 this.sound.playUI();
                 this.sound.playSpawn();
                 this.start();

@@ -1,0 +1,757 @@
+{
+  "schema_version": 1,
+  "default_min_id": 86,
+  "default": {
+    "title": "window.game?.state === 'TITLE'",
+    "playing": "window.game?.state === 'PLAYING'",
+    "start": {
+      "kind": "key",
+      "key": "Enter",
+      "code": "Enter",
+      "target": "window"
+    }
+  },
+  "games": {
+    "001-jules-gba-travelers-chronicle": {
+      "title": "window.ArcadeHarness?.state === 'TITLE'",
+      "playing": "window.ArcadeHarness?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "KeyD",
+        "code": "KeyD",
+        "target": "window"
+      },
+      "initial_state": "PLAYING"
+    },
+    "002-neon-grapple-dilation": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause-hud\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "003-paper-craft-tail-arena": {
+      "title": "Engine.state === 'TITLE'",
+      "playing": "Engine.state === 'PLAYING'",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "004-jungle-ammo-run": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "005-sky-recoil-rhythm": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "006-arctic-perimeter": {
+      "title": "document.querySelector('#ui-title.active') !== null",
+      "playing": "document.querySelector('#ui-playing.active') !== null",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "007-cell-drill-polarity": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "008-scrapheap-heist": {
+      "title": "window.engine?.state === 'TITLE'",
+      "playing": "window.engine?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "009-echo-trench": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "010-ricochet-retrieval": {
+      "title": "document.querySelector('#state-title.active') !== null",
+      "playing": "document.querySelector('#state-playing.active') !== null",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "011-vector-grid-parry": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause-hud\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "012-orbital-forge-recoil": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "013-cyber-shogun-tail-strike": {
+      "title": "document.querySelector('#screen-title.active') !== null",
+      "playing": "!document.querySelector('.screen.active') && document.querySelector('#btn-pause').style.display === 'block'",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "014-manor-gravity-shift": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "015-sweet-echo-assault": {
+      "title": "window.game?.engine.state === 0",
+      "playing": "window.game?.engine.state === 1",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "016-alchemy-foundry-overdrive": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "017-sandstorm-grapple": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "018-desert-bazaar-overdrive": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "019-sky-tether-heist": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "020-micro-cell-retrieval": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "021-neon-grid-switch": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause-hud\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "022-clockwork-recoil-dungeon": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause-hud\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "023-cyber-drill-dojo": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "024-orbital-rhythm-collapse": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "025-echo-forge-parry": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "026-manor-overdrive-rush": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "027-frozen-tail-rhythm": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "028-crt-polarity-drive": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "029-origami-recoil-siege": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "030-abyssal-alchemy": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "031-scrap-retrieval": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "032-echo-ruins": {
+      "title": "window.arcadeState === 'TITLE'",
+      "playing": "window.arcadeState === 'PLAYING'",
+      "start": {
+        "kind": "mouse",
+        "selector": "canvas",
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "033-candy-echo-recoil": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "034-jungle-recoil-heist": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "035-orbital-dilation-blitz": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn-hud\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "036-gothic-drill-sacrifice": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause-hud\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "037-candy-conveyor-slash": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause-game\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "038-paper-polarity-beats": {
+      "title": "document.querySelector('#ui-title.active') !== null",
+      "playing": "document.querySelector('#ui-playing.active') !== null",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "039-cellular-chain-collapse": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "040-floating-echo-arena": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pauseBtn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "041-sandstorm-bazaar-overdrive": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "042-vector-stealth-retrieve": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "043-trench-recoil-tactics": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "044-frozen-overdrive": {
+      "title": "(() => {const e=document.querySelector(\"#screen-title\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#screen-title\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#hud\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#screen-title button"
+      }
+    },
+    "045-cyber-ronin-tether": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "046-neon-core-drill": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "047-echo-cog": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#pause-btn\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "048-scrapheap-echo-grapple": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "049-volcanic-time-forge": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "050-neon-synthwave-slash": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "051-orbital-overdrive": {
+      "title": "document.querySelector('#screen-title.active') !== null",
+      "playing": "!document.querySelector('.screen.active') && document.querySelector('#hud.active') !== null",
+      "start": {
+        "kind": "pointer",
+        "selector": "#btn-play"
+      }
+    },
+    "052-sky-shifting-arena": {
+      "title": "window.engine?.state === 'TITLE'",
+      "playing": "window.engine?.state === 'PLAYING'",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-start",
+        "followup_click": "#btn-close-tutorial"
+      }
+    },
+    "053-sandstorm-echo-coop": {
+      "title": "game?.state === 'TITLE'",
+      "playing": "game?.state === 'PLAYING'",
+      "start": {
+        "kind": "click",
+        "selector": "#btnPlay"
+      }
+    },
+    "054-arctic-drill-recoil": {
+      "title": "window.engine?.state === 'TITLE'",
+      "playing": "window.engine?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "055-polarity-diorama": {
+      "title": "window.gameEngine?.state === 'TITLE'",
+      "playing": "window.gameEngine?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "056-scrap-chain": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "click",
+        "selector": "#screenTitle button"
+      }
+    },
+    "057-abyssal-ricochet": {
+      "title": "window.engine?.state === 'TITLE'",
+      "playing": "window.engine?.state === 'PLAYING'",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-start"
+      }
+    },
+    "058-chrono-cell-rush": {
+      "title": "window.engine?.state === 'TITLE'",
+      "playing": "window.engine?.state === 'PLAYING'",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-start",
+        "followup_click": "#btn-tutorial-ok"
+      }
+    },
+    "059-phantom-manor-heist": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "060-magma-recoil-platformer": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "pointer",
+        "selector": "canvas"
+      }
+    },
+    "061-jungle-overdrive-sacrifice": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "062-cyber-drill-samurai": {
+      "title": "window.engine?.state === 'TITLE'",
+      "playing": "window.engine?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "063-crt-polarity-bounce": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "064-candy-time-heist": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "065-clockwork-polarity-parry": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "066-crt-vector-overdrive": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "067-candy-tether-defense": {
+      "title": "window.game?.state === 0",
+      "playing": "window.game?.state === 1",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "068-orbital-echo-tactics": {
+      "title": "(() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()",
+      "playing": "!((() => {const e=document.querySelector(\"#btn-play\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})()) && ((() => {const e=document.querySelector(\"#btn-pause-hud\"); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';})())",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-play"
+      }
+    },
+    "069-magma-shift-forge": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "070-manor-polarity-chain": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "071-clockwork-tether-foundry": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "072-jungle-recoil-ruins": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "073-trench-shift-blitz": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "074-magnetic-sky-duel": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "075-neon-echo-protocol": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "076-blood-oath-overdrive": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "077-origami-heist-shift": {
+      "title": "window.game?.state === 0",
+      "playing": "window.game?.state === 1",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "078-cytoplasm-recoil": {
+      "title": "window.game?.state === 0",
+      "playing": "window.game?.state === 1",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "079-bazaar-bullet-retrieval": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "080-frozen-tether": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "081-scrap-orbital-recoil": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    },
+    "082-dune-ammo-scramble": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "click",
+        "selector": "#btn-start"
+      }
+    },
+    "083-haunted-tether-drill": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "084-echo-forge-fusion": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": " ",
+        "code": "Space",
+        "target": "window"
+      }
+    },
+    "085-scrap-heist-retrieval": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      }
+    }
+  }
+}

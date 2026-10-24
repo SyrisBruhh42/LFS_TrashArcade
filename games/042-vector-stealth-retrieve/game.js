@@ -654,7 +654,7 @@ class GameEngine {
 
             // Look towards player occasionally or just sweep
             // Simple sweep
-            g.angle = g.patrolAngle + Math.PI/2 + Math.sin(time/500)*0.5;
+            g.angle = g.patrolAngle + Math.PI/2 + Math.sin(this.lastTime / 500) * 0.5;
 
             // Vision cone check
             const dx = this.player.x - g.x;

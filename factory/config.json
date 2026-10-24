@@ -1,6 +1,6 @@
 {
-  "schema": 1,
-  "_note": "Factory controller knobs. Read fresh from main on every tick, so edits here (even from the GitHub mobile app) take effect within 15 minutes. Set enabled=false to stop dispatching.",
+  "schema": 2,
+  "_note": "Local safety budgets are operator choices, not subscription entitlements. Null shared-account caps deliberately hold dispatch until configured. Set enabled=false or create local PAUSE to stop provider mutations. No live settings are changed by editing this candidate.",
   "enabled": true,
   "repo": "SyrisBruhh42/LFS_TrashArcade",
   "source": "sources/github/SyrisBruhh42/LFS_TrashArcade",
@@ -16,6 +16,17 @@
   "stale_session_hours": 6,
   "no_pr_grace_minutes": 30,
   "no_gate_hours": 24,
-  "max_feedback_nudges": 2,
-  "lesson_count": 5
+  "plan_policy": "autonomous_game_scope",
+  "account_active_cap": null,
+  "account_daily_cap": null,
+  "account_active_reserve": 1,
+  "account_daily_reserve": 5,
+  "max_unfinished_games": 2,
+  "max_repair_messages": 1,
+  "inventory_max_pages": 100,
+  "max_main_gate_age_hours": 6,
+  "healthy_ticks_required": 2,
+  "inventory_max_age_seconds": 180,
+  "max_repairs_per_tick": 1,
+  "main_gate_job_name": "Main guard"
 }

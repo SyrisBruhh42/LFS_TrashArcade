@@ -117,8 +117,8 @@ class UIManager {
         opts.touchSwap = this.els.chkTouchSwap.checked;
         this.game.saveManager.save();
 
-        if(this.game.sound && this.game.sound.masterGain) {
-            this.game.sound.masterGain.gain.value = opts.mute ? 0 : 0.3; // Default in code was 0.3
+        if(this.game.sound) {
+            this.game.sound.setVolumes(opts);
         }
 
         const fpsDisplay = document.getElementById('fps-display');

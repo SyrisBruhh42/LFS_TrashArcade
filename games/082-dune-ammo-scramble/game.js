@@ -17,8 +17,7 @@ class SaveManager {
             const saved = localStorage.getItem(SAVE_KEY);
             if (saved) {
                 const parsed = JSON.parse(saved);
-                this.data = { ...this.data, ...parsed };
-                if (parsed.options) this.data.options = { ...this.data.options, ...parsed.options };
+                this.data = { ...this.data, ...parsed, options: { ...this.data.options, ...parsed.options } };
             }
         } catch (e) {
             console.warn('Failed to load save data', e);
@@ -31,9 +30,12 @@ class SaveManager {
 }
 
 class SoundEngine {
-    constructor() {
+    constructor(saveManager) {
+        this.saveManager = saveManager;
         this.ctx = null;
         this.masterGain = null;
+        this.sfxGain = null;
+        this.musicGain = null;
         this.initialized = false;
 
         // Synths and state for adaptive soundtrack
@@ -65,7 +67,9 @@ class SoundEngine {
 
         // Create master gain
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = (window.game && window.game.saveManager && window.game.saveManager.data.options.mute) ? 0 : 0.3;
+        this.sfxGain = this.ctx.createGain();
+        this.musicGain = this.ctx.createGain();
+        this.setVolumes(this.saveManager ? this.saveManager.data.options : {});
 
         // Create filter for adaptive soundtrack
         this.filter = this.ctx.createBiquadFilter();
@@ -73,10 +77,20 @@ class SoundEngine {
         this.filter.frequency.value = 2000;
 
         // Connect routing
-        this.filter.connect(this.masterGain);
+        this.filter.connect(this.musicGain);
+        this.sfxGain.connect(this.masterGain);
+        this.musicGain.connect(this.masterGain);
         this.masterGain.connect(this.ctx.destination);
 
         this.initialized = true;
+    }
+
+    setVolumes(options) {
+        if (!this.masterGain) return;
+        const volume = value => Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+        this.masterGain.gain.value = options.mute ? 0 : 0.3;
+        this.sfxGain.gain.value = volume(options.sfxVolume);
+        this.musicGain.gain.value = volume(options.musicVolume);
     }
 
     resume() {
@@ -97,7 +111,7 @@ class SoundEngine {
     }
 
     scheduleNote(beatNumber, time) {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
 
         // Arpeggiator (synth)
         if (beatNumber % 2 === 0 || this.isBossWave) {
@@ -136,7 +150,7 @@ class SoundEngine {
             gain.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
 
             osc.connect(gain);
-            gain.connect(this.masterGain);
+            gain.connect(this.musicGain);
 
             osc.start(time);
             osc.stop(time + 0.5);
@@ -164,7 +178,7 @@ class SoundEngine {
 
             noise.connect(noiseFilter);
             noiseFilter.connect(gain);
-            gain.connect(this.masterGain);
+            gain.connect(this.musicGain);
 
             noise.start(time);
             noise.stop(time + 0.1);
@@ -172,7 +186,7 @@ class SoundEngine {
     }
 
     scheduler() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || !this.isPlayingBgm) return;
 
         // Catch up if falling behind due to tab backgrounding
         if (this.nextNoteTime < this.ctx.currentTime - 0.5) {
@@ -236,7 +250,7 @@ class SoundEngine {
 
     // 1. Basic Shoot
     playShoot() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'square';
@@ -245,14 +259,14 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.1);
     }
 
     // 2. Shotgun Shoot (noisy, multiple oscillators)
     playShotgun() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sawtooth';
@@ -261,7 +275,7 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.15);
 
@@ -277,13 +291,13 @@ class SoundEngine {
         noiseGain.gain.setValueAtTime(0.3, this.ctx.currentTime);
         noiseGain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
         noise.connect(noiseGain);
-        noiseGain.connect(this.masterGain);
+        noiseGain.connect(this.sfxGain);
         noise.start();
     }
 
     // 3. Sniper/Railgun Shoot (high frequency, piercing)
     playSniper() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'triangle';
@@ -292,14 +306,14 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.2);
     }
 
     // 4. Enemy Hit
     playHit() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sawtooth';
@@ -308,14 +322,14 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.15);
     }
 
     // 5. Enemy Death (explosion)
     playExplosion() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'square';
@@ -331,14 +345,14 @@ class SoundEngine {
 
         osc.connect(filter);
         filter.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.3);
     }
 
     // 6. Ammo Pickup
     playPickup() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sine';
@@ -347,14 +361,14 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.1);
     }
 
     // 7. Empty Gun Click
     playEmpty() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'triangle';
@@ -362,14 +376,14 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.05);
     }
 
     // 8. Player Dash/Ability
     playDash() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sine';
@@ -378,14 +392,14 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.15);
     }
 
     // 9. Upgrade Selected
     playUpgrade() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'square';
@@ -402,14 +416,14 @@ class SoundEngine {
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
 
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.5);
     }
 
     // 10. UI Hover/Select
     playUIHover() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sine';
@@ -417,14 +431,14 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.05);
     }
 
     // 11. UI Click
     playUIClick() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'square';
@@ -433,14 +447,14 @@ class SoundEngine {
         gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.05);
     }
 
     // 12. Player Hit/Damage
     playPlayerHit() {
-        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
+        if (!this.initialized || !this.ctx || this.masterGain.gain.value === 0) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sawtooth';
@@ -462,7 +476,7 @@ class SoundEngine {
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
 
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.3);
     }
@@ -1296,7 +1310,7 @@ class Game {
         this.vfx = new VFXManager();
         this.saveManager = new SaveManager();
         this.uiManager = new UIManager(this);
-        this.sound = new SoundEngine();
+        this.sound = new SoundEngine(this.saveManager);
         this.input = new InputManager(this.canvas);
         this.width = 800; this.height = 600;
         this.lastTime = 0;

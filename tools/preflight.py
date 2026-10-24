@@ -1,43 +1,46 @@
 #!/usr/bin/env python3
-"""One-shot pre-submit check for game sessions. Mirrors the CI gate (path guard + strict game check).
+"""Fail-closed local pre-submit validation of an exact committed game revision.
 
-Usage: python3 tools/preflight.py
-Commit your new game folder first, then run this. Exit 0 (PREFLIGHT OK) means safe to submit.
+No implicit fetch or network call. Fetch/rebase explicitly first. Local results do
+not grant merge, provider, deployment or production acceptance authority.
 """
 from __future__ import annotations
-
+import argparse
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def run(*cmd: str) -> int:
-    return subprocess.run(cmd, cwd=ROOT).returncode
-
-
 def main() -> int:
-    subprocess.run(["git", "fetch", "origin", "main"], cwd=ROOT, capture_output=True)
-    base = "origin/main"
-    have_base = subprocess.run(["git", "rev-parse", "--verify", base], cwd=ROOT, capture_output=True).returncode == 0
-
-    status = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout
-    dirty = [ln for ln in status.splitlines() if ln.strip()]
-    if dirty:
-        print("NOTE: uncommitted changes found. Commit them before submitting; the path guard compares commits.")
-        for ln in dirty:
-            print("   " + ln)
-
-    rc = 0
-    if have_base:
-        rc |= run(sys.executable, "tools/path_guard.py", "--base", base)
-    else:
-        print("WARN: origin/main not reachable; skipping path guard (CI will enforce it).")
-    rc |= run(sys.executable, "tools/check_games.py", "--strict")
-
-    print("PREFLIGHT OK: submit now." if rc == 0 else "PREFLIGHT FAILED: fix the errors above, re-commit, and re-run.")
-    return 0 if rc == 0 else 1
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base", default="origin/main")
+    parser.add_argument("--head", default="HEAD")
+    parser.add_argument("--mode", choices=("phase", "maintenance"), default="phase")
+    args = parser.parse_args()
+    status = subprocess.run(["git","status","--porcelain"],cwd=ROOT,capture_output=True,text=True,check=True)
+    if status.stdout.strip():
+        print("PREFLIGHT FAILED: commit or preserve local changes first; working tree must match tested HEAD.")
+        return 1
+    head = subprocess.run(["git","rev-parse","--verify","--end-of-options",args.head+"^{commit}"],cwd=ROOT,capture_output=True,text=True)
+    checkout = subprocess.run(["git","rev-parse","HEAD"],cwd=ROOT,capture_output=True,text=True,check=True).stdout.strip()
+    if head.returncode != 0 or head.stdout.strip() != checkout:
+        print("PREFLIGHT FAILED: --head must resolve to this clean checkout's HEAD.")
+        return 1
+    with tempfile.TemporaryDirectory(prefix="arcade-preflight-") as directory:
+        targets = Path(directory)/"targets.json"
+        result = subprocess.run([sys.executable,"tools/path_guard.py","--base",args.base,"--head",args.head,
+                                 "--mode",args.mode,"--output",str(targets)],cwd=ROOT)
+        if result.returncode:
+            print("PREFLIGHT FAILED: path/base/phase checks failed; no validation was skipped.")
+            return 1
+        result = subprocess.run([sys.executable,"tools/check_games.py","--strict","--check-registry","--targets-file",str(targets),
+                                 "--report",str(Path(directory)/"evidence.json")],cwd=ROOT)
+    print("PREFLIGHT OK: bounded committed-source checks passed; owner review required for maintenance." if result.returncode == 0
+          else "PREFLIGHT FAILED: resolve reported failures; never substitute static-only for browser acceptance.")
+    return result.returncode
 
 
 if __name__ == "__main__":
