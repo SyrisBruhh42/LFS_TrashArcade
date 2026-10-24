@@ -1081,5 +1081,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#b48ff0",
     "phase": "5",
     "path": "./games/081-scrap-orbital-recoil/index.html"
+  },
+  {
+    "id": "082",
+    "slug": "082-dune-ammo-scramble",
+    "title": "Dune Ammo Scramble",
+    "genre": "Twin-Stick Arena",
+    "coreMechanic": "Limited Ammo Must Be Physically Retrieved",
+    "setting": "Desert Sandstorm Bazaar",
+    "description": "Survive the desert bazaar arena. Shoot enemies but don't forget to pick up your spent ammo!",
+    "controls": "WASD to move, Mouse to aim and shoot. Touch joystick and screen tap.",
+    "createdAt": "2024-10-24",
+    "accentColor": "#fdc2b9",
+    "phase": "1",
+    "path": "./games/082-dune-ammo-scramble/index.html"
   }
 ];
