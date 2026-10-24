@@ -39,6 +39,7 @@ class SoundEngine {
     init() {
         if (this.initialized) return;
         const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
         this.ctx = new AudioContext();
         this.masterGain = this.ctx.createGain();
         this.sfxGain = this.ctx.createGain();
@@ -73,7 +74,8 @@ class InputManager {
         this.keys = {};
         this.justPressed = {};
         this.mouse = { x: 0, y: 0, down: false, justDown: false };
-        this.touch = { active: false, x: 0, y: 0, justDown: false };
+        this.touch = { active: false, x: 0, y: 0, justDown: false, id: null, dx: 0, dy: 0 };
+        this.suppressedTouch = null;
         this.boundKeydown = this.keydown.bind(this);
         this.boundKeyup = this.keyup.bind(this);
         this.boundMousedown = this.mousedown.bind(this);
@@ -90,26 +92,71 @@ class InputManager {
         window.addEventListener('touchstart', this.boundTouchstart, {passive: false});
         window.addEventListener('touchend', this.boundTouchend);
         window.addEventListener('touchmove', this.boundTouchmove, {passive: false});
+        window.addEventListener('touchcancel', () => {
+            this.clear();
+            this.touch.id = this.suppressedTouch = null;
+        });
     }
     keydown(e) {
+        if (e.repeat || (e.code !== 'Escape' && e.target?.closest?.('a, button, input, textarea'))) return;
+        if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+        this.wakeAudio();
         if(!this.keys[e.code]) this.justPressed[e.code] = true;
         this.keys[e.code] = true;
     }
     keyup(e) { this.keys[e.code] = false; }
     mousedown(e) {
+        if (e.button !== 0 || e.target?.closest?.('a, button, input, textarea')) return;
+        this.wakeAudio();
         this.mouse.down = true;
         this.mouse.justDown = true;
         this.updateMousePos(e);
     }
     mouseup(e) { this.mouse.down = false; }
     mousemove(e) { this.updateMousePos(e); }
+    wakeAudio() {
+        const sound = window.game?.soundEngine;
+        if (sound) { sound.init(); sound.resume(); }
+    }
     touchstart(e) {
+        if (e.target?.closest?.('a, button, input, textarea') || this.touch.active) return;
+        e.preventDefault();
+        this.wakeAudio();
+        const t = e.changedTouches[0];
+        if (!t) return;
+        this.touch.id = t.identifier;
         this.touch.active = true;
         this.touch.justDown = true;
+        this.touch.startX = t.clientX;
+        this.touch.startY = t.clientY;
+        this.touch.dx = this.touch.dy = 0;
         this.updateTouchPos(e);
     }
-    touchend(e) { this.touch.active = false; }
-    touchmove(e) { this.updateTouchPos(e); }
+    touchend(e) {
+        if (![...e.changedTouches].some(t => t.identifier === this.touch.id)) return;
+        this.touch.active = false;
+        this.touch.dx = this.touch.dy = 0;
+        this.touch.id = null;
+        this.suppressedTouch = null;
+    }
+    touchmove(e) {
+        if (!this.touch.active || this.touch.id === this.suppressedTouch) return;
+        e.preventDefault();
+        const t = [...e.touches].find(t => t.identifier === this.touch.id);
+        if (!t) return;
+        const dx=t.clientX-this.touch.startX, dy=t.clientY-this.touch.startY;
+        this.touch.dx = Math.abs(dx)>12 && Math.abs(dx)>=Math.abs(dy) ? Math.sign(dx) : 0;
+        this.touch.dy = Math.abs(dy)>12 && Math.abs(dy)>Math.abs(dx) ? Math.sign(dy) : 0;
+        this.updateTouchPos(e);
+    }
+    clear() {
+        this.keys = {};
+        this.justPressed = {};
+        this.mouse.down = this.mouse.justDown = false;
+        this.suppressedTouch = this.touch.id;
+        this.touch.active = this.touch.justDown = false;
+        this.touch.dx = this.touch.dy = 0;
+    }
     updateMousePos(e) {
         const canvas = document.getElementById('gameCanvas');
         if(!canvas) return;
@@ -118,12 +165,15 @@ class InputManager {
         this.mouse.y = (e.clientY - rect.top) / (rect.height / canvas.height);
     }
     updateTouchPos(e) {
-        if(e.touches.length > 0) {
+        const t = [...e.touches].find(t => t.identifier === this.touch.id);
+        if(t) {
             const canvas = document.getElementById('gameCanvas');
             if(!canvas) return;
             const rect = canvas.getBoundingClientRect();
-            this.touch.x = (e.touches[0].clientX - rect.left) / (rect.width / canvas.width);
-            this.touch.y = (e.touches[0].clientY - rect.top) / (rect.height / canvas.height);
+            this.touch.x = (t.clientX - rect.left) / (rect.width / canvas.width);
+            this.touch.y = (t.clientY - rect.top) / (rect.height / canvas.height);
+            this.mouse.x = this.touch.x;
+            this.mouse.y = this.touch.y;
         }
     }
     update() {
@@ -199,6 +249,7 @@ class Player extends Entity {
             else if (input.keys['KeyS'] || input.keys['ArrowDown']) dy = 1;
             else if (input.keys['KeyA'] || input.keys['ArrowLeft']) dx = -1;
             else if (input.keys['KeyD'] || input.keys['ArrowRight']) dx = 1;
+            else if (input.touch.active) { dx = input.touch.dx; dy = input.touch.dy; }
 
             if (dx !== 0 || dy !== 0) {
                 let nextX = this.x + dx * grid.cellSize;
@@ -292,6 +343,11 @@ class Game {
 
         this.spawnTimer = 0;
 
+        this.pauseButton = document.getElementById('pause-button');
+        this.pauseButton.addEventListener('click', () => {
+            this.inputManager.wakeAudio();
+            if (this.state === 'PLAYING') this.pause(); else if (this.state === 'PAUSED') this.resume();
+        });
         this.setupResize();
         requestAnimationFrame(this.loop.bind(this));
     }
@@ -310,7 +366,25 @@ class Game {
         this.resizeObserver.observe(this.canvas.parentElement);
     }
 
+    pause() {
+        this.inputManager.clear();
+        if (this.state === 'PLAYING') this.state = 'PAUSED';
+        this.syncControls();
+    }
+    resume() {
+        if (document.hidden || this.state !== 'PAUSED') return;
+        this.inputManager.clear();
+        this.state = 'PLAYING';
+        this.lastTime = performance.now();
+        this.canvas.focus({preventScroll:true});
+        this.syncControls();
+    }
+    syncControls() {
+        this.pauseButton.hidden = !['PLAYING', 'PAUSED'].includes(this.state);
+        this.pauseButton.textContent = this.state === 'PAUSED' ? 'Resume' : 'Pause';
+    }
     start() {
+        this.inputManager.clear();
         this.soundEngine.init();
         this.soundEngine.resume();
         this.state = 'PLAYING';
@@ -341,14 +415,13 @@ class Game {
     update(dt) {
         if (this.state === 'TITLE') {
             document.getElementById('back-button').classList.remove('hidden');
-            if (this.inputManager.justPressed['Space'] || this.inputManager.mouse.justDown || this.inputManager.touch.justDown) {
+            if (this.inputManager.justPressed['Enter'] || this.inputManager.justPressed['Space'] || this.inputManager.mouse.justDown || this.inputManager.touch.justDown) {
                 this.start();
             }
         } else if (this.state === 'PLAYING') {
             document.getElementById('back-button').classList.add('hidden');
             if (this.inputManager.justPressed['Escape']) {
-                this.state = 'PAUSED';
-                this.inputManager.justPressed['Escape'] = false;
+                this.pause();
                 return;
             }
 
@@ -357,7 +430,8 @@ class Game {
                 this.inputManager.keys['KeyW'] || this.inputManager.keys['ArrowUp'] ||
                 this.inputManager.keys['KeyS'] || this.inputManager.keys['ArrowDown'] ||
                 this.inputManager.keys['KeyA'] || this.inputManager.keys['ArrowLeft'] ||
-                this.inputManager.keys['KeyD'] || this.inputManager.keys['ArrowRight'];
+                this.inputManager.keys['KeyD'] || this.inputManager.keys['ArrowRight'] ||
+                this.inputManager.touch.dx || this.inputManager.touch.dy;
 
             this.timeMultiplier = isPlayerMoving ? 1.0 : 0.1;
             let effectiveDt = dt * this.timeMultiplier;
@@ -417,16 +491,16 @@ class Game {
         } else if (this.state === 'PAUSED') {
             document.getElementById('back-button').classList.remove('hidden');
             if (this.inputManager.justPressed['Escape']) {
-                this.state = 'PLAYING';
-                this.inputManager.justPressed['Escape'] = false;
+                this.resume();
             }
         } else if (this.state === 'GAME_OVER') {
             document.getElementById('back-button').classList.remove('hidden');
-            if (this.inputManager.justPressed['Space'] || this.inputManager.mouse.justDown || this.inputManager.touch.justDown) {
+            if (this.inputManager.justPressed['Enter'] || this.inputManager.justPressed['Space'] || this.inputManager.mouse.justDown || this.inputManager.touch.justDown) {
                 this.start();
             }
         }
 
+        this.syncControls();
         this.inputManager.update();
     }
 
@@ -470,9 +544,11 @@ class Game {
             this.ctx.textAlign = 'center';
             this.ctx.fillText('TRENCH TACTICS', this.width/2, this.height/2 - 40);
             this.ctx.font = '20px monospace';
-            this.ctx.fillText('Press Space or Click to Start', this.width/2, this.height/2 + 20);
+            this.ctx.fillText('Enter / Space / Tap to Start', this.width/2, this.height/2 + 20);
             this.ctx.font = '16px monospace';
-            this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, this.height/2 + 60);
+            this.ctx.fillText('WASD/Arrows or drag to move', this.width/2, this.height/2 + 45, this.width - 40);
+            this.ctx.fillText('Tap/Click/Space to attack', this.width/2, this.height/2 + 68, this.width - 40);
+            this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, this.height/2 + 96);
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(5, 10, 18, 0.7)';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -481,7 +557,7 @@ class Game {
             this.ctx.textAlign = 'center';
             this.ctx.fillText('PAUSED', this.width/2, this.height/2);
             this.ctx.font = '20px monospace';
-            this.ctx.fillText('Press Escape to Resume', this.width/2, this.height/2 + 40);
+            this.ctx.fillText('Choose Resume or press Escape', this.width/2, this.height/2 + 40);
         } else if (this.state === 'GAME_OVER') {
             this.ctx.fillStyle = 'rgba(231, 76, 60, 0.3)';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -508,12 +584,12 @@ window.onload = () => {
     window.game = new Game(document.getElementById('gameCanvas'));
     document.addEventListener('visibilitychange', () => {
         if (document.hidden && window.game.state === 'PLAYING') {
-            window.game.state = 'PAUSED';
+            window.game.pause();
         }
     });
     window.addEventListener('blur', () => {
         if (window.game.state === 'PLAYING') {
-            window.game.state = 'PAUSED';
+            window.game.pause();
         }
     });
 };

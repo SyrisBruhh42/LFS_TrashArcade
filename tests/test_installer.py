@@ -1,5 +1,6 @@
 """Offline installer failure injection. All process calls are stubbed."""
 import contextlib
+import fcntl
 import importlib.util
 import io
 import json
@@ -31,7 +32,11 @@ class InstallerTests(unittest.TestCase):
         self.active = False
         self.bad_head = False
         self.enabled = False
+        self.timer_active = False
         self.bad_loaded = False
+        self.dropins = ""
+        self.service_result = "success"
+        self.state_contract = {"durable_intents": True, "migration_admission_hold": True, "maintenance_queue": True}
         self.current_revision = SHA
         self.output = io.StringIO()
         self.patches = contextlib.ExitStack()
@@ -64,12 +69,30 @@ class InstallerTests(unittest.TestCase):
             elif "status" in argv:
                 return subprocess.CompletedProcess(argv, 0, " M tools/factory_dispatch.py\n" if self.dirty else "", "")
         if argv[0] == "systemctl" and "is-active" in argv:
-            return subprocess.CompletedProcess(argv, 0 if self.active else 3, "active\n" if self.active else "inactive\n", "")
+            active = self.active or (argv[-1] == f.UNITS[1] and self.timer_active)
+            return subprocess.CompletedProcess(argv, 0 if active else 3, "active\n" if active else "inactive\n", "")
         if argv[0] == "systemctl" and "is-enabled" in argv:
             return subprocess.CompletedProcess(argv, 0 if self.enabled else 1, "enabled\n" if self.enabled else "disabled\n", "")
         if argv[0] == "systemctl" and "show" in argv:
-            path = "/wrong/loaded/unit" if self.bad_loaded else str(self.units / argv[3])
-            return subprocess.CompletedProcess(argv, 0, f"FragmentPath={path}\nNeedDaemonReload=no\n", "")
+            path = "/wrong/loaded/unit" if self.bad_loaded else str(self.units / argv[3]) if (self.units / argv[3]).exists() else ""
+            active = self.active or (argv[3] == f.UNITS[1] and self.timer_active)
+            return subprocess.CompletedProcess(argv, 0,
+                f"FragmentPath={path}\nNeedDaemonReload=no\nDropInPaths={self.dropins}\nLoadState=loaded\n"
+                f"ActiveState={'active' if active else 'inactive'}\nSubState=waiting\n"
+                f"UnitFileState={'enabled' if self.enabled else 'disabled'}\n"
+                f"Result={self.service_result}\nExecMainStatus={'0' if self.service_result == 'success' else '1'}\n", "")
+        if argv[0] == "systemctl" and "enable" in argv:
+            self.enabled = self.timer_active = True
+        if argv[0] == "systemctl" and "disable" in argv:
+            self.enabled = self.timer_active = False
+        if argv[-1] == "--status":
+            try:
+                state = json.loads((self.state_home / f.NAME / "state.json").read_text())
+                return subprocess.CompletedProcess(argv, 0, json.dumps({"schema": 2, "tracked": len(state["sessions"]),
+                    "state_contract": self.state_contract,
+                    "unresolved_intents": sum(i["status"] in {"pending", "ambiguous"} for i in state.get("intents", {}).values())}), "")
+            except (ValueError, KeyError, TypeError):
+                return subprocess.CompletedProcess(argv, 1, "", "state invalid")
         return subprocess.CompletedProcess(argv, 0, "", "")
 
     def invoke(self, action=None, revision=None, extra=()):
@@ -84,8 +107,16 @@ class InstallerTests(unittest.TestCase):
         return self.data / "releases" / revision
 
     def activate(self, revision=SHA):
+        if not (self.state_home / f.NAME / "state.json").exists():
+            self.seed_state()
         self.stage(revision)
         self.assertEqual(self.invoke("activate", revision), 0, self.output.getvalue())
+
+    def seed_state(self, **extra):
+        state = self.state_home / f.NAME / "state.json"
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(json.dumps({"schema": 2, "sessions": {}, "intents": {}, "lessons": [], **extra}))
+        return state
 
     def snapshot(self):
         return {str(path.relative_to(self.root)): path.read_bytes()
@@ -97,7 +128,7 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(self.data.exists())
 
     def test_every_dry_run_has_no_writes_or_process_calls(self):
-        for action in ("stage", "activate", "rollback", "enable", "disable", "uninstall", "status"):
+        for action in ("stage", "activate", "rollback", "enable", "disable", "uninstall", "status", "health"):
             self.assertEqual(self.invoke(action, SHA, ("--dry-run",)), 0)
         self.assertEqual(self.calls, [])
         self.assertEqual(list(self.root.iterdir()), [])
@@ -148,6 +179,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_dirty_or_symlink_release_refuses_activation(self):
         release = self.stage()
+        self.seed_state()
         self.dirty = True
         self.assertEqual(self.invoke("activate", SHA), 1)
         self.dirty = False
@@ -184,6 +216,8 @@ class InstallerTests(unittest.TestCase):
 
     def test_validation_failure_preserves_existing_units(self):
         self.stage()
+        self.seed_state()
+        (self.state_home / f.NAME / "tick.lock").touch()
         self.units.mkdir(parents=True)
         (self.units / f.UNITS[0]).write_text("old-service")
         before = self.snapshot()
@@ -196,8 +230,8 @@ class InstallerTests(unittest.TestCase):
         self.units.mkdir(parents=True)
         (self.units / f.UNITS[0]).write_text("old-service")
         state = self.state_home / f.NAME
-        state.mkdir(parents=True)
-        (state / "state.json").write_text('{"preserve":true}')
+        state.mkdir(parents=True, exist_ok=True)
+        self.seed_state(preserve=True)
         (state / "events.jsonl").write_text("retained-event\n")
         self.assertEqual(self.invoke("activate", SHA), 0, self.output.getvalue())
         active = json.loads((self.data / "active.json").read_text())
@@ -249,7 +283,7 @@ class InstallerTests(unittest.TestCase):
         mirror.mkdir()
         (mirror / "uncommitted").write_text("preserve")
         state = self.state_home / f.NAME
-        state.mkdir(parents=True)
+        state.mkdir(parents=True, exist_ok=True)
         (state / "events.jsonl").write_text("history")
         self.assertEqual(self.invoke("uninstall"), 0)
         self.assertFalse((self.units / f.UNITS[0]).exists())
@@ -281,6 +315,133 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.invoke("status"), 0)
         self.assertEqual(self.calls, [])
         self.assertFalse(self.data.exists())
+
+    def test_activation_refuses_missing_legacy_corrupt_and_incompatible_state_without_replacing_it(self):
+        self.stage()
+        self.assertEqual(self.invoke("activate", SHA), 1)
+        self.assertFalse((self.state_home / f.NAME / "state.json").exists())
+        for content in ('{"sessions":{}}', '{"schema":2,"sessions":[]}', '{broken'):
+            state = self.seed_state()
+            state.write_text(content)
+            self.assertEqual(self.invoke("activate", SHA), 1)
+            self.assertEqual(state.read_text(), content)
+            self.assertFalse(self.units.exists())
+
+    def test_manual_tick_lock_excludes_activation_and_uninstall(self):
+        self.activate()
+        state = self.state_home / f.NAME / "state.json"
+        before = state.read_bytes()
+        with (state.parent / "tick.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            for action in ("activate", "uninstall"):
+                self.assertEqual(self.invoke(action, SHA), 1)
+        self.assertEqual(state.read_bytes(), before)
+        self.assertTrue((self.units / f.UNITS[0]).exists())
+
+    def test_dropin_overrides_block_enable_even_when_fragment_path_matches(self):
+        self.activate()
+        self.dropins = "/tmp/override.conf"
+        self.calls.clear()
+        self.assertEqual(self.invoke("enable"), 1)
+        self.assertFalse(any("enable" in call for call in self.calls))
+
+    def test_health_reads_back_pinned_units_state_and_stopped_then_running_timer(self):
+        self.activate()
+        before = self.snapshot()
+        self.calls.clear()
+        self.assertEqual(self.invoke("health"), 0, self.output.getvalue())
+        self.assertEqual(self.snapshot(), before)
+        self.assertFalse(any("daemon-reload" in call for call in self.calls))
+        self.assertEqual(self.invoke("enable"), 0)
+        self.assertEqual(self.invoke("health", extra=("--expect", "running")), 0)
+        self.assertEqual(self.invoke("health"), 1, 'running timer cannot pass stopped health')
+        self.service_result = "exit-code"
+        self.assertEqual(self.invoke("health", extra=("--expect", "running")), 1)
+
+    def test_successful_enable_command_with_bad_readback_disables_timer_and_preserves_state(self):
+        self.activate()
+        state = self.seed_state(provider_receipt={"session": "new-receipt"})
+        before = state.read_bytes()
+        self.service_result = "exit-code"
+        self.assertEqual(self.invoke("enable"), 1)
+        self.assertIn(["systemctl", "--user", "disable", "--now", f.UNITS[1]], self.calls)
+        self.assertFalse(self.enabled)
+        self.assertFalse(self.timer_active)
+        self.assertEqual(state.read_bytes(), before)
+        self.assertFalse(any("stop" in call and f.UNITS[0] in call for call in self.calls))
+
+    def test_failed_enable_stop_readback_is_reported_without_claiming_recovery(self):
+        self.activate()
+        self.service_result = "exit-code"
+        self.fail = lambda argv: argv[0] == "systemctl" and "disable" in argv
+        self.assertEqual(self.invoke("enable"), 1)
+        self.assertTrue(self.timer_active)
+        self.assertIn("timer stop could not be confirmed", self.output.getvalue())
+
+    def test_rollback_and_failed_activation_never_restore_backup_state_over_new_receipts(self):
+        self.activate(OLD)
+        self.activate(SHA)
+        state = self.seed_state(provider_receipt={"session": "created-after-old-backup"})
+        events = state.parent / "events.jsonl"
+        events.write_text('new durable receipt\n')
+        before = state.read_bytes()
+        self.assertEqual(self.invoke("rollback", OLD), 0)
+        self.assertEqual(state.read_bytes(), before)
+        self.assertEqual(events.read_text(), 'new durable receipt\n')
+        failures = [True, False]
+        self.fail = lambda argv: "daemon-reload" in argv and failures.pop(0)
+        self.assertEqual(self.invoke("activate", SHA), 1)
+        self.assertEqual(state.read_bytes(), before)
+        self.assertEqual(events.read_text(), 'new durable receipt\n')
+
+    def test_rollback_refuses_controller_that_cannot_load_current_state(self):
+        self.activate(OLD)
+        self.activate(SHA)
+        state = self.seed_state(provider_receipt={"session": "current"})
+        before = state.read_bytes()
+        original = (self.data / "active.json").read_bytes()
+        self.fail = lambda argv: argv[-1] == "--status" and OLD in str(argv[1])
+        self.assertEqual(self.invoke("rollback", OLD), 1)
+        self.assertEqual((self.data / "active.json").read_bytes(), original)
+        self.assertEqual(state.read_bytes(), before)
+
+    def test_rollback_refuses_readable_schema_when_target_does_not_understand_current_holds(self):
+        self.activate(OLD)
+        self.activate(SHA)
+        self.seed_state(migration={"admission_hold": True}, maintenance={"incidents": {}})
+        original = (self.data / "active.json").read_bytes()
+        self.state_contract = {"durable_intents": True}
+        self.assertEqual(self.invoke("rollback", OLD), 1)
+        self.assertEqual((self.data / "active.json").read_bytes(), original)
+        self.assertFalse(any("enable" in call for call in self.calls))
+
+    def test_failed_restoration_readback_keeps_disabled_timer_and_reports_unverified_recovery(self):
+        self.activate(OLD)
+        self.stage(SHA)
+        self.fail = lambda argv: "daemon-reload" in argv
+        self.assertEqual(self.invoke("activate", SHA), 1)
+        self.assertEqual(json.loads((self.data / "active.json").read_text())["revision"], OLD)
+        self.assertIn("restored units could not be verified", self.output.getvalue())
+        self.assertFalse(self.enabled)
+
+    def test_uninstall_refuses_inflight_service_and_never_terminates_provider_work(self):
+        self.activate()
+        self.active = True
+        self.calls.clear()
+        self.assertEqual(self.invoke("uninstall"), 1)
+        self.assertTrue((self.units / f.UNITS[0]).exists())
+        self.assertFalse(any("stop" in call for call in self.calls))
+
+    def test_disable_confirms_timer_readback_without_stopping_the_service(self):
+        self.activate()
+        self.assertEqual(self.invoke("enable"), 0)
+        self.calls.clear()
+        self.assertEqual(self.invoke("disable"), 0)
+        self.assertFalse(self.enabled)
+        self.assertFalse(self.timer_active)
+        self.assertIn(["systemctl", "--user", "is-active", f.UNITS[1]], self.calls)
+        self.assertIn(["systemctl", "--user", "is-enabled", f.UNITS[1]], self.calls)
+        self.assertFalse(any("stop" in call and f.UNITS[0] in call for call in self.calls))
 
 
 if __name__ == "__main__":

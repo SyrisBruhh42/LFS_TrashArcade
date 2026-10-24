@@ -26,7 +26,8 @@ class FactoryTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.cfg = json.loads(f.CONFIG_FILE.read_text())
         self.cfg.update(account_active_cap=20, account_daily_cap=100, account_active_reserve=1,
-                        account_daily_reserve=5, healthy_ticks_required=2)
+                        account_daily_reserve=5, healthy_ticks_required=2, generation_enabled=True,
+                        repair_owner="controller", controller_native_repairs_disabled=True)
         self.state = f.empty_state()
         self.patches = contextlib.ExitStack()
         self.addCleanup(self.patches.close)
@@ -399,19 +400,21 @@ class FactoryTests(unittest.TestCase):
         reconcile.assert_not_called()
 
     def test_resolved_provider_question_releases_hold_without_nudge(self):
-        self.state["sessions"]["s1"] = self.record(hold="awaiting_user_feedback")
+        intent, session = self.install_intent("accepted")
+        self.state["sessions"]["s1"] = {**intent["record"], "hold": "awaiting_user_feedback"}
         with patch.object(f, "api") as api:
-            f.reconcile(self.cfg, self.state, {"s1": self.session()}, False)
+            f.reconcile(self.cfg, self.state, {"s1": session}, False)
         api.assert_not_called()
         self.assertNotIn("hold", self.state["sessions"]["s1"])
-        self.assertEqual(f.capacity(self.cfg, self.state, {"s1": self.session()})["account_active"], 1)
+        self.assertEqual(f.capacity(self.cfg, self.state, {"s1": session})["account_active"], 1)
 
     def test_terminal_local_outcome_does_not_release_active_assignment(self):
-        self.state["sessions"]["s1"] = self.record(outcome="failed:stale")
-        f.reconcile(self.cfg, self.state, {"s1": self.session()}, False)
+        intent, session = self.install_intent("accepted")
+        self.state["sessions"]["s1"] = {**intent["record"], "outcome": "failed:stale"}
+        f.reconcile(self.cfg, self.state, {"s1": session}, False)
         self.assertEqual(self.state["sessions"]["s1"]["hold"], "terminal_record_provider_active")
         with self.assertRaisesRegex(f.Hold, "terminal_record_provider_active"):
-            f.capacity(self.cfg, self.state, {"s1": self.session()})
+            f.capacity(self.cfg, self.state, {"s1": session})
 
     def test_corrupt_accepted_intent_fails_closed(self):
         self.install_intent("accepted")
@@ -628,9 +631,9 @@ class FactoryTests(unittest.TestCase):
     def test_merged_or_closed_pr_keeps_assignment_until_provider_terminal(self):
         for pr_state in ("MERGED", "CLOSED"):
             with self.subTest(pr_state=pr_state):
-                rec = self.record(pr=f"https://github.com/{self.cfg['repo']}/pull/123")
+                intent, session = self.install_intent("accepted")
+                rec = {**intent["record"], "pr": f"https://github.com/{self.cfg['repo']}/pull/123"}
                 self.state["sessions"]["s1"] = rec
-                session = self.session()
                 with patch.object(f, "gh", return_value=json.dumps({"state": pr_state})):
                     f.reconcile(self.cfg, self.state, {"s1": session}, False)
                     f.reconcile(self.cfg, self.state, {"s1": session}, False)

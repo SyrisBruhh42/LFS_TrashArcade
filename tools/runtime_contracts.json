@@ -731,7 +731,8 @@
         "key": " ",
         "code": "Space",
         "target": "window"
-      }
+      },
+      "behavior_profile": "game083-v1"
     },
     "084-echo-forge-fusion": {
       "title": "window.game?.state === 'TITLE'",
@@ -741,7 +742,8 @@
         "key": " ",
         "code": "Space",
         "target": "window"
-      }
+      },
+      "behavior_profile": "game084-v1"
     },
     "085-scrap-heist-retrieval": {
       "title": "window.game?.state === 'TITLE'",
@@ -751,7 +753,19 @@
         "key": "Enter",
         "code": "Enter",
         "target": "window"
-      }
+      },
+      "behavior_profile": "game085-v1"
+    },
+    "086-trench-tactics": {
+      "title": "window.game?.state === 'TITLE'",
+      "playing": "window.game?.state === 'PLAYING'",
+      "start": {
+        "kind": "key",
+        "key": "Enter",
+        "code": "Enter",
+        "target": "window"
+      },
+      "behavior_profile": "game086-v1"
     }
   }
 }

@@ -1,6 +1,6 @@
 # Bounded maintenance assignment template
 
-Status: reviewed design template; the current picker does not automatically select it. Fill every field and admit the task through the authoritative owner/budget record before submitting it. A template is not authorization to launch a session. Do not launch a task for an already repaired incident.
+Reference for the executable maintenance contract in `tools/factory_maintenance.py`. The controller selects only reviewed incidents admitted through `--enqueue-incident` and matched to the trusted base catalog. This prose is not a second dispatcher or launch authority. Do not launch a task for an already repaired incident.
 
 ```text
 TASK {task_id}; INCIDENT {incident_id}; TYPE {defect_repair|ux_improvement}
@@ -45,7 +45,8 @@ Never claim unrun checks or edit acceptance code to make a result pass.
 
 Preserve changes before synchronizing. Reconcile current main without
 force-pushing. Generate registry, commit the intended changes, then run:
-python3 tools/preflight.py --base origin/main --head HEAD --mode maintenance
+python3 tools/preflight.py --base origin/main --head HEAD --mode maintenance \
+  --incident-id {incident_id} --incident-spec {spec_hash}
 If main/head changes, invalidate old integration evidence and recheck.
 
 Open or update one maintenance PR with task/incident IDs and evidence.

@@ -49,7 +49,8 @@ def registry_is_canonical(head: str) -> bool:
         return mode == "100644" and expected == actual
 
 
-def validate(base: str, head: str, mode: str = "phase") -> dict:
+def validate(base: str, head: str, mode: str = "phase", *, incident_id=None, spec_hash=None,
+             require_assignment=False) -> dict:
     result = {"schema_version": 1, "mode": mode, "status": "FAIL", "classification": "content",
               "base_sha": None, "head_sha": None, "targets": [], "paths": [], "errors": [],
               "automatic_merge_eligible": False}
@@ -79,6 +80,14 @@ def validate(base: str, head: str, mode: str = "phase") -> dict:
         if len(folders) != 1:
             errors.append("Exactly one game folder must change.")
         result["targets"] = sorted(folders)
+        if mode == "maintenance" and require_assignment:
+            try:
+                if len(folders) != 1:
+                    raise ValueError("Maintenance requires exactly one assigned game")
+                from maintenance_assignment import resolve
+                result["assignment"] = resolve(git, base, next(iter(folders)), incident_id, spec_hash)
+            except ValueError as exc:
+                errors.append(str(exc))
         for folder, changed in folders.items():
             # Inspect the WHOLE head folder, not merely changed paths: symlinks and
             # gitlinks are never valid game data, even when inherited unchanged.
@@ -154,8 +163,12 @@ def main() -> int:
     ap.add_argument("--mode", choices=("phase", "maintenance"), default="phase")
     ap.add_argument("--output", type=Path)
     ap.add_argument("--overlay", action="store_true")
+    ap.add_argument("--incident-id")
+    ap.add_argument("--incident-spec")
+    ap.add_argument("--require-assignment", action="store_true", help="trusted CI maintenance admission")
     args = ap.parse_args()
-    result = validate(args.base, args.head, args.mode)
+    result = validate(args.base, args.head, args.mode, incident_id=args.incident_id,
+                      spec_hash=args.incident_spec, require_assignment=args.require_assignment)
     if result["status"] == "PASS" and args.overlay:
         try:
             overlay(result)

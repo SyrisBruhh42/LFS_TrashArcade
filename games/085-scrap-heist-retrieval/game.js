@@ -1021,7 +1021,7 @@ class Game {
                 if (this.state === 'PLAYING') this.pauseGame();
                 else if (this.state === 'PAUSED') this.resumeGame();
             }
-            if (e.code === 'Space' || e.code === 'Enter') {
+            if (!e.repeat && (e.code === 'Space' || e.code === 'Enter')) {
                 if (this.state === 'TITLE') this.startGame();
                 else if (this.state === 'GAME_OVER') this.state = 'TITLE';
             }
@@ -1064,7 +1064,9 @@ class Game {
     }
 
     startGame() {
-        this.input.consumePointerAction();
+        // Starting a run consumes keyboard, mouse and touch equally. The first
+        // gameplay action must be a fresh gesture, not the held title control.
+        this.input.clear();
         this.state = 'PLAYING';
         this.score = 0;
         this.wave = 1;

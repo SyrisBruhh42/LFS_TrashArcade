@@ -17,7 +17,7 @@ import gate_feedback
 import build_registry
 
 
-class GuardTests(unittest.TestCase):
+class GuardFixture:
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.repo = Path(self.temp.name)
@@ -50,6 +50,9 @@ class GuardTests(unittest.TestCase):
         self.commit()
     def validate(self,mode="phase"): return path_guard.validate(self.base,"HEAD",mode)
 
+
+
+class GuardTests(GuardFixture, unittest.TestCase):
     def test_tiny_behavioral_phase_is_valid_without_line_incentive(self):
         self.upgrade(); result=self.validate()
         self.assertEqual("PASS",result["status"])
@@ -132,6 +135,67 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(result["head_sha"],provenance["head_sha"])
         result["targets"]=["999-missing"];evidence.write_text(json.dumps(result))
         with self.assertRaises(ValueError):check_games.runtime_targets(args,[self.game,newer])
+
+
+class MaintenanceAssignmentTests(GuardFixture, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.observed = self.base
+        self.entry = {"status":"approved", "repository":"SyrisBruhh42/LFS_TrashArcade",
+                      "spec_hash":"a"*64,"expected_behavior_hash":"b"*64,
+                      "assigned_folder":"games/080-fixture", "game_id":"080", "observed_sha":self.observed,
+                      "scenario_id":"input-release", "protected_phase":"9"}
+        (self.repo/"factory").mkdir()
+        self.publish_catalog()
+
+    def publish_catalog(self):
+        (self.repo/"factory/maintenance_catalog.json").write_text(json.dumps({"schema_version":1,"incidents":{"test-080":self.entry}}))
+        self.commit()
+        self.base = self.git("rev-parse","HEAD").strip()
+
+    def repair(self):
+        (self.game/"game.js").write_text("fixed()")
+        self.commit()
+
+    def assigned(self, **kwargs):
+        return path_guard.validate(self.base, "HEAD", "maintenance", require_assignment=True,
+                                   incident_id=kwargs.get("incident_id", "test-080"),
+                                   spec_hash=kwargs.get("spec_hash", "a"*64))
+
+    def test_trusted_catalog_binds_exact_game_and_specification(self):
+        self.repair()
+        r=self.assigned()
+        self.assertEqual(r["status"],"PASS",r)
+        self.assertEqual(r["assignment"]["observed_sha"],self.observed)
+        self.assertFalse(r["automatic_merge_eligible"])
+
+    def test_wrong_id_or_specification_cannot_select_assignment(self):
+        self.repair()
+        self.assertEqual(self.assigned(incident_id="unknown")["status"],"FAIL")
+        self.assertEqual(self.assigned(spec_hash="c"*64)["status"],"FAIL")
+
+    def test_catalog_entry_for_another_game_is_rejected(self):
+        self.entry["assigned_folder"]="games/081-other"
+        self.publish_catalog();self.repair()
+        self.assertEqual(self.assigned()["status"],"FAIL")
+
+    def test_changed_game_invalidates_old_diagnosis(self):
+        (self.game/"index.html").write_text("changed baseline")
+        self.commit();self.base=self.git("rev-parse","HEAD").strip()
+        self.repair()
+        self.assertEqual(self.assigned()["status"],"FAIL")
+
+    def test_candidate_cannot_publish_its_own_approval(self):
+        self.repair()
+        self.entry["spec_hash"]="c"*64
+        (self.repo/"factory/maintenance_catalog.json").write_text(json.dumps({"schema_version":1,"incidents":{"test-080":self.entry}}))
+        self.commit()
+        self.assertEqual(self.assigned(spec_hash="c"*64)["status"],"FAIL")
+
+    def test_missing_or_retired_assignment_is_rejected(self):
+        self.entry["status"]="accepted"
+        self.publish_catalog();self.repair()
+        self.assertEqual(self.assigned()["status"],"FAIL")
 
 
 class FeedbackTests(unittest.TestCase):

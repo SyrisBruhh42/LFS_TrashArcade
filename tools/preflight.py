@@ -19,6 +19,8 @@ def main() -> int:
     parser.add_argument("--base", default="origin/main")
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--mode", choices=("phase", "maintenance"), default="phase")
+    parser.add_argument("--incident-id")
+    parser.add_argument("--incident-spec")
     args = parser.parse_args()
     status = subprocess.run(["git","status","--porcelain"],cwd=ROOT,capture_output=True,text=True,check=True)
     if status.stdout.strip():
@@ -31,8 +33,14 @@ def main() -> int:
         return 1
     with tempfile.TemporaryDirectory(prefix="arcade-preflight-") as directory:
         targets = Path(directory)/"targets.json"
-        result = subprocess.run([sys.executable,"tools/path_guard.py","--base",args.base,"--head",args.head,
-                                 "--mode",args.mode,"--output",str(targets)],cwd=ROOT)
+        guard = [sys.executable,"tools/path_guard.py","--base",args.base,"--head",args.head,
+                 "--mode",args.mode,"--output",str(targets)]
+        if args.mode == "maintenance":
+            if not args.incident_id or not args.incident_spec:
+                print("PREFLIGHT FAILED: maintenance requires --incident-id and --incident-spec from the reviewed assignment.")
+                return 1
+            guard += ["--require-assignment", "--incident-id", args.incident_id, "--incident-spec", args.incident_spec]
+        result = subprocess.run(guard,cwd=ROOT)
         if result.returncode:
             print("PREFLIGHT FAILED: path/base/phase checks failed; no validation was skipped.")
             return 1

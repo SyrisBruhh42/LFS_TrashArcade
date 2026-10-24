@@ -272,6 +272,7 @@ def runtime_targets(args, folders: list[Path]) -> tuple[list[Path], dict]:
         if compared.returncode != 0:
             raise ValueError("game files do not match the exact validated head")
         return [by_name[n] for n in names], {"scope":"changed-games", "base_sha":evidence["base_sha"], "head_sha":evidence["head_sha"],
+                                            "mode":evidence.get("mode"), "assignment":evidence.get("assignment"),
                                             "source_state":"exact-head" if checkout == evidence["head_sha"] else "validated-overlay"}
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,text=True,check=True).stdout.strip()
     dirty = bool(subprocess.run(["git","status","--porcelain","--untracked-files=no"],cwd=ROOT,capture_output=True,text=True,check=True).stdout.strip())
@@ -311,7 +312,11 @@ def main() -> int:
         try:
             targets, provenance = runtime_targets(args, folders)
             from runtime_gate import audit
-            runtime = audit(targets)
+            bound_sha = provenance["head_sha"] if provenance.get("source_state") in ("exact-head", "validated-overlay") else None
+            assignment = provenance.get("assignment") or {}
+            runtime = audit(targets, source_sha=bound_sha, require_behavior=provenance.get("mode") == "maintenance",
+                            expected_behavior_hash=assignment.get("expected_behavior_hash"),
+                            required_scenarios=[assignment["scenario_id"]] if assignment else None)
             for result in runtime:
                 if result["status"] != "PASS":
                     rep.err("games/" + result["game"], result["classification"].upper() + ": " + result["reason"])

@@ -75,7 +75,21 @@ jobs:
         if: steps.lane.outputs.mode != 'infrastructure'
         env:
           MODE: ${{ steps.lane.outputs.mode }}
-        run: python3 tools/path_guard.py --base "$BASE_SHA" --head "$HEAD_SHA" --mode "$MODE" --output targets.json --overlay
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess
+          args = ['python3', 'tools/path_guard.py', '--base', os.environ['BASE_SHA'], '--head', os.environ['HEAD_SHA'],
+                  '--mode', os.environ['MODE'], '--output', 'targets.json', '--overlay']
+          if os.environ['MODE'] == 'maintenance':
+              body = os.environ.get('PR_BODY', '')
+              ids = re.findall(r'^Factory incident: ([A-Za-z0-9][A-Za-z0-9_.-]{2,79})\s*$', body, re.M)
+              specs = re.findall(r'^Factory incident spec: ([0-9a-f]{64})\s*$', body, re.M)
+              if len(ids) != 1 or len(specs) != 1:
+                  raise SystemExit('Maintenance requires one incident ID and specification hash from the reviewed catalog')
+              args += ['--require-assignment', '--incident-id', ids[0], '--incident-spec', specs[0]]
+          subprocess.run(args, check=True)
+          PY
 
       - name: Strict static and exact changed-game runtime checks
         if: steps.lane.outputs.mode != 'infrastructure'

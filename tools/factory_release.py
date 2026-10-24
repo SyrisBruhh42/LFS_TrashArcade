@@ -12,6 +12,7 @@ mirror, state/logs and recovery copies. --dry-run only prints a plan.
 from __future__ import annotations
 
 import argparse
+import contextlib
 from datetime import datetime, timezone
 import fcntl
 import json
@@ -34,10 +35,10 @@ class ReleaseError(Exception):
     pass
 
 
-def run(argv, *, allowed=(0,)):
+def run(argv, *, allowed=(0,), env=None):
     """Never echo child output: authentication failures can include credentials."""
     try:
-        result = subprocess.run([str(x) for x in argv], capture_output=True, text=True, timeout=180)
+        result = subprocess.run([str(x) for x in argv], capture_output=True, text=True, timeout=180, env=env)
     except (OSError, subprocess.TimeoutExpired):
         raise ReleaseError("Command unavailable or timed out; details withheld") from None
     if result.returncode not in allowed:
@@ -190,13 +191,122 @@ def require_stopped():
         raise ReleaseError("Timer must be disabled before activation; use disable explicitly")
 
 
+def verify_timer_disabled():
+    active = run(["systemctl", "--user", "is-active", UNITS[1]], allowed=(0, 3, 4))
+    enabled = run(["systemctl", "--user", "is-enabled", UNITS[1]], allowed=(0, 1, 4))
+    if (active.stdout.strip() not in {"inactive", "unknown"} or active.returncode == 0 or
+            enabled.stdout.strip() not in {"disabled", "not-found"}):
+        raise ReleaseError("Disabled timer state could not be confirmed; inspect units before continuing")
+
+
 def verify_loaded(args):
     """A successful daemon-reload alone does not establish the loaded unit path."""
     for name in UNITS:
-        result = run(["systemctl", "--user", "show", name, "--property=FragmentPath", "--property=NeedDaemonReload"])
+        result = run(["systemctl", "--user", "show", name, "--property=FragmentPath", "--property=NeedDaemonReload",
+                      "--property=DropInPaths", "--property=LoadState"])
         fields = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
-        if fields.get("FragmentPath") != str(unit_dir(args) / name) or fields.get("NeedDaemonReload") != "no":
-            raise ReleaseError("Loaded unit path/reload state differs from activation; no timer enabled")
+        if (fields.get("FragmentPath") != str(unit_dir(args) / name) or fields.get("NeedDaemonReload") != "no" or
+                fields.get("DropInPaths") != "" or fields.get("LoadState") != "loaded"):
+            raise ReleaseError("Loaded unit path, overrides, or reload state differ from pinned activation")
+
+
+@contextlib.contextmanager
+def state_lock(args):
+    """Share the dispatcher's lock; a stopped timer alone cannot exclude a manual tick."""
+    state = args.state_home / NAME
+    if not (state / "state.json").is_file():
+        raise ReleaseError("Existing state required; restore history or explicitly initialize a new installation")
+    path = state / "tick.lock"
+    if path.is_symlink():
+        raise ReleaseError("State lock must not be a symbolic link")
+    with path.open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ReleaseError("A dispatcher tick owns state; wait for it to finish") from None
+        yield
+
+
+def state_health(args, repo, python):
+    """Use the selected controller's read-only loader, never initialize or rewrite state."""
+    path = args.state_home / NAME / "state.json"
+    if path.is_symlink():
+        raise ReleaseError("State must be a regular file, not a symbolic link")
+    raw = read_json(path)
+    if raw.get("schema", 1) != 2:
+        raise ReleaseError("Legacy state requires explicit backed migration before activation")
+    if not isinstance(raw.get("sessions"), dict):
+        raise ReleaseError("Retained state has invalid session collection")
+    env = dict(os.environ, XDG_STATE_HOME=str(args.state_home), XDG_CONFIG_HOME=str(args.config_dir),
+               PYTHONDONTWRITEBYTECODE="1")
+    result = run([python, repo / "tools/factory_dispatch.py", "--status"], env=env)
+    try:
+        summary = json.loads(result.stdout)
+        if (summary.get("schema") != 2 or type(summary.get("tracked")) is not int or
+                summary["tracked"] != len(raw["sessions"])):
+            raise ValueError
+        contract = summary.get("state_contract", {})
+        required = {"durable_intents"}
+        if "migration" in raw:
+            required.add("migration_admission_hold")
+        if "maintenance" in raw:
+            required.add("maintenance_queue")
+        if not isinstance(contract, dict) or any(contract.get(key) is not True for key in required):
+            raise ValueError
+    except (ValueError, TypeError, KeyError, AttributeError):
+        raise ReleaseError("Selected controller did not confirm compatible retained state") from None
+    return {"schema": 2, "tracked": summary["tracked"],
+            "migration_hold": bool(raw.get("migration", {}).get("admission_hold")),
+            "breaker_present": bool(raw.get("breaker")),
+            "unresolved_intents": summary.get("unresolved_intents")}
+
+
+def installed_health(args):
+    active = read_json(args.data_dir / "active.json")
+    revision = checked_revision(active.get("revision"))
+    repo = validate_release(args, revision)
+    for field in ("config_dir", "state_home", "key_file"):
+        if active.get(field) != str(getattr(args, field)):
+            raise ReleaseError("Supply the same paths used for activation")
+    try:
+        units = render_units(args, revision, active["python"], active["gh_directory"])
+        for name, content in units.items():
+            path = unit_dir(args) / name
+            if path.is_symlink() or path.read_bytes() != content:
+                raise ReleaseError("Installed units differ from pinned activation; re-activate explicitly")
+    except (KeyError, OSError):
+        raise ReleaseError("Activation metadata or installed units incomplete") from None
+    verify_loaded(args)
+    return active, units, state_health(args, repo, active["python"])
+
+
+def runtime_health(expected):
+    states = {}
+    for name in UNITS:
+        result = run(["systemctl", "--user", "show", name, "--property=ActiveState", "--property=SubState",
+                      "--property=UnitFileState", "--property=Result", "--property=ExecMainStatus"])
+        fields = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+        states[name] = fields
+    timer, service = states[UNITS[1]], states[UNITS[0]]
+    if expected == "running":
+        if timer.get("ActiveState") != "active" or timer.get("UnitFileState") != "enabled":
+            raise ReleaseError("Timer enable/readback did not confirm active and enabled")
+        if service.get("ActiveState") not in {"inactive", "activating", "active"}:
+            raise ReleaseError("Controller service is failed or has unknown runtime state")
+    elif (timer.get("ActiveState") != "inactive" or timer.get("UnitFileState") != "disabled" or
+          service.get("ActiveState") != "inactive"):
+        raise ReleaseError("Expected stopped timer/service and disabled timer")
+    if service.get("Result") != "success" or service.get("ExecMainStatus") != "0":
+        raise ReleaseError("Last controller execution did not report success; inspect retained journal")
+    return {"timer": timer["ActiveState"], "timer_enabled": timer["UnitFileState"],
+            "service": service["ActiveState"], "last_exit": int(service["ExecMainStatus"])}
+
+
+def health(args):
+    active, _, state = installed_health(args)
+    runtime = runtime_health(args.expect)
+    print(json.dumps({"revision": active["revision"], "local_health": "passed", "state": state,
+                      "runtime": runtime, "acceptance": "local installation only; provider/gameplay not exercised"}))
 
 
 def backup(args):
@@ -225,12 +335,25 @@ def restore_units(args, recovery):
         elif target.exists():
             target.unlink()
     run(["systemctl", "--user", "daemon-reload"])
+    for name in UNITS:
+        result = run(["systemctl", "--user", "show", name, "--property=FragmentPath", "--property=NeedDaemonReload"])
+        fields = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+        expected = str(unit_dir(args) / name) if (recovery / name).exists() else ""
+        if fields.get("FragmentPath") != expected or fields.get("NeedDaemonReload") != "no":
+            raise ReleaseError("Restored unit files could not be confirmed loaded; leave timer disabled")
 
 
 def activate(args):
+    require_stopped()
+    with state_lock(args):
+        activate_locked(args)
+
+
+def activate_locked(args):
     validate_release(args, args.revision)
     require_stopped()
     python = str(Path(sys.executable).resolve())
+    state_health(args, release_dir(args, args.revision) / "repo", python)
     gh = shutil.which("gh")
     if not gh:
         raise ReleaseError("gh executable required; no units changed")
@@ -246,37 +369,40 @@ def activate(args):
                    "gh_directory": str(Path(gh).parent), "config_dir": str(args.config_dir),
                    "state_home": str(args.state_home), "key_file": str(args.key_file), "recovery": str(recovery)})
     except Exception:
-        restore_units(args, recovery)
+        try:
+            restore_units(args, recovery)
+        except Exception:
+            raise ReleaseError("Activation failed and restored units could not be verified; timer remains disabled; preserve recovery") from None
         raise
     print(f"Activated {args.revision}; timer remains stopped. Recovery: {recovery}")
 
 
 def enable(args):
-    active = read_json(args.data_dir / "active.json")
-    revision = checked_revision(active.get("revision"))
-    validate_release(args, revision)
-    for field in ("config_dir", "state_home", "key_file"):
-        if active.get(field) != str(getattr(args, field)):
-            raise ReleaseError("Supply the same paths used for activation")
-    try:
-        units = render_units(args, revision, active["python"], active["gh_directory"])
-        for name, content in units.items():
-            path = unit_dir(args) / name
-            if path.is_symlink() or path.read_bytes() != content:
-                raise ReleaseError("Installed units differ from pinned activation; re-activate explicitly")
-    except (KeyError, OSError):
-        raise ReleaseError("Activation metadata or installed units incomplete") from None
+    active, units, _ = installed_health(args)
     verify_units(units)
     run(["systemctl", "--user", "daemon-reload"])
     verify_loaded(args)
-    run(["systemctl", "--user", "enable", "--now", UNITS[1]])
-    print(f"Enabled timer for {revision}")
+    try:
+        run(["systemctl", "--user", "enable", "--now", UNITS[1]])
+        runtime_health("running")
+    except Exception:
+        try:
+            run(["systemctl", "--user", "disable", "--now", UNITS[1]])
+            verify_timer_disabled()
+        except Exception:
+            raise ReleaseError("Enable failed and timer stop could not be confirmed; inspect units immediately; state retained") from None
+        raise ReleaseError("Enable/readback failed; timer disabled, existing service allowed to finish; state retained") from None
+    print(f"Enabled and read back timer for {active['revision']}; provider acceptance not established")
 
 
 def uninstall(args):
+    require_stopped()
+    with state_lock(args):
+        uninstall_locked(args)
+
+
+def uninstall_locked(args):
     recovery = backup(args)
-    run(["systemctl", "--user", "disable", "--now", UNITS[1]])
-    run(["systemctl", "--user", "stop", UNITS[0]])
     try:
         for name in UNITS:
             path = unit_dir(args) / name
@@ -291,7 +417,7 @@ def uninstall(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("action", nargs="?", choices=("stage", "activate", "rollback", "enable", "disable", "uninstall", "status"))
+    parser.add_argument("action", nargs="?", choices=("stage", "activate", "rollback", "enable", "disable", "uninstall", "status", "health"))
     parser.add_argument("--revision", help="Full 40-character commit SHA for stage/activate/rollback")
     parser.add_argument("--repository", default=REPOSITORY, help="Repository URL or local path for staging")
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / NAME)
@@ -299,6 +425,7 @@ def main(argv=None):
     parser.add_argument("--state-home", type=Path, default=Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")))
     parser.add_argument("--key-file", type=Path, default=Path.home() / ".secrets/jules_api_key", help="Path only; never read or modified by installer")
     parser.add_argument("--dry-run", action="store_true", help="No filesystem/network/service mutations or subprocesses")
+    parser.add_argument("--expect", choices=("stopped", "running"), default="stopped", help="Expected runtime state for read-only health")
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "--uninstall":
         argv[0] = "uninstall"
@@ -331,6 +458,9 @@ def main(argv=None):
                               "unit_files_present": all((unit_dir(args) / name).is_file() for name in UNITS),
                               "runtime_status": "not_queried"}))
             return 0
+        if args.action == "health":
+            health(args)
+            return 0
         args.data_dir.mkdir(parents=True, exist_ok=True)
         with (args.data_dir / "release.lock").open("a") as lock:
             try:
@@ -345,6 +475,7 @@ def main(argv=None):
                 enable(args)
             elif args.action == "disable":
                 run(["systemctl", "--user", "disable", "--now", UNITS[1]])
+                verify_timer_disabled()
                 print("Timer disabled; any running tick is allowed to finish")
             else:
                 uninstall(args)

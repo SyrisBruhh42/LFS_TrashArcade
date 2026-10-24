@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import fcntl
 import hashlib
 import json
@@ -25,6 +26,9 @@ import uuid
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import factory_maintenance as maintenance
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_FILE = ROOT / "factory" / "config.json"
@@ -141,19 +145,21 @@ def load_state() -> dict:
         if (not re.fullmatch(r"[0-9a-f]{40}", record.get("baseline_sha", "")) or
                 not re.fullmatch(r"\d{3}", str(record.get("game_id", ""))) or
                 not record["assigned_folder"].startswith(f"games/{record['game_id']}-") or
-                str(record.get("phase")) not in {str(value) for value in range(1, 11)}):
+                (str(record.get("phase")) not in {str(value) for value in range(1, 11)} and
+                 not (record.get("mode") == "maintenance" and record.get("phase") is None))):
             raise StateError("Invalid intent baseline or game assignment")
         if intent["status"] == "accepted":
             sid = intent.get("session_id")
             if not valid_id(sid) or state["sessions"].get(sid, {}).get("correlation") != correlation:
                 raise StateError("Accepted intent has no matching durable session")
-            for field in ("assigned_folder", "game_id", "phase", "baseline_sha", "title", "mode", "triple"):
+            for field in ("assigned_folder", "game_id", "phase", "baseline_sha", "title", "mode", "triple", "incident_id", "repair_owner"):
                 if state["sessions"][sid].get(field) != record.get(field):
                     raise StateError("Durable session assignment differs from create intent")
         parse_ts(intent.get("created"))
     state["schema"] = 2  # In-memory migration; legacy records and history are retained.
     state.setdefault("lessons", [])
     state.setdefault("api_fail_streak", 0)
+    maintenance.ledger(state)
     return state
 
 
@@ -447,6 +453,8 @@ def repair_admission(cfg: dict, state: dict, operation: str = "Repair") -> None:
     """Repair may fix red main, but still requires fresh shared-account headroom."""
     if not cfg.get("enabled") or PAUSE_FILE.exists():
         raise Hold("Paid mutation stopped by local kill switch")
+    if state.get("migration", {}).get("admission_hold") is True:
+        raise Hold("Migration admission hold requires reviewed reconciliation and explicit release")
     observation = state.get("inventory", {})
     if not observation.get("complete"):
         raise Hold(f"{operation} requires complete account inventory")
@@ -461,6 +469,76 @@ def repair_admission(cfg: dict, state: dict, operation: str = "Repair") -> None:
             raise Hold(f"{operation} requires configured shared-account budget headroom")
 
 
+def verified_assignment(cfg: dict, state: dict, sid: str, rec: dict, session: dict) -> bool:
+    correlation = rec.get("correlation")
+    intent = state["intents"].get(correlation, {})
+    return bool(correlation and intent.get("status") == "accepted" and intent.get("session_id") == sid and
+                correlation_match(session, intent, correlation, cfg) and
+                all(rec.get(field) == intent.get("record", {}).get(field) for field in
+                    ("assigned_folder", "game_id", "phase", "baseline_sha", "incident_id", "repair_owner")) and
+                re.fullmatch(r"games/\d{3}-[a-z0-9-]+", rec.get("assigned_folder", "")))
+
+
+def rebase_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, pr: dict, dry: bool) -> None:
+    """Recover a stale/conflicting PR once in its existing, verified session."""
+    rec["hold"] = "needs_rebase"
+    if not verified_assignment(cfg, state, sid, rec, session):
+        rec["hold"] = "needs_owner:rebase_scope_unverified"
+        return
+    if session.get("state") not in {"IN_PROGRESS", "AWAITING_USER_FEEDBACK"}:
+        rec["hold"] = "needs_owner:rebase_session_not_message_eligible"
+        return
+    if rec.get("repair_owner", cfg.get("repair_owner", "native")) != "controller":
+        rec["hold"] = "needs_rebase:native_observation"
+        return
+    if not cfg.get("controller_native_repairs_disabled", False):
+        rec["hold"] = "needs_owner:native_repair_overlap"
+        return
+    if not all(re.fullmatch(r"[0-9a-f]{40}", pr.get(key, "")) for key in ("headRefOid", "baseRefOid")):
+        rec["hold"] = "needs_owner:rebase_revision_unverified"
+        return
+    key = digest({"head": pr["headRefOid"], "base": pr["baseRefOid"]})
+    seen = rec.setdefault("rebases", {})
+    if key in seen and seen[key].get("status") != "not_sent":
+        rec["hold"] = "needs_rebase:" + seen[key]["status"]
+        return
+    if sum(item.get("status") != "not_sent" for item in seen.values()) >= cfg.get("max_rebase_messages", 1):
+        rec["hold"] = "needs_owner:rebase_budget_exhausted"
+        return
+    if dry:
+        return
+    repair_admission(cfg, state, "Rebase")
+    prompt = (f"Reconcile existing PR {rec['pr']} for {rec['assigned_folder']}/ with current main. "
+              f"Observed PR head {pr['headRefOid']}, base {pr['baseRefOid']}. Stop if either changed. "
+              "Preserve local edits, assigned phase, identity, save compatibility and all working features. "
+              "Resolve only within the assigned game; regenerate exact games/registry.js with tools/build_registry.py. "
+              "Never modify controller, workflow or trusted tests. Do not force-push, create another PR/session, "
+              "or bypass checks. Re-run original acceptance and report failed/unrun checks; stop for owner if conflict needs another scope.")
+    previous = seen.get(key)
+    seen[key] = {"status": "pending", "created": iso(now()), "body_hash": digest({"prompt": prompt}),
+                 "admission_history": ([previous] if previous else [])}
+    save_state(state)
+    try:
+        try:
+            current = json.loads(gh("pr", "view", rec["pr"], "--json", "state,headRefOid,baseRefOid"))
+            if current.get("state") != "OPEN" or any(current.get(k) != pr[k] for k in ("headRefOid", "baseRefOid")):
+                raise Hold("Rebase PR changed before message; observe again")
+            repair_admission(cfg, state, "Rebase")
+        except Exception:
+            seen[key].update(status="not_sent", finished=iso(now()))
+            rec["hold"] = "needs_rebase:admission_held"
+            raise
+        api("POST", f"/sessions/{sid}:sendMessage", {"prompt": prompt})
+        seen[key]["status"] = "sent"
+        rec["hold"] = "needs_rebase:requested"
+    except ApiError:
+        seen[key]["status"] = "ambiguous"
+        rec["hold"] = "needs_owner:rebase_delivery_ambiguous"
+        raise
+    finally:
+        save_state(state)
+
+
 def repair_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, pr: dict, dry: bool) -> None:
     report = gate_feedback(cfg, pr)
     rec["hold"] = "gate_failed_review_required"
@@ -472,14 +550,16 @@ def repair_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, 
     if report["key"] in seen and (not isinstance(previous, dict) or previous.get("status") != "not_sent"):
         return
     # Do not promote opaque legacy assignments into mutation authority.
-    correlation = rec.get("correlation")
-    intent = state["intents"].get(correlation, {})
-    if (not correlation or not intent or not correlation_match(session, intent, correlation, cfg) or
-            any(rec.get(field) != intent.get("record", {}).get(field) for field in ("assigned_folder", "game_id", "phase", "baseline_sha")) or
-            not re.fullmatch(r"games/\d{3}-[a-z0-9-]+", rec.get("assigned_folder", ""))):
+    if not verified_assignment(cfg, state, sid, rec, session):
         rec["hold"] = "repair_scope_unverified"
         return
     if report["classification"] not in {"content", "runtime"}:
+        return
+    if rec.get("repair_owner", cfg.get("repair_owner", "native")) != "controller":
+        rec["hold"] = "repair_native_observation"
+        return
+    if not cfg.get("controller_native_repairs_disabled", False):
+        rec["hold"] = "repair_native_overlap_unresolved"
         return
     if session.get("state") not in {"IN_PROGRESS", "AWAITING_USER_FEEDBACK"}:
         rec["hold"] = "repair_session_not_message_eligible"
@@ -499,10 +579,10 @@ def repair_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, 
               "If the evidence is unavailable, the PR head changed, or the fix needs another game folder, stop and report. "
               "Do not bypass tests, inflate code, or advance another phase.\nDiagnostics:\n" +
               "\n".join(report["errors"]))
-    repair_admission(cfg, state)
     if dry:
         log("dry_run_repair", session=sid, report_key=report["key"])
         return
+    repair_admission(cfg, state)
     history = []
     if previous:
         history = previous.get("admission_history", []) + [
@@ -581,9 +661,11 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
                     set_outcome(rec, "failed:no_pr")
             continue
         pr = json.loads(gh("pr", "view", rec["pr"], "--json",
-                           "state,statusCheckRollup,isDraft,headRefOid,baseRefOid,comments"))
+                           "state,statusCheckRollup,isDraft,headRefOid,baseRefOid,comments,mergeCommit,mergeable,mergeStateStatus"))
         if pr.get("state") in {"MERGED", "CLOSED"}:
             set_outcome(rec, "merged" if pr["state"] == "MERGED" else "failed:closed")
+            if pr["state"] == "MERGED":
+                rec["merge_sha"] = (pr.get("mergeCommit") or {}).get("oid")
             if st in TERMINAL:
                 rec.pop("hold", None)
             else:
@@ -596,6 +678,18 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
             continue
         set_outcome(rec, None)
         if rec.get("hold") == "terminal_record_provider_active":
+            rec.pop("hold", None)
+        if pr.get("mergeable") == "CONFLICTING" or pr.get("mergeStateStatus") in {"DIRTY", "BEHIND"}:
+            if repairs_sent >= cfg.get("max_repairs_per_tick", 1):
+                rec["hold"] = "needs_rebase:tick_budget"
+                continue
+            before = sum(item.get("status") != "not_sent" for item in rec.get("rebases", {}).values())
+            rebase_feedback(cfg, state, sid, rec, session, pr, dry)
+            repairs_sent += sum(item.get("status") != "not_sent" for item in rec.get("rebases", {}).values()) - before
+            continue
+        if rec.get("hold", "").startswith(("needs_rebase", "needs_owner:rebase")):
+            if pr.get("mergeable") != "MERGEABLE" or pr.get("mergeStateStatus") in {None, "UNKNOWN"}:
+                continue  # Unknown mergeability never clears a previously observed conflict.
             rec.pop("hold", None)
         checks = gate_checks(cfg, pr)
         # The separate trusted reporter publishes StatusContext on the exact PR head.
@@ -726,7 +820,9 @@ def observe_account(cfg: dict, state: dict, remote: dict) -> dict:
                    "unknown_active": len(unknown), "stale_active": len(stale),
                    "basis": "Observed sessions; not credits, tokens, plan entitlement or billing"}
     state["inventory"] = observation
-    if unknown or stale:
+    blocking_stale = [sid for sid in stale if exact_source(remote[sid], cfg) and
+                      not legacy_scope_verified(cfg, state, sid, remote[sid])]
+    if unknown or blocking_stale:
         raise Hold("Unknown or stale provider sessions require reconciliation; capacity remains occupied")
     unresolved = [i for i in state["intents"].values() if i["status"] in {"pending", "ambiguous"}]
     if unresolved:
@@ -734,14 +830,20 @@ def observe_account(cfg: dict, state: dict, remote: dict) -> dict:
     for sid, session in remote.items():
         if sid in active and exact_source(session, cfg) and sid not in state["sessions"]:
             raise Hold("Untracked active session on this source; reconcile scope before dispatch")
+        if (sid in active and exact_source(session, cfg) and
+                not verified_assignment(cfg, state, sid, state["sessions"].get(sid, {}), session) and
+                not legacy_scope_verified(cfg, state, sid, session)):
+            raise Hold("Active legacy assignment lacks reviewed ownership scope; reconcile before dispatch")
     return observation
 
 
 def capacity(cfg: dict, state: dict, remote: dict) -> dict:
     observation = observe_account(cfg, state, remote)
     current = now()
-    for rec in state["sessions"].values():
+    for sid, rec in state["sessions"].items():
         if rec.get("hold") and (not rec.get("outcome") or rec.get("provider_state") not in TERMINAL):
+            if sid in remote and legacy_scope_verified(cfg, state, sid, remote[sid]):
+                continue  # Reviewed legacy ownership quarantines its game; never frees its WIP or authorizes messages.
             raise Hold("Tracked session requires reconciliation: " + rec["hold"])
     active_cap, daily_cap = cfg.get("account_active_cap"), cfg.get("account_daily_cap")
     if active_cap is None or daily_cap is None:
@@ -807,31 +909,77 @@ def recheck_assignment_prs(cfg: dict, state: dict, gid: str, folder: str) -> Non
             raise Hold("Historical PR merged; refresh accepted main before reassignment")
 
 
-def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: Path | None = None) -> None:
+def maintenance_baseline(cfg: dict, spec: dict, baseline_sha: str, source_root: Path) -> None:
+    """Trusted base catalog and unchanged diagnosed game bind red-main repair scope."""
+    try:
+        catalog = json.loads((source_root / "factory/maintenance_catalog.json").read_text())
+        entry = catalog["incidents"][spec["id"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        raise Hold("Reviewed incident is absent from current-base maintenance catalog") from None
+    expected = {key: spec[key] for key in ("repository", "assigned_folder", "game_id", "observed_sha", "scenario_id", "protected_phase")}
+    expected.update(spec_hash=maintenance.digest(spec), expected_behavior_hash=maintenance.digest(spec["expected_behavior"]), status="approved")
+    if catalog.get("schema_version") != 1 or entry != expected:
+        raise Hold("Current-base maintenance catalog does not match reviewed incident")
+    observed = spec["observed_sha"]
+    if observed == baseline_sha:
+        return
+    compare = json.loads(gh("api", f"repos/{cfg['repo']}/compare/{observed}...{baseline_sha}"))
+    if (compare.get("status") != "ahead" or compare.get("base_commit", {}).get("sha") != observed or
+            compare.get("merge_base_commit", {}).get("sha") != observed):
+        raise Hold("Reviewed maintenance diagnosis is not an ancestor of current main")
+    tree_sha = observed
+    for part in spec["assigned_folder"].split("/"):
+        tree = json.loads(gh("api", f"repos/{cfg['repo']}/git/trees/{tree_sha}"))
+        entries = tree.get("tree")
+        if tree.get("truncated") is not False or not isinstance(entries, list):
+            raise Hold("Diagnosed game tree evidence incomplete")
+        matches = [entry for entry in entries if entry.get("path") == part and entry.get("type") == "tree"]
+        if len(matches) != 1 or not re.fullmatch(r"[0-9a-f]{40}", matches[0].get("sha", "")):
+            raise Hold("Diagnosed game tree identity unavailable")
+        tree_sha = matches[0]["sha"]
+    if git_read(source_root, "rev-parse", f"{baseline_sha}:{spec['assigned_folder']}") != tree_sha:
+        raise Hold("Assigned game changed since diagnosis; refresh reviewed incident")
+
+
+def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: Path | None = None,
+             incident_id: str | None = None) -> None:
     if not cfg.get("enabled") or PAUSE_FILE.exists():
         raise Hold("Create stopped by local kill switch")
     if any(i["status"] in {"pending", "ambiguous"} for i in state["intents"].values()):
         raise Hold("Unresolved create intent; never repeat a create")
     live = [r for r in state["sessions"].values() if assignment_occupied(r)]
-    exclude = {str(r["game_id"]) for r in live if r.get("game_id")} | quarantined_game_ids(state)
-    result = subprocess.run([sys.executable, str(ROOT / "tools" / "pick_brief.py"), "--json", "--source-root", str(source_root or ROOT), "--id", assign_id(state, source_root),
+    exclude = {str(r["game_id"]) for r in live if r.get("game_id")} | quarantined_game_ids(state) | maintenance.claimed_games(state)
+    if incident_id:
+        if not cfg.get("maintenance_enabled", True):
+            raise Hold("Maintenance dispatch is disabled")
+        spec = maintenance.ledger(state)[incident_id]["spec"]
+        if any(str(rec.get("game_id")) == spec["game_id"] for rec in live):
+            raise Hold("Maintenance game already has occupied work")
+        maintenance_baseline(cfg, spec, baseline_sha, source_root or ROOT)
+        brief = maintenance.brief(state, incident_id, source_root or ROOT, baseline_sha, cfg["repo"], validated_baseline=baseline_sha)
+    else:
+        if not cfg.get("generation_enabled", False):
+            raise Hold("New phase generation is disabled; no queued maintenance selected")
+        result = subprocess.run([sys.executable, str(ROOT / "tools" / "pick_brief.py"), "--json", "--source-root", str(source_root or ROOT), "--id", assign_id(state, source_root),
                              "--exclude-json", json.dumps([r["triple"] for r in live if r.get("triple")]),
                              "--exclude-ids", json.dumps(sorted(exclude)),
                              "--inflight-new-ids", json.dumps([r["game_id"] for r in live if r.get("mode") == "new"]),
                              "--baseline-sha", baseline_sha,
                              "--max-unfinished-games", str(cfg.get("max_unfinished_games", 2))],
-                            capture_output=True, text=True, check=True, cwd=ROOT)
-    brief = json.loads(result.stdout)
+                                capture_output=True, text=True, check=True, cwd=ROOT)
+        brief = json.loads(result.stdout)
     if brief.get("mode") == "hold":
         raise Hold("Unfinished game work-in-progress limit; complete or reconcile existing games")
     correlation = uuid.uuid4().hex
-    gid, phase = str(brief["id"]), str(brief["phase"])
+    gid, phase = str(brief["id"]), brief["phase"] if brief["phase"] is None else str(brief["phase"])
+    if not incident_id and gid in exclude:
+        raise Hold("Picker selected an occupied, quarantined or maintenance-claimed game")
     folder = f"games/{brief['slug']}"
     if not re.fullmatch(r"games/\d{3}-[a-z0-9-]+", folder) or not re.fullmatch(r"[0-9a-f]{40}", baseline_sha):
         raise Hold("Invalid assignment scope or baseline")
     repair_admission(cfg, state, operation="Create")
     recheck_assignment_prs(cfg, state, gid, folder)
-    prompt = (PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n" + brief["markdown"] +
+    prompt = (("" if incident_id else PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n") + brief["markdown"] +
               f"\n\nFactory correlation: {correlation}\nBaseline commit: {baseline_sha}\n")
     title = f"[factory:{correlation}] {brief['label']}"[:120]
     autonomous = cfg.get("plan_policy") == "autonomous_game_scope"
@@ -846,9 +994,15 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
               "mode": brief["mode"], "triple": [brief["genre"], brief["twist"], brief["setting"]],
               "label": brief["label"], "correlation": correlation, "baseline_sha": baseline_sha,
               "assigned_folder": folder, "plan_policy": cfg.get("plan_policy")}
+    if incident_id:
+        record.update(incident_id=incident_id, repair_owner=brief["repair_owner"])
+    else:
+        record["repair_owner"] = cfg.get("repair_owner", "native")
     intent = {"status": "pending", "created": record["created"], "title": title,
               "body_hash": digest(body), "prompt_hash": digest(prompt), "record": record}
     state["intents"][correlation] = intent
+    if incident_id:
+        maintenance.start_attempt(state, incident_id, correlation)
     state["max_game_id"] = max(int(state.get("max_game_id", 0)), int(gid))
     save_state(state)  # fsync file + directory BEFORE the non-idempotent network request.
     try:
@@ -887,6 +1041,7 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
 def status(state: dict) -> None:
     records = list(state["sessions"].values())
     print(json.dumps({"schema": state["schema"], "tracked": len(records),
+                      "state_contract": {"durable_intents": True, "migration_admission_hold": True, "maintenance_queue": True},
                       "outcomes": dict(Counter(r.get("outcome", "in_flight") for r in records)),
                       "merged": sum(r.get("outcome") == "merged" for r in records),
                       "failed": sum(r.get("outcome", "").startswith("failed") for r in records),
@@ -894,10 +1049,20 @@ def status(state: dict) -> None:
                       "holds": dict(Counter(r["hold"] for r in records if r.get("hold"))),
                       "unresolved_intents": sum(i["status"] in {"pending", "ambiguous"} for i in state["intents"].values()),
                       "inventory": state.get("inventory", {"complete": False}), "breaker": state.get("breaker"),
+                      "maintenance": dict(Counter(item["status"] for item in maintenance.ledger(state).values())),
+                      "migration_admission_hold": state.get("migration", {}).get("admission_hold", False),
                       "measurement_note": "Merged is repository acceptance, not runtime/customer acceptance. Counts are not billing or token charges."}, indent=1))
 
 
 def validate_config(cfg: dict) -> None:
+    for key, default in (("generation_enabled", False), ("maintenance_enabled", True),
+                         ("controller_native_repairs_disabled", False)):
+        if type(cfg.setdefault(key, default)) is not bool:
+            raise StateError("Invalid policy boolean: " + key)
+    if cfg.setdefault("repair_owner", "native") not in {"native", "controller"}:
+        raise StateError("Invalid repair ownership policy")
+    if type(cfg.setdefault("max_rebase_messages", 1)) is not int or not 0 <= cfg["max_rebase_messages"] <= 3:
+        raise StateError("Invalid bounded rebase-message budget")
     if not isinstance(cfg.get("repo"), str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", cfg["repo"]):
         raise StateError("Invalid GitHub repository identity")
     if cfg.get("source") != f"sources/github/{cfg.get('repo')}":
@@ -922,6 +1087,43 @@ def validate_config(cfg: dict) -> None:
             raise StateError("Account reserve must be below budget")
 
 
+def legacy_scope_verified(cfg: dict, state: dict, sid: str, session: dict) -> bool:
+    """Reviewed ownership is read-only evidence, never assignment or paid-work authority."""
+    annotation = state.get("legacy_scope_annotations", {}).get(sid, {})
+    rec = state["sessions"].get(sid, {})
+    expected = {"session_id": sid, "source": cfg["source"], "starting_branch": cfg["starting_branch"],
+                "game_id": rec.get("game_id"), "provider_create_time": session.get("createTime")}
+    try:
+        return bool(rec and exact_source(session, cfg) and
+                    all(annotation.get(k) == v and v is not None for k, v in expected.items()) and
+                    re.fullmatch(r"\d{3}", str(rec.get("game_id"))) and
+                    isinstance(annotation.get("reviewed_by"), str) and annotation["reviewed_by"].strip() and
+                    re.fullmatch(r"[0-9a-f]{64}", annotation.get("evidence_sha256", "")) and
+                    parse_ts(annotation.get("reviewed_at")) <= now())
+    except (StateError, TypeError):
+        return False
+
+
+def reconciliation_receipt(cfg: dict, state: dict, remote: dict) -> None:
+    unresolved = 0
+    for sid, session in remote.items():
+        if session.get("state") in TERMINAL:
+            continue
+        source = session.get("sourceContext", {}).get("source")
+        if session.get("state") not in ACTIVE or not isinstance(source, str) or not source:
+            unresolved += 1
+        elif source == cfg["source"] and not (verified_assignment(cfg, state, sid, state["sessions"].get(sid, {}), session) or
+                                              legacy_scope_verified(cfg, state, sid, session)):
+            unresolved += 1
+    state.setdefault("migration", {})["reconciliation"] = {
+        "observed_at": state["inventory_started_at"], "inventory_complete": True,
+        "tracked_sessions": len(state["sessions"]), "active_unresolved": unresolved,
+        "missing_unresolved": sum(not rec.get("outcome") and sid not in remote for sid, rec in state["sessions"].items()),
+        "unresolved_intents": sum(i["status"] in {"pending", "ambiguous"} for i in state["intents"].values()),
+        "sessions_sha256": digest(state["sessions"]), "intents_sha256": digest(state["intents"]),
+        "legacy_scope_annotations_sha256": digest(state.get("legacy_scope_annotations", {}))}
+
+
 def tick(args: argparse.Namespace) -> int:
     state = load_state()
     if args.status:
@@ -943,13 +1145,34 @@ def tick(args: argparse.Namespace) -> int:
         state["inventory_started_at"] = iso(inventory_started)
         remote = inventory(cfg)
         resolve_intents(cfg, state, remote, args.dry_run)
+        if getattr(args, "reconcile_only", False):
+            try:
+                observe_account(cfg, state, remote)
+            except Hold as exc:
+                log("reconciliation_observation_hold", reason=str(exc))
+            reconcile(cfg, state, remote, True)
+            maintenance.reconcile(state)
+            reconciliation_receipt(cfg, state, remote)
+            log("reconciled_without_paid_actions", tracked=len(state["sessions"]))
+            return 0
         observe_account(cfg, state, remote)  # No paid feedback while inventory or scope is uncertain.
         # --no-dispatch remains reconciliation-only, but may deliver bounded repairs.
-        mutations_held = (bool(state.get("breaker")) or cfg.get("account_active_cap") is None or cfg.get("account_daily_cap") is None or
+        mutations_held = (bool(state.get("breaker")) or state.get("migration", {}).get("admission_hold") is True or
+                          cfg.get("account_active_cap") is None or cfg.get("account_daily_cap") is None or
                           (state.get("cooldown_until") and now() < parse_ts(state["cooldown_until"])))
         reconcile(cfg, state, remote, args.dry_run or bool(mutations_held))
+        maintenance.reconcile(state)
         capacity(cfg, state, remote)
-        baseline_sha = main_acceptance(cfg)
+        repair_admission(cfg, state, "Dispatch")
+        selected = maintenance.select(state) if cfg["maintenance_enabled"] else None
+        if selected:
+            baseline_sha = gh("api", f"repos/{cfg['repo']}/commits/{cfg['starting_branch']}", "--jq", ".sha").strip()
+            if not re.fullmatch(r"[0-9a-f]{40}", baseline_sha):
+                raise Hold("Invalid current main revision for maintenance")
+        else:
+            if not cfg["generation_enabled"]:
+                raise Hold("New phase generation is disabled; no queued maintenance eligible")
+            baseline_sha = main_acceptance(cfg)
         if now() - inventory_started > timedelta(seconds=cfg.get("inventory_max_age_seconds", 180)):
             raise Hold("Account inventory became stale during reconciliation; observe again next tick")
         if state.get("breaker"):
@@ -973,7 +1196,8 @@ def tick(args: argparse.Namespace) -> int:
                 raise Hold("Account inventory became stale while fetching source; no dispatch")
             if gh("api", f"repos/{cfg['repo']}/commits/{cfg['starting_branch']}", "--jq", ".sha").strip() != baseline_sha:
                 raise Hold("Main advanced during source preparation; observe a fresh accepted revision next tick")
-            dispatch(cfg, state, args.dry_run, baseline_sha, source_root)
+            dispatch(cfg, state, args.dry_run, baseline_sha, source_root,
+                     incident_id=selected["spec"]["id"] if selected else None)
     except Hold as exc:
         # Holds are operational data, never provider content or credentials.
         if str(exc) not in {"no_dispatch_flag", "Healthy observation hysteresis; wait for another complete tick"}:
@@ -996,6 +1220,28 @@ def tick(args: argparse.Namespace) -> int:
     return 0
 
 
+def accept_incident(cfg: dict, state: dict, receipt: dict) -> None:
+    """Only explicit operator input plus live exact-main and independent evidence can accept."""
+    controller_sha = control_revision()
+    baseline = main_acceptance(cfg)
+    item = maintenance.ledger(state).get(receipt.get("incident_id"), {})
+    merge_sha = item.get("merge_sha")
+    if not isinstance(merge_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", merge_sha):
+        raise Hold("Maintenance merge identity is unavailable")
+    if merge_sha != baseline:
+        comparison = json.loads(gh("api", f"repos/{cfg['repo']}/compare/{merge_sha}...{baseline}"))
+        if (comparison.get("status") != "ahead" or comparison.get("base_commit", {}).get("sha") != merge_sha or
+                comparison.get("merge_base_commit", {}).get("sha") != merge_sha):
+            raise Hold("Maintenance merge is not an ancestor of accepted main")
+    # Recheck after evidence/gate reads before recording acceptance.
+    candidate = copy.deepcopy(state)
+    maintenance.accept(candidate, receipt, cfg["repo"], baseline, iso(now()))
+    if gh("api", f"repos/{cfg['repo']}/commits/{cfg['starting_branch']}", "--jq", ".sha").strip() != baseline:
+        raise Hold("Main advanced during maintenance acceptance; repeat against current main")
+    state["maintenance"] = candidate["maintenance"]
+    state["maintenance"]["incidents"][receipt["incident_id"]]["accepted_controller_sha"] = controller_sha
+
+
 def main() -> int:
     global READ_ONLY
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1004,6 +1250,10 @@ def main() -> int:
     modes.add_argument("--status", action="store_true", help="Print saved observations without network access or writes.")
     modes.add_argument("--initialize-state", action="store_true", help="Explicitly create empty local state only if no state exists; dispatch nothing.")
     modes.add_argument("--reset-breaker", action="store_true", help="After diagnosis, reset the local breaker and healthy-tick history; dispatch nothing.")
+    modes.add_argument("--reconcile-only", action="store_true", help="Persist complete provider/session observations; never send paid messages or create sessions.")
+    modes.add_argument("--enqueue-incident", metavar="ABSOLUTE_JSON", help="Explicitly enqueue one reviewed local incident; no network or provider work.")
+    modes.add_argument("--retry-incident", metavar="INCIDENT_ID", help="Explicitly requeue a definitively failed incident within its original attempt budget.")
+    modes.add_argument("--accept-incident", metavar="ABSOLUTE_JSON", help="Review local behavioral receipt against live exact-main acceptance; creates no provider work.")
     parser.add_argument("--no-dispatch", action="store_true", help="Reconcile, including bounded repair feedback, but launch no new sessions.")
     args = parser.parse_args()
     READ_ONLY = args.dry_run or args.status
@@ -1032,11 +1282,24 @@ def main() -> int:
                         rec["breaker_reset"] = True
                 save_state(state)
                 return 0
+            if args.enqueue_incident or args.retry_incident or args.accept_incident:
+                state = load_state()
+                cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+                validate_config(cfg)
+                if args.enqueue_incident:
+                    iid, added = maintenance.enqueue(state, maintenance.local_json(args.enqueue_incident), cfg["repo"], iso(now()))
+                    log("incident_enqueued" if added else "incident_deduplicated", incident_id=iid)
+                elif args.retry_incident:
+                    maintenance.retry(state, args.retry_incident)
+                else:
+                    accept_incident(cfg, state, maintenance.local_json(args.accept_incident))
+                save_state(state)
+                return 0
             return tick(args)
     except Exception as exc:
         # Never serialize exception repr: OS/HTTP/subprocess details may contain secrets.
         print(json.dumps({"event": "tick_failed", "error_type": type(exc).__name__,
-                          "reason": str(exc) if isinstance(exc, (StateError, Hold)) else "Exception details withheld",
+                          "reason": str(exc) if isinstance(exc, (StateError, Hold, maintenance.IncidentError)) else "Exception details withheld",
                           "action": "Inspect local state/config and credentials"}), file=sys.stderr)
         return 1
 

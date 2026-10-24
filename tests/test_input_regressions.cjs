@@ -92,6 +92,20 @@ test('085 start gesture is consumed, then a fresh tap can fire',()=>{
     h.window.emit('touchend',{changedTouches:[touch(2)]});assert.equal(h.fire(),1);
 });
 
+test('085 keyboard start preserves ammunition until a fresh gameplay action',()=>{
+    for (const code of ['Enter','Space']) {
+        const h=retrieval();
+        h.window.emit('keydown',{code,repeat:false});
+        h.evaluate("Game.prototype.startGame.call({input,state:'TITLE',saveManager:{data:{totalGamesPlayed:0},save(){}},loadWave(){}})");
+        assert.equal(h.evaluate('input.isActionPressed()'),false);
+        h.window.emit('keydown',{code,repeat:true});
+        assert.equal(h.evaluate('input.isActionPressed()'),false);
+        h.window.emit('keyup',{code});
+        h.window.emit('keydown',{code,repeat:false});
+        assert.equal(h.evaluate('input.isActionPressed()'),true);
+    }
+});
+
 
 test('085 phase2 right-click dash stays separate from shooting and retains cooldown repairs',()=>{
     const h=retrieval();
