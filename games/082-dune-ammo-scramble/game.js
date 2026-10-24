@@ -8,7 +8,7 @@ class SaveManager {
             totalGamesPlayed: 0,
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
-            options: { mute: false, volume: 1.0 }
+            options: { mute: false, sfxVolume: 1.0, musicVolume: 1.0, shakeIntensity: 1, particleDensity: 'high', highContrast: false, showFPS: false, touchMode: 'auto', touchSwap: false },
         };
         this.load();
     }
@@ -65,7 +65,7 @@ class SoundEngine {
 
         // Create master gain
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = 0.3;
+        this.masterGain.gain.value = (window.game && window.game.saveManager && window.game.saveManager.data.options.mute) ? 0 : 0.3;
 
         // Create filter for adaptive soundtrack
         this.filter = this.ctx.createBiquadFilter();
@@ -97,7 +97,7 @@ class SoundEngine {
     }
 
     scheduleNote(beatNumber, time) {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
 
         // Arpeggiator (synth)
         if (beatNumber % 2 === 0 || this.isBossWave) {
@@ -172,7 +172,7 @@ class SoundEngine {
     }
 
     scheduler() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
 
         // Catch up if falling behind due to tab backgrounding
         if (this.nextNoteTime < this.ctx.currentTime - 0.5) {
@@ -236,7 +236,7 @@ class SoundEngine {
 
     // 1. Basic Shoot
     playShoot() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'square';
@@ -252,7 +252,7 @@ class SoundEngine {
 
     // 2. Shotgun Shoot (noisy, multiple oscillators)
     playShotgun() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sawtooth';
@@ -283,7 +283,7 @@ class SoundEngine {
 
     // 3. Sniper/Railgun Shoot (high frequency, piercing)
     playSniper() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'triangle';
@@ -299,7 +299,7 @@ class SoundEngine {
 
     // 4. Enemy Hit
     playHit() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sawtooth';
@@ -315,7 +315,7 @@ class SoundEngine {
 
     // 5. Enemy Death (explosion)
     playExplosion() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'square';
@@ -338,7 +338,7 @@ class SoundEngine {
 
     // 6. Ammo Pickup
     playPickup() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sine';
@@ -354,7 +354,7 @@ class SoundEngine {
 
     // 7. Empty Gun Click
     playEmpty() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'triangle';
@@ -369,7 +369,7 @@ class SoundEngine {
 
     // 8. Player Dash/Ability
     playDash() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sine';
@@ -385,7 +385,7 @@ class SoundEngine {
 
     // 9. Upgrade Selected
     playUpgrade() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'square';
@@ -409,7 +409,7 @@ class SoundEngine {
 
     // 10. UI Hover/Select
     playUIHover() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sine';
@@ -424,7 +424,7 @@ class SoundEngine {
 
     // 11. UI Click
     playUIClick() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'square';
@@ -440,7 +440,7 @@ class SoundEngine {
 
     // 12. Player Hit/Damage
     playPlayerHit() {
-        if (!this.initialized || !this.ctx) return;
+        if (!this.initialized || !this.ctx || (window.game && window.game.saveManager && window.game.saveManager.data.options.mute)) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sawtooth';
@@ -473,7 +473,7 @@ class InputManager {
         this.canvas = canvas;
         this.keys = {};
         this.mouse = { x: 0, y: 0, down: false };
-        this.touch = { active: false, id: null, x: 0, y: 0 };
+        this.touch = { active: false, id: null, x: 0, y: 0, joyActive: false, joyId: null, joyX: 0, joyY: 0 };
         this.bindEvents();
     }
     bindEvents() {
@@ -546,6 +546,75 @@ class InputManager {
         };
         this.canvas.addEventListener('touchend', touchEnd, { passive: false });
         this.canvas.addEventListener('touchcancel', touchEnd, { passive: false });
+
+        // Virtual Joystick logic
+        const joyArea = document.getElementById('joystick-area');
+        const joyKnob = document.getElementById('joystick-knob');
+        if (joyArea && joyKnob) {
+            joyArea.addEventListener('touchstart', e => {
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                this.touch.joyActive = true;
+                this.touch.joyId = touch.identifier;
+                this.updateJoystick(touch, joyArea, joyKnob);
+            }, {passive: false});
+            joyArea.addEventListener('touchmove', e => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const touch = e.changedTouches[i];
+                    if (this.touch.joyActive && touch.identifier === this.touch.joyId) {
+                        this.updateJoystick(touch, joyArea, joyKnob);
+                    }
+                }
+            }, {passive: false});
+            const joyEnd = e => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const touch = e.changedTouches[i];
+                    if (this.touch.joyActive && touch.identifier === this.touch.joyId) {
+                        this.touch.joyActive = false;
+                        this.touch.joyId = null;
+                        this.touch.joyX = 0;
+                        this.touch.joyY = 0;
+                        joyKnob.style.transform = `translate(0px, 0px)`;
+                    }
+                }
+            };
+            joyArea.addEventListener('touchend', joyEnd, {passive: false});
+            joyArea.addEventListener('touchcancel', joyEnd, {passive: false});
+        }
+
+        const btnDash = document.getElementById('btn-touch-dash');
+        if (btnDash) {
+            btnDash.addEventListener('touchstart', e => { e.preventDefault(); this.keys['Space'] = true; }, {passive: false});
+            btnDash.addEventListener('touchend', e => { e.preventDefault(); this.keys['Space'] = false; }, {passive: false});
+            btnDash.addEventListener('touchcancel', e => { e.preventDefault(); this.keys['Space'] = false; }, {passive: false});
+        }
+    }
+    updateJoystick(touch, joyArea, joyKnob) {
+        const rect = joyArea.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        let dx = touch.clientX - centerX;
+        let dy = touch.clientY - centerY;
+        const maxDist = rect.width / 2;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > maxDist) {
+            dx = (dx / dist) * maxDist;
+            dy = (dy / dist) * maxDist;
+        }
+
+        joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+
+        // Normalize for gameplay
+        if(dist > 0) {
+            this.touch.joyX = dx / maxDist;
+            this.touch.joyY = dy / maxDist;
+        } else {
+            this.touch.joyX = 0;
+            this.touch.joyY = 0;
+        }
     }
     getAxis() {
         let x = 0; let y = 0;
@@ -556,6 +625,10 @@ class InputManager {
         if (x !== 0 || y !== 0) {
             const length = Math.hypot(x, y);
             x /= length; y /= length;
+        }
+        if (this.touch && this.touch.joyActive) {
+            x = this.touch.joyX;
+            y = this.touch.joyY;
         }
         return { x, y };
     }
@@ -1222,6 +1295,7 @@ class Game {
         this.state = 'TITLE';
         this.vfx = new VFXManager();
         this.saveManager = new SaveManager();
+        this.uiManager = new UIManager(this);
         this.sound = new SoundEngine();
         this.input = new InputManager(this.canvas);
         this.width = 800; this.height = 600;
@@ -1307,6 +1381,7 @@ class Game {
         } else if (this.state === 'UPGRADE_DRAFT') {
             document.getElementById('upgrade-screen').classList.add('active');
         } else if (this.state === 'GAME_OVER') {
+            if(this.uiManager) this.uiManager.checkMilestones();
             document.getElementById('game-over-screen').classList.add('active');
             document.getElementById('final-score').innerText = `Score: ${this.score}`;
             document.getElementById('high-score').innerText = `High Score: ${this.saveManager.data.highScore}`;
@@ -1395,10 +1470,14 @@ class Game {
     }
     spawnAmmo(x, y) { this.ammos.push(new AmmoPickup(x, y)); }
     spawnParticles(x, y, color, count) {
+        let actualCount = count;
+        if (this.saveManager && this.saveManager.data.options.particleDensity === 'low') {
+            actualCount = Math.ceil(count / 3);
+        }
         if (this.vfx) {
-            this.vfx.emitParticles(x, y, color, count);
+            this.vfx.emitParticles(x, y, color, actualCount);
         } else {
-            for(let i=0; i<count; i++) this.particles.push(new Particle(x, y, color));
+            for(let i=0; i<actualCount; i++) this.particles.push(new Particle(x, y, color));
         }
     }
     handleEnemyKill(enemy) {
@@ -1775,8 +1854,20 @@ class Game {
     }
     loop(now) {
         requestAnimationFrame(this.loop);
+        if (!this.frameCount) { this.frameCount = 0; this.lastFpsTime = now; }
         const dt = Math.min((now - this.lastTime) / 1000, 0.1);
         this.lastTime = now;
+
+        this.frameCount++;
+        if (now - this.lastFpsTime >= 1000) {
+            if (this.saveManager && this.saveManager.data && this.saveManager.data.options.showFPS) {
+                const fpsEl = document.getElementById('fps-display');
+                if (fpsEl) fpsEl.innerText = 'FPS: ' + this.frameCount;
+            }
+            this.frameCount = 0;
+            this.lastFpsTime = now;
+        }
+
         this.update(dt);
         this.draw();
     }
