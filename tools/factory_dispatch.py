@@ -680,6 +680,13 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
                 rec["hold"] = "tracked_session_missing_from_inventory"
             continue
         st = session.get("state", "UNKNOWN")
+        # An observed provider restart without a PR is new work, not a relabeling
+        # of its old failure. Existing PRs instead follow OPEN/CLOSED readback;
+        # an active provider alone must not retime a still-closed PR's failure.
+        if (rec.get("provider_state") in TERMINAL and st in ACTIVE and
+                rec.get("outcome", "").startswith("failed:") and
+                not rec.get("pr") and not first_pr_url(session, cfg)):
+            set_outcome(rec, None)
         rec["provider_state"] = st
         if rec.get("hold") in {"tracked_session_missing_from_inventory", "stale_provider_session",
                                "awaiting_plan_approval", "awaiting_user_feedback", "terminal_record_provider_active"}:
