@@ -55,10 +55,20 @@ class SoundEngine {
             this.filter.type = 'lowpass';
             this.filter.frequency.value = 1000;
             this.filter.connect(this.musicGain);
+
+            this.applySettings();
         }
         if (this.ctx.state === 'suspended') {
             this.ctx.resume();
         }
+    }
+
+    applySettings() {
+        if (!this.ctx) return;
+        const set = window.game && window.game.saveManager ? window.game.saveManager.data.settings : {masterMute:false, sfxVolume:1.0, musicVolume:1.0};
+        this.masterGain.gain.value = set.masterMute ? 0 : 1;
+        this.sfxGain.gain.value = set.sfxVolume * 0.6;
+        this.musicGain.gain.value = set.musicVolume * 0.4;
     }
 
     startMusic() {
