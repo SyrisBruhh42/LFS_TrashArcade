@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Scrap Orbital Recoil</title>
+<style>
+  body { margin: 0; padding: 0; overflow: hidden; background: #111; color: #fff; font-family: sans-serif; touch-action: none; }
+  #gameContainer { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background: #0a0a0c; }
+  canvas { display: block; box-shadow: 0 0 20px #b48ff044; background: #151518; }
+  a.back-link { position: absolute; top: 10px; left: 10px; color: #b48ff0; text-decoration: none; font-size: 14px; font-weight: bold; z-index: 1000; }
+  a.back-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div id="gameContainer">
+    <a href="../../index.html" class="back-link">Back to Arcade</a>
+    <canvas id="gameCanvas"></canvas>
+  </div>
+  <script defer src="./game.js"></script>
+</body>
+</html>

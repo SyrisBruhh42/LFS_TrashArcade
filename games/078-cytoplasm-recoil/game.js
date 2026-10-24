@@ -68,7 +68,7 @@ class SaveManager {
             totalGamesPlayed: 0,
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
-            options: { musicVolume: 1, sfxVolume: 1, mute: false }
+            options: { musicVolume: 1, sfxVolume: 1, mute: false, screenShake: 1 }
         };
         this.load();
     }
@@ -264,8 +264,22 @@ class Player {
         this.dashTimer = 0;
         this.invulnTimer = 0;
         this.facingAngle = 0;
+        this.trail = [];
+        this.trailTimer = 0;
     }
     update(dt, input, gameWidth, gameHeight) {
+        if (this.isDashing) {
+            this.trailTimer -= dt;
+            if (this.trailTimer <= 0) {
+                this.trail.push({ x: this.pos.x, y: this.pos.y, life: 0.3 });
+                this.trailTimer = 0.02;
+            }
+        }
+        for (let i = this.trail.length - 1; i >= 0; i--) {
+            this.trail[i].life -= dt;
+            if (this.trail[i].life <= 0) this.trail.splice(i, 1);
+        }
+
         let dx = 0;
         let dy = 0;
         if (input.keys['KeyW'] || input.keys['ArrowUp']) dy -= 1;
@@ -321,6 +335,14 @@ class Player {
         if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 20) % 2 === 0) return;
 
         ctx.save();
+        for (let t of this.trail) {
+            ctx.globalAlpha = Math.max(0, t.life / 0.3) * 0.5;
+            ctx.fillStyle = '#4caf50';
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1.0;
         ctx.translate(this.pos.x, this.pos.y);
         ctx.rotate(this.facingAngle);
 
@@ -400,8 +422,19 @@ class Ammo {
         this.bounces = 0;
         this.maxBounces = 5 + (game ? game.stats.maxBouncesBonus : 0);
         this.damage = 1 + (game ? game.stats.ammoDamageBonus : 0);
+        this.trail = [];
+        this.trailTimer = 0;
     }
     update(dt, gameWidth, gameHeight, bumpers) {
+        this.trailTimer -= dt;
+        if (this.trailTimer <= 0 && this.active) {
+            this.trail.push({ x: this.pos.x, y: this.pos.y, life: 0.2 });
+            this.trailTimer = 0.02;
+        }
+        for (let i = this.trail.length - 1; i >= 0; i--) {
+            this.trail[i].life -= dt;
+            if (this.trail[i].life <= 0) this.trail.splice(i, 1);
+        }
         if (!this.active) return false;
         this.pos.add(new Vector(this.vel.x * dt, this.vel.y * dt));
         let bounced = false;
@@ -436,6 +469,14 @@ class Ammo {
         return false;
     }
     draw(ctx) {
+        for (let t of this.trail) {
+            ctx.globalAlpha = Math.max(0, t.life / 0.2) * 0.5;
+            ctx.fillStyle = '#ffeb3b';
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, this.radius * (t.life / 0.2), 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1.0;
         ctx.fillStyle = this.active ? '#ffeb3b' : '#9e9e9e';
         ctx.beginPath();
         ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
@@ -804,16 +845,130 @@ class Bumper {
     }
 }
 
-class Particle {
-    constructor(x, y, color) {
+
+class Shockwave {
+    constructor(x, y, color, maxRadius, duration, thickness = 2) {
         this.pos = new Vector(x, y);
-        let angle = Math.random() * Math.PI * 2;
-        let speed = MathUtils.randomRange(50, 150);
+        this.color = color;
+        this.maxRadius = maxRadius;
+        this.duration = duration;
+        this.thickness = thickness;
+        this.life = duration;
+    }
+    update(dt) { this.life -= dt; }
+    draw(ctx) {
+        if (this.life <= 0) return;
+        let progress = 1.0 - (this.life / this.duration);
+        let eased = 1 - Math.pow(1 - progress, 3);
+        let radius = this.maxRadius * eased;
+        let alpha = 1.0 - progress;
+
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, alpha);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = this.thickness;
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class AnimatedSpriteVFX {
+    constructor(x, y, color, radius, duration, sides = 6) {
+        this.pos = new Vector(x, y);
+        this.color = color;
+        this.maxRadius = radius;
+        this.duration = duration;
+        this.life = duration;
+        this.sides = sides;
+        this.rotation = Math.random() * Math.PI * 2;
+        this.rotSpeed = MathUtils.randomRange(-3, 3);
+    }
+    update(dt) {
+        this.life -= dt;
+        this.rotation += this.rotSpeed * dt;
+    }
+    draw(ctx) {
+        if (this.life <= 0) return;
+        let progress = 1.0 - (this.life / this.duration);
+        let scale = 1.0 + progress;
+        let alpha = 1.0 - progress;
+
+        ctx.save();
+        ctx.translate(this.pos.x, this.pos.y);
+        ctx.rotate(this.rotation);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha = Math.max(0, alpha);
+        ctx.fillStyle = this.color;
+
+        ctx.beginPath();
+        for (let i = 0; i < this.sides; i++) {
+            let a = (i * Math.PI * 2) / this.sides;
+            let r = this.maxRadius;
+            let x = Math.cos(a) * r;
+            let y = Math.sin(a) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class ScreenFlash {
+    constructor(color, duration) {
+        this.color = color;
+        this.duration = duration;
+        this.life = duration;
+    }
+    update(dt) { this.life -= dt; }
+    draw(ctx, width, height) {
+        if (this.life <= 0) return;
+        let alpha = this.life / this.duration;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, alpha);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+    }
+}
+
+class FloatingText {
+    constructor(x, y, text, color, size) {
+        this.pos = new Vector(x, y);
+        this.vel = new Vector(0, -MathUtils.randomRange(20, 40));
+        this.text = text;
+        this.color = color;
+        this.size = size;
+        this.life = 1.5;
+    }
+    update(dt) {
+        this.pos.add(new Vector(this.vel.x * dt, this.vel.y * dt));
+        this.life -= dt;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = Math.max(0, this.life / 1.5);
+        ctx.font = `bold ${this.size}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(this.text, this.pos.x, this.pos.y);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class Particle {
+    constructor(x, y, color, angleCenter = null, angleSpread = Math.PI * 2, speedMin = 50, speedMax = 150) {
+        this.pos = new Vector(x, y);
+        let angle = angleCenter !== null ? angleCenter + MathUtils.randomRange(-angleSpread / 2, angleSpread / 2) : Math.random() * Math.PI * 2;
+        let speed = MathUtils.randomRange(speedMin, speedMax);
         this.vel = new Vector(Math.cos(angle) * speed, Math.sin(angle) * speed);
         this.life = 1.0;
         this.color = color;
         this.size = MathUtils.randomRange(2, 5);
     }
+
     update(dt) {
         this.pos.add(new Vector(this.vel.x * dt, this.vel.y * dt));
         this.life -= dt * 2;
@@ -1037,6 +1192,9 @@ class Game {
         this.score += gained;
         this.combo++;
         this.comboTimer = this.stats.comboDuration;
+        if (this.combo > 1 && this.player) {
+            this.spawnFloatingText(this.player.pos.x, this.player.pos.y - 40, `Combo x${this.combo}!`, '#f39c12', 20);
+        }
     }
     startDraft() {
         this.state = STATES.DRAFTING;
@@ -1100,14 +1258,47 @@ class Game {
             ));
         }
 
+        this.floatingTexts = [];
+        this.hitStop = 0;
+        this.screenShake = 0;
+        this.shockwaves = [];
+        this.animatedVFX = [];
+        this.screenFlashes = [];
         this.sound.init();
         this.sound.start();
         this.state = STATES.PLAYING;
     }
-    spawnParticles(x, y, color, count) {
-        for (let i = 0; i < count; i++) this.particles.push(new Particle(x, y, color));
+    spawnParticles(x, y, color, count, angleCenter = null, angleSpread = Math.PI * 2, speedMin = 50, speedMax = 150) {
+        for (let i = 0; i < count; i++) this.particles.push(new Particle(x, y, color, angleCenter, angleSpread, speedMin, speedMax));
+    }
+    triggerHitStop(duration) {
+        if (this.hitStop < duration) this.hitStop = duration;
+    }
+    triggerScreenShake(intensity) {
+        let mult = this.saveManager.data.options.screenShake !== undefined ? this.saveManager.data.options.screenShake : 1;
+        if (mult > 0) this.screenShake = Math.max(this.screenShake, intensity * mult);
+    }
+    spawnFloatingText(x, y, text, color = '#fff', size = 16) {
+        this.floatingTexts.push(new FloatingText(x, y, text, color, size));
+    }
+    triggerShockwave(x, y, color, radius, duration, thickness) {
+        if (this.shockwaves) this.shockwaves.push(new Shockwave(x, y, color, radius, duration, thickness));
+    }
+    triggerAnimatedVFX(x, y, color, radius, duration, sides) {
+        if (this.animatedVFX) this.animatedVFX.push(new AnimatedSpriteVFX(x, y, color, radius, duration, sides));
+    }
+    triggerScreenFlash(color, duration) {
+        if (this.screenFlashes) this.screenFlashes.push(new ScreenFlash(color, duration));
     }
     update(dt) {
+        if (this.hitStop > 0) {
+            this.hitStop -= dt;
+            return;
+        }
+        if (this.screenShake > 0) {
+            this.screenShake -= dt * 60;
+            if (this.screenShake < 0) this.screenShake = 0;
+        }
         if (this.state === STATES.TITLE) {
             if (this.input.mouse.clicked || this.input.keys['Enter'] || this.input.keys['Space']) this.initGame();
             return;
@@ -1148,6 +1339,14 @@ class Game {
             return;
         }
         this.player.update(dt, this.input, this.width, this.height);
+        if (this.player.isDashing && Math.random() < 0.5) {
+            let dashAngle = Math.atan2(this.player.vel.y, this.player.vel.x);
+            this.spawnParticles(this.player.pos.x, this.player.pos.y, '#4caf50', 1, dashAngle + Math.PI, Math.PI/4, 50, 100);
+        }
+        if (this.ammo && this.ammo.active && Math.random() < 0.5) {
+            let ammoAngle = Math.atan2(this.ammo.vel.y, this.ammo.vel.x);
+            this.spawnParticles(this.ammo.pos.x, this.ammo.pos.y, '#ffeb3b', 1, ammoAngle + Math.PI, Math.PI/4, 50, 100);
+        }
 
         let pMove = new Vector(0, 0);
         if (this.player.vel) {
@@ -1223,7 +1422,9 @@ class Game {
             let bounced = this.ammo.update(dt, this.width, this.height, this.bumpers);
             if (bounced) {
                 this.sound.bounce();
-                this.spawnParticles(this.ammo.pos.x, this.ammo.pos.y, '#ffeb3b', 3);
+                let bounceAngle = Math.atan2(this.ammo.vel.y, this.ammo.vel.x);
+                this.spawnParticles(this.ammo.pos.x, this.ammo.pos.y, '#ffeb3b', 8, bounceAngle + Math.PI, Math.PI / 2, 100, 300);
+                this.triggerScreenShake(2);
             }
             if (!this.ammo.active) {
                 let dist = MathUtils.distance(this.player.pos.x, this.player.pos.y, this.ammo.pos.x, this.ammo.pos.y);
@@ -1237,6 +1438,13 @@ class Game {
 
         if (this.activeBoss) {
             if (this.activeBoss.markedForDeletion) {
+                this.triggerHitStop(0.5);
+                this.triggerScreenShake(20);
+                this.triggerShockwave(this.activeBoss.pos.x, this.activeBoss.pos.y, '#fff', 300, 1.0, 5);
+                this.triggerAnimatedVFX(this.activeBoss.pos.x, this.activeBoss.pos.y, '#e91e63', 50, 0.5, 8);
+                this.triggerScreenFlash('rgba(255, 255, 255, 0.8)', 0.3);
+                this.spawnFloatingText(this.activeBoss.pos.x, this.activeBoss.pos.y, "BOSS DEFEATED!", '#ff5722', 24);
+                this.spawnParticles(this.activeBoss.pos.x, this.activeBoss.pos.y, '#e91e63', 100, null, Math.PI*2, 200, 600);
                 this.activeBoss = null;
                 this.nextBossThreshold += 300;
                 this.bossEncounterCounter++;
@@ -1302,7 +1510,11 @@ class Game {
                         }
                         this.sound.hit();
                         this.addScore(20);
-                        this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 15);
+                        let impactAngle = Math.atan2(this.player.vel.y, this.player.vel.x);
+                        this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 20, impactAngle, Math.PI/2, 100, 400);
+                        this.triggerHitStop(0.05);
+                        this.triggerScreenShake(5);
+                        this.spawnFloatingText(e.pos.x, e.pos.y - 20, "1", '#fff');
                         if (Math.random() < 0.3) {
                             let type = Math.random() < 0.6 ? 0 : (Math.random() < 0.8 ? 1 : 2);
                             this.pickups.push(new Pickup(e.pos.x, e.pos.y, type));
@@ -1315,7 +1527,10 @@ class Game {
                         this.player.shield--;
                         this.player.invulnTimer = 1.0;
                         this.sound.hit();
-                        this.spawnParticles(this.player.pos.x, this.player.pos.y, '#4caf50', 20);
+                        this.spawnParticles(this.player.pos.x, this.player.pos.y, '#4caf50', 30, null, Math.PI*2, 100, 300);
+                        this.triggerHitStop(0.1);
+                        this.triggerScreenShake(10);
+                        this.spawnFloatingText(this.player.pos.x, this.player.pos.y - 20, "BLOCKED!", '#4caf50');
                     } else {
                         this.sound.death();
                         this.saveManager.updateHighScore(this.score);
@@ -1334,7 +1549,11 @@ class Game {
                         }
                         this.sound.hit();
                         this.addScore(10);
-                        this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 10);
+                        let impactAngle = Math.atan2(this.ammo.vel.y, this.ammo.vel.x);
+                        this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 25, impactAngle, Math.PI/2, 150, 400);
+                        this.triggerHitStop(0.08);
+                        this.triggerScreenShake(6);
+                        this.spawnFloatingText(e.pos.x, e.pos.y - 20, `${this.ammo.damage}`, '#ffeb3b');
                         if (Math.random() < 0.2) {
                             let type = Math.random() < 0.6 ? 0 : (Math.random() < 0.8 ? 1 : 2);
                             this.pickups.push(new Pickup(e.pos.x, e.pos.y, type));
@@ -1355,7 +1574,10 @@ class Game {
                     this.player.shield--;
                     this.player.invulnTimer = 1.0;
                     this.sound.hit();
-                    this.spawnParticles(this.player.pos.x, this.player.pos.y, '#4caf50', 20);
+                    this.spawnParticles(this.player.pos.x, this.player.pos.y, '#4caf50', 30, null, Math.PI*2, 100, 300);
+                    this.triggerHitStop(0.1);
+                    this.triggerScreenShake(10);
+                    this.spawnFloatingText(this.player.pos.x, this.player.pos.y - 20, "BLOCKED!", '#4caf50');
                 } else {
                     this.sound.death();
                     this.saveManager.updateHighScore(this.score);
@@ -1374,7 +1596,10 @@ class Game {
                     this.player.shield--;
                     this.player.invulnTimer = 1.0;
                     this.sound.hit();
-                    this.spawnParticles(this.player.pos.x, this.player.pos.y, '#4caf50', 20);
+                    this.spawnParticles(this.player.pos.x, this.player.pos.y, '#4caf50', 30, null, Math.PI*2, 100, 300);
+                    this.triggerHitStop(0.1);
+                    this.triggerScreenShake(10);
+                    this.spawnFloatingText(this.player.pos.x, this.player.pos.y - 20, "BLOCKED!", '#4caf50');
                 } else {
                     this.sound.death();
                     this.saveManager.updateHighScore(this.score);
@@ -1429,9 +1654,33 @@ class Game {
         for (let p of this.particles) p.update(dt);
         this.particles = this.particles.filter(p => p.life > 0);
 
+        if (this.floatingTexts) {
+            for (let ft of this.floatingTexts) ft.update(dt);
+            this.floatingTexts = this.floatingTexts.filter(ft => ft.life > 0);
+        }
+        if (this.shockwaves) {
+            for (let sw of this.shockwaves) sw.update(dt);
+            this.shockwaves = this.shockwaves.filter(sw => sw.life > 0);
+        }
+        if (this.animatedVFX) {
+            for (let vfx of this.animatedVFX) vfx.update(dt);
+            this.animatedVFX = this.animatedVFX.filter(vfx => vfx.life > 0);
+        }
+        if (this.screenFlashes) {
+            for (let sf of this.screenFlashes) sf.update(dt);
+            this.screenFlashes = this.screenFlashes.filter(sf => sf.life > 0);
+        }
+
         this.input.update();
     }
     draw() {
+        this.ctx.save();
+        if (this.screenShake > 0) {
+            let dx = MathUtils.randomRange(-this.screenShake, this.screenShake);
+            let dy = MathUtils.randomRange(-this.screenShake, this.screenShake);
+            this.ctx.translate(dx, dy);
+        }
+
         this.ctx.fillStyle = '#1a2a22';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
@@ -1490,6 +1739,18 @@ class Game {
             this.drawText("WARNING: BOSS APPROACHING", this.width / 2, this.height / 2 + 10, 40, '#fff');
         }
 
+        if (this.shockwaves) {
+            for (let sw of this.shockwaves) sw.draw(this.ctx);
+        }
+        if (this.animatedVFX) {
+            for (let vfx of this.animatedVFX) vfx.draw(this.ctx);
+        }
+        if (this.floatingTexts) {
+            for (let ft of this.floatingTexts) ft.draw(this.ctx);
+        }
+
+        this.ctx.restore(); // Restore screen shake transform
+
         if (this.player) {
             this.ctx.fillStyle = '#2e4a3b';
             this.ctx.fillRect(20, 50, 100, 10);
@@ -1544,6 +1805,10 @@ class Game {
             this.ctx.font = '16px monospace';
             this.ctx.textAlign = 'center';
             this.ctx.fillText("Back to Arcade", this.width/2, this.height - 50);
+        }
+
+        if (this.screenFlashes) {
+            for (let sf of this.screenFlashes) sf.draw(this.ctx, this.width, this.height);
         }
 
         if (this.input.joystick.active) {

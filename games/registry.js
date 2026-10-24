@@ -1051,7 +1051,35 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD to move, Mouse to aim and shoot. Touch joystick and shoot button on mobile.",
     "createdAt": "2026-10-24",
     "accentColor": "#e2fc7a",
-    "phase": "3",
+    "phase": "6",
     "path": "./games/079-bazaar-bullet-retrieval/index.html"
+  },
+  {
+    "id": "080",
+    "slug": "080-frozen-tether",
+    "title": "Frozen Tether",
+    "genre": "Momentum/Grapple Platformer",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Frozen Arctic Research Base",
+    "description": "Navigate a frozen research base using momentum grappling, and stand still to dilate time.",
+    "controls": "A/D or Arrows to Move. W/Up/Space to Jump. Click to Grapple.",
+    "createdAt": "2023-10-24",
+    "accentColor": "#769a87",
+    "phase": "1",
+    "path": "./games/080-frozen-tether/index.html"
+  },
+  {
+    "id": "081",
+    "slug": "081-scrap-orbital-recoil",
+    "title": "Scrap Orbital Recoil",
+    "genre": "Gravity/Orbital Physics Action",
+    "coreMechanic": "Recoil-as-Movement",
+    "setting": "Junkyard Robot Scrapheap",
+    "description": "Navigate a junkyard orbit by firing your blaster for recoil. Survive the scrap heap!",
+    "controls": "WASD/Arrows to aim, Space to fire (or tap/drag and release to shoot). Recoil propels you backward.",
+    "createdAt": "2023-10-24",
+    "accentColor": "#b48ff0",
+    "phase": "1",
+    "path": "./games/081-scrap-orbital-recoil/index.html"
   }
 ];
