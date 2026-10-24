@@ -436,13 +436,17 @@ class Player extends Entity {
       const dashDir = Vector2.fromAngle(this.angle);
       this.vel.add(dashDir.mult(this.dashForce));
 
-      game.spawnParticles(this.pos.x, this.pos.y, 15, '#44ff44', dashDir.mult(-1));
+      game.vfxManager.triggerScreenShake(0.15, 8);
+      for(let i=0; i<15; i++) {
+         game.vfxManager.spawnAdvancedParticle(this.pos.x, this.pos.y, '#44ff44', dashDir.copy().mult(-1));
+      }
       game.sound.playShoot();
     }
 
     if (this.dashTime > 0) {
+      game.vfxManager.spawnTrail(this.pos.x, this.pos.y, this.radius, this.angle, '#44ff44');
       if (Math.random() < 0.5) {
-        game.spawnParticles(this.pos.x, this.pos.y, 2, '#44ff44', this.vel.copy().normalize().mult(-1));
+        game.vfxManager.spawnAdvancedParticle(this.pos.x, this.pos.y, '#44ff44', this.vel.copy().normalize().mult(-1));
       }
     }
 
@@ -484,10 +488,13 @@ class Player extends Entity {
     }
     game.spawnProjectile(projPos, projVel);
 
+    game.vfxManager.triggerScreenShake(0.05, 3);
     game.sound.playShoot();
 
     // Spawns some particles
-    game.spawnParticles(this.pos.x, this.pos.y, 5, this.color, dir.mult(-1));
+    for(let i=0; i<5; i++) {
+        game.vfxManager.spawnAdvancedParticle(this.pos.x, this.pos.y, this.color, dir.copy().mult(-1));
+    }
   }
 
   hit(game) {
@@ -495,7 +502,11 @@ class Player extends Entity {
     this.health--;
     this.invulnTimer = 1.0;
     game.sound.playHit();
-    game.spawnParticles(this.pos.x, this.pos.y, 20, '#ff4444');
+    game.vfxManager.triggerScreenShake(0.3, 10);
+    game.vfxManager.triggerHitStop(0.1);
+    for(let i=0; i<20; i++) {
+        game.vfxManager.spawnAdvancedParticle(this.pos.x, this.pos.y, '#ff4444');
+    }
 
     // Intense knockback towards center (gravity pull effect on hit)
     const center = new Vector2(game.width / 2, game.height / 2);
@@ -703,9 +714,17 @@ class Enemy extends Entity {
     if (this.health <= 0) {
       this.active = false;
       const mult = 1 + game.comboCount * 0.1;
-      game.score += Math.floor(this.points * mult);
+      const pointsScored = Math.floor(this.points * mult);
+      game.score += pointsScored;
       game.sound.playExplosion();
-      game.spawnParticles(this.pos.x, this.pos.y, 10, this.color);
+      game.vfxManager.triggerScreenShake(0.1, 5);
+      game.vfxManager.spawnFloatingText("+" + pointsScored, this.pos.x, this.pos.y, '#44ff44');
+      if (game.comboCount > 1) {
+         game.vfxManager.spawnFloatingText(game.comboCount + "x", this.pos.x, this.pos.y - 20, '#ffaa00', 30);
+      }
+      for(let i=0; i<15; i++) {
+        game.vfxManager.spawnAdvancedParticle(this.pos.x, this.pos.y, this.color);
+      }
 
       if (Math.random() < 0.2) {
         game.pickups.push(new Pickup(this.pos.x, this.pos.y, Math.random() < 0.2 ? 'health' : 'score'));
@@ -834,6 +853,7 @@ class Game {
     this.saveManager = new SaveManager();
     this.sound = new SoundEngine();
     this.worldManager = new WorldManager(this);
+    this.vfxManager = new VFXManager(this);
 
     this.width = 800;
     this.height = 600;
@@ -930,6 +950,7 @@ class Game {
     this.lastBossWave = 0;
 
     this.worldManager.init();
+    this.vfxManager.init();
     this.saveManager.incrementGamesPlayed();
   }
 
@@ -1124,6 +1145,10 @@ class Game {
   draw() {
     this.ctx.fillStyle = '#0a0a0c'; // space background
     this.ctx.fillRect(0, 0, this.width, this.height);
+
+    this.ctx.save();
+    if (this.vfxManager) this.vfxManager.applyScreenShake(this.ctx);
+
     this.worldManager.drawBackground(this.ctx);
 
     // Draw grid
@@ -1180,6 +1205,9 @@ class Game {
     if (this.player && this.player.active) {
       this.player.draw(this.ctx);
     }
+
+    if (this.vfxManager) this.vfxManager.draw(this.ctx);
+    this.ctx.restore(); // restore from shake
 
     // UI
     if (this.state === 'PLAYING' || this.state === 'GAME_OVER' || this.state === 'PAUSED') {
@@ -1268,7 +1296,12 @@ class Game {
     this.lastTime = now;
     this.time += dt;
 
-    this.update(dt);
+    if (this.vfxManager && this.vfxManager.hitStop > 0) {
+      this.vfxManager.update(dt);
+    } else {
+      if (this.vfxManager) this.vfxManager.update(dt);
+      this.update(dt);
+    }
     this.draw();
   }
 }
