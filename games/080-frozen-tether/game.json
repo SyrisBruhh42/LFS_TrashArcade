@@ -6,7 +6,7 @@
   "controls": "A/D or Arrows to Move. W/Up/Space to Jump. Click to Grapple.",
   "createdAt": "2023-10-24",
   "accentColor": "#769a87",
-  "phase": "2",
+  "phase": "3",
   "genre": "Momentum/Grapple Platformer",
   "coreMechanic": "Time-Dilation on Stillness",
   "setting": "Frozen Arctic Research Base"
