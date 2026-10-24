@@ -15,12 +15,26 @@ class UpgradeManager {
 
     generateChoices() {
         let pool = [...this.availableUpgrades];
+
+        let scalingFactor = 1.0;
+        if (window.game && window.game.bossCount > 0) {
+            scalingFactor = 1.0 + (window.game.bossCount * 0.2);
+        }
+
+        let modifiedPool = pool.map(upgrade => {
+            let modUpgrade = { ...upgrade };
+            if (modUpgrade.id === 'speed') modUpgrade.apply = (p) => { p.dashSpeed += 100 * scalingFactor; };
+            if (modUpgrade.id === 'accel') modUpgrade.apply = (p) => { p.speed += 100 * scalingFactor; };
+            if (modUpgrade.id === 'points') modUpgrade.apply = (p, g) => { g.treasureBasePoints = (g.treasureBasePoints || 10) + Math.floor(5 * scalingFactor); };
+            return modUpgrade;
+        });
+
         this.currentChoices = [];
         for (let i = 0; i < 3; i++) {
-            if (pool.length === 0) break;
-            let idx = Math.floor(Math.random() * pool.length);
-            this.currentChoices.push(pool[idx]);
-            pool.splice(idx, 1);
+            if (modifiedPool.length === 0) break;
+            let idx = Math.floor(Math.random() * modifiedPool.length);
+            this.currentChoices.push(modifiedPool[idx]);
+            modifiedPool.splice(idx, 1);
         }
     }
 
