@@ -1437,6 +1437,7 @@ class Game {
         this.hazards = [];
         this.pickups = [];
         this.parallax = new ParallaxBackground();
+        this.vfxManager = new VFXManager(this);
 
         this.spawnTimer = 0;
         this.resourceTimer = 0;
@@ -1591,6 +1592,10 @@ class Game {
         }
 
         this.player.update(dt, this.inputManager, this.width, this.height);
+        if (this.player.dashActiveTimer > 0) {
+            this.vfxManager.spawnTrail(this.player.x, this.player.y, this.player.radius, '#0ff');
+            this.vfxManager.spawnHitParticles(this.player.x, this.player.y, -this.player.vx, -this.player.vy, '#0ff');
+        }
         this.baseCamp.update(dt);
         this.parallax.update(dt, this.player.vx, this.player.vy);
 
@@ -1652,6 +1657,7 @@ class Game {
             if (this.player.collides(res)) {
                 this.player.addTailNode();
                 this.soundEngine.playCollect();
+                this.vfxManager.spawnText(res.x, res.y, '+Tether', '#0f0');
                 this.resources.splice(i, 1);
             }
         }
@@ -1688,6 +1694,10 @@ class Game {
                     // Dash hits enemy
                     this.soundEngine.playHit();
                     enemy.takeDamage();
+                    this.vfxManager.spawnHitParticles(enemy.x, enemy.y, enemy.x - this.player.x, enemy.y - this.player.y, '#f00');
+                    this.vfxManager.spawnText(enemy.x, enemy.y - 20, '-1', '#f00');
+                    this.vfxManager.addShake(5, 0.1);
+                    this.vfxManager.triggerHitStop(0.05);
                     if (!enemy.active) {
                         this.comboLevel++;
                         this.multiplier = 1 + Math.floor(this.comboLevel / 5);
@@ -1711,6 +1721,10 @@ class Game {
                     this.player.tailLength = j;
                     this.soundEngine.playHit();
                     enemy.takeDamage();
+                    this.vfxManager.spawnHitParticles(enemy.x, enemy.y, enemy.x - this.player.x, enemy.y - this.player.y, '#f00');
+                    this.vfxManager.spawnText(enemy.x, enemy.y - 20, '-1', '#f00');
+                    this.vfxManager.addShake(5, 0.1);
+                    this.vfxManager.triggerHitStop(0.05);
                     tailCut = true;
                     this.score = Math.max(0, this.score - 50);
                     break;
@@ -1817,6 +1831,10 @@ class Game {
     }
 
     draw() {
+        this.ctx.save();
+        if (this.vfxManager && this.vfxManager.shakeTimer > 0) {
+            this.ctx.translate(this.vfxManager.shakeX, this.vfxManager.shakeY);
+        }
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = '#111';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -1947,6 +1965,10 @@ class Game {
     }
 
     draw() {
+        this.ctx.save();
+        if (this.vfxManager && this.vfxManager.shakeTimer > 0) {
+            this.ctx.translate(this.vfxManager.shakeX, this.vfxManager.shakeY);
+        }
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = '#111';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -2083,6 +2105,12 @@ class Game {
             this.ctx.fillText(`Final Score: ${this.score}`, this.width / 2, this.height / 2);
             this.ctx.fillText('Click or Press Space to Restart', this.width / 2, this.height / 2 + 40);
         }
+
+        if (this.vfxManager && this.state !== 'TITLE') {
+            this.vfxManager.draw(this.ctx);
+        }
+
+        this.ctx.restore();
     }
 
     loop(timestamp) {
@@ -2090,12 +2118,159 @@ class Game {
         this.dt = Math.min((now - this.lastTime) / 1000, 0.1);
         this.lastTime = now;
 
-        this.update(this.dt);
+        if (this.vfxManager && this.vfxManager.hitStopTimer > 0) {
+            this.vfxManager.update(this.dt);
+            // Hit stop freezes the game logic, but we can still draw
+        } else {
+            if (this.vfxManager) this.vfxManager.update(this.dt);
+            this.update(this.dt);
+        }
+
         this.draw();
 
         requestAnimationFrame(this.loop);
     }
 }
+
+
+class VFXManager {
+    constructor(game) {
+        this.game = game;
+        this.particles = [];
+        this.floatingTexts = [];
+        this.trails = [];
+        this.shakeX = 0;
+        this.shakeY = 0;
+        this.shakeTimer = 0;
+        this.shakeIntensity = 0;
+        this.hitStopTimer = 0;
+    }
+
+    update(dt) {
+        if (this.hitStopTimer > 0) {
+            this.hitStopTimer -= dt;
+        }
+
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+            if (p.life <= 0) {
+                this.particles.splice(i, 1);
+            }
+        }
+        for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+            let t = this.floatingTexts[i];
+            t.y += t.vy * dt;
+            t.life -= dt;
+            if (t.life <= 0) {
+                this.floatingTexts.splice(i, 1);
+            }
+        }
+        for (let i = this.trails.length - 1; i >= 0; i--) {
+            let tr = this.trails[i];
+            tr.life -= dt;
+            if (tr.life <= 0) {
+                this.trails.splice(i, 1);
+            }
+        }
+        if (this.shakeTimer > 0) {
+            this.shakeTimer -= dt;
+            let intensity = this.shakeIntensity * (this.game.saveManager.data.options.screenShake / 100);
+            this.shakeX = (Math.random() - 0.5) * intensity;
+            this.shakeY = (Math.random() - 0.5) * intensity;
+        } else {
+            this.shakeX = 0;
+            this.shakeY = 0;
+        }
+    }
+
+    draw(ctx) {
+        for (let tr of this.trails) {
+            ctx.fillStyle = tr.color;
+            ctx.globalAlpha = tr.life / tr.maxLife;
+            ctx.beginPath();
+            ctx.arc(tr.x, tr.y, tr.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        for (let p of this.particles) {
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.font = "bold 16px monospace";
+        ctx.textAlign = "center";
+        for (let t of this.floatingTexts) {
+            ctx.fillStyle = t.color;
+            ctx.globalAlpha = Math.max(0, t.life / t.maxLife);
+            ctx.fillText(t.text, t.x, t.y);
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    spawnHitParticles(x, y, dx, dy, color = '#fff') {
+        if (this.game.saveManager.data.options.particles === 'Low') return;
+        const count = this.game.saveManager.data.options.particles === 'High' ? 15 : 5;
+        for (let i = 0; i < count; i++) {
+            let angle = Math.atan2(dy, dx) + (Math.random() - 0.5);
+            let speed = 50 + Math.random() * 100;
+            this.particles.push({
+                x: x, y: y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 0.2 + Math.random() * 0.3,
+                color: color,
+                size: 2 + Math.random() * 2
+            });
+        }
+    }
+
+    spawnExplosion(x, y, color = '#ff0') {
+        if (this.game.saveManager.data.options.particles === 'Low') return;
+        const count = this.game.saveManager.data.options.particles === 'High' ? 30 : 10;
+        for (let i = 0; i < count; i++) {
+            let angle = Math.random() * Math.PI * 2;
+            let speed = 50 + Math.random() * 150;
+            this.particles.push({
+                x: x, y: y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 0.3 + Math.random() * 0.5,
+                color: color,
+                size: 3 + Math.random() * 3
+            });
+        }
+    }
+
+    spawnText(x, y, text, color = '#fff') {
+        this.floatingTexts.push({
+            x: x, y: y, text: text, color: color,
+            vy: -30, life: 1, maxLife: 1
+        });
+    }
+
+    spawnTrail(x, y, radius, color) {
+        this.trails.push({
+            x: x, y: y, radius: radius, color: color,
+            life: 0.2, maxLife: 0.2
+        });
+    }
+
+    addShake(intensity, duration = 0.2) {
+        this.shakeIntensity = intensity;
+        this.shakeTimer = duration;
+    }
+
+    triggerHitStop(duration) {
+        if (this.hitStopTimer < duration) {
+            this.hitStopTimer = duration;
+        }
+    }
+}
+
 
 window.onload = () => {
     window.game = new Game();
