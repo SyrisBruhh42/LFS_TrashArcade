@@ -442,6 +442,7 @@ class Game {
         this.input = new InputManager(this.canvas);
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
+        this.world = new World(this.canvas);
 
         this.state = 'TITLE';
         this.lastTime = performance.now();
@@ -478,6 +479,7 @@ class Game {
         this.spawnTimer = 0;
         this.particles = [];
         this.gameOverTimer = 0;
+        this.world.reset(this.canvas.width, this.canvas.height);
     }
 
     loop(time) {
@@ -516,6 +518,8 @@ class Game {
         }
 
         // --- PLAYING STATE ---
+
+        this.world.update(dt, this.player, this.enemies);
 
         // Update Player
         this.player.update(dt, this.input);
@@ -670,20 +674,14 @@ class Game {
         this.ctx.fillStyle = '#1a1515'; // Desert night
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Draw Grid / Bazaar floor pattern
-        this.ctx.strokeStyle = '#2a2525';
-        this.ctx.lineWidth = 1;
-        for (let x = 0; x < this.canvas.width; x += 50) {
-            this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.canvas.height); this.ctx.stroke();
-        }
-        for (let y = 0; y < this.canvas.height; y += 50) {
-            this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.canvas.width, y); this.ctx.stroke();
-        }
+        this.world.drawBackground(this.ctx, this.canvas);
 
         this.bullets.forEach(b => b.draw(this.ctx));
         this.enemies.forEach(e => e.draw(this.ctx));
         this.enemyBullets.forEach(eb => eb.draw(this.ctx));
         this.player.draw(this.ctx);
+
+        this.world.drawForeground(this.ctx, this.canvas);
 
         // UI
         this.ctx.fillStyle = '#e2fc7a';
