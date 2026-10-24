@@ -1109,5 +1109,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#65bb98",
     "phase": "4",
     "path": "./games/083-haunted-tether-drill/index.html"
+  },
+  {
+    "id": "084",
+    "slug": "084-echo-forge-fusion",
+    "title": "Echo Forge Fusion",
+    "genre": "Rhythm/Beat-Synced Reflex",
+    "coreMechanic": "Echo/Ghost Self-Cooperation",
+    "setting": "Microscopic Cell Interior",
+    "description": "Cooperate with your rhythmic echoes inside a microscopic cell.",
+    "controls": "WASD to move, Space/Click to blast.",
+    "createdAt": "2023-10-27",
+    "accentColor": "#e857ce",
+    "phase": "1",
+    "path": "./games/084-echo-forge-fusion/index.html"
   }
 ];
