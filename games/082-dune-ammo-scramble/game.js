@@ -35,20 +35,206 @@ class SoundEngine {
         this.ctx = null;
         this.masterGain = null;
         this.initialized = false;
+
+        // Synths and state for adaptive soundtrack
+        this.bgmOscs = [];
+        this.bgmGains = [];
+        this.tempo = 120; // BPM
+        this.nextNoteTime = 0;
+        this.currentNote = 0;
+        this.isPlayingBgm = false;
+        this.bgmInterval = null;
+        this.isBossWave = false;
+        this.isLowHp = false;
+        this.filter = null;
+        this.drumOsc = null;
+        this.drumGain = null;
+        this.arpeggioNotes = [261.63, 329.63, 392.00, 523.25]; // C, E, G, C (C major arpeggio)
+
+        // Loop scheduling
+        this.lookahead = 25.0; // How frequently to call scheduling function (in milliseconds)
+        this.scheduleAheadTime = 0.1; // How far ahead to schedule audio (sec)
+        this.timerID = null;
     }
+
     init() {
         if (this.initialized) return;
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         if (!AudioContext) return;
         this.ctx = new AudioContext();
+
+        // Create master gain
         this.masterGain = this.ctx.createGain();
-        this.masterGain.connect(this.ctx.destination);
         this.masterGain.gain.value = 0.3;
+
+        // Create filter for adaptive soundtrack
+        this.filter = this.ctx.createBiquadFilter();
+        this.filter.type = 'lowpass';
+        this.filter.frequency.value = 2000;
+
+        // Connect routing
+        this.filter.connect(this.masterGain);
+        this.masterGain.connect(this.ctx.destination);
+
         this.initialized = true;
     }
+
     resume() {
-        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
     }
+
+    // Adaptive Soundtrack scheduling
+    nextNote() {
+        const secondsPerBeat = 60.0 / this.tempo;
+        // 16th notes
+        this.nextNoteTime += 0.25 * secondsPerBeat;
+        this.currentNote++;
+        if (this.currentNote === 16) {
+            this.currentNote = 0;
+        }
+    }
+
+    scheduleNote(beatNumber, time) {
+        if (!this.initialized || !this.ctx) return;
+
+        // Arpeggiator (synth)
+        if (beatNumber % 2 === 0 || this.isBossWave) {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            // Adjust synth type and notes based on boss state
+            osc.type = this.isBossWave ? 'sawtooth' : 'sine';
+            const noteIdx = (beatNumber + (this.isBossWave ? 2 : 0)) % this.arpeggioNotes.length;
+            let freq = this.arpeggioNotes[noteIdx];
+            if (this.isLowHp) freq *= 0.5; // pitch down if low hp
+
+            osc.frequency.value = freq;
+
+            gain.gain.setValueAtTime(0, time);
+            gain.gain.linearRampToValueAtTime(0.1, time + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+
+            osc.connect(gain);
+            gain.connect(this.filter);
+
+            osc.start(time);
+            osc.stop(time + 0.25);
+        }
+
+        // Percussion (Kick)
+        if (beatNumber % 4 === 0) {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(150, time);
+            osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.5);
+
+            gain.gain.setValueAtTime(0.3, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
+
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+
+            osc.start(time);
+            osc.stop(time + 0.5);
+        }
+
+        // Hi-hat
+        if (beatNumber % 2 !== 0 && (this.isBossWave || beatNumber % 4 === 2)) {
+            const bufferSize = this.ctx.sampleRate * 0.1;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const noiseFilter = this.ctx.createBiquadFilter();
+            noiseFilter.type = 'highpass';
+            noiseFilter.frequency.value = 7000;
+
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.1, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+
+            noise.connect(noiseFilter);
+            noiseFilter.connect(gain);
+            gain.connect(this.masterGain);
+
+            noise.start(time);
+            noise.stop(time + 0.1);
+        }
+    }
+
+    scheduler() {
+        if (!this.initialized || !this.ctx) return;
+
+        // Catch up if falling behind due to tab backgrounding
+        if (this.nextNoteTime < this.ctx.currentTime - 0.5) {
+            this.nextNoteTime = this.ctx.currentTime;
+        }
+
+        while (this.nextNoteTime < this.ctx.currentTime + this.scheduleAheadTime) {
+            this.scheduleNote(this.currentNote, this.nextNoteTime);
+            this.nextNote();
+        }
+
+        this.timerID = setTimeout(() => this.scheduler(), this.lookahead);
+    }
+
+    startBgm() {
+        if (!this.initialized || !this.ctx || this.isPlayingBgm) return;
+
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+
+        this.isPlayingBgm = true;
+        this.currentNote = 0;
+        this.nextNoteTime = this.ctx.currentTime + 0.1;
+        this.scheduler();
+    }
+
+    stopBgm() {
+        if (this.timerID) {
+            clearTimeout(this.timerID);
+            this.timerID = null;
+        }
+        this.isPlayingBgm = false;
+    }
+
+    updateBgmState(isBoss, hpRatio) {
+        if (!this.initialized) return;
+
+        this.isBossWave = isBoss;
+        this.isLowHp = hpRatio < 0.3;
+
+        // Adaptive tempo and filter
+        let targetTempo = 120;
+        let targetFilterFreq = 2000;
+
+        if (this.isBossWave) {
+            targetTempo = 150;
+            targetFilterFreq = 4000;
+        }
+
+        if (this.isLowHp) {
+            targetTempo = Math.min(targetTempo + 20, 180); // Even faster and more chaotic
+            targetFilterFreq = 1000; // Muffled
+        }
+
+        this.tempo = targetTempo;
+        this.filter.frequency.setTargetAtTime(targetFilterFreq, this.ctx.currentTime, 0.5);
+    }
+
+    // --- SFX (10+ distinct sounds) ---
+
+    // 1. Basic Shoot
     playShoot() {
         if (!this.initialized || !this.ctx) return;
         const osc = this.ctx.createOscillator();
@@ -56,13 +242,62 @@ class SoundEngine {
         osc.type = 'square';
         osc.frequency.setValueAtTime(400, this.ctx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
         osc.connect(gain);
         gain.connect(this.masterGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.1);
     }
+
+    // 2. Shotgun Shoot (noisy, multiple oscillators)
+    playShotgun() {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.15);
+
+        // Add white noise component for shotgun blast
+        const bufferSize = this.ctx.sampleRate * 0.15;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+        noise.connect(noiseGain);
+        noiseGain.connect(this.masterGain);
+        noise.start();
+    }
+
+    // 3. Sniper/Railgun Shoot (high frequency, piercing)
+    playSniper() {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.2);
+    }
+
+    // 4. Enemy Hit
     playHit() {
         if (!this.initialized || !this.ctx) return;
         const osc = this.ctx.createOscillator();
@@ -70,13 +305,38 @@ class SoundEngine {
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(200, this.ctx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.15);
-        gain.gain.setValueAtTime(0.6, this.ctx.currentTime);
+        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
         osc.connect(gain);
         gain.connect(this.masterGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.15);
     }
+
+    // 5. Enemy Death (explosion)
+    playExplosion() {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(20, this.ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(500, this.ctx.currentTime);
+        filter.frequency.linearRampToValueAtTime(50, this.ctx.currentTime + 0.3);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.3);
+    }
+
+    // 6. Ammo Pickup
     playPickup() {
         if (!this.initialized || !this.ctx) return;
         const osc = this.ctx.createOscillator();
@@ -84,13 +344,15 @@ class SoundEngine {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(600, this.ctx.currentTime);
         osc.frequency.linearRampToValueAtTime(900, this.ctx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
         osc.connect(gain);
         gain.connect(this.masterGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.1);
     }
+
+    // 7. Empty Gun Click
     playEmpty() {
         if (!this.initialized || !this.ctx) return;
         const osc = this.ctx.createOscillator();
@@ -103,6 +365,106 @@ class SoundEngine {
         gain.connect(this.masterGain);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.05);
+    }
+
+    // 8. Player Dash/Ability
+    playDash() {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(600, this.ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.15);
+    }
+
+    // 9. Upgrade Selected
+    playUpgrade() {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+
+        // A little melodic run up
+        osc.frequency.setValueAtTime(440, this.ctx.currentTime); // A4
+        osc.frequency.setValueAtTime(554.37, this.ctx.currentTime + 0.1); // C#5
+        osc.frequency.setValueAtTime(659.25, this.ctx.currentTime + 0.2); // E5
+        osc.frequency.setValueAtTime(880, this.ctx.currentTime + 0.3); // A5
+
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.3, this.ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime + 0.3);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.5);
+    }
+
+    // 10. UI Hover/Select
+    playUIHover() {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.05);
+    }
+
+    // 11. UI Click
+    playUIClick() {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.05);
+    }
+
+    // 12. Player Hit/Damage
+    playPlayerHit() {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.3);
+
+        // Add some LFO for a "stunned/wobble" effect
+        const lfo = this.ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 10;
+        const lfoGain = this.ctx.createGain();
+        lfoGain.gain.value = 50;
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc.frequency);
+        lfo.start();
+        lfo.stop(this.ctx.currentTime + 0.3);
+
+        gain.gain.setValueAtTime(0.6, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.3);
     }
 }
 
@@ -420,6 +782,11 @@ class AmmoPickup {
         this.flashTimer = 0;
     }
     update(dt) {
+        if (window.game && window.game.player) {
+            const isBoss = window.game.wave % 5 === 0;
+            const hpRatio = window.game.player.hp / window.game.player.maxHp;
+            if (window.game.sound) window.game.sound.updateBgmState(isBoss, hpRatio);
+        }
         this.flashTimer += dt * 5;
     }
     draw(ctx) {
@@ -901,9 +1268,13 @@ class Game {
         this.canvas.height = this.height;
     }
     bindUI() {
-        document.getElementById('btn-start').addEventListener('click', () => this.startGame());
-        document.getElementById('btn-restart').addEventListener('click', () => this.startGame());
+        document.getElementById('btn-start').addEventListener('click', () => { this.sound.playUIClick(); this.startGame(); });
+        document.getElementById('btn-start').addEventListener('mouseenter', () => this.sound.playUIHover());
+        document.getElementById('btn-restart').addEventListener('click', () => { this.sound.playUIClick(); this.startGame(); });
+        document.getElementById('btn-restart').addEventListener('mouseenter', () => this.sound.playUIHover());
+        document.getElementById('btn-resume').addEventListener('mouseenter', () => this.sound.playUIHover());
         document.getElementById('btn-resume').addEventListener('click', () => {
+            this.sound.playUIClick();
             this.state = 'PLAYING';
             this.sound.resume();
             this.updateUI();
@@ -1003,12 +1374,14 @@ class Game {
         this.saveManager.data.totalGamesPlayed++;
         this.saveManager.save();
         this.updateUI();
-    }
+        this.sound.startBgm();
+}
     gameOver() {
         this.state = 'GAME_OVER';
         if (this.score > this.saveManager.data.highScore) {
             this.saveManager.data.highScore = this.score;
-        }
+            this.sound.stopBgm();
+}
         this.saveManager.data.totalScoreAccumulated += this.score;
         this.saveManager.save();
         this.updateUI();
@@ -1070,6 +1443,7 @@ class Game {
             let btn = document.createElement('button');
             btn.innerHTML = `<strong>${c.name}</strong><br><small>${c.desc}</small>`;
             btn.onclick = () => this.applyUpgrade(c.id);
+            btn.onmouseenter = () => this.sound.playUIHover();
             container.appendChild(btn);
         });
 
