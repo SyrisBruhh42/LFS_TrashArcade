@@ -804,12 +804,19 @@ class HazardTrail {
     }
 }
 
-function createRandomEnemy(x, y) {
+function createRandomEnemy(x, y, wave = 0) {
     let r = Math.random();
-    if (r < 0.2) return new SwarmerEnemy(x, y);
-    if (r < 0.4) return new BruiserEnemy(x, y);
-    if (r < 0.6) return new SniperEnemy(x, y);
-    if (r < 0.8) return new SpawnerEnemy(x, y);
+    // Scale probabilities based on wave
+    let swarmerProb = Math.max(0.05, 0.3 - wave * 0.05);
+    let bruiserProb = Math.max(0.1, 0.3 - wave * 0.02);
+    let sniperProb = Math.min(0.3, 0.15 + wave * 0.03);
+    let spawnerProb = Math.min(0.35, 0.1 + wave * 0.05);
+    // Hazard fills the rest
+
+    if (r < swarmerProb) return new SwarmerEnemy(x, y);
+    if (r < swarmerProb + bruiserProb) return new BruiserEnemy(x, y);
+    if (r < swarmerProb + bruiserProb + sniperProb) return new SniperEnemy(x, y);
+    if (r < swarmerProb + bruiserProb + sniperProb + spawnerProb) return new SpawnerEnemy(x, y);
     return new HazardEnemy(x, y);
 }
 
@@ -887,16 +894,20 @@ class Game {
             this.platforms.push({x: c.x, y: c.y, w: c.w, h: c.h, isHazard: true});
         }
 
-        for(let i = 0; i < 5; i++) {
-            this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50 + Math.random() * 300));
+        this.bossCount = 0;
+        let enemyCount = 3 + this.bossCount * 2;
+        for(let i = 0; i < enemyCount; i++) {
+            this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50 + Math.random() * 300, this.bossCount));
         }
 
         this.nextBossScore = 500;
         this.bossActive = false;
         this.bossWarningTimer = 0;
-        this.bossCount = 0;
 
         this.state = 'PLAYING';
+        if (this.vfxManager) {
+            this.vfxManager.waveIntro = new WaveIntro(1);
+        }
         this.saveManager.incrementGamesPlayed();
     }
 
@@ -953,9 +964,9 @@ class Game {
                 if (this.bossWarningTimer <= 0) {
                     this.bossCount++;
                     if (this.bossCount % 2 === 1) {
-                        this.enemies.push(new CryoWardenBoss(400, 100));
+                        this.enemies.push(new CryoWardenBoss(400, 100, this.bossCount));
                     } else {
-                        this.enemies.push(new FrostMechanicBoss(400, 100));
+                        this.enemies.push(new FrostMechanicBoss(400, 100, this.bossCount));
                     }
                 }
             }
@@ -1046,7 +1057,7 @@ class Game {
 
                             // Spawn new enemy to keep game going if not boss mode
                             if (!this.bossActive) {
-                                this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50));
+                                this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50, this.bossCount));
                             }
                         }
                     } else if (this.player.invulnTime <= 0) {
@@ -1114,8 +1125,12 @@ class Game {
                         this.upgradeChoices[i].apply(this.player);
                         this.sound.playUpgrade();
                         this.state = 'PLAYING';
-                        for(let j = 0; j < 5; j++) {
-                            this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50));
+                        let newEnemyCount = 3 + this.bossCount * 2;
+                        for(let j = 0; j < newEnemyCount; j++) {
+                            this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50, this.bossCount));
+                        }
+                        if (this.vfxManager) {
+                            this.vfxManager.waveIntro = new WaveIntro(this.bossCount + 1);
                         }
                         break;
                     }
@@ -1229,6 +1244,25 @@ class Game {
                 this.vfxManager.draw(this.ctx);
             }
             this.ctx.restore();
+
+            // Interactive Tutorial Overlay for Wave 1
+            if (this.bossCount === 0 && this.state === 'PLAYING') {
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                this.ctx.fillRect(0, 0, this.logicalWidth, 40);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '16px sans-serif';
+                this.ctx.textAlign = 'center';
+
+                let hintText = "TUTORIAL: A/D to Move. W/Space to Jump.";
+                if (this.player.comboCount > 0) {
+                     hintText = "TUTORIAL: Good! Build Combos by killing enemies quickly.";
+                } else if (this.score > 200) {
+                     hintText = "TUTORIAL: Stand still to Dilate Time and dodge easily!";
+                } else if (this.score > 100) {
+                     hintText = "TUTORIAL: Click to Grapple to platforms and swing.";
+                }
+                this.ctx.fillText(hintText, this.logicalWidth / 2, 25);
+            }
 
             // Draw Boss Warning
             if (this.bossWarningTimer > 0) {
@@ -1356,14 +1390,14 @@ window.onload = () => {
 };
 
 class CryoWardenBoss extends BaseEnemy {
-    constructor(x, y) {
+    constructor(x, y, wave = 0) {
         super(x, y);
         this.type = 'cryo_warden';
         this.bossName = 'CRYO WARDEN';
         this.isBoss = true;
         this.color = '#00aaaa';
         this.radius = 40;
-        this.maxHp = 500;
+        this.maxHp = Math.floor(500 * (1 + wave * 0.5));
         this.hp = this.maxHp;
         this.phase2 = false;
 
@@ -1438,14 +1472,14 @@ class CryoWardenBoss extends BaseEnemy {
 }
 
 class FrostMechanicBoss extends BaseEnemy {
-    constructor(x, y) {
+    constructor(x, y, wave = 0) {
         super(x, y);
         this.type = 'frost_mechanic';
         this.bossName = 'FROST MECHANIC';
         this.isBoss = true;
         this.color = '#8800ff';
         this.radius = 35;
-        this.maxHp = 600;
+        this.maxHp = Math.floor(600 * (1 + wave * 0.5));
         this.hp = this.maxHp;
         this.phase2 = false;
 
