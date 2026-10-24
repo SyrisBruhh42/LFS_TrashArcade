@@ -212,6 +212,10 @@ class InputManager {
     canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
     window.addEventListener('mousemove', (e) => this.onMouseMove(e));
     window.addEventListener('mouseup', (e) => this.onMouseUp(e));
+    canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      return false;
+    });
 
     canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
     canvas.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
@@ -240,8 +244,12 @@ class InputManager {
 
   onMouseDown(e) {
     this.updateMousePos(e);
-    this.mouse.down = true;
-    this.mouse.click = true;
+    if (e.button === 2) {
+      this.mouse.rightDown = true;
+    } else {
+      this.mouse.down = true;
+      this.mouse.click = true;
+    }
     this.pointerDown = true;
     this.anyKeyOrClick = true;
   }
@@ -251,7 +259,11 @@ class InputManager {
   }
 
   onMouseUp(e) {
-    this.mouse.down = false;
+    if (e.button === 2) {
+      this.mouse.rightDown = false;
+    } else {
+      this.mouse.down = false;
+    }
     this.pointerDown = false;
   }
 
@@ -382,6 +394,17 @@ class Player extends Entity {
     this.shootDelay = 0.2;
     this.recoilForce = 500;
     this.invulnTimer = 0;
+
+    // Dash / Overdrive Ability
+    this.dashCooldown = 3.0;
+    this.dashTimer = 0;
+    this.dashDuration = 0.2;
+    this.dashTime = 0;
+    this.dashForce = 1500;
+
+    // Procedural animation state
+    this.recoilOffset = 0; // Visual recoil pullback
+    this.thrustPower = 0;  // Visual engine flare
   }
 
   update(dt, game) {
@@ -401,8 +424,40 @@ class Player extends Entity {
 
     super.update(dt);
 
-    // Dampen velocity slightly
-    this.vel.mult(0.99);
+    // Dash Ability Logic
+    if (this.dashTimer > 0) this.dashTimer -= dt;
+    if (this.dashTime > 0) this.dashTime -= dt;
+
+    if ((game.input.keys['ShiftLeft'] || game.input.keys['ShiftRight'] || game.input.mouse.rightDown) && this.dashTimer <= 0) {
+      this.dashTime = this.dashDuration;
+      this.dashTimer = this.dashCooldown;
+      this.invulnTimer = Math.max(this.invulnTimer, this.dashDuration); // Invuln while dashing
+
+      const dashDir = Vector2.fromAngle(this.angle);
+      this.vel.add(dashDir.mult(this.dashForce));
+
+      game.spawnParticles(this.pos.x, this.pos.y, 15, '#44ff44', dashDir.mult(-1));
+      game.sound.playShoot();
+    }
+
+    if (this.dashTime > 0) {
+      if (Math.random() < 0.5) {
+        game.spawnParticles(this.pos.x, this.pos.y, 2, '#44ff44', this.vel.copy().normalize().mult(-1));
+      }
+    }
+
+    // Procedural animation update
+    if (this.recoilOffset > 0) this.recoilOffset -= dt * 50;
+    if (this.recoilOffset < 0) this.recoilOffset = 0;
+
+    this.thrustPower = this.dashTime > 0 ? 2.0 : (this.vel.mag() / 500);
+
+    // Dampen velocity
+    if (this.dashTime > 0) {
+       this.vel.mult(0.92); // Tighter friction during dash to make it short and snappy
+    } else {
+       this.vel.mult(0.98); // Slightly tighter base friction for better momentum tuning
+    }
 
     // Keep in bounds loosely (bounce off walls)
     if (this.pos.x < this.radius) { this.pos.x = this.radius; this.vel.x *= -0.5; }
@@ -413,6 +468,8 @@ class Player extends Entity {
 
   shoot(game) {
     const dir = Vector2.fromAngle(this.angle);
+
+    this.recoilOffset = 8; // Visual recoil pullback
 
     // Recoil (opposite to aim direction)
     const recoil = dir.copy().mult(-this.recoilForce);
@@ -449,27 +506,103 @@ class Player extends Entity {
   }
 
   draw(ctx) {
-    if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 10) % 2 === 0) return;
+    const isBlinking = this.invulnTimer > 0 && Math.floor(this.invulnTimer * 15) % 2 === 0;
 
     ctx.save();
     ctx.translate(this.pos.x, this.pos.y);
     ctx.rotate(this.angle);
 
-    // Draw scrap robot body
-    ctx.fillStyle = '#555';
-    ctx.fillRect(-10, -10, 20, 20);
-
-    // Engine / Recoil port (back)
-    ctx.fillStyle = '#ff8800';
+    // Aim Telegraph (faint laser line)
+    ctx.strokeStyle = 'rgba(180, 143, 240, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
     ctx.beginPath();
-    ctx.moveTo(-10, -5);
-    ctx.lineTo(-15, 0);
-    ctx.lineTo(-10, 5);
+    ctx.moveTo(15, 0);
+    ctx.lineTo(800, 0);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    if (isBlinking) {
+       ctx.globalAlpha = 0.3;
+    }
+
+    // Engine Thrust (Procedural)
+    const thrustSize = 5 + this.thrustPower * 15;
+    ctx.fillStyle = this.dashTime > 0 ? '#44ff44' : '#ff8800';
+    ctx.beginPath();
+    ctx.moveTo(-10, -6);
+    ctx.lineTo(-10 - thrustSize, 0);
+    ctx.lineTo(-10, 6);
     ctx.fill();
 
-    // Blaster (front)
+    // Draw scrap robot core body
+    ctx.fillStyle = this.dashTime > 0 ? '#ddd' : '#555';
+    ctx.fillRect(-10, -10, 20, 20);
+
+    // Side plates
+    ctx.fillStyle = '#777';
+    ctx.fillRect(-8, -14, 16, 4);
+    ctx.fillRect(-8, 10, 16, 4);
+
+    // Blaster (front) with recoil offset
+    ctx.save();
+    ctx.translate(-this.recoilOffset, 0);
     ctx.fillStyle = this.color;
-    ctx.fillRect(10, -4, 12, 8);
+    ctx.fillRect(10, -5, 14, 10);
+    // Barrel detail
+    ctx.fillStyle = '#333';
+    ctx.fillRect(20, -3, 6, 6);
+    ctx.restore();
+
+    // Additional decorative parts
+    ctx.fillStyle = '#999';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw some cool dash visual effects
+    if (this.dashTime > 0) {
+      ctx.strokeStyle = '#44ff44';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const fxRadius = 15 + (1 - this.dashTime / this.dashDuration) * 10;
+      ctx.arc(0, 0, fxRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Secondary ring
+      ctx.strokeStyle = 'rgba(68, 255, 68, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(0, 0, fxRadius + 5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Draw dynamic energy core depending on health and dash state
+    if (this.dashTimer <= 0) {
+       ctx.fillStyle = '#44ff44';
+    } else {
+       ctx.fillStyle = '#ff8800';
+    }
+
+    if (this.health === 1) {
+       ctx.fillStyle = '#ff4444';
+    }
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw structural lines for mechanical look
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-10, -10);
+    ctx.lineTo(10, 10);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-10, 10);
+    ctx.lineTo(10, -10);
+    ctx.stroke();
 
     ctx.restore();
   }
@@ -874,7 +1007,17 @@ class Game {
       this.ctx.fillText("High Score: " + this.saveManager.data.highScore, this.width / 2, this.height / 2 + 60);
 
       this.ctx.fillStyle = '#888';
-      this.ctx.fillText("Aim with Mouse. Click/Space to Fire. Recoil propels you!", this.width / 2, this.height - 40);
+      this.ctx.fillText("Aim: Mouse | Fire: Click/Space | Dash: Right-Click/Shift | Recoil propels you!", this.width / 2, this.height - 40);
+
+      // Render some aesthetic floating bits on title screen
+      const timer = Date.now() / 1000;
+      this.ctx.fillStyle = '#444';
+      for(let i=0; i<10; i++) {
+        const ax = this.width / 2 + Math.cos(timer + i) * 150;
+        const ay = this.height / 2 + Math.sin(timer * 1.5 + i) * 100;
+        this.ctx.fillRect(ax, ay, 4, 4);
+      }
+
       return;
     }
 
@@ -901,6 +1044,20 @@ class Game {
         for(let i=0; i<this.player.maxHealth; i++) {
           this.ctx.fillStyle = i < this.player.health ? '#ff4444' : '#555';
           this.ctx.fillRect(60 + i * 25, 85, 20, 20);
+        }
+
+        // Dash Cooldown HUD
+        this.ctx.fillStyle = '#fff';
+        this.ctx.fillText("DASH: ", 20, 130);
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(90, 115, 100, 15);
+        if (this.player.dashTimer <= 0) {
+          this.ctx.fillStyle = '#44ff44';
+          this.ctx.fillRect(90, 115, 100, 15);
+        } else {
+          this.ctx.fillStyle = '#ff8800';
+          const pct = 1.0 - (this.player.dashTimer / this.player.dashCooldown);
+          this.ctx.fillRect(90, 115, 100 * pct, 15);
         }
       }
     }
