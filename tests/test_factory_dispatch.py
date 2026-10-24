@@ -65,6 +65,8 @@ class FactoryTests(unittest.TestCase):
         brief = {"id": "001", "slug": "001-game", "phase": "1", "mode": "new", "label": "test",
                  "genre": "g", "twist": "t", "setting": "s", "markdown": "Acceptance"}
         self.patches.enter_context(patch.object(f.subprocess, "run", return_value=Mock(stdout=json.dumps(brief))))
+        self.patches.enter_context(patch.object(f, "gh", return_value=SHA))
+        f.observe_account(self.cfg, self.state, {})
 
     def test_legacy_412_records_preserved_in_memory_and_after_save(self):
         old = {"sessions": {f"s{i}": self.record(outcome="merged", legacy_field=i) for i in range(412)},
@@ -250,14 +252,29 @@ class FactoryTests(unittest.TestCase):
         self.state["sessions"]["s1"] = rec
         body = (f"{f.GATE_MARKER}\nHead: {SHA}\nBase: {'d' * 40}\nClassification: {classification}\n"
                 f"Run: https://github.com/{self.cfg['repo']}/actions/runs/42\nFAILED: runtime defect")
-        pr = {"headRefOid": SHA, "baseRefOid": "d" * 40,
+        pr = {"state": "OPEN", "headRefOid": SHA, "baseRefOid": "d" * 40,
               "comments": [{"author": {"login": "github-actions[bot]"}, "body": body}],
               "statusCheckRollup": [{"name": self.cfg["gate_check_name"], "conclusion": "FAILURE",
                                      "detailsUrl": f"https://github.com/{self.cfg['repo']}/actions/runs/42/job/7"}]}
-        run = {"path": ".github/workflows/arcade_gate.yml", "event": "pull_request_target",
+        self.feedback_run = {"id": 42, "path": ".github/workflows/arcade_gate.yml", "event": "pull_request_target",
                "head_sha": SHA, "status": "completed", "conclusion": "failure",
-               "pull_requests": [{"number": 123, "head": {"sha": SHA}, "base": {"sha": "d" * 40}}]}
-        self.patches.enter_context(patch.object(f, "gh", return_value=json.dumps(run)))
+               "head_repository": {"full_name": self.cfg["repo"]}, "pull_requests": []}
+        self.feedback_jobs = {"total_count": 2, "jobs": [
+            {"name": "Arcade gate", "status": "completed", "conclusion": "failure"},
+            {"name": "Trusted gate feedback", "status": "completed", "conclusion": "success"}]}
+        self.feedback_artifacts = {"total_count": 1, "artifacts": [
+            {"name": f"gate-evidence-123-{SHA}", "expired": False, "workflow_run": {"id": 42, "head_sha": SHA}}]}
+        self.feedback_statuses = [{"id": 1, "context": self.cfg["gate_check_name"], "state": "failure",
+                                   "target_url": f"https://github.com/{self.cfg['repo']}/actions/runs/42",
+                                   "creator": {"login": "github-actions[bot]"}}]
+        def evidence(*args):
+            endpoint = args[1]
+            if endpoint.endswith("/runs/42"): return json.dumps(self.feedback_run)
+            if endpoint.endswith("/jobs?per_page=100"): return json.dumps(self.feedback_jobs)
+            if endpoint.endswith("/artifacts?per_page=100"): return json.dumps(self.feedback_artifacts)
+            if endpoint.endswith("/statuses?per_page=100"): return json.dumps(self.feedback_statuses)
+            self.fail("Unexpected feedback evidence endpoint: " + endpoint)
+        self.patches.enter_context(patch.object(f, "gh", side_effect=evidence))
         f.observe_account(self.cfg, self.state, {"s1": session})
         return rec, session, pr
 
@@ -551,6 +568,322 @@ class FactoryTests(unittest.TestCase):
                 f.dispatch(self.cfg, restored, False, SHA)
             api.assert_not_called()
             self.assertEqual(len(restored["intents"]), 1)
+
+    def test_empty_rest_pr_associations_need_complete_report_attestation(self):
+        rec, session, pr = self.report_fixture()
+        self.assertEqual(self.feedback_run["pull_requests"], [])
+        with patch.object(f, "api", return_value={}) as api:
+            f.repair_feedback(self.cfg, self.state, "s1", rec, session, pr, False)
+        api.assert_called_once()
+        self.assertEqual(rec["hold"], "repair_requested")
+
+    def test_conflicting_nonempty_run_associations_reject_even_with_other_attestation(self):
+        for change in ({"number": 999}, {"head": {"sha": "e" * 40}}, {"base": {"sha": "e" * 40}}):
+            with self.subTest(change=change):
+                rec, session, pr = self.report_fixture()
+                valid = {"number": 123, "head": {"sha": SHA}, "base": {"sha": "d" * 40}}
+                self.feedback_run["pull_requests"] = [valid, {**valid, **change}]
+                with patch.object(f, "api") as api:
+                    f.repair_feedback(self.cfg, self.state, "s1", rec, session, pr, False)
+                api.assert_not_called()
+                self.assertEqual(rec["hold"], "repair_run_provenance_unverified")
+
+    def test_repair_attestation_rejects_missing_spoofed_stale_and_partial_evidence(self):
+        cases = (
+            ("run_identity", lambda: self.feedback_run.update(id=43)),
+            ("wrong_head", lambda: self.feedback_run.update(head_sha="d" * 40)),
+            ("foreign_repository", lambda: self.feedback_run.update(head_repository={"full_name": "other/repo"})),
+            ("missing_association_field", lambda: self.feedback_run.pop("pull_requests")),
+            ("reporter_failed", lambda: self.feedback_jobs["jobs"][1].update(conclusion="failure")),
+            ("gate_succeeded", lambda: self.feedback_jobs["jobs"][0].update(conclusion="success")),
+            ("jobs_partial", lambda: self.feedback_jobs.update(total_count=101)),
+            ("jobs_malformed", lambda: self.feedback_jobs.update(jobs=[None, None])),
+            ("artifact_other_pr", lambda: self.feedback_artifacts["artifacts"][0].update(name=f"gate-evidence-999-{SHA}")),
+            ("artifact_expired", lambda: self.feedback_artifacts["artifacts"][0].update(expired=True)),
+            ("artifact_other_run", lambda: self.feedback_artifacts["artifacts"][0]["workflow_run"].update(id=43)),
+            ("artifact_other_head", lambda: self.feedback_artifacts["artifacts"][0]["workflow_run"].update(head_sha="d" * 40)),
+            ("artifact_partial", lambda: self.feedback_artifacts.update(total_count=2)),
+            ("artifact_missing", lambda: self.feedback_artifacts.update(total_count=0, artifacts=[])),
+            ("status_spoofed", lambda: self.feedback_statuses[0].update(creator={"login": "owner"})),
+            ("status_other_run", lambda: self.feedback_statuses[0].update(target_url="https://github.com/other/repo/actions/runs/42")),
+            ("status_now_success", lambda: self.feedback_statuses.append({**self.feedback_statuses[0], "id": 2, "state": "success"})),
+            ("status_page_full", lambda: self.feedback_statuses.extend([self.feedback_statuses[0]] * 99)),
+            ("status_malformed", lambda: self.feedback_statuses[0].update(creator=[])),
+        )
+        for label, corrupt in cases:
+            with self.subTest(label=label):
+                rec, session, pr = self.report_fixture()
+                corrupt()
+                with patch.object(f, "api") as api:
+                    f.repair_feedback(self.cfg, self.state, "s1", rec, session, pr, False)
+                api.assert_not_called()
+                self.assertEqual(rec["hold"], "repair_run_provenance_unverified")
+
+    def test_old_report_cannot_authorize_after_current_pr_base_changes(self):
+        rec, session, pr = self.report_fixture()
+        report = f.gate_feedback(self.cfg, pr)
+        pr["baseRefOid"] = "e" * 40
+        self.assertFalse(f.verified_feedback_run(self.cfg, report, pr, rec["pr"]))
+
+    def test_merged_or_closed_pr_keeps_assignment_until_provider_terminal(self):
+        for pr_state in ("MERGED", "CLOSED"):
+            with self.subTest(pr_state=pr_state):
+                rec = self.record(pr=f"https://github.com/{self.cfg['repo']}/pull/123")
+                self.state["sessions"]["s1"] = rec
+                session = self.session()
+                with patch.object(f, "gh", return_value=json.dumps({"state": pr_state})):
+                    f.reconcile(self.cfg, self.state, {"s1": session}, False)
+                    f.reconcile(self.cfg, self.state, {"s1": session}, False)
+                self.assertEqual(rec["hold"], "terminal_record_provider_active")
+                self.assertTrue(f.assignment_occupied(rec))
+                with self.assertRaisesRegex(f.Hold, "terminal_record_provider_active"):
+                    f.capacity(self.cfg, self.state, {"s1": session})
+                session["state"] = "COMPLETED"
+                with patch.object(f, "gh", return_value=json.dumps({"state": pr_state})):
+                    f.reconcile(self.cfg, self.state, {"s1": session}, False)
+                self.assertNotIn("hold", rec)
+                self.assertFalse(f.assignment_occupied(rec))
+                f.capacity(self.cfg, self.state, {"s1": session})
+
+    def test_dispatch_excludes_provider_active_assignment_even_with_historical_outcome(self):
+        self.dispatch_fixture()
+        self.state["sessions"]["s1"] = self.record(outcome="merged", provider_state="IN_PROGRESS", triple=["g", "t", "s"])
+        f.dispatch(self.cfg, self.state, True, SHA)
+        command = f.subprocess.run.call_args.args[0]
+        self.assertEqual(json.loads(command[command.index("--exclude-ids") + 1]), ["083"])
+        self.assertEqual(json.loads(command[command.index("--exclude-json") + 1]), [["g", "t", "s"]])
+
+    def test_late_pr_restores_wip_and_preserves_failed_observation_without_paid_action(self):
+        rec = self.record(outcome="failed:no_pr", finished="2026-10-24T01:00:00Z")
+        self.state["sessions"]["s1"] = rec
+        session = self.session(state="COMPLETED")
+        session["outputs"] = [{"pullRequest": {"url": f"https://github.com/{self.cfg['repo']}/pull/123"}}]
+        with patch.object(f, "gh", return_value=json.dumps({"state": "OPEN"})) as gh, patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, {"s1": session}, False)
+            f.reconcile(self.cfg, self.state, {"s1": session}, False)
+        self.assertEqual(gh.call_count, 2)
+        api.assert_not_called()
+        self.assertNotIn("outcome", rec)
+        self.assertTrue(f.assignment_occupied(rec))
+        self.assertEqual(len(rec["outcome_history"]), 1)
+        self.assertEqual(rec["outcome_history"][0]["outcome"], "failed:no_pr")
+        self.assertEqual(rec["outcome_history"][0]["finished"], "2026-10-24T01:00:00Z")
+
+    def test_reopened_failed_pr_keeps_message_deduplication(self):
+        rec, session, pr = self.report_fixture()
+        report = f.gate_feedback(self.cfg, pr)
+        rec.update(outcome="failed:closed", breaker_reset=True, feedback={report["key"]: {"status": "ambiguous"}})
+        def github(*args):
+            self.assertEqual(args[0], "pr")  # Deduplication must avoid another evidence/message cycle.
+            return json.dumps(pr)
+        with patch.object(f, "gh", side_effect=github), patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, {"s1": session}, False)
+        api.assert_not_called()
+        self.assertNotIn("outcome", rec)
+        self.assertNotIn("breaker_reset", rec)
+        self.assertEqual(rec["feedback"][report["key"]]["status"], "ambiguous")
+        self.assertEqual(rec["outcome_history"][0]["outcome"], "failed:closed")
+        self.assertTrue(rec["outcome_history"][0]["breaker_reset"])
+
+    def test_no_pr_failure_keeps_original_completion_time_on_later_observations(self):
+        rec = self.record(outcome="failed:no_pr", finished="2026-10-24T01:00:00Z")
+        self.state["sessions"]["s1"] = rec
+        f.reconcile(self.cfg, self.state, {"s1": self.session(state="COMPLETED")}, False)
+        self.assertEqual(rec["finished"], "2026-10-24T01:00:00Z")
+        self.assertNotIn("outcome_history", rec)
+
+    def test_repair_pause_after_intent_is_known_unsent_and_can_retry_once(self):
+        rec, session, pr = self.report_fixture()
+        original_save = f.save_state
+        def save_then_pause(state):
+            original_save(state)
+            f.PAUSE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            f.PAUSE_FILE.write_text("pause after durable repair intent")
+        with patch.object(f, "save_state", side_effect=save_then_pause), patch.object(f, "api") as api:
+            with self.assertRaisesRegex(f.Hold, "kill switch"):
+                f.repair_feedback(self.cfg, self.state, "s1", rec, session, pr, False)
+        api.assert_not_called()
+        saved = f.load_state()["sessions"]["s1"]
+        self.assertEqual(next(iter(saved["feedback"].values()))["status"], "not_sent")
+        self.assertEqual(f.paid_feedback_count(saved), 0)
+        f.PAUSE_FILE.unlink()
+        with patch.object(f, "api", return_value={}) as api:
+            f.repair_feedback(self.cfg, self.state, "s1", rec, session, pr, False)
+            f.repair_feedback(self.cfg, self.state, "s1", rec, session, pr, False)
+        api.assert_called_once()
+        attempt = next(iter(rec["feedback"].values()))
+        self.assertEqual(attempt["status"], "sent")
+        self.assertEqual(attempt["admission_history"][0]["status"], "not_sent")
+        self.assertEqual(f.paid_feedback_count(rec), 1)
+
+    def test_crash_pending_repair_is_not_treated_as_known_unsent(self):
+        rec, session, pr = self.report_fixture()
+        report = f.gate_feedback(self.cfg, pr)
+        rec["feedback"] = {report["key"]: {"status": "pending"}}
+        with patch.object(f, "api") as api:
+            f.repair_feedback(self.cfg, self.state, "s1", rec, session, pr, False)
+        api.assert_not_called()
+        self.assertEqual(f.paid_feedback_count(rec), 1)
+
+    def test_historical_pr_cohort_is_bounded_fair_and_survives_restart(self):
+        remote = {}
+        for index in range(3):
+            sid = f"s{index}"
+            self.state["sessions"][sid] = self.record(outcome="failed:closed", pr=f"https://github.com/{self.cfg['repo']}/pull/{index + 1}")
+            remote[sid] = self.session(sid=sid, state="COMPLETED")
+        visited = []
+        for _ in range(4):
+            with patch.object(f, "gh", return_value=json.dumps({"state": "CLOSED"})) as gh, patch.object(f, "api") as api:
+                f.reconcile(self.cfg, self.state, remote, False)
+            api.assert_not_called()
+            self.assertEqual(gh.call_count, f.TERMINAL_PR_RECHECKS_PER_TICK)
+            visited.append(gh.call_args.args[2])
+            f.save_state(self.state)
+            self.state = f.load_state()
+        self.assertEqual(visited, [f"https://github.com/{self.cfg['repo']}/pull/{number}" for number in (1, 2, 3, 1)])
+
+    def test_active_and_new_outputs_bypass_historical_cohort_without_resuming_completed_session(self):
+        self.state["sessions"] = {
+            "s0": self.record(outcome="failed:closed", pr=f"https://github.com/{self.cfg['repo']}/pull/1"),
+            "s1": self.record(outcome="failed:no_pr"),
+            "s2": self.record(outcome="failed:closed", pr=f"https://github.com/{self.cfg['repo']}/pull/3"),
+        }
+        remote = {sid: self.session(sid=sid, state="IN_PROGRESS" if sid == "s2" else "COMPLETED") for sid in self.state["sessions"]}
+        remote["s1"]["outputs"] = [{"pullRequest": {"url": f"https://github.com/{self.cfg['repo']}/pull/2"}}]
+        with patch.object(f, "gh", return_value=json.dumps({"state": "OPEN"})) as gh, patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, remote, False)
+        self.assertEqual(gh.call_count, 3)
+        api.assert_not_called()
+        self.assertTrue(all(f.assignment_occupied(rec) for rec in self.state["sessions"].values()))
+
+    def test_completed_merged_record_is_not_reopened_or_messaged_by_readback(self):
+        self.state["sessions"]["s1"] = self.record(outcome="merged", pr=f"https://github.com/{self.cfg['repo']}/pull/123")
+        with patch.object(f, "gh") as gh, patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, {"s1": self.session(state="COMPLETED")}, False)
+        gh.assert_not_called()
+        api.assert_not_called()
+        self.assertEqual(self.state["sessions"]["s1"]["outcome"], "merged")
+
+    def test_reopened_completed_failed_pr_cannot_resurrect_provider_work(self):
+        rec, session, pr = self.report_fixture()
+        rec["outcome"] = "failed:closed"
+        session["state"] = "COMPLETED"
+        with patch.object(f, "gh", return_value=json.dumps(pr)), patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, {"s1": session}, False)
+        api.assert_not_called()
+        self.assertNotIn("outcome", rec)
+        self.assertEqual(rec["hold"], "repair_session_not_message_eligible")
+
+    def test_known_unsent_retry_still_consumes_per_tick_message_cap(self):
+        self.state["sessions"] = {sid: self.record(pr=f"https://github.com/{self.cfg['repo']}/pull/{index}",
+            feedback={"report": {"status": "not_sent"}}) for index, sid in enumerate(("s1", "s2"), 1)}
+        remote = {sid: self.session(sid=sid) for sid in self.state["sessions"]}
+        pr = {"state": "OPEN", "statusCheckRollup": [{"context": self.cfg["gate_check_name"], "state": "FAILURE"}]}
+        def send_once(_cfg, _state, _sid, rec, *_rest):
+            rec["feedback"]["report"]["status"] = "sent"
+        with patch.object(f, "gh", return_value=json.dumps(pr)), patch.object(f, "repair_feedback", side_effect=send_once) as repair:
+            f.reconcile(self.cfg, self.state, remote, False)
+        repair.assert_called_once()
+        self.assertEqual(self.state["sessions"]["s2"]["hold"], "repair_tick_budget")
+
+    def test_malformed_existing_feedback_cannot_become_retry_authority(self):
+        for previous in ({}, None, "not_sent"):
+            with self.subTest(previous=previous):
+                rec, session, pr = self.report_fixture()
+                report = f.gate_feedback(self.cfg, pr)
+                rec["feedback"] = {report["key"]: previous}
+                with patch.object(f, "api") as api:
+                    f.repair_feedback(self.cfg, self.state, "s1", rec, session, pr, False)
+                api.assert_not_called()
+
+    def test_reopened_second_historical_pr_blocks_selected_game_before_create(self):
+        self.dispatch_fixture()
+        urls = [f"https://github.com/{self.cfg['repo']}/pull/{number}" for number in (1, 2)]
+        self.state["sessions"] = {
+            "s1": self.record(game_id="002", outcome="failed:closed", pr=urls[0]),
+            "s2": self.record(game_id="001", outcome="failed:closed", pr=urls[1]),
+        }
+        remote = {sid: self.session(sid=sid, state="COMPLETED") for sid in self.state["sessions"]}
+        def github(*args):
+            self.assertEqual(args[0], "pr")
+            return json.dumps({"url": args[2], "state": "CLOSED" if args[2] == urls[0] else "OPEN", "baseRefName": "main"})
+        with patch.object(f, "gh", side_effect=github) as gh, patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, remote, False)
+            self.assertEqual(gh.call_count, 1, "archive scan only visits the first historical record")
+            self.assertEqual(self.state["sessions"]["s2"]["outcome"], "failed:closed")
+            f.capacity(self.cfg, self.state, remote)
+            with self.assertRaisesRegex(f.Hold, "reopened historical PR"):
+                f.dispatch(self.cfg, self.state, False, SHA)
+        api.assert_not_called()
+        self.assertEqual([call.args[2] for call in gh.call_args_list], urls)
+        self.assertNotIn("outcome", self.state["sessions"]["s2"])
+        self.assertTrue(f.assignment_occupied(self.state["sessions"]["s2"]))
+        self.assertEqual(self.state["intents"], {})
+
+    def test_closed_selected_game_history_allows_create_without_querying_other_games(self):
+        self.dispatch_fixture()
+        urls = [f"https://github.com/{self.cfg['repo']}/pull/{number}" for number in (1, 2)]
+        self.state["sessions"] = {
+            "s1": self.record(game_id="001", outcome="failed:closed", pr=urls[0]),
+            "s2": self.record(game_id="001", outcome="failed:closed", pr=urls[1]),
+            "s3": self.record(game_id="002", outcome="failed:closed", pr="https://github.com/other/repo/pull/3"),
+        }
+        def github(*args):
+            if args[0] == "api": return SHA
+            self.assertIn(args[2], urls)
+            return json.dumps({"url": args[2], "state": "CLOSED", "baseRefName": "main"})
+        with patch.object(f, "gh", side_effect=github) as gh, patch.object(f, "api", return_value=self.session("new")) as api:
+            f.dispatch(self.cfg, self.state, False, SHA)
+        api.assert_called_once()
+        self.assertEqual([call.args[2] for call in gh.call_args_list if call.args[0] == "pr"], urls)
+
+    def test_selected_history_limit_and_cross_scope_hold_without_create(self):
+        self.dispatch_fixture()
+        for kind in ("limit", "foreign_pr", "foreign_folder"):
+            with self.subTest(kind=kind):
+                rec = self.record(game_id="001", outcome="failed:closed", pr=f"https://github.com/{self.cfg['repo']}/pull/1")
+                if kind == "foreign_pr": rec["pr"] = "https://github.com/other/repo/pull/1"
+                if kind == "foreign_folder": rec["assigned_folder"] = "games/001-other"
+                self.state["sessions"] = {f"s{index}": rec.copy() for index in range(f.ASSIGNMENT_PR_RECHECK_LIMIT + 1 if kind == "limit" else 1)}
+                with patch.object(f, "gh") as gh, patch.object(f, "api") as api, self.assertRaises(f.Hold):
+                    f.dispatch(self.cfg, self.state, False, SHA)
+                gh.assert_not_called()
+                api.assert_not_called()
+                self.assertEqual(self.state["intents"], {})
+
+    def test_selected_history_unknown_identity_state_or_read_failure_restores_occupied_work(self):
+        self.dispatch_fixture()
+        url = f"https://github.com/{self.cfg['repo']}/pull/1"
+        valid = {"url": url, "state": "CLOSED", "baseRefName": "main"}
+        responses = ["not JSON", json.dumps({}), json.dumps({**valid, "state": "UNKNOWN"}),
+                     json.dumps({**valid, "baseRefName": "other"}), json.dumps({**valid, "url": url + "0"}), f.Hold("read unavailable")]
+        for response in responses:
+            with self.subTest(response=str(response)):
+                rec = self.record(game_id="001", outcome="failed:closed", pr=url)
+                self.state["sessions"] = {"s1": rec}
+                kwargs = {"side_effect": response} if isinstance(response, Exception) else {"return_value": response}
+                with patch.object(f, "gh", **kwargs), patch.object(f, "api") as api, self.assertRaisesRegex(f.Hold, "readback is unverified"):
+                    f.dispatch(self.cfg, self.state, False, SHA)
+                api.assert_not_called()
+                self.assertTrue(f.assignment_occupied(rec))
+                self.assertEqual(rec["hold"], "gate_assignment_pr_unverified")
+
+    def test_main_move_or_expired_inventory_after_assignment_checks_is_known_unsent(self):
+        self.dispatch_fixture()
+        for failure in ("main_moved", "inventory_expired"):
+            with self.subTest(failure=failure):
+                self.state = f.empty_state()
+                f.observe_account(self.cfg, self.state, {})
+                def main_read(*args):
+                    if failure == "inventory_expired":
+                        self.state["inventory"]["observed_at"] = f.iso(f.now() - timedelta(seconds=181))
+                    return "d" * 40 if failure == "main_moved" else SHA
+                with patch.object(f, "gh", side_effect=main_read), patch.object(f, "api") as api, self.assertRaises(f.Hold):
+                    f.dispatch(self.cfg, self.state, False, SHA)
+                api.assert_not_called()
+                intent = next(iter(f.load_state()["intents"].values()))
+                self.assertEqual(intent["status"], "rejected")
+                self.assertEqual(intent["reason"], "create_admission_no_request")
 
 
 if __name__ == "__main__":

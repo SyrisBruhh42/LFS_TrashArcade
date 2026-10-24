@@ -41,6 +41,8 @@ PAUSE_LABEL = "factory:pause"
 GATE_MARKER = "<!-- arcade-gate-report -->"
 TERMINAL = {"COMPLETED", "FAILED"}
 ACTIVE = {"QUEUED", "PLANNING", "AWAITING_PLAN_APPROVAL", "AWAITING_USER_FEEDBACK", "IN_PROGRESS", "PAUSED"}
+TERMINAL_PR_RECHECKS_PER_TICK = 1
+ASSIGNMENT_PR_RECHECK_LIMIT = 20
 READ_ONLY = False
 
 
@@ -109,6 +111,8 @@ def load_state() -> dict:
         raise StateError("Invalid lessons")
     if not isinstance(state.get("api_fail_streak", 0), int) or state.get("api_fail_streak", 0) < 0:
         raise StateError("Invalid API failure counter")
+    if state.get("terminal_pr_cursor", "") != "" and not valid_id(state["terminal_pr_cursor"]):
+        raise StateError("Invalid historical PR readback cursor")
     for sid, rec in state["sessions"].items():
         if not valid_id(sid) or not isinstance(rec, dict):
             raise StateError("Invalid tracked session")
@@ -352,37 +356,109 @@ def gate_checks(cfg: dict, pr: dict) -> list[dict]:
 
 
 def verified_feedback_run(cfg: dict, report: dict, pr: dict, pr_url: str) -> bool:
+    """Bind current PR feedback to the trusted reporter, including empty REST associations."""
+    try:
+        return _verified_feedback_run(cfg, report, pr, pr_url)
+    except (ValueError, TypeError, AttributeError, KeyError):
+        return False  # Malformed provider evidence never becomes repair authority.
+
+
+def _verified_feedback_run(cfg: dict, report: dict, pr: dict, pr_url: str) -> bool:
     run_id = report["run"].rsplit("/", 1)[-1]
     run = json.loads(gh("api", f"repos/{cfg['repo']}/actions/runs/{run_id}"))
-    if (run.get("path") != f".github/workflows/{cfg['gate_workflow']}" or
-            run.get("event") != "pull_request_target" or run.get("head_sha") not in {pr.get("headRefOid"), pr.get("baseRefOid")} or
+    head, base = pr.get("headRefOid"), pr.get("baseRefOid")
+    if (not isinstance(run, dict) or str(run.get("id")) != run_id or
+            run.get("path") != f".github/workflows/{cfg['gate_workflow']}" or
+            run.get("event") != "pull_request_target" or run.get("head_sha") != head or
+            (run.get("head_repository") or {}).get("full_name") != cfg["repo"] or
             run.get("status") != "completed" or run.get("conclusion") not in {"failure", "timed_out"}):
         return False
     number = int(pr_url.rsplit("/", 1)[-1])
-    associated = any(item.get("number") == number and item.get("head", {}).get("sha") == pr.get("headRefOid") and
-                     item.get("base", {}).get("sha") == pr.get("baseRefOid") for item in run.get("pull_requests", []))
-    checks = gate_checks(cfg, pr)
-    linked = any(check["conclusion"] in {"FAILURE", "TIMED_OUT"} and
-                 (check["url"] == report["run"] or check["url"].startswith(report["run"] + "/")) for check in checks)
-    return associated and linked
+    associations = run.get("pull_requests")
+    if not isinstance(associations, list) or any(not isinstance(item, dict) or item.get("number") != number or
+            (item.get("head") or {}).get("sha") != head or (item.get("base") or {}).get("sha") != base
+            for item in associations):
+        return False
+    # GitHub's pull_request_target REST runs can have no associations. The current
+    # PR's bot report binds head/base; the trusted job, exact-head status and named
+    # artifact independently bind that report's run to this PR/head. Never accept
+    # a conflicting association, missing reporter or merely a familiar check name.
+    if gate_feedback(cfg, pr) != report:
+        return False
+    jobs_page = json.loads(gh("api", f"repos/{cfg['repo']}/actions/runs/{run_id}/jobs?per_page=100"))
+    artifacts_page = json.loads(gh("api", f"repos/{cfg['repo']}/actions/runs/{run_id}/artifacts?per_page=100"))
+    for page, key in ((jobs_page, "jobs"), (artifacts_page, "artifacts")):
+        if (not isinstance(page, dict) or not isinstance(page.get(key), list) or
+                type(page.get("total_count")) is not int or not 0 <= page["total_count"] < 100 or
+                len(page[key]) != page["total_count"] or any(not isinstance(item, dict) for item in page[key])):
+            return False
+    for name, allowed in ((cfg["gate_check_name"], {"failure", "timed_out"}),
+                          ("Trusted gate feedback", {"success"})):
+        matches = [job for job in jobs_page["jobs"] if job.get("name") == name]
+        if len(matches) != 1 or matches[0].get("status") != "completed" or matches[0].get("conclusion") not in allowed:
+            return False
+    artifacts = [item for item in artifacts_page["artifacts"]
+                 if item.get("name") == f"gate-evidence-{number}-{head}"]
+    if (len(artifacts) != 1 or artifacts[0].get("expired") is not False or
+            (artifacts[0].get("workflow_run") or {}).get("id") != int(run_id) or
+            (artifacts[0].get("workflow_run") or {}).get("head_sha") != head):
+        return False
+    # This endpoint returns newest statuses first. A full page is conservatively
+    # incomplete; do not scan an unbounded history to authorize paid feedback.
+    statuses = json.loads(gh("api", f"repos/{cfg['repo']}/commits/{head}/statuses?per_page=100"))
+    if not isinstance(statuses, list) or len(statuses) >= 100 or any(not isinstance(item, dict) for item in statuses):
+        return False
+    matching = [item for item in statuses if item.get("context") == cfg["gate_check_name"]]
+    if not matching or any(type(item.get("id")) is not int for item in matching):
+        return False
+    latest = max(matching, key=lambda item: item["id"])
+    return (latest.get("state") == "failure" and latest.get("target_url") == report["run"] and
+            (latest.get("creator") or {}).get("login") == "github-actions[bot]")
 
 
-def repair_admission(cfg: dict, state: dict) -> None:
+def paid_feedback_count(rec: dict) -> int:
+    """Known-unsent admission attempts retain history but consume no paid budget."""
+    return sum(item.get("status") != "not_sent" for item in rec.get("feedback", {}).values())
+
+
+def assignment_occupied(rec: dict) -> bool:
+    return not rec.get("outcome") or bool(rec.get("provider_state") and rec["provider_state"] not in TERMINAL)
+
+
+def set_outcome(rec: dict, outcome: str | None) -> None:
+    """Retain superseded observations while late/reopened work returns to WIP."""
+    previous = rec.get("outcome")
+    if previous == outcome:
+        return
+    if previous:
+        history = {"outcome": previous, "finished": rec.get("finished"), "superseded_at": iso(now())}
+        if "breaker_reset" in rec:
+            history["breaker_reset"] = rec["breaker_reset"]
+        rec.setdefault("outcome_history", []).append(history)
+    rec.pop("breaker_reset", None)  # An old diagnosed failure cannot exempt reopened work's next failure.
+    if outcome is None:
+        rec.pop("outcome", None)
+        rec.pop("finished", None)
+    else:
+        rec.update(outcome=outcome, finished=iso(now()))
+
+
+def repair_admission(cfg: dict, state: dict, operation: str = "Repair") -> None:
     """Repair may fix red main, but still requires fresh shared-account headroom."""
     if not cfg.get("enabled") or PAUSE_FILE.exists():
         raise Hold("Paid mutation stopped by local kill switch")
     observation = state.get("inventory", {})
     if not observation.get("complete"):
-        raise Hold("Repair requires complete account inventory")
+        raise Hold(f"{operation} requires complete account inventory")
     age = now() - parse_ts(observation.get("observed_at"))
     if age < timedelta(0) or age > timedelta(seconds=cfg["inventory_max_age_seconds"]):
-        raise Hold("Repair account inventory stale; observe again before paid feedback")
+        raise Hold(f"{operation} account inventory stale; observe again before paid mutation")
     for budget, reserve, metric in (("account_active_cap", "account_active_reserve", "account_active"),
                                     ("account_daily_cap", "account_daily_reserve", "account_created_24h")):
         limit = cfg.get(budget)
         observed = observation.get(metric)
         if limit is None or not isinstance(observed, int) or observed >= limit - cfg[reserve]:
-            raise Hold("Repair requires configured shared-account budget headroom")
+            raise Hold(f"{operation} requires configured shared-account budget headroom")
 
 
 def repair_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, pr: dict, dry: bool) -> None:
@@ -392,7 +468,8 @@ def repair_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, 
         return
     rec["gate_classification"] = report["classification"]
     seen = rec.setdefault("feedback", {})
-    if report["key"] in seen:
+    previous = seen.get(report["key"])
+    if report["key"] in seen and (not isinstance(previous, dict) or previous.get("status") != "not_sent"):
         return
     # Do not promote opaque legacy assignments into mutation authority.
     correlation = rec.get("correlation")
@@ -410,7 +487,7 @@ def repair_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, 
     if not verified_feedback_run(cfg, report, pr, rec["pr"]):
         rec["hold"] = "repair_run_provenance_unverified"
         return
-    if len(seen) >= cfg.get("max_repair_messages", 1):
+    if paid_feedback_count(rec) >= cfg.get("max_repair_messages", 1):
         rec["hold"] = "repair_budget_exhausted"
         return
     prompt = (f"Repair only {rec['assigned_folder']}/ in the existing PR {rec['pr']}. "
@@ -426,10 +503,20 @@ def repair_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, 
     if dry:
         log("dry_run_repair", session=sid, report_key=report["key"])
         return
-    seen[report["key"]] = {"status": "pending", "created": iso(now()), "body_hash": digest({"prompt": prompt})}
+    history = []
+    if previous:
+        history = previous.get("admission_history", []) + [
+            {key: value for key, value in previous.items() if key != "admission_history"}]
+    seen[report["key"]] = {"status": "pending", "created": iso(now()), "body_hash": digest({"prompt": prompt}),
+                          "admission_history": history}
     save_state(state)  # An uncertain message is never sent again.
     try:
-        repair_admission(cfg, state)  # Recheck immediately before every paid provider mutation.
+        try:
+            repair_admission(cfg, state)  # Recheck immediately before every paid provider mutation.
+        except (Hold, StateError) as exc:
+            seen[report["key"]].update(status="not_sent", reason=str(exc), finished=iso(now()))
+            rec["hold"] = "repair_admission_held"
+            raise
         api("POST", f"/sessions/{sid}:sendMessage", {"prompt": prompt})
         seen[report["key"]]["status"] = "sent"
         rec["hold"] = "repair_requested"
@@ -443,6 +530,17 @@ def repair_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, 
 
 def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
     repairs_sent = 0
+    # Reopened historical PRs need eventual readback, not an ever-growing scan on
+    # every tick. Active sessions and newly discovered/changed outputs bypass this
+    # cohort. The durable cursor provides fair coverage across process restarts.
+    historical = sorted(sid for sid, rec in state["sessions"].items()
+                        if rec.get("outcome", "").startswith("failed") and rec.get("pr") and
+                        remote.get(sid, {}).get("state") in TERMINAL and
+                        first_pr_url(remote[sid], cfg) in (None, rec["pr"]))
+    cursor = state.get("terminal_pr_cursor", "")
+    ordered = [sid for sid in historical if sid > cursor] + [sid for sid in historical if sid <= cursor]
+    recheck = set(ordered[:TERMINAL_PR_RECHECKS_PER_TICK])
+    historical = set(historical)
     for sid, rec in state["sessions"].items():
         session = remote.get(sid)
         if session is None:
@@ -456,9 +554,14 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
             rec.pop("hold", None)
         if rec.get("outcome") and st not in TERMINAL:
             rec["hold"] = "terminal_record_provider_active"
-        # Preserve historical outcomes, but never let them erase current provider capacity.
-        if rec.get("outcome") and st in TERMINAL:
+        # A confirmed merge is final, but provisional failures must still discover
+        # late outputs and reopened PRs. Provider-active assignments remain occupied.
+        if rec.get("outcome") == "merged" and st in TERMINAL:
             continue
+        if sid in historical:
+            if sid not in recheck:
+                continue
+            state["terminal_pr_cursor"] = sid
         rec["state"] = st
         age_h = (now() - parse_ts(rec["created"])).total_seconds() / 3600
         if st not in TERMINAL and age_h > cfg["stale_session_hours"]:
@@ -471,18 +574,29 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
             rec.setdefault("pr_seen", iso(now()))
         if not rec.get("pr"):
             if st == "FAILED":
-                rec.update(outcome="failed:session_failed", finished=iso(now()))
+                set_outcome(rec, "failed:session_failed")
             elif st == "COMPLETED":
                 elapsed = (now() - parse_ts(session.get("updateTime", rec["created"]))).total_seconds() / 60
                 if elapsed > cfg["no_pr_grace_minutes"]:
-                    rec.update(outcome="failed:no_pr", finished=iso(now()))
+                    set_outcome(rec, "failed:no_pr")
             continue
         pr = json.loads(gh("pr", "view", rec["pr"], "--json",
                            "state,statusCheckRollup,isDraft,headRefOid,baseRefOid,comments"))
         if pr.get("state") in {"MERGED", "CLOSED"}:
-            rec.update(outcome="merged" if pr["state"] == "MERGED" else "failed:closed", finished=iso(now()))
-            rec.pop("hold", None)
+            set_outcome(rec, "merged" if pr["state"] == "MERGED" else "failed:closed")
+            if st in TERMINAL:
+                rec.pop("hold", None)
+            else:
+                rec["hold"] = "terminal_record_provider_active"
             continue
+        if pr.get("state") != "OPEN" or rec.get("outcome") == "merged":
+            if rec.get("outcome") != "merged":
+                set_outcome(rec, None)
+            rec["hold"] = "unexpected_pr_state"
+            continue
+        set_outcome(rec, None)
+        if rec.get("hold") == "terminal_record_provider_active":
+            rec.pop("hold", None)
         checks = gate_checks(cfg, pr)
         # The separate trusted reporter publishes StatusContext on the exact PR head.
         current = [check for check in checks if check["kind"] == "status"] or checks
@@ -491,9 +605,9 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
             if repairs_sent >= cfg.get("max_repairs_per_tick", 1):
                 rec["hold"] = "repair_tick_budget"
                 continue
-            before = len(rec.get("feedback", {}))
+            before = paid_feedback_count(rec)
             repair_feedback(cfg, state, sid, rec, session, pr, dry)
-            repairs_sent += len(rec.get("feedback", {})) - before
+            repairs_sent += paid_feedback_count(rec) - before
         elif not checks and (now() - parse_ts(rec.get("pr_seen", rec["created"]))).total_seconds() > cfg["no_gate_hours"] * 3600:
             rec["hold"] = "no_gate_evidence"
         elif conclusion == "SUCCESS":
@@ -636,7 +750,7 @@ def capacity(cfg: dict, state: dict, remote: dict) -> dict:
         raise Hold("Account concurrency budget including reserve reached")
     if observation["account_created_24h"] >= daily_cap - cfg.get("account_daily_reserve", 0):
         raise Hold("Account rolling-24h budget including reserve reached")
-    local_live = [r for r in state["sessions"].values() if not r.get("outcome")]
+    local_live = [r for r in state["sessions"].values() if assignment_occupied(r)]
     if sum(not r.get("pr") for r in local_live) >= cfg["max_active_sessions"]:
         raise Hold("Local session work-in-progress cap reached")
     if sum(bool(r.get("pr")) for r in local_live) >= cfg["max_open_prs"]:
@@ -662,12 +776,43 @@ def quarantined_game_ids(state: dict, max_phase_fails: int = 3) -> set[str]:
     return {str(gid) for (gid, _), count in counts.items() if gid and count >= max_phase_fails}
 
 
+def recheck_assignment_prs(cfg: dict, state: dict, gid: str, folder: str) -> None:
+    """Archival polling is bounded; releasing the selected game needs complete readback."""
+    records = [rec for rec in state["sessions"].values() if str(rec.get("game_id")) == gid and
+               rec.get("outcome", "").startswith("failed") and rec.get("pr")]
+    if len(records) > ASSIGNMENT_PR_RECHECK_LIMIT:
+        raise Hold("Selected game exceeds bounded historical PR readback; reconcile before reassignment")
+    prefix = f"https://github.com/{cfg['repo']}/pull/"
+    for rec in records:
+        url = rec["pr"]
+        if (not isinstance(url, str) or not re.fullmatch(re.escape(prefix) + r"\d+", url) or
+                rec.get("assigned_folder", folder) != folder):
+            raise Hold("Selected game's historical PR or folder scope is unverified")
+        try:
+            pr = json.loads(gh("pr", "view", url, "--json", "url,state,baseRefName"))
+            if (not isinstance(pr, dict) or pr.get("url") != url or
+                    pr.get("baseRefName") != cfg["starting_branch"] or pr.get("state") not in {"OPEN", "CLOSED", "MERGED"}):
+                raise Hold("Historical PR identity/state unavailable")
+        except (Hold, ValueError, TypeError):
+            set_outcome(rec, None)
+            rec["hold"] = "gate_assignment_pr_unverified"
+            raise Hold("Selected game's historical PR readback is unverified; no reassignment") from None
+        rec["assignment_pr_readback"] = {"state": pr["state"], "observed_at": iso(now())}
+        if pr["state"] == "OPEN":
+            set_outcome(rec, None)
+            rec["hold"] = "gate_reopened_pr_requires_reconciliation"
+            raise Hold("Selected game has a reopened historical PR; retained as occupied work")
+        if pr["state"] == "MERGED":
+            set_outcome(rec, "merged")
+            raise Hold("Historical PR merged; refresh accepted main before reassignment")
+
+
 def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: Path | None = None) -> None:
     if not cfg.get("enabled") or PAUSE_FILE.exists():
         raise Hold("Create stopped by local kill switch")
     if any(i["status"] in {"pending", "ambiguous"} for i in state["intents"].values()):
         raise Hold("Unresolved create intent; never repeat a create")
-    live = [r for r in state["sessions"].values() if not r.get("outcome")]
+    live = [r for r in state["sessions"].values() if assignment_occupied(r)]
     exclude = {str(r["game_id"]) for r in live if r.get("game_id")} | quarantined_game_ids(state)
     result = subprocess.run([sys.executable, str(ROOT / "tools" / "pick_brief.py"), "--json", "--source-root", str(source_root or ROOT), "--id", assign_id(state, source_root),
                              "--exclude-json", json.dumps([r["triple"] for r in live if r.get("triple")]),
@@ -684,6 +829,8 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
     folder = f"games/{brief['slug']}"
     if not re.fullmatch(r"games/\d{3}-[a-z0-9-]+", folder) or not re.fullmatch(r"[0-9a-f]{40}", baseline_sha):
         raise Hold("Invalid assignment scope or baseline")
+    repair_admission(cfg, state, operation="Create")
+    recheck_assignment_prs(cfg, state, gid, folder)
     prompt = (PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n" + brief["markdown"] +
               f"\n\nFactory correlation: {correlation}\nBaseline commit: {baseline_sha}\n")
     title = f"[factory:{correlation}] {brief['label']}"[:120]
@@ -705,9 +852,17 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
     state["max_game_id"] = max(int(state.get("max_game_id", 0)), int(gid))
     save_state(state)  # fsync file + directory BEFORE the non-idempotent network request.
     try:
-        if PAUSE_FILE.exists():
-            intent.update(status="rejected", reason="local_pause_no_request")
-            raise Hold("Create stopped by local pause before POST")
+        try:
+            if PAUSE_FILE.exists():
+                intent.update(status="rejected", reason="local_pause_no_request")
+                raise Hold("Create stopped by local pause before POST")
+            repair_admission(cfg, state, operation="Create")
+            if gh("api", f"repos/{cfg['repo']}/commits/{cfg['starting_branch']}", "--jq", ".sha").strip() != baseline_sha:
+                raise Hold("Main advanced during assignment readback; observe a fresh accepted revision")
+            repair_admission(cfg, state, operation="Create")  # Reads and durable writes can exhaust evidence freshness.
+        except Exception:
+            intent.update(status="rejected", reason=intent.get("reason", "create_admission_no_request"))
+            raise
         session = api("POST", "/sessions", body, timeout=60)
         sid = session_id(session)
         if sid in state["sessions"]:
@@ -720,7 +875,7 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
         intent["http_status"] = exc.status
         raise
     except Exception:
-        if intent.get("reason") != "local_pause_no_request":
+        if intent.get("status") != "rejected":
             intent["status"] = "ambiguous"
         raise
     finally:

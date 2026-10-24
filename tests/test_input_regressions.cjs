@@ -138,3 +138,67 @@ test('085 phase2 particles update, expire, draw, and reset with a new wave',()=>
     assert.equal(result.active,false);
     assert.equal(result.reset,0);
 });
+
+function pausedRetrieval() {
+    const document=target({hidden:false});
+    const h=load('085-scrap-heist-retrieval',['game.js'],{document});
+    h.evaluate(`globalThis.input=new InputManager(); globalThis.game=Object.assign(Object.create(Game.prototype),{
+        input,state:'PLAYING',score:170,player:{x:200,y:200},sound:{init(){},resume(){}}
+    }); game.bindEvents();`);
+    return {...h,document};
+}
+
+test('085 blur clears held controls and fresh touch resumes without firing',()=>{
+    const h=pausedRetrieval();
+    h.window.emit('keydown',{code:'KeyD'});
+    h.window.emit('touchstart',{changedTouches:[touch(1)]});
+    h.window.emit('touchmove',{changedTouches:[touch(1,180,100)]});
+    h.window.emit('blur');
+    assert.equal(h.evaluate('game.state'),'PAUSED');
+    assert.equal(h.evaluate('input.getAxis().x'),0);
+    assert.equal(h.evaluate('input.isActionPressed()'),false);
+    h.window.emit('touchstart',{changedTouches:[touch(2)]});
+    h.window.emit('touchend',{changedTouches:[touch(2)]});
+    assert.equal(h.evaluate('game.state'),'PLAYING');
+    assert.equal(h.evaluate('input.isActionPressed()'),false,'resume tap is consumed');
+    assert.equal(h.evaluate('input.getAxis().x'),0);
+    assert.equal(h.evaluate('game.score'),170,'run state survives resume');
+    for (const code of ['KeyD','Space','ShiftLeft']) h.window.emit('keydown',{code,repeat:true});
+    assert.equal(h.evaluate('input.getAxis().x'),0,'held movement needs a fresh press after resume');
+    assert.equal(h.evaluate('input.isActionPressed()'),false,'held fire cannot restart through autorepeat');
+    assert.equal(!!h.evaluate('input.isSecondaryPressed()'),false,'held dash cannot restart through autorepeat');
+    h.window.emit('touchstart',{changedTouches:[touch(3)]});
+    h.window.emit('touchend',{changedTouches:[touch(3)]});
+    assert.equal(h.evaluate('input.isActionPressed()'),true,'fresh gameplay tap still works');
+});
+
+test('085 document visibility and Escape repeat cannot resume implicitly',()=>{
+    const h=pausedRetrieval();
+    h.document.hidden=true; h.document.emit('visibilitychange');
+    assert.equal(h.evaluate('game.state'),'PAUSED');
+    h.document.hidden=false; h.document.emit('visibilitychange');
+    assert.equal(h.evaluate('game.state'),'PAUSED');
+    h.window.emit('keydown',{code:'Escape',repeat:true});
+    assert.equal(h.evaluate('game.state'),'PAUSED');
+    h.window.emit('keydown',{code:'Escape',repeat:false});
+    assert.equal(h.evaluate('game.state'),'PLAYING');
+    h.window.emit('keydown',{code:'Escape',repeat:true});
+    assert.equal(h.evaluate('game.state'),'PLAYING');
+    h.window.emit('blur');
+    h.window.emit('mousedown',{button:0,clientX:20,clientY:20,target:{closest:()=>({tagName:'A'})}});
+    assert.equal(h.evaluate('game.state'),'PAUSED','Back navigation must not resume gameplay');
+});
+
+test('085 phase3 integration updates particles once and keeps hazards and parallax',()=>{
+    const h=retrieval();
+    h.evaluate(`globalThis.game=Object.assign(Object.create(Game.prototype),{
+        width:800,height:600,wave:1,shootCooldown:0,state:'PLAYING',input,
+        parallax:new ParallaxBackground(800,600),sound:{playScore(){}}
+    });game.loadWave();game.enemies=[];
+    game.particles=[new Particle(200,200,'#fff',3,0.2)];
+    game.update(0.05);`);
+    assert.equal(h.evaluate('game.hazards.length'),2);
+    assert.ok(Math.abs(h.evaluate('game.particles[0].life')-0.15)<1e-9,'particle lifecycle runs once per frame');
+    assert.equal(h.evaluate('game.shootCooldown'),0);
+    assert.equal(h.evaluate('game.parallax.layers.length'),3);
+});

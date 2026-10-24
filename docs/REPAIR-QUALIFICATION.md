@@ -1,5 +1,7 @@
 # Repair qualification — 2026-10-24
 
+Historical checkpoint: the later [adversarial audit](ADVERSARIAL-AUDIT-2026-10-24.md) found controller and input defects outside this test coverage. See its [subsequent qualification](ADVERSARIAL-QUALIFICATION-2026-10-24.md) for the newer repairs and remaining holds. Results below remain evidence only for their named revisions.
+
 **Status: locally qualified source candidate; not activated, published, merged into main or production accepted.**
 
 Qualified source: `7aab8ef27d4a295333a3d6b3fed349edf1ee52cd` on `codex/repair-jules-pipeline-20261024`. Reconciled remote main through `567405654f729374615a6b1792ad23973c6f71ed`, including PR386–389. This document is a subsequent documentation-only checkpoint.

@@ -5,7 +5,12 @@ const ACCENT_COLOR = '#65bb98';
 
 class SaveManager {
     constructor() {
-        this.data = {
+        this.data = SaveManager.defaults();
+        this.load();
+    }
+
+    static defaults() {
+        return {
             highScore: 0,
             bestCombo: 0,
             totalGamesPlayed: 0,
@@ -27,18 +32,71 @@ class SaveManager {
                 screenShake: 100
             }
         };
-        this.load();
+    }
+
+    static validate(candidate) {
+        const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+        if (!object(candidate)) throw new Error('Save must be an object');
+        const data = SaveManager.defaults();
+        if (!Object.keys(data).some(key => Object.hasOwn(candidate, key))) {
+            throw new Error('Save has no recognized fields');
+        }
+        for (const key of Object.keys(data)) {
+            if (!Object.hasOwn(candidate, key) || key === 'options') continue;
+            const value = candidate[key];
+            if (key === 'unlockedMilestones') {
+                if (!Array.isArray(value) || !value.every(id => typeof id === 'string')) {
+                    throw new Error('Invalid milestones');
+                }
+                data[key] = [...new Set(value)];
+            } else {
+                if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+                    throw new Error('Invalid statistic: ' + key);
+                }
+                data[key] = value;
+            }
+        }
+        if (Object.hasOwn(candidate, 'options')) {
+            if (!object(candidate.options)) throw new Error('Invalid options');
+            const choices = {
+                touchControls: ['Auto', 'Always', 'Off'], touchHandedness: ['Right', 'Left'],
+                particles: ['High', 'Low'], screenShake: [100, 50, 0]
+            };
+            for (const key of Object.keys(data.options)) {
+                if (!Object.hasOwn(candidate.options, key)) continue;
+                const value = candidate.options[key];
+                const valid = choices[key] ? choices[key].includes(value)
+                    : typeof data.options[key] === 'boolean' ? typeof value === 'boolean'
+                    : typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
+                if (!valid) throw new Error('Invalid option: ' + key);
+                data.options[key] = value;
+            }
+        }
+        return data;
+    }
+
+    importData(encoded) {
+        let candidate;
+        try {
+            candidate = SaveManager.validate(JSON.parse(atob(encoded)));
+        } catch (e) {
+            return { ok: false, message: 'Invalid save data.' };
+        }
+        try {
+            // Explicit replacement must be durable before changing the working save.
+            localStorage.setItem(SAVE_KEY, JSON.stringify(candidate));
+        } catch (e) {
+            return { ok: false, message: 'Save storage is unavailable. Your previous save was kept.' };
+        }
+        this.data = candidate;
+        return { ok: true, message: 'Save imported successfully!' };
     }
 
     load() {
         try {
             const stored = localStorage.getItem(SAVE_KEY);
             if (stored) {
-                const parsed = JSON.parse(stored);
-                this.data = { ...this.data, ...parsed };
-                if (parsed.options) {
-                    this.data.options = { ...this.data.options, ...parsed.options };
-                }
+                this.data = SaveManager.validate(JSON.parse(stored));
             }
         } catch (e) {
             console.error('SaveManager load error:', e);
@@ -425,6 +483,7 @@ class SoundEngine {
 class InputManager {
     constructor() {
         this.keys = {};
+        this.virtualKeys = {};
         this.prevKeys = {};
         this.mouse = { x: 0, y: 0, down: false };
         this.prevMouse = { x: 0, y: 0, down: false };
@@ -435,10 +494,15 @@ class InputManager {
 
     bindEvents() {
         window.addEventListener('keydown', (e) => {
+            if (e.repeat) return; // A held key cannot reactivate after focus-loss cleanup.
             this.keys[e.code] = true;
         });
         window.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
+        });
+        window.addEventListener('blur', () => this.releaseAll());
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) this.releaseAll();
         });
 
         const canvas = document.getElementById('gameCanvas');
@@ -468,11 +532,27 @@ class InputManager {
                     this.updateTouch(e.touches[0]);
                 }
             }, { passive: false });
-            window.addEventListener('touchend', () => {
-                this.mouse.down = false;
-                this.touch.active = false;
+            window.addEventListener('touchend', (e) => {
+                this.releaseTouch();
+                if (e.touches && e.touches.length > 0) {
+                    this.updateTouch(e.touches[0]);
+                    this.mouse.down = true;
+                    this.touch.active = true;
+                }
             });
+            window.addEventListener('touchcancel', () => this.releaseTouch());
         }
+    }
+
+    releaseTouch() {
+        this.mouse.down = false;
+        this.touch.active = false;
+        this.virtualKeys = {};
+    }
+
+    releaseAll() {
+        this.keys = {};
+        this.releaseTouch();
     }
 
     updateMouse(e) {
@@ -498,21 +578,18 @@ class InputManager {
     }
 
     isDown(code) {
-        if (this.keys[code]) {
-            return true;
-        }
-        return false;
+        return !!(this.keys[code] || this.virtualKeys[code]);
     }
 
     justPressed(code) {
-        if (this.keys[code] && !this.prevKeys[code]) {
+        if (this.isDown(code) && !this.prevKeys[code]) {
             return true;
         }
         return false;
     }
 
     justReleased(code) {
-        if (!this.keys[code] && this.prevKeys[code]) {
+        if (!this.isDown(code) && this.prevKeys[code]) {
             return true;
         }
         return false;
@@ -547,7 +624,7 @@ class InputManager {
     }
 
     update() {
-        this.prevKeys = { ...this.keys };
+        this.prevKeys = { ...this.keys, ...this.virtualKeys };
         this.prevMouse = { ...this.mouse };
         this.prevTouch = { ...this.touch };
     }
@@ -603,6 +680,7 @@ class Player extends Entity {
         this.dashCooldownMax = 3.0;
         this.dashActiveTimer = 0;
         this.dashActiveMax = 0.2;
+        this.lastMoveDirection = { x: 0, y: 0 };
         this.isInvulnerable = false;
         this.particles = [];
     }
@@ -624,7 +702,12 @@ class Player extends Entity {
             dx += 1;
         }
 
-        if (input.touch.active || (input.mouse.down && dx === 0 && dy === 0)) {
+        const virtualDirection = input.virtualKeys['ArrowUp'] || input.virtualKeys['ArrowDown'] ||
+            input.virtualKeys['ArrowLeft'] || input.virtualKeys['ArrowRight'];
+        const virtualDash = !!input.virtualKeys['Space'];
+        const virtualControl = virtualDirection || virtualDash;
+        // A control touch belongs to its button, not to world-space steering.
+        if (!virtualControl && (input.touch.active || input.mouse.down) && dx === 0 && dy === 0) {
             const mx = input.mouse.x;
             const my = input.mouse.y;
             const angle = Math.atan2(my - this.y, mx - this.x);
@@ -636,14 +719,26 @@ class Player extends Entity {
             dy /= length;
         }
 
+        if (dx !== 0 || dy !== 0) this.lastMoveDirection = { x: dx, y: dy };
+
         this.dashCooldown -= dt;
         if (this.dashCooldown < 0) this.dashCooldown = 0;
 
         this.dashActiveTimer -= dt;
         if (this.dashActiveTimer < 0) this.dashActiveTimer = 0;
 
+        const dashPressed = input.justPressed('Space') || (!virtualControl &&
+            ((input.mouse.down && !input.prevMouse.down) || (input.touch.active && !input.prevTouch.active)));
+        // Single-finger users can leave the pad and dash along their last heading.
+        // The fallback ends on release, cancellation, or expiry of this dash.
+        if (virtualDash && dx === 0 && dy === 0 &&
+            (this.dashActiveTimer > 0 || (this.dashCooldown <= 0 && dashPressed))) {
+            dx = this.lastMoveDirection.x;
+            dy = this.lastMoveDirection.y;
+        }
+
         let isDashing = false;
-        if (this.dashCooldown <= 0 && (input.justPressed('Space') || (input.mouse.down && !input.prevMouse.down) || (input.touch.active && !input.prevTouch.active))) {
+        if (this.dashCooldown <= 0 && dashPressed) {
             this.dashCooldown = this.dashCooldownMax;
             this.dashActiveTimer = this.dashActiveMax;
             isDashing = true;
@@ -1721,6 +1816,9 @@ class Game {
                 }
             }
         });
+        window.addEventListener('blur', () => {
+            if (this.state === 'PLAYING') this.state = 'PAUSED';
+        });
 
         this.loop = this.loop.bind(this);
         requestAnimationFrame(this.loop);
@@ -2118,7 +2216,6 @@ class Game {
             }
         }
 
-        this.inputManager.update();
     }
 
     draw() {
@@ -2273,7 +2370,6 @@ class Game {
             }
         }
 
-        this.inputManager.update();
     }
 
     draw() {
@@ -2429,18 +2525,21 @@ class Game {
         const now = timestamp || performance.now();
         this.dt = Math.min((now - this.lastTime) / 1000, 0.1);
         this.lastTime = now;
+        if (this.uiManager) this.uiManager.updateTouchControls();
 
         if (this.state === 'OPTIONS') {
             if (this.uiManager) this.uiManager.update(this.dt);
-            if (this.inputManager) this.inputManager.update();
         } else if (this.vfxManager && this.vfxManager.hitStopTimer > 0) {
             this.vfxManager.update(this.dt);
-            // Hit stop freezes the game logic, but we can still draw
+            // Hit stop freezes game logic, not menu input.
+            if (this.uiManager) this.uiManager.update(this.dt);
         } else {
             if (this.vfxManager) this.vfxManager.update(this.dt);
             this.update(this.dt);
             if (this.uiManager) this.uiManager.update(this.dt);
         }
+        // All game and UI consumers see the same input edge before it expires.
+        if (this.inputManager) this.inputManager.update();
 
         this.draw();
         if (this.uiManager) this.uiManager.draw(this.ctx);
@@ -2714,17 +2813,10 @@ class UIManager {
                 this.game.previousState = this.game.state;
                 this.game.state = 'OPTIONS';
             }
-        } else if (this.game.state === 'TITLE' || this.game.state === 'PAUSED') {
-            if (this.game.inputManager.justPressed('KeyO')) {
-                this.game.previousState = this.game.state;
-                this.game.previousState = this.game.state; this.game.state = 'OPTIONS';
-            }
         }
 
         // FPS Counter
         this.frameCount++;
-        this.updateTouchControls();
-        if (this.updateTouchControls) this.updateTouchControls();
         if (performance.now() - this.lastFpsTime >= 1000) {
             this.fps = this.frameCount;
             this.frameCount = 0;
@@ -2790,14 +2882,8 @@ class UIManager {
             } else if (item.action === 'import') {
                 const inputStr = prompt("Paste your save data:");
                 if (inputStr) {
-                    try {
-                        const parsed = JSON.parse(atob(inputStr));
-                        this.game.saveManager.data = parsed;
-                        this.game.saveManager.save();
-                        alert("Save imported successfully!");
-                    } catch (e) {
-                        alert("Invalid save data.");
-                    }
+                    const result = this.game.saveManager.importData(inputStr);
+                    alert(result.message);
                 }
             } else if (item.action === 'reset') {
                 if (this.optionsMenu.resetState === 0) {
@@ -2881,6 +2967,8 @@ class UIManager {
         const data = this.game.saveManager.data.options;
         const isTouchActive = data.touchControls === 'Always' || (data.touchControls === 'Auto' && ('ontouchstart' in window || navigator.maxTouchPoints > 0));
 
+        // Touch never writes physical keys; release or disabling controls clears only this layer.
+        input.virtualKeys = {};
         if (!isTouchActive || this.game.state !== 'PLAYING') return;
 
         const hand = data.touchHandedness;
@@ -2889,79 +2977,27 @@ class UIManager {
         const dashX = hand === 'Right' ? this.game.width - 100 : 100;
         const dashY = this.game.height - 100;
 
-        // Reset virtual keys
-        input.keys['ArrowUp'] = false;
-        input.keys['ArrowDown'] = false;
-        input.keys['ArrowLeft'] = false;
-        input.keys['ArrowRight'] = false;
-        input.keys['Space'] = false;
-
-        if (input.touch.active) {
-            const tx = input.mouse.x; // mapped in InputManager
-            const ty = input.mouse.y;
-
-            // Check Dash Button
-            const distDash = Math.hypot(tx - dashX, ty - dashY);
-            if (distDash < 60) {
-                input.keys['Space'] = true;
-            }
-
-            // Check D-Pad
-            const distPad = Math.hypot(tx - padX, ty - padY);
-            if (distPad < 100) {
-                const angle = Math.atan2(ty - padY, tx - padX);
-                // 8-way directional mapping
-                if (angle > -Math.PI*5/8 && angle < -Math.PI*3/8) input.keys['ArrowUp'] = true;
-                if (angle > Math.PI*3/8 && angle < Math.PI*5/8) input.keys['ArrowDown'] = true;
-                if (angle > Math.PI*7/8 || angle < -Math.PI*7/8) input.keys['ArrowLeft'] = true;
-                if (angle > -Math.PI/8 && angle < Math.PI/8) input.keys['ArrowRight'] = true;
-
-                // diagonals
-                if (angle >= -Math.PI*7/8 && angle <= -Math.PI*5/8) { input.keys['ArrowLeft'] = true; input.keys['ArrowUp'] = true; }
-                if (angle >= -Math.PI*3/8 && angle <= -Math.PI/8) { input.keys['ArrowRight'] = true; input.keys['ArrowUp'] = true; }
-                if (angle >= Math.PI/8 && angle <= Math.PI*3/8) { input.keys['ArrowRight'] = true; input.keys['ArrowDown'] = true; }
-                if (angle >= Math.PI*5/8 && angle <= Math.PI*7/8) { input.keys['ArrowLeft'] = true; input.keys['ArrowDown'] = true; }
-            }
-        }
-    }
-
-
-    updateTouchControls() {
-        const input = this.game.inputManager;
-        const data = this.game.saveManager.data.options;
-        const isTouchActive = data.touchControls === 'Always' || (data.touchControls === 'Auto' && ('ontouchstart' in window || navigator.maxTouchPoints > 0));
-
-        if (!isTouchActive || this.game.state !== 'PLAYING') return;
-
-        const hand = data.touchHandedness;
-        const padX = hand === 'Right' ? 100 : this.game.width - 100;
-        const padY = this.game.height - 100;
-        const dashX = hand === 'Right' ? this.game.width - 100 : 100;
-        const dashY = this.game.height - 100;
-
-        // Ensure virtual keys are only reset when we touch?
-        // Let's directly overwrite them while touch is active
         if (input.touch.active) {
             const tx = input.mouse.x;
             const ty = input.mouse.y;
 
             const distDash = Math.hypot(tx - dashX, ty - dashY);
             if (distDash < 60) {
-                input.keys['Space'] = true;
+                input.virtualKeys['Space'] = true;
             }
 
             const distPad = Math.hypot(tx - padX, ty - padY);
             if (distPad < 100) {
                 const angle = Math.atan2(ty - padY, tx - padX);
-                if (angle > -Math.PI*5/8 && angle < -Math.PI*3/8) input.keys['ArrowUp'] = true;
-                if (angle > Math.PI*3/8 && angle < Math.PI*5/8) input.keys['ArrowDown'] = true;
-                if (angle > Math.PI*7/8 || angle < -Math.PI*7/8) input.keys['ArrowLeft'] = true;
-                if (angle > -Math.PI/8 && angle < Math.PI/8) input.keys['ArrowRight'] = true;
+                if (angle > -Math.PI*5/8 && angle < -Math.PI*3/8) input.virtualKeys['ArrowUp'] = true;
+                if (angle > Math.PI*3/8 && angle < Math.PI*5/8) input.virtualKeys['ArrowDown'] = true;
+                if (angle > Math.PI*7/8 || angle < -Math.PI*7/8) input.virtualKeys['ArrowLeft'] = true;
+                if (angle > -Math.PI/8 && angle < Math.PI/8) input.virtualKeys['ArrowRight'] = true;
 
-                if (angle >= -Math.PI*7/8 && angle <= -Math.PI*5/8) { input.keys['ArrowLeft'] = true; input.keys['ArrowUp'] = true; }
-                if (angle >= -Math.PI*3/8 && angle <= -Math.PI/8) { input.keys['ArrowRight'] = true; input.keys['ArrowUp'] = true; }
-                if (angle >= Math.PI/8 && angle <= Math.PI*3/8) { input.keys['ArrowRight'] = true; input.keys['ArrowDown'] = true; }
-                if (angle >= Math.PI*5/8 && angle <= Math.PI*7/8) { input.keys['ArrowLeft'] = true; input.keys['ArrowDown'] = true; }
+                if (angle >= -Math.PI*7/8 && angle <= -Math.PI*5/8) { input.virtualKeys['ArrowLeft'] = true; input.virtualKeys['ArrowUp'] = true; }
+                if (angle >= -Math.PI*3/8 && angle <= -Math.PI/8) { input.virtualKeys['ArrowRight'] = true; input.virtualKeys['ArrowUp'] = true; }
+                if (angle >= Math.PI/8 && angle <= Math.PI*3/8) { input.virtualKeys['ArrowRight'] = true; input.virtualKeys['ArrowDown'] = true; }
+                if (angle >= Math.PI*5/8 && angle <= Math.PI*7/8) { input.virtualKeys['ArrowLeft'] = true; input.virtualKeys['ArrowDown'] = true; }
             }
         }
     }

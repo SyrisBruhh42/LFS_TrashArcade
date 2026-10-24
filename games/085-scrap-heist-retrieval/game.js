@@ -118,6 +118,7 @@ class InputManager {
         this.tapQueued = false;
 
         window.addEventListener('keydown', e => {
+            if (e.repeat) return;
             this.keys[e.code] = true;
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
                 e.preventDefault();
@@ -254,6 +255,16 @@ class InputManager {
     consumePointerAction() {
         this.tapQueued = false;
         for (const pointer of Object.values(this.pointers)) pointer.suppressed = true;
+    }
+
+    clear() {
+        this.keys = {};
+        this.mouse.down = false;
+        this.mouse.rightDown = false;
+        this.touches = [];
+        this.pointers = {};
+        this.tapQueued = false;
+        this.joystick.active = false;
     }
 
     isActionPressed() {
@@ -1006,9 +1017,9 @@ class Game {
             this.sound.init();
             this.sound.resume();
 
-            if (e.code === 'Escape') {
-                if (this.state === 'PLAYING') this.state = 'PAUSED';
-                else if (this.state === 'PAUSED') this.state = 'PLAYING';
+            if (e.code === 'Escape' && !e.repeat) {
+                if (this.state === 'PLAYING') this.pauseGame();
+                else if (this.state === 'PAUSED') this.resumeGame();
             }
             if (e.code === 'Space' || e.code === 'Enter') {
                 if (this.state === 'TITLE') this.startGame();
@@ -1016,31 +1027,40 @@ class Game {
             }
         });
 
-        window.addEventListener('mousedown', () => {
+        window.addEventListener('mousedown', e => {
+            if (e.target?.closest?.('a, button, input, textarea')) return;
             this.sound.init();
             this.sound.resume();
             if (this.state === 'TITLE') this.startGame();
+            else if (this.state === 'PAUSED') this.resumeGame();
             else if (this.state === 'GAME_OVER') this.state = 'TITLE';
         });
 
-        window.addEventListener('touchstart', () => {
+        window.addEventListener('touchstart', e => {
+            if (e.target?.closest?.('a, button, input, textarea')) return;
             this.sound.init();
             this.sound.resume();
             if (this.state === 'TITLE') this.startGame();
+            else if (this.state === 'PAUSED') this.resumeGame();
             else if (this.state === 'GAME_OVER') this.state = 'TITLE';
         });
 
-        window.addEventListener('visibilitychange', () => {
-            if (document.hidden && this.state === 'PLAYING') {
-                this.state = 'PAUSED';
-            }
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) this.pauseGame();
         });
 
-        window.addEventListener('blur', () => {
-            if (this.state === 'PLAYING') {
-                this.state = 'PAUSED';
-            }
-        });
+        window.addEventListener('blur', () => this.pauseGame());
+    }
+
+    pauseGame() {
+        this.input.clear();
+        if (this.state === 'PLAYING') this.state = 'PAUSED';
+    }
+
+    resumeGame() {
+        // The resume gesture must never become a shot or a held movement.
+        this.input.clear();
+        if (this.state === 'PAUSED') this.state = 'PLAYING';
     }
 
     startGame() {
@@ -1196,6 +1216,8 @@ class Game {
                 this.ctx.font = '40px monospace';
                 this.ctx.textAlign = 'center';
                 this.ctx.fillText('PAUSED', this.width/2, this.height/2);
+                this.ctx.font = '18px monospace';
+                this.ctx.fillText('Tap, click or press Esc to resume', this.width/2, this.height/2 + 40);
             } else if (this.state === 'GAME_OVER') {
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                 this.ctx.fillRect(0, 0, this.width, this.height);
