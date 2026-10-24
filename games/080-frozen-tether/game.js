@@ -11,7 +11,13 @@ class SaveManager {
             options: {
                 masterVolume: 1.0,
                 sfxVolume: 1.0,
-                musicVolume: 1.0
+                musicVolume: 1.0,
+                screenShake: 1.0,
+                particleDensity: 1.0,
+                highContrast: false,
+                showFPS: false,
+                touchControls: 'auto',
+                touchSwap: false
             }
         };
         this.load();
@@ -163,8 +169,14 @@ class Player {
     }
 
     update(dt, input, platforms, sound) {
+        const isLeftDown = window.game ? window.game.uiManager.isActionDown('left') : (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft'));
+        const isRightDown = window.game ? window.game.uiManager.isActionDown('right') : (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight'));
+        const isJumpDown = window.game ? window.game.uiManager.isActionDown('jump') : (input.isKeyDown('Space') || input.isKeyDown('ArrowUp') || input.isKeyDown('KeyW'));
+        const isGrappleDown = window.game ? window.game.uiManager.isActionDown('grapple') : input.mouse.down;
+        const isGrappleJustPressed = window.game ? (isGrappleDown && !this.lastGrappleDown) : input.mouse.justPressed;
+
         const speedSq = this.vx * this.vx + this.vy * this.vy;
-        if (speedSq < this.movementThreshold * this.movementThreshold && !input.isKeyDown('KeyA') && !input.isKeyDown('KeyD') && !this.grapple.active) {
+        if (speedSq < this.movementThreshold * this.movementThreshold && !isLeftDown && !isRightDown && !this.grapple.active) {
             this.stillTime += dt;
             this.timeDilationFactor = Math.max(0.1, 1.0 - this.stillTime * 2);
         } else {
@@ -172,9 +184,11 @@ class Player {
             this.timeDilationFactor = 1.0;
         }
 
+        if (this.timeDilationFactor < 0.3 && window.game) window.game.uiManager.unlockMilestone('time_lord');
+
         let ax = 0;
-        if (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) ax -= 1;
-        if (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) ax += 1;
+        if (isLeftDown) ax -= 1;
+        if (isRightDown) ax += 1;
 
         this.vx += ax * this.speed * dt * (this.grounded ? 2 : 1);
 
@@ -238,9 +252,18 @@ class Player {
             sound.playDash();
         }
 
-        if (input.mouse.justPressed && !this.dashActive) {
-            this.shootGrapple(input.mouse.x, input.mouse.y, platforms, sound);
-        } else if (!input.mouse.down && this.grapple.active) {
+        if (isGrappleJustPressed && !this.dashActive) {
+            let tx = input.mouse.x;
+            let ty = input.mouse.y;
+
+            // If using touch grapple button, shoot straight up or towards nearest platform
+            if (window.game && window.game.uiManager.isTouchInZone(tx, ty, 'grapple') && input.touch.active) {
+               tx = this.x;
+               ty = this.y - 300; // shoot straight up as fallback
+            }
+
+            this.shootGrapple(tx, ty, platforms, sound);
+        } else if (!isGrappleDown && this.grapple.active) {
             this.grapple.active = false;
         }
 
@@ -289,16 +312,19 @@ class Player {
             }
         }
 
-        if (this.grounded && (input.isKeyDown('Space') || input.isKeyDown('ArrowUp') || input.isKeyDown('KeyW'))) {
+        if (this.grounded && isJumpDown) {
             this.vy = this.jumpForce;
             this.grounded = false;
             sound.playJump();
+            if (window.game) window.game.uiManager.unlockMilestone('first_jump');
         }
 
         // Limits
         if (this.x < this.radius) { this.x = this.radius; this.vx *= -0.5; }
         if (this.x > 800 - this.radius) { this.x = 800 - this.radius; this.vx *= -0.5; }
         if (this.y > 600 - this.radius) { this.y = 600 - this.radius; this.vy = 0; this.grounded = true; }
+
+        this.lastGrappleDown = isGrappleDown;
     }
 
     shootGrapple(tx, ty, platforms, sound) {
@@ -332,6 +358,11 @@ class Player {
                     this.recoilY = Math.sin(rAngle) * 300;
 
                     sound.playGrappleHit();
+
+                    if (!this.grappleCount) this.grappleCount = 0;
+                    this.grappleCount++;
+                    if (this.grappleCount >= 10 && window.game) window.game.uiManager.unlockMilestone('grapple_king');
+
                     return;
                 }
             }
@@ -789,6 +820,7 @@ class Game {
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
         this.input = new InputManager(canvas, this.sound);
+        this.uiManager = new UIManager(this);
 
         this.state = 'TITLE';
         this.lastTime = performance.now();
@@ -869,8 +901,11 @@ class Game {
     }
 
     update(dt) {
+        this.lastDt = dt;
+        this.uiManager.update(dt);
+
         if (this.state === 'TITLE') {
-            if (this.input.isKeyDown('Enter') || this.input.mouse.justPressed) {
+            if (this.input.isKeyDown('Enter') || (this.input.mouse.justPressed && !this.input.touch.active)) {
                 this.sound.playUI();
                 this.sound.playSpawn();
                 this.start();
@@ -884,6 +919,7 @@ class Game {
             }
             if (this.input.isKeyDown('Escape')) {
                 this.state = 'PAUSED';
+                this.input.keys['Escape'] = false; // consume to prevent rapid toggle
                 return;
             }
 
@@ -961,6 +997,8 @@ class Game {
                                     this.enemies.splice(i, 1);
                                     this.bossActive = false;
 
+                                    if (window.game) window.game.uiManager.unlockMilestone('boss_slayer');
+
                                     this.state = 'UPGRADE';
                                     this.upgradeChoices = WaveDirector.getUpgrades(3);
                                     this.player.vx = 0;
@@ -981,7 +1019,12 @@ class Game {
                                  this.player.vy = this.player.jumpForce * 0.8; // Bounce
                             }
                             this.score += 100 * (1 + this.player.comboCount * 0.1);
+
+                            if (this.score >= 1000 && window.game) window.game.uiManager.unlockMilestone('high_score_1k');
+
                             this.player.comboCount++;
+                            if (this.player.comboCount >= 5 && window.game) window.game.uiManager.unlockMilestone('combo_master');
+
                             this.player.comboTimer = this.player.comboMaxTimer;
                             this.vfxManager.triggerShake(10, 0, -1);
                             this.vfxManager.triggerHitStop(0.1);
@@ -1079,12 +1122,22 @@ class Game {
                 }
             }
         } else if (this.state === 'PAUSED') {
-            if (this.input.isKeyDown('Enter') || this.input.mouse.justPressed) {
+            this.uiManager.handleInput(this.input);
+
+            // Only unpause if Escape is pressed, or mouse is clicked OUTSIDE the UI bounds.
+            if (this.input.isKeyDown('Escape')) {
                 this.sound.playUI();
                 this.state = 'PLAYING';
+                this.input.keys['Escape'] = false; // consume
+            } else if (this.input.mouse.justPressed) {
+                // If it was a touch OR mouse click outside the UI, resume
+                if (!this.uiManager.isClickInUI(this.input.mouse.x, this.input.mouse.y)) {
+                    this.sound.playUI();
+                    this.state = 'PLAYING';
+                }
             }
         } else if (this.state === 'GAME_OVER') {
-            if (this.input.isKeyDown('Enter') || this.input.mouse.justPressed) {
+            if (this.input.isKeyDown('Enter') || (this.input.mouse.justPressed && !this.input.touch.active)) {
                 this.sound.playUI();
                 this.sound.playSpawn();
                 this.start();
@@ -1095,6 +1148,12 @@ class Game {
     }
 
     draw() {
+        if (this.saveManager.data.options.highContrast) {
+            this.canvas.style.filter = "contrast(150%) hue-rotate(180deg) grayscale(20%)";
+        } else {
+            this.canvas.style.filter = "none";
+        }
+
         this.ctx.fillStyle = '#1a1a2e';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -1262,17 +1321,6 @@ class Game {
                     this.ctx.fillStyle = '#aaa';
                     this.ctx.fillText(choice.desc, bx + boxWidth / 2, startY + 70);
                 }
-            } else if (this.state === 'PAUSED') {
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
-                this.ctx.fillStyle = '#fff';
-                this.ctx.font = '48px sans-serif';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText('PAUSED', this.logicalWidth / 2, this.logicalHeight / 2);
-                this.ctx.font = '24px sans-serif';
-                this.ctx.fillText('Click to Resume', this.logicalWidth / 2, this.logicalHeight / 2 + 50);
-                this.ctx.font = '16px sans-serif';
-                this.ctx.fillText('Back to Arcade: ../../index.html', this.logicalWidth / 2, this.logicalHeight - 30);
             } else if (this.state === 'GAME_OVER') {
                 this.ctx.fillStyle = 'rgba(100, 0, 0, 0.7)';
                 this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
@@ -1286,6 +1334,7 @@ class Game {
             }
         }
 
+        this.uiManager.draw(this.ctx);
         this.ctx.restore();
     }
 
