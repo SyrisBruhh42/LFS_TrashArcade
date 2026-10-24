@@ -161,8 +161,11 @@ class SoundEngine {
 class InputManager {
     constructor() {
         this.keys = {};
+        this.prevKeys = {};
         this.mouse = { x: 0, y: 0, down: false };
+        this.prevMouse = { x: 0, y: 0, down: false };
         this.touch = { active: false, x: 0, y: 0 };
+        this.prevTouch = { active: false, x: 0, y: 0 };
         this.bindEvents();
     }
 
@@ -236,6 +239,54 @@ class InputManager {
         }
         return false;
     }
+
+    justPressed(code) {
+        if (this.keys[code] && !this.prevKeys[code]) {
+            return true;
+        }
+        return false;
+    }
+
+    justReleased(code) {
+        if (!this.keys[code] && this.prevKeys[code]) {
+            return true;
+        }
+        return false;
+    }
+
+    mouseJustPressed() {
+        if (this.mouse.down && !this.prevMouse.down) {
+            return true;
+        }
+        return false;
+    }
+
+    mouseJustReleased() {
+        if (!this.mouse.down && this.prevMouse.down) {
+            return true;
+        }
+        return false;
+    }
+
+    touchJustPressed() {
+        if (this.touch.active && !this.prevTouch.active) {
+            return true;
+        }
+        return false;
+    }
+
+    touchJustReleased() {
+        if (!this.touch.active && this.prevTouch.active) {
+            return true;
+        }
+        return false;
+    }
+
+    update() {
+        this.prevKeys = { ...this.keys };
+        this.prevMouse = { ...this.mouse };
+        this.prevTouch = { ...this.touch };
+    }
 }
 
 class Entity {
@@ -283,6 +334,13 @@ class Player extends Entity {
         this.history = [];
         this.energy = 100;
         this.baseDepositTimer = 0;
+
+        this.dashCooldown = 0;
+        this.dashCooldownMax = 3.0;
+        this.dashActiveTimer = 0;
+        this.dashActiveMax = 0.2;
+        this.isInvulnerable = false;
+        this.particles = [];
     }
 
     update(dt, input, width, height) {
@@ -314,8 +372,50 @@ class Player extends Entity {
             dy /= length;
         }
 
-        this.vx = dx * this.speed;
-        this.vy = dy * this.speed;
+        this.dashCooldown -= dt;
+        if (this.dashCooldown < 0) this.dashCooldown = 0;
+
+        this.dashActiveTimer -= dt;
+        if (this.dashActiveTimer < 0) this.dashActiveTimer = 0;
+
+        let isDashing = false;
+        if (this.dashCooldown <= 0 && (input.justPressed('Space') || (input.mouse.down && !input.prevMouse.down) || (input.touch.active && !input.prevTouch.active))) {
+            this.dashCooldown = this.dashCooldownMax;
+            this.dashActiveTimer = this.dashActiveMax;
+            isDashing = true;
+
+            // Add some particles
+            for (let i = 0; i < 10; i++) {
+                this.particles.push({
+                    x: this.x,
+                    y: this.y,
+                    vx: (Math.random() - 0.5) * 100 - dx * 50,
+                    vy: (Math.random() - 0.5) * 100 - dy * 50,
+                    life: 0.5 + Math.random() * 0.5
+                });
+            }
+        }
+
+        let currentSpeed = this.speed;
+        if (this.dashActiveTimer > 0) {
+            currentSpeed = this.speed * 3;
+            this.isInvulnerable = true;
+        } else {
+            this.isInvulnerable = false;
+        }
+
+        this.vx = dx * currentSpeed;
+        this.vy = dy * currentSpeed;
+
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+            if (p.life <= 0) {
+                this.particles.splice(i, 1);
+            }
+        }
 
         super.update(dt);
 
@@ -352,6 +452,15 @@ class Player extends Entity {
     }
 
     draw(ctx) {
+        if (this.particles) {
+            for (let p of this.particles) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${p.life})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
         ctx.strokeStyle = '#aaa';
         ctx.lineWidth = 3;
         ctx.beginPath();
@@ -370,7 +479,7 @@ class Player extends Entity {
             }
         }
 
-        ctx.fillStyle = this.color;
+        ctx.fillStyle = this.isInvulnerable ? '#ffffff' : this.color;
         ctx.beginPath();
         const angle = Math.atan2(this.vy, this.vx);
 
@@ -380,11 +489,39 @@ class Player extends Entity {
             ctx.rotate(angle);
         }
 
-        ctx.moveTo(15, 0);
-        ctx.lineTo(-10, 10);
-        ctx.lineTo(-10, -10);
+        let recoil = 0;
+        if (this.dashActiveTimer > 0) {
+            recoil = -5; // move back slightly
+            ctx.fillStyle = '#ffeb3b'; // flash color
+        }
+
+        // multi-part vector sprite
+        ctx.beginPath();
+        ctx.moveTo(15 + recoil, 0);
+        ctx.lineTo(-10 + recoil, 10);
+        ctx.lineTo(-10 + recoil, -10);
         ctx.closePath();
         ctx.fill();
+
+        // Thrust flame
+        if (this.vx !== 0 || this.vy !== 0) {
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath();
+            ctx.moveTo(-10 + recoil, -5);
+            ctx.lineTo(-10 + recoil, 5);
+            ctx.lineTo(-20 + recoil - Math.random() * 5, 0);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Telegraph (aim line)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(20 + recoil, 0);
+        ctx.lineTo(50 + recoil, 0);
+        ctx.stroke();
+
         ctx.restore();
     }
 
@@ -640,9 +777,16 @@ class Game {
             enemy.update(dt);
 
             if (this.player.collides(enemy)) {
-                this.soundEngine.playHit();
-                this.gameOver();
-                return;
+                if (!this.player.isInvulnerable) {
+                    this.soundEngine.playHit();
+                    this.gameOver();
+                    return;
+                } else {
+                    // Dash kills enemy
+                    this.soundEngine.playHit();
+                    enemy.active = false;
+                    this.score += 20 * this.multiplier;
+                }
             }
 
             let tailCut = false;
@@ -704,6 +848,8 @@ class Game {
                 this.inputManager.touch.active = false;
             }
         }
+
+        this.inputManager.update();
     }
 
     draw() {
@@ -748,6 +894,17 @@ class Game {
             const currentTail = this.player ? this.player.tailLength : 0;
             const maxTail = this.player ? this.player.maxTailLength : 50;
             this.ctx.fillText(`Tail: ${currentTail}/${maxTail}`, 10, 60);
+
+            if (this.player) {
+                this.ctx.fillText(`Dash: ${this.player.dashCooldown <= 0 ? 'READY' : this.player.dashCooldown.toFixed(1)}s`, 10, 90);
+
+                // Dash cooldown bar
+                this.ctx.fillStyle = '#333';
+                this.ctx.fillRect(10, 100, 100, 10);
+                this.ctx.fillStyle = this.player.dashCooldown <= 0 ? '#65bb98' : '#e74c3c';
+                const fillRatio = this.player.dashCooldown <= 0 ? 1 : 1 - (this.player.dashCooldown / this.player.dashCooldownMax);
+                this.ctx.fillRect(10, 100, 100 * fillRatio, 10);
+            }
         }
 
         if (this.state === 'TITLE') {
