@@ -1,0 +1,13 @@
+{
+  "id": "079",
+  "slug": "079-bazaar-bullet-retrieval",
+  "title": "Bazaar Bullet Retrieval",
+  "genre": "Bullet-Hell Boss Rush",
+  "coreMechanic": "Limited Ammo Must Be Physically Retrieved",
+  "setting": "Desert Sandstorm Bazaar",
+  "description": "Battle through a desert sandstorm bazaar. You have limited ammo and must physically retrieve your bullets after firing them.",
+  "controls": "WASD to move, Mouse to aim and shoot. Touch joystick and shoot button on mobile.",
+  "createdAt": "2026-10-24",
+  "accentColor": "#e2fc7a",
+  "phase": "1"
+}
