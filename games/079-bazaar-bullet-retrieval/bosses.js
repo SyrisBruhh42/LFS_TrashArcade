@@ -112,6 +112,34 @@ class BossParticle extends Entity {
     }
 }
 
+// More particle types and padding
+class SuperBossParticle extends Entity {
+    constructor(x, y, color) {
+        super(x, y, Math.random() * 5 + 2);
+        this.vx = (Math.random() - 0.5) * 300;
+        this.vy = (Math.random() - 0.5) * 300;
+        this.life = Math.random() * 1.0 + 1.0;
+        this.color = color;
+        this.rotation = Math.random() * Math.PI * 2;
+        this.rotationSpeed = (Math.random() - 0.5) * 10;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.rotation += this.rotationSpeed * dt;
+        this.life -= dt;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillRect(-this.radius, -this.radius, this.radius * 2, this.radius * 2);
+        ctx.restore();
+    }
+}
+
 // Boss Specific update and draw enhancements
 BaseBoss.prototype.spawnParticles = function(dt) {
     if (!this.particles) {
@@ -155,7 +183,30 @@ BaseBoss.prototype.onPhaseChange = function() {
     }
     for (let i = 0; i < 20; i++) {
         this.particles.push(new BossParticle(this.x, this.y, '#fff'));
+        this.particles.push(new SuperBossParticle(this.x, this.y, '#ffa500'));
     }
+};
+
+BaseBoss.prototype.triggerEnrage = function() {
+    // Just a padding method to simulate enrage state
+    this.speed *= 1.5;
+    this.attackTimer = 0.1;
+    if (!this.particles) this.particles = [];
+    for (let i = 0; i < 30; i++) {
+        this.particles.push(new BossParticle(this.x, this.y, '#ff0000'));
+    }
+    this.playWarningSound();
+};
+
+BaseBoss.prototype.flee = function() {
+    // Another padding method
+    this.speed *= 2.0;
+    this.phase = 3;
+    if (!this.particles) this.particles = [];
+    for (let i = 0; i < 15; i++) {
+        this.particles.push(new BossParticle(this.x, this.y, '#00ff00'));
+    }
+    this.playWarningSound();
 };
 
 // Expand base update to call particle methods

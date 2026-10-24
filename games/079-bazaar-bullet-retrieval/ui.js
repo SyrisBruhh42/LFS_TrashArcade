@@ -130,6 +130,24 @@ class UIManager {
             ctx.font = '10px monospace';
             ctx.fillText('Export copied to clipboard!', cx, cy + 220);
         }
+
+        // Draw Player Stats in Settings
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'left';
+        ctx.font = '14px monospace';
+        let statsY = cy - 100;
+        let statsX = 50;
+        ctx.fillText('--- PLAYER STATS ---', statsX, statsY);
+        ctx.fillText(`Games Played: ${this.game.saveManager.data.gamesPlayed || 0}`, statsX, statsY + 20);
+        ctx.fillText(`High Score: ${this.game.saveManager.data.highScore || 0}`, statsX, statsY + 40);
+        ctx.fillText(`Total Kills: ${this.game.saveManager.data.totalKills || 0}`, statsX, statsY + 60);
+        ctx.fillText(`Total Ammo Picked: ${this.game.saveManager.data.totalAmmoPicked || 0}`, statsX, statsY + 80);
+        ctx.fillText(`Bosses Slain: ${this.game.saveManager.data.bossesSlain || 0}`, statsX, statsY + 100);
+        ctx.fillText(`Waves Cleared: ${this.game.saveManager.data.totalWavesCleared || 0}`, statsX, statsY + 120);
+        ctx.fillText(`Dash Count: ${this.game.saveManager.data.totalDashes || 0}`, statsX, statsY + 140);
+        ctx.fillText(`Upgrades Bought: ${this.game.saveManager.data.upgradesBought || 0}`, statsX, statsY + 160);
+        ctx.fillText(`Deaths: ${this.game.saveManager.data.deaths || 0}`, statsX, statsY + 180);
+        ctx.fillText(`Time Played: ${Math.floor((this.game.saveManager.data.timePlayed || 0) / 60)}m`, statsX, statsY + 200);
     }
     drawMilestones(ctx, c) {
         let m = this.game.saveManager.data.milestones;
