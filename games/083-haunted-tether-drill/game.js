@@ -626,6 +626,265 @@ class BaseCamp extends Entity {
     }
 }
 
+class ParallaxBackground {
+    constructor() {
+        this.layers = [
+            { speed: 0.1, color: '#1a111a', pattern: 'dots', offset: 0, density: 0.01 }, // deep background
+            { speed: 0.3, color: '#2a1a2a', pattern: 'lines', offset: 0, density: 0.02 }, // mid ground
+            { speed: 0.6, color: '#3d253d', pattern: 'arches', offset: 0, density: 0.03 } // foreground manor elements
+        ];
+        this.dots = [];
+        for (let i=0; i<100; i++) {
+            this.dots.push({x: Math.random(), y: Math.random(), s: Math.random() * 2 + 1});
+        }
+    }
+
+    update(dt, playerVx, playerVy) {
+        // Player moves the camera effectively, so parallax moves opposite
+        this.layers.forEach(layer => {
+            layer.offsetX = (layer.offsetX || 0) - playerVx * dt * layer.speed;
+            layer.offsetY = (layer.offsetY || 0) - playerVy * dt * layer.speed;
+        });
+    }
+
+    draw(ctx, width, height) {
+        ctx.fillStyle = '#0f0a0f'; // deepest background
+        ctx.fillRect(0, 0, width, height);
+
+        this.layers.forEach((layer, idx) => {
+            ctx.fillStyle = layer.color;
+            ctx.strokeStyle = layer.color;
+
+            if (layer.pattern === 'dots') {
+                for(let d of this.dots) {
+                    let px = (d.x * width + layer.offsetX) % width;
+                    let py = (d.y * height + layer.offsetY) % height;
+                    if (px < 0) px += width;
+                    if (py < 0) py += height;
+
+                    ctx.beginPath();
+                    ctx.arc(px, py, d.s, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else if (layer.pattern === 'lines') {
+                ctx.lineWidth = 2;
+                const spacing = 150;
+                let startX = layer.offsetX % spacing;
+                if (startX > 0) startX -= spacing;
+
+                for (let x = startX; x < width + spacing; x += spacing) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, height);
+                    ctx.stroke();
+                }
+
+                let startY = layer.offsetY % spacing;
+                if (startY > 0) startY -= spacing;
+                for (let y = startY; y < height + spacing; y += spacing) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(width, y);
+                    ctx.stroke();
+                }
+            } else if (layer.pattern === 'arches') {
+                ctx.lineWidth = 4;
+                const spacing = 300;
+                let startX = layer.offsetX % spacing;
+                if (startX > 0) startX -= spacing;
+
+                for (let x = startX; x < width + spacing; x += spacing) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, height);
+                    ctx.lineTo(x, height / 2);
+                    ctx.arc(x + spacing/2, height/2, spacing/2, Math.PI, 0);
+                    ctx.lineTo(x + spacing, height);
+                    ctx.stroke();
+                }
+            }
+        });
+    }
+}
+
+class Hazard extends Entity {
+    constructor(x, y, radius, color) {
+        super(x, y, radius, color);
+    }
+    affect(entity, dt) {}
+}
+
+class GhostlyVortex extends Hazard {
+    constructor(x, y) {
+        super(x, y, 60, '#7d3c98');
+        this.angle = 0;
+        this.pullForce = 150;
+    }
+
+    update(dt) {
+        this.angle += dt * 2;
+        super.update(dt);
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i=0; i<3; i++) {
+            ctx.arc(0, 0, this.radius - i * 15, i*Math.PI/2, i*Math.PI/2 + Math.PI);
+        }
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    affect(entity, dt) {
+        const dx = this.x - entity.x;
+        const dy = this.y - entity.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+
+        if (dist < this.radius * 2 && dist > 5) {
+            const pull = this.pullForce * (1 - dist / (this.radius * 2));
+            entity.x += (dx / dist) * pull * dt;
+            entity.y += (dy / dist) * pull * dt;
+        }
+    }
+}
+
+class CrumblingPillar extends Hazard {
+    constructor(x, y) {
+        super(x, y, 25, '#7f8c8d');
+        this.hp = 3; // takes 3 hits to destroy
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius*2, this.radius*2);
+
+        // cracks based on hp
+        ctx.strokeStyle = '#2c3e50';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (this.hp <= 2) {
+            ctx.moveTo(this.x - this.radius, this.y - this.radius);
+            ctx.lineTo(this.x, this.y);
+        }
+        if (this.hp <= 1) {
+            ctx.moveTo(this.x + this.radius, this.y - this.radius);
+            ctx.lineTo(this.x - 10, this.y + 10);
+        }
+        ctx.stroke();
+    }
+
+    affect(entity, dt) {
+        // Acts as solid obstacle, push entity out
+        const dx = entity.x - this.x;
+        const dy = entity.y - this.y;
+
+        // AABB approximation for circle-rect
+        const closestX = Math.max(this.x - this.radius, Math.min(entity.x, this.x + this.radius));
+        const closestY = Math.max(this.y - this.radius, Math.min(entity.y, this.y + this.radius));
+
+        const distanceX = entity.x - closestX;
+        const distanceY = entity.y - closestY;
+        const distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+
+        if (distanceSquared < (entity.radius * entity.radius)) {
+            // Collision!
+            const dist = Math.sqrt(distanceSquared) || 1;
+            const pushOut = entity.radius - dist;
+
+            // if entity is player dashing, break pillar
+            if (entity instanceof Player && entity.isInvulnerable) {
+                this.hp--;
+                if (this.hp <= 0) {
+                    this.active = false;
+                }
+                // bounce player slightly
+                entity.x += (distanceX / dist) * pushOut * 2;
+                entity.y += (distanceY / dist) * pushOut * 2;
+            } else {
+                entity.x += (distanceX / dist) * pushOut;
+                entity.y += (distanceY / dist) * pushOut;
+            }
+        }
+    }
+}
+
+class SpectralSpikes extends Hazard {
+    constructor(x, y) {
+        super(x, y, 20, '#16a085');
+        this.timer = Math.random() * 4;
+        this.state = 'hidden'; // hidden, warning, active
+    }
+
+    update(dt) {
+        this.timer += dt;
+        const cycle = this.timer % 4;
+        if (cycle < 2) {
+            this.state = 'hidden';
+        } else if (cycle < 3) {
+            this.state = 'warning';
+        } else {
+            this.state = 'active';
+        }
+        super.update(dt);
+    }
+
+    draw(ctx) {
+        if (this.state === 'hidden') return;
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        if (this.state === 'warning') {
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.3)';
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius, 0, Math.PI*2);
+            ctx.fill();
+        } else {
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.moveTo(0, -this.radius);
+            ctx.lineTo(this.radius * 0.8, this.radius * 0.8);
+            ctx.lineTo(-this.radius * 0.8, this.radius * 0.8);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = '#fff';
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    affect(entity, dt) {
+        if (this.state !== 'active') return;
+
+        const dx = entity.x - this.x;
+        const dy = entity.y - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+
+        if (dist < this.radius + entity.radius) {
+            if (entity instanceof Player && !entity.isInvulnerable) {
+                // Instakill or damage? Let Game handle it if possible, but here we can just set a flag on player or call something if Game is accessible.
+                // Alternatively, we just drastically slow them down and hurt tail
+                entity.vx *= 0.5;
+                entity.vy *= 0.5;
+                if (entity.tailLength > 0 && Math.random() < 0.1) {
+                   entity.tailLength = Math.max(0, entity.tailLength - 1);
+                }
+            } else if (entity instanceof Enemy) {
+                // Spikes kill enemies!
+                entity.active = false;
+            }
+        }
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -646,6 +905,8 @@ class Game {
         this.baseCamp = null;
         this.enemies = [];
         this.resources = [];
+        this.hazards = [];
+        this.parallax = new ParallaxBackground();
 
         this.spawnTimer = 0;
         this.resourceTimer = 0;
@@ -694,6 +955,36 @@ class Game {
         for(let i = 0; i < 5; i++) {
             this.spawnResource();
         }
+
+        this.spawnHazards();
+    }
+
+    spawnHazards() {
+        this.hazards = [];
+
+        // Spawn Vortexes
+        for (let i = 0; i < 3; i++) {
+            this.hazards.push(new GhostlyVortex(
+                Math.random() * this.width,
+                Math.random() * this.height
+            ));
+        }
+
+        // Spawn Crumbling Pillars
+        for (let i = 0; i < 6; i++) {
+            this.hazards.push(new CrumblingPillar(
+                Math.random() * this.width,
+                Math.random() * this.height
+            ));
+        }
+
+        // Spawn Spectral Spikes
+        for (let i = 0; i < 4; i++) {
+            this.hazards.push(new SpectralSpikes(
+                Math.random() * this.width,
+                Math.random() * this.height
+            ));
+        }
     }
 
     spawnResource() {
@@ -733,6 +1024,23 @@ class Game {
     updatePlaying(dt) {
         this.player.update(dt, this.inputManager, this.width, this.height);
         this.baseCamp.update(dt);
+        this.parallax.update(dt, this.player.vx, this.player.vy);
+
+        for (let i = this.hazards.length - 1; i >= 0; i--) {
+            const hazard = this.hazards[i];
+            if (hazard.active) {
+                hazard.update(dt);
+                hazard.affect(this.player, dt);
+
+                this.enemies.forEach(enemy => {
+                    if (enemy.active) {
+                        hazard.affect(enemy, dt);
+                    }
+                });
+            } else {
+                this.hazards.splice(i, 1);
+            }
+        }
 
         this.spawnTimer -= dt;
         if (this.spawnTimer <= 0) {
@@ -853,26 +1161,18 @@ class Game {
     }
 
     draw() {
-        this.ctx.fillStyle = '#111';
-        this.ctx.fillRect(0, 0, this.width, this.height);
-
-        this.ctx.strokeStyle = '#222';
-        this.ctx.lineWidth = 1;
-        const gridSize = 40;
-        for(let x=0; x < this.width; x += gridSize) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, this.height);
-            this.ctx.stroke();
-        }
-        for(let y=0; y < this.height; y += gridSize) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, y);
-            this.ctx.lineTo(this.width, y);
-            this.ctx.stroke();
+        if (this.state === 'TITLE') {
+            this.ctx.fillStyle = '#111';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        } else {
+            this.parallax.draw(this.ctx, this.width, this.height);
         }
 
         if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+            this.hazards.forEach(h => {
+                if (h.active) h.draw(this.ctx);
+            });
+
             if (this.baseCamp) {
                 this.baseCamp.draw(this.ctx);
             }
