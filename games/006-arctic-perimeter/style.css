@@ -37,10 +37,10 @@ body, html {
 
 .ui-layer {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  pointer-events: none; opacity: 0; transition: opacity 0.3s;
+  pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.3s;
   display: flex; flex-direction: column; z-index: 10;
 }
-.ui-layer.active { pointer-events: auto; opacity: 1; }
+.ui-layer.active { pointer-events: auto; opacity: 1; visibility: visible; }
 .ui-layer.modal {
   background: var(--ui-bg); justify-content: center; align-items: center; z-index: 20;
 }
