@@ -45,6 +45,34 @@ class SoundEngine {
         osc.start(this.ctx.currentTime);
         osc.stop(this.ctx.currentTime + 0.1);
     }
+    playDash() {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.master);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+        osc.start(this.ctx.currentTime);
+        osc.stop(this.ctx.currentTime + 0.1);
+    }
+    playError() {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.master);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+        osc.start(this.ctx.currentTime);
+        osc.stop(this.ctx.currentTime + 0.1);
+    }
     playPickup() {
         if (!this.initialized) return;
         const osc = this.ctx.createOscillator();
@@ -158,6 +186,9 @@ class InputManager {
         }
         return { x: this.mouse.x, y: this.mouse.y };
     }
+    isDashing() {
+        return this.keys['ShiftLeft'] || this.keys['ShiftRight'];
+    }
 }
 
 class Entity {
@@ -182,6 +213,25 @@ class Player extends Entity {
         this.maxAmmo = 5;
         this.ammo = this.maxAmmo;
         this.shootCooldown = 0;
+
+        // Phase 2: Mastery, vector sprite, reactive animation
+        this.dashCooldownMax = 1.5;
+        this.dashCooldown = 0;
+        this.dashTimeMax = 0.2;
+        this.dashTimer = 0;
+        this.invulnTimerMax = 0.5;
+        this.invulnTimer = 0;
+        this.aimAngle = 0;
+        this.recoilTimer = 0;
+        this.thrustTimer = 0;
+
+        // Momentum based movement
+        this.vx = 0;
+        this.vy = 0;
+        this.accel = 1500;
+        this.friction = 0.85;
+        this.maxSpeed = 250;
+        this.dashSpeed = 800;
     }
     update(dt, input) {
         const move = input.getMovement();
@@ -193,22 +243,113 @@ class Player extends Entity {
             move.dy /= mag;
         }
 
-        this.x += move.dx * this.speed * dt;
-        this.y += move.dy * this.speed * dt;
+        // Aim angle
+        const aim = input.getAim(this.x, this.y);
+        this.aimAngle = Math.atan2(aim.y - this.y, aim.x - this.x);
+
+        // Dash
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+        if (this.dashTimer > 0) this.dashTimer -= dt;
+        if (this.invulnTimer > 0) this.invulnTimer -= dt;
+        if (this.recoilTimer > 0) this.recoilTimer -= dt;
+
+        if (input.isDashing() && this.dashCooldown <= 0 && mag > 0.1) {
+            this.dashTimer = this.dashTimeMax;
+            this.dashCooldown = this.dashCooldownMax;
+            this.invulnTimer = this.invulnTimerMax;
+
+            // Boost velocity in dash direction
+            this.vx = move.dx * this.dashSpeed;
+            this.vy = move.dy * this.dashSpeed;
+        }
+
+        // Apply acceleration if not dashing
+        if (this.dashTimer <= 0) {
+            this.vx += move.dx * this.accel * dt;
+            this.vy += move.dy * this.accel * dt;
+
+            // Limit speed
+            const speedSq = this.vx * this.vx + this.vy * this.vy;
+            if (speedSq > this.maxSpeed * this.maxSpeed) {
+                const speed = Math.sqrt(speedSq);
+                this.vx = (this.vx / speed) * this.maxSpeed;
+                this.vy = (this.vy / speed) * this.maxSpeed;
+            }
+        }
+
+        // Apply friction
+        this.vx *= Math.pow(this.friction, dt * 60);
+        this.vy *= Math.pow(this.friction, dt * 60);
+
+        // Apply velocity
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
 
         if (this.shootCooldown > 0) this.shootCooldown -= dt;
+
+        // Thrust visual timer
+        if (mag > 0.1) this.thrustTimer += dt;
+        else this.thrustTimer = 0;
     }
     draw(ctx) {
-        ctx.fillStyle = '#e2fc7a';
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fill();
+        // Invulnerability blink
+        if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 20) % 2 === 0) return;
 
-        // Draw ammo indicators
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        // Recoil displacement visually
+        if (this.recoilTimer > 0) {
+            const recoilDist = (this.recoilTimer / 0.1) * 5;
+            ctx.translate(-Math.cos(this.aimAngle) * recoilDist, -Math.sin(this.aimAngle) * recoilDist);
+        }
+
+        ctx.rotate(this.aimAngle);
+
+        // Thrust effect
+        if (this.thrustTimer > 0) {
+            ctx.fillStyle = (Math.floor(this.thrustTimer * 20) % 2 === 0) ? '#ff5' : '#f50';
+            ctx.beginPath();
+            ctx.moveTo(-10, -5);
+            ctx.lineTo(-20 - Math.random() * 10, 0);
+            ctx.lineTo(-10, 5);
+            ctx.fill();
+        }
+
+        // Procedural Ship Chassis
+        ctx.strokeStyle = '#e2fc7a';
+        ctx.fillStyle = '#1a1515';
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.moveTo(15, 0); // Nose
+        ctx.lineTo(-10, 12); // Right Wing
+        ctx.lineTo(-5, 0); // Engine Back
+        ctx.lineTo(-10, -12); // Left Wing
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Gun barrel
+        ctx.fillStyle = '#e2fc7a';
+        ctx.fillRect(5, -2, 12, 4);
+
+        // Laser telegraph
+        ctx.strokeStyle = 'rgba(226, 252, 122, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(17, 0);
+        ctx.lineTo(800, 0);
+        ctx.stroke();
+
+        ctx.restore();
+
+        // Draw ammo indicators (orbiting)
+        const orbitTime = Date.now() / 1000;
         for (let i = 0; i < this.maxAmmo; i++) {
-            const angle = (i / this.maxAmmo) * Math.PI * 2;
-            const px = this.x + Math.cos(angle) * (this.radius + 8);
-            const py = this.y + Math.sin(angle) * (this.radius + 8);
+            const angle = (i / this.maxAmmo) * Math.PI * 2 + orbitTime;
+            const px = this.x + Math.cos(angle) * (this.radius + 12);
+            const py = this.y + Math.sin(angle) * (this.radius + 12);
             ctx.fillStyle = i < this.ammo ? '#fff' : '#444';
             ctx.beginPath();
             ctx.arc(px, py, 3, 0, Math.PI * 2);
@@ -389,11 +530,20 @@ class Game {
             const dx = aim.x - this.player.x;
             const dy = aim.y - this.player.y;
             const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            const speed = 400;
+            const speed = 600; // Increased bullet speed
 
-            this.bullets.push(new Bullet(this.player.x, this.player.y, (dx / dist) * speed, (dy / dist) * speed));
+            const dirX = dx / dist;
+            const dirY = dy / dist;
+
+            this.bullets.push(new Bullet(this.player.x, this.player.y, dirX * speed, dirY * speed));
             this.player.ammo--;
             this.player.shootCooldown = 0.25;
+            this.player.recoilTimer = 0.1;
+
+            // Add physical recoil to player momentum
+            this.player.vx -= dirX * 200;
+            this.player.vy -= dirY * 200;
+
             this.sound.playShoot();
         }
 
@@ -472,11 +622,13 @@ class Game {
                 }
             }
 
-            // Check collision with player
-            const dx = e.x - this.player.x;
-            const dy = e.y - this.player.y;
-            if (dx * dx + dy * dy < (e.radius + this.player.radius) ** 2) {
-                this.endGame();
+            // Check collision with player (respect invulnerability)
+            if (this.player.invulnTimer <= 0) {
+                const dx = e.x - this.player.x;
+                const dy = e.y - this.player.y;
+                if (dx * dx + dy * dy < (e.radius + this.player.radius) ** 2) {
+                    this.endGame();
+                }
             }
 
             if (e.hp <= 0) {
@@ -490,10 +642,12 @@ class Game {
             const eb = this.enemyBullets[i];
             eb.update(dt);
 
-            const dx = eb.x - this.player.x;
-            const dy = eb.y - this.player.y;
-            if (dx * dx + dy * dy < (eb.radius + this.player.radius) ** 2) {
-                this.endGame();
+            if (this.player.invulnTimer <= 0) {
+                const dx = eb.x - this.player.x;
+                const dy = eb.y - this.player.y;
+                if (dx * dx + dy * dy < (eb.radius + this.player.radius) ** 2) {
+                    this.endGame();
+                }
             }
 
             if (eb.x < 0 || eb.x > this.canvas.width || eb.y < 0 || eb.y > this.canvas.height) {
@@ -549,6 +703,20 @@ class Game {
             this.ctx.fillText(`Score: ${this.score}`, 20, 30);
             this.ctx.fillText(`Wave: ${this.wave}`, 20, 60);
             this.ctx.fillText(`Ammo: ${this.player.ammo}/${this.player.maxAmmo}`, 20, 90);
+
+            // Dash Cooldown HUD
+            this.ctx.fillText(`Dash: ${this.player.dashCooldown > 0 ? this.player.dashCooldown.toFixed(1) + 's' : 'READY'}`, 20, 120);
+
+            // Visual Dash Cooldown Bar
+            this.ctx.strokeStyle = '#444';
+            this.ctx.strokeRect(20, 130, 100, 10);
+            if (this.player.dashCooldown <= 0) {
+                this.ctx.fillStyle = '#e2fc7a';
+                this.ctx.fillRect(20, 130, 100, 10);
+            } else {
+                this.ctx.fillStyle = '#f55';
+                this.ctx.fillRect(20, 130, 100 * (1 - this.player.dashCooldown / this.player.dashCooldownMax), 10);
+            }
 
             if (this.state === 'PAUSED') {
                 this.ctx.textAlign = 'center';
