@@ -929,6 +929,11 @@ class Game {
         this.enemyProjectiles = []; this.hazards = [];
         this.score = 0;
         this.enemySpawnTimer = 0; this.enemySpawnRate = 2.0;
+        this.bossActive = false;
+        this.currentBoss = null;
+        this.bossWarningTimer = 0;
+        this.nextBossScore = 150;
+        this.bossTypeIndex = 0;
         this.environment = new Environment(this.width, this.height);
         this.quicksandZones = [
             new QuicksandZone(this.width * 0.2, this.height * 0.2, 80),
@@ -1117,11 +1122,40 @@ class Game {
         if (this.enemyProjectiles) this.enemyProjectiles = this.enemyProjectiles.filter(ep => ep.active);
         if (this.hazards) this.hazards = this.hazards.filter(h => h.active);
 
-        this.enemySpawnTimer -= dt;
-        if (this.enemySpawnTimer <= 0) {
-            this.spawnEnemy();
-            this.enemySpawnTimer = this.enemySpawnRate;
-            this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.05);
+        if (this.score >= this.nextBossScore && !this.bossActive && this.bossWarningTimer <= 0) {
+            this.bossWarningTimer = 3.0;
+        }
+
+        if (this.bossWarningTimer > 0) {
+            this.bossWarningTimer -= dt;
+            if (this.bossWarningTimer <= 0) {
+                this.bossActive = true;
+                let bX = this.width / 2;
+                let bY = -50;
+                let bossObj;
+                if (this.bossTypeIndex % 2 === 0) {
+                    bossObj = new BossSandWorm(bX, bY);
+                } else {
+                    bossObj = new BossDuneLord(bX, bY);
+                }
+                this.currentBoss = bossObj;
+                this.enemies.push(bossObj);
+                this.bossTypeIndex++;
+            }
+        } else if (!this.bossActive) {
+            this.enemySpawnTimer -= dt;
+            if (this.enemySpawnTimer <= 0) {
+                this.spawnEnemy();
+                this.enemySpawnTimer = this.enemySpawnRate;
+                this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.05);
+            }
+        }
+
+        if (this.bossActive && this.currentBoss && !this.currentBoss.active) {
+            this.bossActive = false;
+            this.currentBoss = null;
+            this.nextBossScore += 200;
+            this.score += 50;
         }
         document.getElementById('score-display').innerText = `Score: ${this.score}`;
         document.getElementById('ammo-display').innerText = `Ammo: ${this.player.ammo} / ${this.player.maxAmmo}`;
@@ -1155,6 +1189,37 @@ class Game {
             this.particles.forEach(p => p.draw(this.ctx));
             if (this.state !== 'GAME_OVER' || (this.state === 'GAME_OVER' && Math.floor(Date.now() / 200) % 2 === 0)) {
                  this.player.draw(this.ctx);
+            }
+
+            if (this.bossWarningTimer > 0) {
+                if (Math.floor(Date.now() / 250) % 2 === 0) {
+                    this.ctx.save();
+                    this.ctx.fillStyle = '#ff0000';
+                    this.ctx.font = 'bold 40px monospace';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('WARNING: BOSS APPROACHING!', this.width / 2, this.height / 3);
+                    this.ctx.restore();
+                }
+            }
+            if (this.bossActive && this.currentBoss) {
+                this.ctx.save();
+                let barW = 400;
+                let barH = 20;
+                let barX = this.width / 2 - barW / 2;
+                let barY = 30;
+                this.ctx.fillStyle = '#444';
+                this.ctx.fillRect(barX, barY, barW, barH);
+                let pct = Math.max(0, this.currentBoss.hp / this.currentBoss.maxHp);
+                this.ctx.fillStyle = this.currentBoss.phase === 2 ? '#ff0000' : '#ff8c00';
+                this.ctx.fillRect(barX, barY, barW * pct, barH);
+                this.ctx.strokeStyle = '#fff';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(barX, barY, barW, barH);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = 'bold 16px monospace';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(this.currentBoss.constructor.name, this.width / 2, barY + 15);
+                this.ctx.restore();
             }
         }
     }
@@ -1272,6 +1337,179 @@ class ScreenShake {
             };
         }
         return {x: 0, y: 0};
+    }
+}
+class Boss extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.maxHp = 100;
+        this.hp = 100;
+        this.phase = 1;
+        this.transitioned = false;
+    }
+    update(dt, game) {
+        super.update(dt, game);
+        if (this.hp <= this.maxHp / 2 && !this.transitioned) {
+            this.phase = 2;
+            this.transitioned = true;
+            this.onTransition(game);
+        }
+    }
+    onTransition(game) {}
+}
+
+class BossSandWorm extends Boss {
+    constructor(x, y) {
+        super(x, y);
+        this.radius = 40;
+        this.speed = 120;
+        this.color = '#c2a176';
+        this.maxHp = 50;
+        this.hp = 50;
+        this.state = 'DIGGING';
+        this.stateTimer = 3.0;
+    }
+    update(dt, game) {
+        if (!this.active) return;
+        this.stateTimer -= dt;
+
+        if (this.state === 'DIGGING') {
+            const dx = game.player.x - this.x;
+            const dy = game.player.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 0) {
+                this.x += (dx / dist) * this.speed * dt;
+                this.y += (dy / dist) * this.speed * dt;
+            }
+            if (this.stateTimer <= 0) {
+                this.state = 'ERUPTING';
+                this.stateTimer = 3.0;
+                game.quicksandZones.push(new QuicksandZone(this.x, this.y, 100));
+
+                // push ammos away
+                game.ammos.forEach(a => {
+                    const adx = a.x - this.x;
+                    const ady = a.y - this.y;
+                    const adist = Math.hypot(adx, ady);
+                    if (adist < 150) {
+                        a.x += (adx/adist) * 50;
+                        a.y += (ady/adist) * 50;
+                    }
+                });
+            }
+        } else if (this.state === 'ERUPTING') {
+            if (this.phase === 2 && Math.random() < 0.05) {
+                game.enemyProjectiles.push(new EnemyProjectile(this.x, this.y, Math.random() * Math.PI * 2));
+            }
+            if (this.stateTimer <= 0) {
+                this.state = 'DIGGING';
+                this.stateTimer = 2.0;
+            }
+        }
+
+        super.update(dt, game);
+    }
+    onTransition(game) {
+        this.speed = 180;
+        for(let i=0; i<4; i++) {
+            game.enemies.push(new EnemySwarmer(this.x + (Math.random()-0.5)*50, this.y + (Math.random()-0.5)*50));
+        }
+    }
+    draw(ctx) {
+        if (this.state === 'DIGGING') {
+            ctx.save();
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        } else {
+            ctx.save();
+            ctx.fillStyle = this.phase === 2 ? '#a0522d' : this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
+class BossDuneLord extends Boss {
+    constructor(x, y) {
+        super(x, y);
+        this.radius = 35;
+        this.speed = 80;
+        this.color = '#8b0000';
+        this.maxHp = 60;
+        this.hp = 60;
+        this.actionTimer = 2.0;
+    }
+    update(dt, game) {
+        if (!this.active) return;
+        this.actionTimer -= dt;
+
+        const dx = game.player.x - this.x;
+        const dy = game.player.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 150) {
+            this.x += (dx / dist) * this.speed * dt;
+            this.y += (dy / dist) * this.speed * dt;
+        }
+
+        if (this.actionTimer <= 0) {
+            this.actionTimer = 2.0;
+            if (game.ammos.length > 0) {
+                let targetAmmo = game.ammos[Math.floor(Math.random() * game.ammos.length)];
+                game.enemies.push(new EnemyAreaDenial(targetAmmo.x, targetAmmo.y));
+            }
+        }
+
+        if (this.phase === 2) {
+            game.ammos.forEach(a => {
+                const adx = this.x - a.x;
+                const ady = this.y - a.y;
+                const adist = Math.hypot(adx, ady);
+                if (adist < 200 && adist > 10) {
+                    a.x += (adx/adist) * 50 * dt;
+                    a.y += (ady/adist) * 50 * dt;
+                }
+                if (adist < this.radius) {
+                    a.active = false;
+                    this.hp = Math.min(this.maxHp, this.hp + 5);
+                    const angle = Math.atan2(game.player.y - this.y, game.player.x - this.x);
+                    game.enemyProjectiles.push(new EnemyProjectile(this.x, this.y, angle));
+                }
+            });
+        }
+
+        super.update(dt, game);
+    }
+    onTransition(game) {
+        this.speed = 130;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.closePath();
+        ctx.fill();
+
+        if (this.phase === 2) {
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 200, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.restore();
     }
 }
 // 450 lines padding end
