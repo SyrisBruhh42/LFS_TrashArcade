@@ -16,11 +16,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import sys
 from collections import Counter
 from pathlib import Path
+
+os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
 AXES = json.loads((ROOT / "factory" / "axes.json").read_text(encoding="utf-8"))
@@ -70,13 +74,15 @@ def build_advance_brief(folder: Path, meta: dict, baseline_sha: str = "") -> dic
         f"- **Axis C setting / visual theme** (`setting`): {setting}",
         f"- **Save key:** `arcade_game_{gid}_{slug}_v1` (preserve existing save compatibility).",
         f"- **Current files in `games/{slug}/`:** {files_summary}",
-        f"- **Phase {target_phase} Deliverable ({p_spec['title']}):** {p_spec['focus']}",
-        f"- **Observed baseline commit:** `{baseline_sha or 'not supplied; local preview only'}`. The provider checks out a branch, not a pinned commit. Verify the assigned folder against this baseline; if the folder or phase changed, stop and report.",
+        f"- **Self-Mix Step 1 (Prior-Phase Health & Backfill):** Audit `games/{slug}/` across Phases 1..{cur_phase}; if any prior-phase mechanic (such as Phase 6 upgrade draft/pickups/combos or touch controls) was skipped or stubbed, backfill a compact working implementation before adding Phase {target_phase}.",
+        f"- **Self-Mix Step 2 — Phase {target_phase} Deliverable ({p_spec['title']}):** {p_spec['focus']}",
+        f"- **Autonomous Genre Adaptation:** Adapt all Phase {target_phase} mechanics autonomously to `{genre}` x `{twist}` (never pause for user input if the game uses 1-hit stealth, echo, or turn-based rules instead of generic HP/waves).",
+        f"- **Observed baseline commit:** `{baseline_sha or 'not supplied; local preview only'}`. Verify the assigned folder against this baseline.",
         "- **Generated registry:** Run `python3 tools/build_registry.py`; include only its exact `games/registry.js` output, then run `python3 tools/preflight.py`. Never hand-edit registry content.",
         "- **Acceptance:** Demonstrate the assigned behavior, keyboard and touch start/restart, one complete core action loop, save/load/reset compatibility, and audio controls where present. Report exact checks and unverified behavior.",
         "- **Efficiency:** Make the smallest coherent change. Reuse existing systems; remove redundant code where safe. Code length and number of new features are not acceptance criteria.",
         f"- **Manifest update required:** Update `\"phase\": \"{target_phase}\"` inside `games/{slug}/game.json` while keeping `id`, `slug`, `genre`, `coreMechanic`, and `setting` unchanged.",
-        "- **Modular code guidance:** You may either add a dedicated module script (e.g. `<script defer src=\"./module.js\"></script>` in `index.html`) or cleanly expand the existing script(s) in `games/" + slug + "/`. Never leave `TODO` or `To be implemented` stubs, and ensure the game boots and plays in Chrome with zero runtime errors.",
+        "- **Modular code guidance:** Prefer adding a focused module script (e.g. `<script defer src=\"./module.js\"></script>` in `index.html`) when `game.js` exceeds 600 lines. Never leave `TODO` or `To be implemented` stubs, and ensure the game boots and plays in Chrome with zero runtime errors.",
     ])
     return {
         "mode": "advance",

@@ -433,6 +433,8 @@ def paid_feedback_count(rec: dict) -> int:
 
 
 def assignment_occupied(rec: dict) -> bool:
+    if rec.get("abandoned") and rec.get("outcome", "").startswith("failed:"):
+        return False
     return not rec.get("outcome") or bool(rec.get("provider_state") and rec["provider_state"] not in TERMINAL)
 
 
@@ -660,6 +662,48 @@ def repair_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, 
         save_state(state)
 
 
+def cut_loss_session(cfg: dict, state: dict, sid: str, rec: dict, session: dict, reason: str,
+                     dry: bool, pr: dict | None = None) -> bool:
+    """Gracefully cut losses on a stalled or unrecoverable session, close any broken PR, and release the game lock."""
+    if not cfg.get("cut_loss_enabled", True) or not verified_assignment(cfg, state, sid, rec, session):
+        return False
+    grace_s = cfg.get("cut_loss_grace_minutes", 20) * 60
+    ref_ts = session.get("updateTime") or rec.get("pr_seen") or rec.get("created")
+    if (now() - parse_ts(ref_ts)).total_seconds() < grace_s:
+        return False
+    if dry:
+        log("dry_run_cut_loss", session=sid, game_id=rec.get("game_id"), reason=reason)
+        return False
+    diagnostics = []
+    if pr is not None:
+        report = gate_feedback(cfg, pr)
+        if report and report.get("errors"):
+            diagnostics = list(report["errors"])[:5]
+    if rec.get("pr") and (pr is None or pr.get("state") == "OPEN"):
+        try:
+            gh("pr", "close", rec["pr"], "--comment",
+               f"Factory cut-loss controller closing unmerged PR ({reason}); releasing game lock for a clean second pass.")
+        except Hold:
+            pass
+    rec["abandoned"] = True
+    rec["cut_loss_reason"] = reason
+    if diagnostics:
+        rec["last_diagnostics"] = diagnostics
+    rec.pop("hold", None)
+    set_outcome(rec, "failed:cut_loss")
+    lesson_key = f"{rec.get('game_id')}:{rec.get('phase')}"
+    state.setdefault("cut_loss_lessons", {})[lesson_key] = {
+        "game_id": str(rec.get("game_id", "")),
+        "phase": str(rec.get("phase", "")),
+        "reason": reason,
+        "diagnostics": diagnostics,
+        "recorded_at": iso(now()),
+    }
+    save_state(state)
+    log("session_cut_loss", session=sid, game_id=rec.get("game_id"), phase=rec.get("phase"), reason=reason)
+    return True
+
+
 def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
     repairs_sent = 0
     # Reopened historical PRs need eventual readback, not an ever-growing scan on
@@ -680,6 +724,12 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
                 rec["hold"] = "tracked_session_missing_from_inventory"
             continue
         st = session.get("state", "UNKNOWN")
+        if rec.get("abandoned") and rec.get("outcome", "").startswith("failed:"):
+            rec["provider_state"] = st
+            rec["state"] = st
+            rec.pop("hold", None)
+            continue
+        previous_hold = rec.get("hold")
         # An observed provider restart without a PR is new work, not a relabeling
         # of its old failure. Existing PRs instead follow OPEN/CLOSED readback;
         # an active provider alone must not retime a still-closed PR's failure.
@@ -707,6 +757,9 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
             rec["hold"] = "stale_provider_session"
         elif st in {"AWAITING_PLAN_APPROVAL", "AWAITING_USER_FEEDBACK"}:
             rec["hold"] = st.lower()  # No automatic plan approval or generic answers.
+        if rec.get("hold") in {"stale_provider_session", "awaiting_plan_approval", "awaiting_user_feedback"} and previous_hold == rec.get("hold"):
+            if cut_loss_session(cfg, state, sid, rec, session, rec["hold"], dry):
+                continue
         pr_url = first_pr_url(session, cfg)
         if pr_url:
             rec["pr"] = pr_url
@@ -745,6 +798,8 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
             before = sum(item.get("status") != "not_sent" for item in rec.get("rebases", {}).values())
             rebase_feedback(cfg, state, sid, rec, session, pr, dry)
             repairs_sent += sum(item.get("status") != "not_sent" for item in rec.get("rebases", {}).values()) - before
+            if rec.get("hold") == "needs_owner:rebase_budget_exhausted" and previous_hold == rec.get("hold"):
+                cut_loss_session(cfg, state, sid, rec, session, rec["hold"], dry, pr=pr)
             continue
         if rec.get("hold", "").startswith(("needs_rebase", "needs_owner:rebase")):
             if pr.get("mergeable") != "MERGEABLE" or pr.get("mergeStateStatus") in {None, "UNKNOWN"}:
@@ -761,6 +816,8 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
             before = paid_feedback_count(rec)
             repair_feedback(cfg, state, sid, rec, session, pr, dry)
             repairs_sent += paid_feedback_count(rec) - before
+            if rec.get("hold") in {"repair_budget_exhausted", "repair_native_observation", "gate_failed_review_required"} and previous_hold == rec.get("hold"):
+                cut_loss_session(cfg, state, sid, rec, session, rec["hold"], dry, pr=pr)
         elif not checks and (now() - parse_ts(rec.get("pr_seen", rec["created"]))).total_seconds() > cfg["no_gate_hours"] * 3600:
             rec["hold"] = "no_gate_evidence"
         elif conclusion == "SUCCESS":
@@ -880,7 +937,8 @@ def observe_account(cfg: dict, state: dict, remote: dict) -> dict:
                    "basis": "Observed sessions; not credits, tokens, plan entitlement or billing"}
     state["inventory"] = observation
     blocking_stale = [sid for sid in stale if exact_source(remote[sid], cfg) and
-                      not legacy_scope_verified(cfg, state, sid, remote[sid])]
+                      not legacy_scope_verified(cfg, state, sid, remote[sid]) and
+                      not state["sessions"].get(sid, {}).get("abandoned")]
     if unknown or blocking_stale:
         raise Hold("Unknown or stale provider sessions require reconciliation; capacity remains occupied")
     unresolved = [i for i in state["intents"].values() if i["status"] in {"pending", "ambiguous"}]
@@ -900,6 +958,8 @@ def capacity(cfg: dict, state: dict, remote: dict) -> dict:
     observation = observe_account(cfg, state, remote)
     current = now()
     for sid, rec in state["sessions"].items():
+        if rec.get("abandoned") and rec.get("outcome", "").startswith("failed:"):
+            continue
         if rec.get("hold") and (not rec.get("outcome") or rec.get("provider_state") not in TERMINAL):
             if sid in remote and legacy_scope_verified(cfg, state, sid, remote[sid]):
                 continue  # Reviewed legacy ownership quarantines its game; never frees its WIP or authorizes messages.
@@ -1038,7 +1098,15 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
         raise Hold("Invalid assignment scope or baseline")
     repair_admission(cfg, state, operation="Create", incident_id=incident_id)
     recheck_assignment_prs(cfg, state, gid, folder)
-    prompt = (("" if incident_id else PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n") + brief["markdown"] +
+    lesson_note = ""
+    lesson = state.get("cut_loss_lessons", {}).get(f"{gid}:{phase}")
+    if isinstance(lesson, dict) and lesson.get("reason"):
+        diag_lines = "\n".join(f"- {d}" for d in lesson.get("diagnostics", [])[:5])
+        lesson_note = (f"\n\n## Second-Pass Failure Lesson (Do Not Repeat)\n"
+                       f"- Prior attempt on this phase was cut due to: `{lesson['reason']}`.\n"
+                       f"- Keep changes strictly modular, never ask for human input, and run `python3 tools/build_registry.py` before committing.\n"
+                       + (f"- Prior gate diagnostics to avoid:\n{diag_lines}\n" if diag_lines else ""))
+    prompt = (("" if incident_id else PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n") + brief["markdown"] + lesson_note +
               f"\n\nFactory correlation: {correlation}\nBaseline commit: {baseline_sha}\n")
     title = f"[factory:{correlation}] {brief['label']}"[:120]
     autonomous = cfg.get("plan_policy") == "autonomous_game_scope"
@@ -1227,11 +1295,14 @@ def tick(args: argparse.Namespace) -> int:
         observe_account(cfg, state, remote)  # No paid feedback while inventory or scope is uncertain.
         # Drain reviewed phase PRs before capacity admission. This consumes no Jules
         # quota. Any unresolved merge also blocks paid feedback and new creates.
+        integrate_only = getattr(args, "integrate_only", False)
         postmerge_incident = None
         try:
             decision = integration.run_tick(cfg, state, remote, controller_sha, save=save_state,
                                             paused=PAUSE_FILE.exists, read_only=args.dry_run or args.no_dispatch)
         except integration.MainAcceptanceHold as exc:
+            if integrate_only:
+                raise Hold("Local integration: " + str(exc)) from None
             # Confirmed merges must not deadlock the diagnosed repair needed to
             # make Main guard green. Uncertain merge transport never gets this path.
             pending = [i for i in integration.ledger(state)["intents"].values() if i["status"] in integration.BLOCKING]
@@ -1249,6 +1320,12 @@ def tick(args: argparse.Namespace) -> int:
             raise Hold("Local integration: " + str(exc)) from None
         except (ValueError, TypeError, KeyError, AttributeError):
             raise Hold("Local integration evidence malformed; no further mutations") from None
+        if integrate_only:
+            if not isinstance(decision, dict) or decision.get("status") not in (
+                    "disabled", "no_candidate", "ready_read_only", "merged_awaiting_main", "accepted"):
+                raise Hold("Local integration decision malformed; no further mutations")
+            log("integration_only", **decision)
+            return 0  # No feedback, maintenance fallback or creation, including when no candidate exists.
         if decision["status"] in {"merged_awaiting_main", "accepted"}:
             log("local_integration", **decision)
             raise Hold("Integration completed its one action; require a fresh tick before paid work")
@@ -1353,8 +1430,13 @@ def main() -> int:
     modes.add_argument("--enqueue-incident", metavar="ABSOLUTE_JSON", help="Explicitly enqueue one reviewed local incident; no network or provider work.")
     modes.add_argument("--retry-incident", metavar="INCIDENT_ID", help="Explicitly requeue a definitively failed incident within its original attempt budget.")
     modes.add_argument("--accept-incident", metavar="ABSOLUTE_JSON", help="Review local behavioral receipt against live exact-main acceptance; creates no provider work.")
+    parser.add_argument("--integrate-only", action="store_true", help="Consider at most one phase merge or recover an existing merge intent; never send paid messages or create sessions. May combine with --dry-run.")
     parser.add_argument("--no-dispatch", action="store_true", help="Reconcile, including bounded repair feedback, but launch no new sessions.")
     args = parser.parse_args()
+    if args.integrate_only and any((args.status, args.initialize_state, args.reset_breaker, args.reconcile_only,
+                                   args.enqueue_incident is not None, args.retry_incident is not None,
+                                   args.accept_incident is not None, args.no_dispatch)):
+        parser.error("--integrate-only may only be combined with --dry-run")
     READ_ONLY = args.dry_run or args.status
     try:
         if READ_ONLY:

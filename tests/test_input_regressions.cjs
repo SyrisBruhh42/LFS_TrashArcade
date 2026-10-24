@@ -155,7 +155,7 @@ test('085 phase2 particles update, expire, draw, and reset with a new wave',()=>
 });
 
 function pausedRetrieval() {
-    const document=target({hidden:false});
+    const document=target({getElementById(){return null;},activeElement:null,hidden:false});
     const h=load('085-scrap-heist-retrieval',['game.js'],{document});
     h.evaluate(`globalThis.input=new InputManager(); globalThis.game=Object.assign(Object.create(Game.prototype),{
         input,state:'PLAYING',score:170,player:{x:200,y:200},sound:{init(){},resume(){}}

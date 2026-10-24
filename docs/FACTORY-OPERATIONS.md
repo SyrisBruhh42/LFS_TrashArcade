@@ -6,7 +6,7 @@ This is the operational contract for the implemented controller, migration and r
 
 ## Admission, ownership and cost boundaries
 
-The candidate defaults to `generation_enabled=false`, `local_integration_enabled=false`, `maintenance_enabled=true`, `repair_owner="native"` and `controller_native_repairs_disabled=false`. The initial pilot is **one reviewed incident with `max_attempts: 1`**. Keep generation and automatic integration disabled until independently authorized and qualified.
+The release policy sets `generation_enabled=true`, `local_integration_enabled=true`, `maintenance_enabled=true`, `repair_owner="native"` and `controller_native_repairs_disabled=false`. The stopped maintenance-pilot release used generation and integration disabled, with **one reviewed incident and `max_attempts: 1`**. Activate this phase-enabled policy only after that repair is independently accepted; keep the timer disabled through one bounded phase creation/integration trial using `--integrate-only` below. Source configuration is not evidence of activation or a successful trial.
 
 `factory/config.json` separates local ceilings (12 active sessions, 96 rolling-day starts, 8 open PRs, 2 unfinished games) from configured shared-account ceilings (60 active, 300 rolling-24-hour starts, reserves of 1 and 5). These are ceilings, not targets or remaining capacity. Reconfirm actual allocation and complete inventory; manual, native, scheduled and other-repository work also consumes account capacity. Session counts, token diagnostics and estimated savings are not billing receipts, refunds or evidence of credits remaining.
 
@@ -23,6 +23,7 @@ Defaults are `$XDG_DATA_HOME/lfs-trasharcade-factory` (normally `~/.local/share/
 | `python3 tools/factory_dispatch.py --status` | Saved local observations only; no network, writes or locks. |
 | `python3 tools/factory_dispatch.py --dry-run` | Provider/GitHub GET observations; no state/event/lock writes, source checkout or paid calls. An unavailable current-main snapshot can hold it. |
 | `python3 tools/factory_dispatch.py --reconcile-only` | Provider/GitHub reads **and durable local reconciliation writes**, including GET-only recovery of existing merge intents. Never creates sessions, sends paid messages or submits merge requests. Requires enabled/unpaused operation, credentials and clean pinned controller policy. |
+| `python3 tools/factory_dispatch.py --integrate-only` | Complete provider observation and durable state writes; considers at most one eligible phase merge or recovers an existing merge intent. Never creates sessions, sends repair/rebase messages or routes maintenance. Requires configured local integration and all normal integration admission gates. Add `--dry-run` for GET-only validation without writes or merge requests. |
 | `python3 tools/factory_dispatch.py --enqueue-incident /absolute/spec.json` | Validated local evidence reads and state writes; no provider calls. |
 | `python3 tools/factory_dispatch.py --retry-incident INCIDENT_ID` | Explicit local requeue after definitive failed/rejected work, within the original attempt budget. Uncertain/active work cannot be replaced. |
 | `python3 tools/factory_dispatch.py --accept-incident /absolute/receipt.json` | Local evidence plus fresh GitHub acceptance reads and state writes; no paid provider call. |
@@ -144,6 +145,8 @@ python3 "$FACTORY_PINNED/tools/factory_migrate.py" --state-file "$FACTORY_STATE"
 Release requires complete matching inventory, zero `missing_unresolved`, `active_unresolved` and `unresolved_intents`, and no actual pending/ambiguous intent. The file hash binds all other state too. Changed state or expired review requires renewed review/reconciliation, not editing a hash merely to pass. Release records the owner evidence hash, preserves history, resets healthy observations and removes only its own migration breaker. It does not start the timer or prove paid admission will pass.
 
 ## One-incident maintenance pilot
+
+Use the retained maintenance-pilot release with generation and local integration disabled for this initial trial. Activate the phase-enabled release only after independent acceptance below.
 
 The owner reproduces a still-present defect against a named main SHA and installs a trusted scenario/adapter asserting intended behavior. Do not pay for an already repaired incident or invent a scenario ID without an implemented trusted check. Usability work needs one observable journey and protected behavior, not an unbounded overhaul. Required scenarios/protected checks do not cover every feature.
 
@@ -274,6 +277,8 @@ The local integration path uses the existing dispatcher lock and native authenti
 
 Local automatic integration accepts only verified new/advance assignments whose durable create intent, provider source/title/prompt/output, game folder and exact phase all agree. Legacy annotations, maintenance and infrastructure never gain automatic merge authority. One candidate is considered per tick before creation capacity checks, allowing accepted work to drain when WIP is full. Dry runs and `--no-dispatch` never merge.
 
+For a bounded one-session trial, keep the timer disabled and stop ordinary ticks once its durable create intent exists. Use `--reconcile-only` to observe session/PR progress and `--integrate-only` to attempt integration. The latter returns even when there is no eligible candidate or main acceptance fails, so it cannot create fallback work while generation is enabled. It does not refresh session/PR eligibility through ordinary reconciliation; reconcile first. `--integrate-only --dry-run` reports its read-only decision. Other command modes, including `--no-dispatch`, cannot be combined with `--integrate-only`. This mode does not override disabled integration, migration holds or other admission stops; use `--reconcile-only` for GET-only recovery when new integration is held.
+
 Live-qualify a main branch rule requiring `Arcade gate` from GitHub Actions, strict up-to-date branches, administrator enforcement, no force-push/delete permissions and no review-bypass allowances. Other rules can add holds. The controller verifies exact PR/head/base, immutable base-to-head file scope, manifest phase, fresh Main guard, trusted bot report, successful validation jobs, exact-head status and matching artifact metadata. It rechecks admission and evidence expiry before sending. Strict server protection covers the remaining base race; local reads alone are not atomic.
 
 Before the single merge PUT, the controller durably saves an intent keyed by repository, PR, head, base and validation run. A known pre-transport pause is recorded as `not_sent` and may be freshly admitted, preserving its history. Once transport may have occurred, pending/ambiguous intents receive GET readback only; neither a timeout nor disabling the feature permits another PUT. Confirmed merges remain `awaiting_main_acceptance` until a fresh successful **push-triggered** Main guard covers exact current main and includes that merge. Native-auth merges normally trigger this workflow; the controller does not issue a duplicate workflow dispatch. Readback/receipt recovery runs through `--reconcile-only` without ordinary new-work admission.
@@ -282,7 +287,7 @@ An unresolved merge holds phase generation and paid feedback. A confirmed merge 
 
 The alternate cloud integration path remains opt-in through `ARCADE_AUTO_MERGE=true` and requires a separate Administration:read capability (`ARCADE_POLICY_TOKEN`) because workflow `GITHUB_TOKEN` cannot read branch protection. It must not run alongside local integration. The cloud helper uses the read-only capability only for policy inspection and the workflow token for merging, followed by explicit main audit dispatch because workflow-token pushes normally do not trigger workflows. This alternative is not enabled by the local cutover; missing credentials are not a reason to put a broad token into repository secrets.
 
-After the bounded pilot's provider correlation, repair ownership, acceptance and recovery evidence are reviewed, continuing service can be enabled if authorized:
+Only after the maintenance incident is independently accepted and the bounded phase creation/integration trial passes its exact merged-main Main guard, assigned-behavior checks and recovery review can continuing service be enabled, if authorized:
 
 ```sh
 bash tools/install_factory.sh enable

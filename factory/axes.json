@@ -141,23 +141,23 @@
     },
     "6": {
       "title": "Phase 6/10 — Wave Director, In-Run Upgrade Draft & Combo Multipliers",
-      "focus": "Add deep run-to-run progression (`progression.js` or upgrade subsystem): build a between-wave Upgrade/Perk Draft modal (or interactive tactical upgrade choice) offering 3 randomized build upgrades (from a pool of 8+ perks/mutators) when clearing waves, plus physical field pickups and a risk/reward combo multiplier decay bar. Set `\"phase\": \"6\"` in `game.json`."
+      "focus": "Add run progression (`progression.js` or upgrade subsystem): implement a between-wave Upgrade/Perk Draft offering 3 randomized build upgrades (from a focused pool of 4-6 genre-appropriate perks), 1 interactive field pickup type, and a visible combo multiplier indicator with decay. Set `\"phase\": \"6\"` in `game.json`."
     },
     "7": {
       "title": "Phase 7/10 — High-Impact Arcade Juice, Particle Emitters & Combat VFX",
-      "focus": "Maximize visual feedback (`vfx.js` or juice subsystem): add directional particle emitters for hits/thrusters/explosions, hit-stop freeze frames on critical impacts and boss kills, directional screen shake respecting Options intensity, floating combat damage/combo popups with smooth easing, and motion trails/afterimages. Set `\"phase\": \"7\"` in `game.json`."
+      "focus": "Add high-signal visual feedback (`vfx.js` or juice subsystem): implement directional particle bursts on impacts/actions, brief hit-stop or critical flash on major events, screen-shake respecting reduced-motion settings, and floating score/combo popups. Set `\"phase\": \"7\"` in `game.json`."
     },
     "8": {
       "title": "Phase 8/10 — Multi-Voice Web Audio Synthesizer & Dynamic Adaptive Soundtrack",
-      "focus": "Upgrade `SoundEngine` (`audio.js` or audio subsystem) into a rich procedural Web Audio synthesizer: create a multi-voice procedural background synth/arpeggiator + percussion loop that shifts tempo/filter intensity during Boss waves and low-HP states, plus 10+ distinct synthesized SFX across all weapons, abilities, enemy hits, upgrades, and UI buttons. Set `\"phase\": \"8\"` in `game.json`."
+      "focus": "Upgrade `SoundEngine` (`audio.js` or audio subsystem) into a procedural Web Audio synthesizer: add a procedural synth/percussion loop that adapts intensity during Boss waves or high-danger/alert/combo states (adapting autonomously to 1-hit or HP rules), plus 5+ synthesized SFX across core actions, hits, upgrades, and UI. Set `\"phase\": \"8\"` in `game.json`."
     },
     "9": {
-      "title": "Phase 9/10 — Complete Accessibility, Ergonomic Touch UI & 6 Unlockable Milestones",
-      "focus": "Complete all UI, accessibility, and persistence features (`ui.js` or UI subsystem): verify Master Mute + SFX/Music sliders, Screen Shake (100%/50%/Off), Particle Density (High/Low), working High-Contrast/Colorblind palette mode, live on-screen FPS counter toggle, Touch Controls (Auto/Always/Off + Left/Right handedness swap), Base64 Save Export/Import + 2-step Reset, and 6 earnable Milestones/Badges shown on Title and Game Over screens. Set `\"phase\": \"9\"` in `game.json`."
+      "title": "Phase 9/10 — Complete Accessibility, Ergonomic Touch UI & Unlockable Milestones",
+      "focus": "Complete UI, accessibility, and persistence (`ui.js` or UI subsystem): provide working Mute/Volume controls, Reduced-Motion/Screen-Shake toggle, High-Contrast palette toggle, Touch Controls handedness swap (Left/Right), Save Export/Import + Reset, and 4-6 unlockable Milestones shown on Title/Game Over screens. Set `\"phase\": \"9\"` in `game.json`."
     },
     "10": {
       "title": "Phase 10/10 — Integration, Balance and Acceptance Evidence",
-      "focus": "Perform the final integration and balance pass across all modules: tune wave pacing, enemy spawn weights, boss HP, and upgrade scaling so early waves are welcoming and late waves are thrilling; add an interactive tutorial/hint overlay on Wave 1; eliminate any runtime edge cases or memory leaks; and set `\"phase\": \"10\"` in `game.json` after recording the completed checks and remaining device/playtest limitations; phase 10 is not production acceptance."
+      "focus": "Perform final integration, self-mix audit of all prior phases, and balance polish: verify all prior phase mechanics (including upgrades, VFX, audio, and touch controls) are active and bug-free; add a concise Wave 1 control/twist hint banner; tune difficulty pacing; and set `\"phase\": \"10\"` in `game.json`."
     }
   }
 }

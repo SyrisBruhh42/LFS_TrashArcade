@@ -6,10 +6,14 @@ not grant merge, provider, deployment or production acceptance authority.
 """
 from __future__ import annotations
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
 

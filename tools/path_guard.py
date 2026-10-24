@@ -7,11 +7,15 @@ Infrastructure changes deliberately have no bypass through this factory guard.
 from __future__ import annotations
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
 GAME_FILE_RE = re.compile(r"games/(\d{3}-[a-z0-9]+(?:-[a-z0-9]+)*)/(index\.html|game\.json|[a-z0-9][a-z0-9_-]{0,40}\.(?:js|css))\Z")
