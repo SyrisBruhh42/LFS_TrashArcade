@@ -72,6 +72,18 @@ class SoundEngine {
     this.sfxGain = null;
     this.musicGain = null;
     this.initialized = false;
+    this.isPlayingMusic = false;
+    this.bgmOscs = [];
+    this.bgmFilter = null;
+    this.bgmLFO = null;
+    this.tempo = 120;
+    this.nextNoteTime = 0;
+    this.currentNote = 0;
+    this.scale = [220.00, 246.94, 261.63, 293.66, 329.63, 349.23, 392.00]; // A Minor
+
+    // Drum state
+    this.nextDrumTime = 0;
+    this.drumStep = 0;
   }
 
   init() {
@@ -107,6 +119,224 @@ class SoundEngine {
     this.musicGain.gain.value = options.musicVolume;
   }
 
+  update(dt, game) {
+    if (!this.initialized) return;
+
+    // Dynamic Soundtrack adjustments
+    let intensity = 0;
+    if (game.boss && game.boss.active) {
+      intensity = 1.0;
+    } else if (game.player && game.player.health === 1) {
+      intensity = 0.8; // Low health tension
+    }
+
+    this.tempo = 120 + (intensity * 40); // 120 to 160 BPM
+
+    if (this.bgmFilter) {
+      const targetCutoff = 1000 + (intensity * 4000);
+      // Only set target if it changed significantly to avoid pops
+      if (Math.abs(this.bgmFilter.frequency.value - targetCutoff) > 10) {
+        this.bgmFilter.frequency.setTargetAtTime(targetCutoff, this.ctx.currentTime, 0.5);
+      }
+    }
+
+    // Procedural Music Scheduler
+    if (this.isPlayingMusic && this.ctx.state === 'running') {
+      this.scheduleArp();
+      this.scheduleDrums();
+    }
+  }
+
+  startMusic() {
+    if (!this.initialized || this.isPlayingMusic) return;
+    this.isPlayingMusic = true;
+    this.nextNoteTime = this.ctx.currentTime + 0.1;
+    this.nextDrumTime = this.ctx.currentTime + 0.1;
+
+    // Setup global filter for BGM
+    this.bgmFilter = this.ctx.createBiquadFilter();
+    this.bgmFilter.type = 'lowpass';
+    this.bgmFilter.frequency.value = 1000;
+
+    this.bgmLFO = this.ctx.createOscillator();
+    this.bgmLFO.type = 'sine';
+    this.bgmLFO.frequency.value = 0.2; // slow sweep
+    const lfoGain = this.ctx.createGain();
+    lfoGain.gain.value = 500;
+    this.bgmLFO.connect(lfoGain);
+    lfoGain.connect(this.bgmFilter.frequency);
+    this.bgmLFO.start();
+
+    this.bgmFilter.connect(this.musicGain);
+  }
+
+  stopMusic() {
+    this.isPlayingMusic = false;
+    if (this.bgmLFO) {
+      this.bgmLFO.stop();
+      this.bgmLFO = null;
+    }
+  }
+
+  scheduleArp() {
+    const lookahead = 0.1;
+    const secondsPerBeat = 60.0 / this.tempo;
+    const noteLength = secondsPerBeat * 0.25; // 16th notes
+
+    // Prevent massive catch-up bursts after tab switching
+    if (this.nextNoteTime < this.ctx.currentTime - 0.5) {
+      this.nextNoteTime = this.ctx.currentTime;
+    }
+
+    while (this.nextNoteTime < this.ctx.currentTime + lookahead) {
+      this.playArpNote(this.nextNoteTime, noteLength);
+      this.currentNote++;
+      this.nextNoteTime += noteLength;
+    }
+  }
+
+  playArpNote(time, duration) {
+    // Generative arpeggiator pattern
+    const pattern = [0, 2, 4, 7, 4, 2, 0, -3];
+    const index = this.currentNote % pattern.length;
+    let noteIdx = pattern[index];
+
+    // Shift octave occasionally
+    if (this.currentNote % 32 < 16) {
+       noteIdx += 7; // up an octave
+    }
+
+    // Resolve index safely
+    while(noteIdx < 0) noteIdx += this.scale.length;
+    const freq = this.scale[noteIdx % this.scale.length] * (noteIdx >= this.scale.length ? 2 : 1);
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = (this.currentNote % 16 === 0) ? 'sawtooth' : 'square';
+    osc.frequency.setValueAtTime(freq, time);
+
+    // Envelopes
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.1, time + duration * 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration * 0.9);
+
+    osc.connect(gain);
+    gain.connect(this.bgmFilter);
+
+    osc.start(time);
+    osc.stop(time + duration);
+  }
+
+  scheduleDrums() {
+    const lookahead = 0.1;
+    const secondsPerBeat = 60.0 / this.tempo;
+    const stepLength = secondsPerBeat * 0.25;
+
+    // Prevent massive catch-up bursts after tab switching
+    if (this.nextDrumTime < this.ctx.currentTime - 0.5) {
+      this.nextDrumTime = this.ctx.currentTime;
+    }
+
+    while (this.nextDrumTime < this.ctx.currentTime + lookahead) {
+      this.playDrumStep(this.nextDrumTime);
+      this.drumStep++;
+      this.nextDrumTime += stepLength;
+    }
+  }
+
+  playDrumStep(time) {
+    const step = this.drumStep % 16;
+
+    // Kick on 0, 4, 8, 12
+    if (step % 4 === 0) {
+      this.playKick(time);
+    }
+    // Snare on 4, 12
+    if (step === 4 || step === 12) {
+      this.playSnare(time);
+    }
+    // Hihat every off-beat
+    if (step % 2 !== 0) {
+      this.playHihat(time);
+    }
+  }
+
+  playKick(time) {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.frequency.setValueAtTime(150, time);
+    osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.1);
+    gain.gain.setValueAtTime(0.4, time);
+    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+    osc.connect(gain);
+    gain.connect(this.musicGain);
+    osc.start(time);
+    osc.stop(time + 0.1);
+  }
+
+  playSnare(time) {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    // Noise element
+    const bufferSize = this.ctx.sampleRate * 0.1;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const noiseFilter = this.ctx.createBiquadFilter();
+    noiseFilter.type = 'highpass';
+    noiseFilter.frequency.value = 1000;
+    noise.connect(noiseFilter);
+
+    // Snare body
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(250, time);
+    osc.frequency.exponentialRampToValueAtTime(50, time + 0.1);
+
+    gain.gain.setValueAtTime(0.3, time);
+    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+
+    osc.connect(gain);
+    noiseFilter.connect(gain);
+    gain.connect(this.musicGain);
+
+    osc.start(time);
+    noise.start(time);
+    osc.stop(time + 0.1);
+  }
+
+  playHihat(time) {
+    const bufferSize = this.ctx.sampleRate * 0.05;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 5000;
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.1, time);
+    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.musicGain);
+
+    noise.start(time);
+  }
+
+  // SFX Methods
   playShoot() {
     if (!this.initialized) return;
     const t = this.ctx.currentTime;
@@ -125,6 +355,26 @@ class SoundEngine {
 
     osc.start(t);
     osc.stop(t + 0.1);
+  }
+
+  playDash() {
+    if (!this.initialized) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(300, t);
+    osc.frequency.exponentialRampToValueAtTime(800, t + 0.15); // pitch up
+
+    gain.gain.setValueAtTime(0.4, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(t);
+    osc.stop(t + 0.15);
   }
 
   playHit() {
@@ -195,6 +445,116 @@ class SoundEngine {
 
     osc.start(t);
     osc.stop(t + 0.2);
+  }
+
+  playBossSpawn() {
+    if (!this.initialized) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const osc2 = this.ctx.createOscillator();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(50, t);
+    osc.frequency.exponentialRampToValueAtTime(200, t + 2.0);
+
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(51, t);
+    osc2.frequency.exponentialRampToValueAtTime(201, t + 2.0);
+
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.5, t + 0.5);
+    gain.gain.linearRampToValueAtTime(0.01, t + 2.0);
+
+    osc.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(t);
+    osc2.start(t);
+    osc.stop(t + 2.0);
+    osc2.stop(t + 2.0);
+  }
+
+  playUIHover() {
+    if (!this.initialized) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, t);
+
+    gain.gain.setValueAtTime(0.1, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(t);
+    osc.stop(t + 0.05);
+  }
+
+  playUIClick() {
+    if (!this.initialized) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, t);
+    osc.frequency.exponentialRampToValueAtTime(1200, t + 0.1);
+
+    gain.gain.setValueAtTime(0.2, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(t);
+    osc.stop(t + 0.1);
+  }
+
+  playUpgrade() {
+    if (!this.initialized) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, t);
+    osc.frequency.setValueAtTime(600, t + 0.1);
+    osc.frequency.setValueAtTime(800, t + 0.2);
+
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.3, t + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(t);
+    osc.stop(t + 0.4);
+  }
+
+  playPowerupCollect() {
+    if (!this.initialized) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(800, t);
+    osc.frequency.exponentialRampToValueAtTime(1600, t + 0.1);
+
+    gain.gain.setValueAtTime(0.2, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(t);
+    osc.stop(t + 0.1);
   }
 }
 
@@ -440,7 +800,7 @@ class Player extends Entity {
       for(let i=0; i<15; i++) {
          game.vfxManager.spawnAdvancedParticle(this.pos.x, this.pos.y, '#44ff44', dashDir.copy().mult(-1));
       }
-      game.sound.playShoot();
+      game.sound.playDash();
     }
 
     if (this.dashTime > 0) {
@@ -951,6 +1311,7 @@ class Game {
 
     this.worldManager.init();
     this.vfxManager.init();
+    this.sound.startMusic();
     this.saveManager.incrementGamesPlayed();
   }
 
@@ -1025,6 +1386,7 @@ class Game {
         const by = -50; // spawn slightly offscreen
         this.boss = Math.random() < 0.5 ? new JunkGoliathBoss(bx, by) : new MagneticWarlordBoss(bx, by);
         this.enemies.push(this.boss);
+        this.sound.playBossSpawn();
       }
     } else if (this.boss) {
       if (!this.boss.active) {
@@ -1063,6 +1425,7 @@ class Game {
       this.gravityWell.update(dt, this);
     }
 
+    this.sound.update(dt, this);
     this.worldManager.update(dt);
 
     if (this.comboTimer > 0) {
@@ -1075,7 +1438,7 @@ class Game {
       p.update(dt, this);
       if (this.player && this.player.active && p.checkCollision(this.player)) {
         p.active = false;
-        this.sound.playShoot();
+        this.sound.playPowerupCollect();
         if (p.type === 'health') {
           this.player.health = Math.min(this.player.health + 1, this.player.maxHealth);
         } else {
