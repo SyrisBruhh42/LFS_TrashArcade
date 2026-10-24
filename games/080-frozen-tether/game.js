@@ -510,19 +510,19 @@ class Particle {
     }
 }
 
-class Enemy {
+class BaseEnemy {
     constructor(x, y) {
         this.x = x;
         this.y = y;
         this.radius = 15;
-        this.vx = (Math.random() - 0.5) * 100;
+        this.vx = 0;
         this.vy = 0;
         this.active = true;
         this.color = '#ff4444';
+        this.type = 'base';
     }
-    update(dt, platforms) {
+    update(dt, platforms, player, game) {
         this.vy += 600 * dt; // Gravity
-
         this.x += this.vx * dt;
         this.y += this.vy * dt;
 
@@ -553,10 +553,7 @@ class Enemy {
         if (this.x < this.radius || this.x > 800 - this.radius) this.vx *= -1;
         if (this.y > 600 - this.radius) { this.y = 600 - this.radius; this.vy = 0; }
 
-        // Simple pacing
-        if (grounded && Math.random() < 0.02) {
-            this.vy = -300;
-        }
+        return grounded;
     }
     draw(ctx) {
         if (!this.active) return;
@@ -568,6 +565,280 @@ class Enemy {
         ctx.fillStyle = this.color;
         ctx.fill();
     }
+}
+
+class SwarmerEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y);
+        this.type = 'swarmer';
+        this.color = '#ff8800';
+        this.radius = 12;
+        this.speed = 150;
+    }
+    update(dt, platforms, player, game) {
+        let grounded = super.update(dt, platforms, player, game);
+        if (player) {
+            let dx = player.x - this.x;
+            if (Math.abs(dx) > 10) {
+                this.vx = Math.sign(dx) * this.speed;
+            } else {
+                this.vx = 0;
+            }
+        }
+        if (grounded && Math.random() < 0.05) {
+            this.vy = -350;
+        }
+        return grounded;
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.closePath();
+        ctx.fillStyle = this.color;
+        ctx.fill();
+    }
+}
+
+class BruiserEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y);
+        this.type = 'bruiser';
+        this.color = '#4444ff';
+        this.radius = 25;
+        this.vx = (Math.random() - 0.5) * 50;
+        this.shielded = true;
+    }
+    update(dt, platforms, player, game) {
+        let grounded = super.update(dt, platforms, player, game);
+        if (grounded && Math.random() < 0.01) {
+            this.vy = -200;
+        }
+        return grounded;
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.beginPath();
+        ctx.rect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        if (this.shielded) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+    }
+}
+
+class SniperEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y);
+        this.type = 'sniper';
+        this.color = '#ff00ff';
+        this.radius = 15;
+        this.attackTimer = 0;
+        this.telegraphing = false;
+        this.vx = (Math.random() - 0.5) * 30;
+    }
+    update(dt, platforms, player, game) {
+        let grounded = super.update(dt, platforms, player, game);
+        this.attackTimer += dt;
+
+        if (this.attackTimer > 2.0 && player) {
+            this.telegraphing = true;
+            if (this.attackTimer > 3.0) {
+                this.telegraphing = false;
+                this.attackTimer = 0;
+
+                let dx = player.x - this.x;
+                let dy = player.y - this.y;
+                let dist = Math.hypot(dx, dy);
+                if (dist > 0) {
+                    let projVx = (dx / dist) * 300;
+                    let projVy = (dy / dist) * 300;
+                    game.particles.push(new SniperProjectile(this.x, this.y, projVx, projVy));
+                }
+            }
+        }
+        return grounded;
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        if (this.telegraphing) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius * 1.5, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    }
+}
+
+class SniperProjectile {
+    constructor(x, y, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.radius = 5;
+        this.active = true;
+        this.color = '#ff00ff';
+        this.type = 'projectile';
+    }
+    update(dt, platforms, player, game) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        if (this.x < 0 || this.x > 800 || this.y < 0 || this.y > 600) {
+            this.active = false;
+        }
+
+        for (let p of platforms) {
+            if (this.x + this.radius > p.x && this.x - this.radius < p.x + p.w &&
+                this.y + this.radius > p.y && this.y - this.radius < p.y + p.h) {
+                this.active = false;
+            }
+        }
+
+        if (player && this.active) {
+            const dist = Math.hypot(this.x - player.x, this.y - player.y);
+            if (dist < this.radius + player.radius) {
+                if (player.invulnTime <= 0) {
+                    game.state = 'GAME_OVER';
+                    game.sound.playGameOver();
+                    game.saveManager.updateScore(game.score);
+                }
+                this.active = false;
+            }
+        }
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+    }
+}
+
+class SpawnerEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y);
+        this.type = 'spawner';
+        this.color = '#00ff00';
+        this.radius = 20;
+        this.spawnTimer = 0;
+        this.vx = (Math.random() - 0.5) * 80;
+    }
+    update(dt, platforms, player, game) {
+        let grounded = super.update(dt, platforms, player, game);
+        this.spawnTimer += dt;
+        if (this.spawnTimer > 4.0) {
+            this.spawnTimer = 0;
+            // Spawn a small minion
+            game.enemies.push(new SwarmerEnemy(this.x, this.y - 20));
+        }
+        if (grounded && Math.random() < 0.02) {
+            this.vy = -250;
+        }
+        return grounded;
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y);
+        ctx.closePath();
+        ctx.fillStyle = this.color;
+        ctx.fill();
+    }
+}
+
+class HazardEnemy extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y);
+        this.type = 'hazard';
+        this.color = '#ffff00';
+        this.radius = 18;
+        this.vx = (Math.random() - 0.5) * 200;
+        this.trailTimer = 0;
+    }
+    update(dt, platforms, player, game) {
+        let grounded = super.update(dt, platforms, player, game);
+        this.trailTimer += dt;
+        if (this.trailTimer > 0.5) {
+            this.trailTimer = 0;
+            game.particles.push(new HazardTrail(this.x, this.y));
+        }
+        return grounded;
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.closePath();
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(this.x, this.y + this.radius / 2, this.radius / 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff0000';
+        ctx.fill();
+    }
+}
+
+class HazardTrail {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 10;
+        this.life = 3.0; // Area denial for 3 seconds
+        this.active = true;
+        this.type = 'hazard_trail';
+    }
+    update(dt, platforms, player, game) {
+        this.life -= dt;
+        if (this.life <= 0) {
+            this.active = false;
+        }
+        if (player && this.active && player.invulnTime <= 0) {
+            const dist = Math.hypot(this.x - player.x, this.y - player.y);
+            if (dist < this.radius + player.radius) {
+                game.state = 'GAME_OVER';
+                game.sound.playGameOver();
+                game.saveManager.updateScore(game.score);
+            }
+        }
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 0, ${this.life / 3.0})`;
+        ctx.fill();
+    }
+}
+
+function createRandomEnemy(x, y) {
+    let r = Math.random();
+    if (r < 0.2) return new SwarmerEnemy(x, y);
+    if (r < 0.4) return new BruiserEnemy(x, y);
+    if (r < 0.6) return new SniperEnemy(x, y);
+    if (r < 0.8) return new SpawnerEnemy(x, y);
+    return new HazardEnemy(x, y);
 }
 
 class Game {
@@ -640,7 +911,7 @@ class Game {
         }
 
         for(let i = 0; i < 5; i++) {
-            this.enemies.push(new Enemy(100 + Math.random() * 600, 50 + Math.random() * 300));
+            this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50 + Math.random() * 300));
         }
 
         this.state = 'PLAYING';
@@ -668,29 +939,46 @@ class Game {
 
             for (let i = this.enemies.length - 1; i >= 0; i--) {
                 let e = this.enemies[i];
-                e.update(effectiveDt, this.platforms);
+                e.update(effectiveDt, this.platforms, this.player, this);
 
                 // Collision with player
                 const dist = Math.hypot(e.x - this.player.x, e.y - this.player.y);
                 if (dist < e.radius + this.player.radius) {
                     if (this.player.dashActive || (this.player.vy > 0 && this.player.y < e.y)) {
                         // Kill enemy if dashing or falling on top
-                        e.active = false;
-                        if (!this.player.dashActive) {
-                             this.player.vy = this.player.jumpForce * 0.8; // Bounce
+
+                        if (e.type === 'bruiser' && e.shielded) {
+                            e.shielded = false; // Break shield first
+                            if (!this.player.dashActive) {
+                                this.player.vy = this.player.jumpForce * 0.8;
+                            }
+                            for (let k = 0; k < 10; k++) {
+                                this.particles.push(new Particle(e.x, e.y, '#00ffff'));
+                            }
+                            this.sound.playEnemyHit();
+                        } else {
+                            e.active = false;
+                            if (!this.player.dashActive) {
+                                 this.player.vy = this.player.jumpForce * 0.8; // Bounce
+                            }
+                            this.score += 100;
+                            this.sound.playEnemyHit();
+                            this.sound.playScore();
+                            this.enemies.splice(i, 1);
+
+                            for (let k = 0; k < 10; k++) {
+                                this.particles.push(new Particle(e.x, e.y, e.color));
+                            }
+
+                            // Spawner logic: spawns 2 swarmers on death
+                            if (e.type === 'spawner') {
+                                this.enemies.push(new SwarmerEnemy(e.x - 20, e.y));
+                                this.enemies.push(new SwarmerEnemy(e.x + 20, e.y));
+                            }
+
+                            // Spawn new enemy to keep game going
+                            this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50));
                         }
-                        this.score += 100;
-                        this.sound.playEnemyHit();
-                        this.sound.playScore();
-                        this.enemies.splice(i, 1);
-
-
-                        for (let k = 0; k < 10; k++) {
-                            this.particles.push(new Particle(e.x, e.y, e.color));
-                        }
-
-                        // Spawn new enemy to keep game going
-                        this.enemies.push(new Enemy(100 + Math.random() * 600, 50));
                     } else if (this.player.invulnTime <= 0) {
                         for (let k = 0; k < 20; k++) {
                             this.particles.push(new Particle(this.player.x, this.player.y, this.player.color));
@@ -708,9 +996,14 @@ class Game {
             }
 
             for (let i = this.particles.length - 1; i >= 0; i--) {
-                this.particles[i].update(effectiveDt);
-                if (this.particles[i].life <= 0) {
-                    this.particles.splice(i, 1);
+                if (this.particles[i].type === 'projectile' || this.particles[i].type === 'hazard_trail') {
+                     this.particles[i].update(effectiveDt, this.platforms, this.player, this);
+                     if (!this.particles[i].active) this.particles.splice(i, 1);
+                } else {
+                    this.particles[i].update(effectiveDt);
+                    if (this.particles[i].life <= 0) {
+                        this.particles.splice(i, 1);
+                    }
                 }
             }
 
