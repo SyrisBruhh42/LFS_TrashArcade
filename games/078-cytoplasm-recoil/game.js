@@ -592,6 +592,146 @@ class AreaDenialHazard extends Enemy {
     }
 }
 
+class Boss extends Enemy {
+    constructor(x, y, maxHp, name) {
+        super(x, y);
+        this.maxHp = maxHp;
+        this.hp = maxHp;
+        this.name = name;
+        this.radius = 40;
+        this.phase = 1;
+        this.stateTimer = 0;
+    }
+    takeDamage(amount) {
+        let died = super.takeDamage(amount);
+        if (this.hp <= this.maxHp * 0.5 && this.phase === 1) {
+            this.phase = 2;
+            this.onPhaseTransition();
+        }
+        return died;
+    }
+    onPhaseTransition() {}
+    drawHpBar(ctx, width) {
+        let barWidth = width * 0.6;
+        let barHeight = 20;
+        let x = (width - barWidth) / 2;
+        let y = 30;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(x, y, barWidth, barHeight);
+
+        let hpRatio = Math.max(0, this.hp / this.maxHp);
+        ctx.fillStyle = this.phase === 1 ? '#e91e63' : '#d50000';
+        ctx.fillRect(x, y, barWidth * hpRatio, barHeight);
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, barWidth, barHeight);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.name + (this.phase === 2 ? " (ENRAGED)" : ""), width / 2, y + 15);
+    }
+}
+
+class BossMacrophage extends Boss {
+    constructor(x, y) {
+        super(x, y, 40, "Macrophage Alpha");
+        this.speed = 50;
+        this.shootTimer = 2;
+    }
+    onPhaseTransition() {
+        this.speed = 80;
+        this.radius = 35;
+    }
+    update(dt, game) {
+        let dir = new Vector(game.player.pos.x - this.pos.x, game.player.pos.y - this.pos.y);
+        if (dir.mag() > 0) dir.normalize();
+        this.pos.add(new Vector(dir.x * this.speed * dt, dir.y * this.speed * dt));
+
+        this.shootTimer -= dt;
+        if (this.shootTimer <= 0) {
+            this.shootTimer = this.phase === 1 ? 2 : 1;
+            let numShots = this.phase === 1 ? 5 : 9;
+            for (let i = 0; i < numShots; i++) {
+                let angle = (i / numShots) * Math.PI * 2;
+                game.enemyProjectiles.push(new EnemyProjectile(this.pos.x, this.pos.y, Math.cos(angle), Math.sin(angle), 100));
+            }
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.phase === 1 ? '#9c27b0' : '#4a148c';
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.fillStyle = '#ea80fc';
+        ctx.beginPath();
+        ctx.arc(this.pos.x - 10, this.pos.y - 10, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(this.pos.x + 10, this.pos.y + 5, 6, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+class BossViralConstruct extends Boss {
+    constructor(x, y) {
+        super(x, y, 50, "Viral Construct Omega");
+        this.speed = 40;
+        this.spawnTimer = 3;
+        this.puddleTimer = 4;
+        this.angle = 0;
+    }
+    onPhaseTransition() {
+        this.speed = 60;
+    }
+    update(dt, game) {
+        this.angle += dt;
+        let targetX = game.player.pos.x + Math.cos(this.angle) * 150;
+        let targetY = game.player.pos.y + Math.sin(this.angle) * 150;
+
+        let dir = new Vector(targetX - this.pos.x, targetY - this.pos.y);
+        if (dir.mag() > 0) dir.normalize();
+        this.pos.add(new Vector(dir.x * this.speed * dt, dir.y * this.speed * dt));
+
+        this.spawnTimer -= dt;
+        if (this.spawnTimer <= 0) {
+            this.spawnTimer = this.phase === 1 ? 4 : 2;
+            game.enemies.push(new Swarmer(this.pos.x, this.pos.y));
+            if (this.phase === 2) {
+                game.enemies.push(new Swarmer(this.pos.x, this.pos.y));
+            }
+        }
+
+        this.puddleTimer -= dt;
+        if (this.puddleTimer <= 0) {
+            this.puddleTimer = this.phase === 1 ? 5 : 3;
+            game.enemyPuddles.push(new ToxicPuddle(this.pos.x, this.pos.y));
+            if (this.phase === 2) {
+                game.enemyPuddles.push(new ToxicPuddle(this.pos.x + 40, this.pos.y));
+                game.enemyPuddles.push(new ToxicPuddle(this.pos.x - 40, this.pos.y));
+            }
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.phase === 1 ? '#00bcd4' : '#006064';
+        ctx.beginPath();
+        ctx.moveTo(this.pos.x, this.pos.y - this.radius);
+        ctx.lineTo(this.pos.x + this.radius, this.pos.y);
+        ctx.lineTo(this.pos.x, this.pos.y + this.radius);
+        ctx.lineTo(this.pos.x - this.radius, this.pos.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+    }
+}
+
 class Bumper {
     constructor(x, y, r) {
         this.pos = new Vector(x, y);
@@ -809,6 +949,10 @@ class Game {
         this.particles = [];
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
+        this.bossEncounterCounter = 1;
+        this.nextBossThreshold = 150;
+        this.activeBoss = null;
+        this.warningTimer = 0;
         this.bgLayers = [];
         this.streams = [];
         this.hazards = [];
@@ -839,6 +983,10 @@ class Game {
         this.score = 0;
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
+        this.bossEncounterCounter = 1;
+        this.nextBossThreshold = 150;
+        this.activeBoss = null;
+        this.warningTimer = 0;
         this.enemyProjectiles = [];
         this.enemyPuddles = [];
         this.bumpers = [];
@@ -960,25 +1108,58 @@ class Game {
             }
         }
 
-        this.enemySpawnTimer -= dt;
-        if (this.enemySpawnTimer <= 0) {
-            let side = Math.floor(Math.random() * 4);
-            let ex = 0, ey = 0;
-            if (side === 0) { ex = Math.random() * this.width; ey = -20; }
-            if (side === 1) { ex = Math.random() * this.width; ey = this.height + 20; }
-            if (side === 2) { ex = -20; ey = Math.random() * this.height; }
-            if (side === 3) { ex = this.width + 20; ey = Math.random() * this.height; }
+        if (this.activeBoss) {
+            if (this.activeBoss.markedForDeletion) {
+                this.activeBoss = null;
+                this.nextBossThreshold += 300;
+                this.bossEncounterCounter++;
+                this.score += 100;
+                this.sound.playTone(440, 'square', 0.1, 1);
+                this.enemySpawnTimer = 3.0; // Break before next waves
+            }
+        } else {
+            if (this.score >= this.nextBossThreshold && this.warningTimer <= 0) {
+                this.warningTimer = 3.0;
+                this.enemies.forEach(e => e.markedForDeletion = true);
+                this.enemyProjectiles.forEach(ep => ep.markedForDeletion = true);
+            }
+        }
 
-            let rand = Math.random();
-            if (rand < 0.2) this.enemies.push(new Swarmer(ex, ey));
-            else if (rand < 0.4) this.enemies.push(new RangedSniper(ex, ey));
-            else if (rand < 0.6) this.enemies.push(new ShieldedBruiser(ex, ey));
-            else if (rand < 0.8) this.enemies.push(new SplitterSpawner(ex, ey));
-            else if (rand < 0.9) this.enemies.push(new AreaDenialHazard(ex, ey));
-            else this.enemies.push(new Enemy(ex, ey));
+        if (this.warningTimer > 0) {
+            this.warningTimer -= dt;
+            if (this.warningTimer <= 0) {
+                let ex = this.width / 2;
+                let ey = -50;
+                if (this.bossEncounterCounter % 2 === 1) {
+                    this.activeBoss = new BossMacrophage(ex, ey);
+                } else {
+                    this.activeBoss = new BossViralConstruct(ex, ey);
+                }
+                this.enemies.push(this.activeBoss);
+            }
+        }
 
-            this.enemySpawnTimer = this.enemySpawnRate;
-            this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.02);
+        if (!this.activeBoss && this.warningTimer <= 0) {
+            this.enemySpawnTimer -= dt;
+            if (this.enemySpawnTimer <= 0) {
+                let side = Math.floor(Math.random() * 4);
+                let ex = 0, ey = 0;
+                if (side === 0) { ex = Math.random() * this.width; ey = -20; }
+                if (side === 1) { ex = Math.random() * this.width; ey = this.height + 20; }
+                if (side === 2) { ex = -20; ey = Math.random() * this.height; }
+                if (side === 3) { ex = this.width + 20; ey = Math.random() * this.height; }
+
+                let rand = Math.random();
+                if (rand < 0.2) this.enemies.push(new Swarmer(ex, ey));
+                else if (rand < 0.4) this.enemies.push(new RangedSniper(ex, ey));
+                else if (rand < 0.6) this.enemies.push(new ShieldedBruiser(ex, ey));
+                else if (rand < 0.8) this.enemies.push(new SplitterSpawner(ex, ey));
+                else if (rand < 0.9) this.enemies.push(new AreaDenialHazard(ex, ey));
+                else this.enemies.push(new Enemy(ex, ey));
+
+                this.enemySpawnTimer = this.enemySpawnRate;
+                this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.02);
+            }
         }
 
         for (let e of this.enemies) {
@@ -1124,6 +1305,16 @@ class Game {
         this.ctx.font = '24px monospace';
         this.ctx.textAlign = 'left';
         this.ctx.fillText(`Score: ${this.score}`, 20, 40);
+
+        if (this.activeBoss && !this.activeBoss.markedForDeletion) {
+            this.activeBoss.drawHpBar(this.ctx, this.width);
+        }
+
+        if (this.warningTimer > 0 && Math.floor(this.warningTimer * 5) % 2 === 0) {
+            this.ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+            this.ctx.fillRect(0, this.height / 2 - 40, this.width, 80);
+            this.drawText("WARNING: BOSS APPROACHING", this.width / 2, this.height / 2 + 10, 40, '#fff');
+        }
 
         if (this.player) {
             this.ctx.fillStyle = '#2e4a3b';
