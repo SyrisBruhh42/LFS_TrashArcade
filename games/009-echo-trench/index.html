@@ -430,7 +430,7 @@ class SoundEngine {
 const soundEngine = new SoundEngine();
 
 // UI State Machine
-let gameState = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+let gameState = null; // Uninitialized until the first TITLE transition renders the UI.
 
 function setGameState(newState) {
     if (gameState === newState) return;

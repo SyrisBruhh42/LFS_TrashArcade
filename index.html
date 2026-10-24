@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LFS_TrashArcade Cabinet — Offline Game Hub</title>
   <style>
+    [hidden] { display: none !important; }
     :root {
       --bg-deep: #090c14;
       --bg-panel: #111726;
@@ -428,11 +429,13 @@
       <p style="font-size:0.88rem;color:var(--text-secondary);">
         Export or import all <code>arcade_game_*</code> save keys across the entire Arcade Cabinet in a single Base64 bundle.
       </p>
-      <textarea id="backup-textarea" placeholder="Base64 save bundle appears here..."></textarea>
-      <div id="backup-status" style="font-size:0.82rem;color:var(--accent-green);min-height:1.2em;"></div>
+      <textarea id="backup-textarea" aria-label="Save backup bundle" placeholder="Base64 save bundle appears here..."></textarea>
+      <div id="backup-status" role="status" aria-live="polite" style="font-size:0.82rem;color:var(--accent-green);min-height:1.2em;"></div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;">
         <button class="btn" id="export-bundle-btn" type="button">Generate &amp; Copy Export</button>
         <button class="btn btn-primary" id="import-bundle-btn" type="button">Import Bundle</button>
+        <button class="btn" id="recovery-bundle-btn" type="button" hidden>Show Prior Saves for Recovery</button>
+        <button class="btn" id="retry-recovery-btn" type="button" hidden>Retry Prior Save Recovery</button>
         <button class="btn" id="close-modal-btn" type="button">Close</button>
       </div>
     </div>
@@ -443,6 +446,7 @@
   </footer>
 
   <script src="./games/registry.js"></script>
+  <script src="./launcher_backup.js"></script>
   <script>
     (function () {
       'use strict';
@@ -679,59 +683,110 @@
       const textarea = document.getElementById('backup-textarea');
       const statusEl = document.getElementById('backup-status');
 
-      function exportGlobalBundle() {
-        const bundle = {};
+      const recoveryButton = document.getElementById('recovery-bundle-btn');
+      const retryRecoveryButton = document.getElementById('retry-recovery-btn');
+      const importButton = document.getElementById('import-bundle-btn');
+      const exportButton = document.getElementById('export-bundle-btn');
+      let recoveryResult = null;
+      let previousFocus = null;
+      let statusEpoch = 0;
+      const encodeBundle = bundle => btoa(unescape(encodeURIComponent(JSON.stringify(bundle))));
+      function showRecovery() {
+        statusEpoch++;
+        textarea.value = encodeBundle(recoveryResult.recovery);
+        textarea.focus(); textarea.select();
+        statusEl.textContent = 'Recovery is incomplete; further imports are blocked. Prior saves are shown for copying. Retry recovery or copy these bytes before leaving. Unresolved keys: ' + recoveryResult.unresolved.join(', ') +
+          (recoveryResult.originallyAbsent.length ? '. These keys were originally absent: ' + recoveryResult.originallyAbsent.join(', ') : '');
+      }
+      async function exportGlobalBundle(copy = false) {
+        if (recoveryResult) { showRecovery(); return; }
+        const epoch = ++statusEpoch;
         try {
-          for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i);
-            if (k && k.indexOf('arcade_game_') === 0) {
-              bundle[k] = localStorage.getItem(k);
+          const bundle = ArcadeBackup.snapshot(localStorage);
+          const encoded = encodeBundle(bundle);
+          if (encoded.length > ArcadeBackup.maxEncodedLength) throw new Error('Encoded backup exceeds supported size');
+          textarea.value = encoded;
+          statusEl.textContent = 'Exported ' + Object.keys(bundle).length + ' game save(s). Select the text to copy it.';
+          if (copy && navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+              await navigator.clipboard.writeText(encoded);
+              if (epoch === statusEpoch) statusEl.textContent = 'Exported and copied ' + Object.keys(bundle).length + ' game save(s).';
+            } catch (_) {
+              if (epoch === statusEpoch) statusEl.textContent = 'Export ready. Clipboard access failed; select and copy the text manually.';
             }
           }
-        } catch (e) {}
-        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(bundle))));
-        textarea.value = encoded;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(encoded).catch(function () {});
+        } catch (_) {
+          statusEl.textContent = 'A complete backup could not be generated. Storage may be unavailable or the bundle exceeds the supported size.';
         }
-        statusEl.textContent = 'Exported ' + Object.keys(bundle).length + ' game save(s) to Base64.';
       }
-
-      document.getElementById('backup-modal-btn').addEventListener('click', function () {
-        statusEl.textContent = '';
-        exportGlobalBundle();
-        modal.classList.add('open');
-      });
-
-      document.getElementById('close-modal-btn').addEventListener('click', function () {
+      function closeBackup() {
         modal.classList.remove('open');
+        document.querySelectorAll('body > header, body > main, body > footer').forEach(el => { el.inert = false; });
+        if (previousFocus && previousFocus.isConnected) previousFocus.focus();
+      }
+      document.getElementById('backup-modal-btn').addEventListener('click', function () {
+        previousFocus = document.activeElement;
+        statusEl.textContent = '';
+        modal.classList.add('open');
+        document.querySelectorAll('body > header, body > main, body > footer').forEach(el => { el.inert = true; });
+        textarea.focus();
+        if (recoveryResult) showRecovery();
+        else exportGlobalBundle();
       });
-
-      document.getElementById('export-bundle-btn').addEventListener('click', exportGlobalBundle);
-
-      document.getElementById('import-bundle-btn').addEventListener('click', function () {
+      document.getElementById('close-modal-btn').addEventListener('click', closeBackup);
+      modal.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') { event.preventDefault(); closeBackup(); }
+        if (event.key !== 'Tab') return;
+        const controls = [...modal.querySelectorAll('textarea,button')].filter(el => !el.hidden && !el.disabled);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      });
+      exportButton.addEventListener('click', () => exportGlobalBundle(true));
+      recoveryButton.addEventListener('click', function () {
+        if (!recoveryResult) return;
+        showRecovery();
+      });
+      retryRecoveryButton.addEventListener('click', function () {
+        if (!recoveryResult) return;
+        statusEpoch++;
+        let result;
+        try { result = ArcadeBackup.recover(localStorage, recoveryResult); }
+        catch (_) { showRecovery(); return; }
+        if (result.status === 'recovered') {
+          recoveryResult = null;
+          recoveryButton.hidden = retryRecoveryButton.hidden = true;
+          importButton.disabled = exportButton.disabled = false;
+          statusEl.textContent = 'All prior saves and originally absent keys were restored and verified. Imports are available again.';
+          try { renderGames(); } catch (_) { statusEl.textContent += ' Cabinet statistics could not be refreshed.'; }
+        } else { recoveryResult = result; showRecovery(); }
+      });
+      window.addEventListener('beforeunload', function (event) {
+        if (recoveryResult) { event.preventDefault(); event.returnValue = ''; }
+      });
+      importButton.addEventListener('click', function () {
+        if (recoveryResult) { showRecovery(); return; }
+        statusEpoch++;
         const raw = textarea.value.trim();
-        if (!raw) {
-          statusEl.textContent = 'Paste a Base64 save bundle first.';
+        if (!raw) { statusEl.textContent = 'Paste a Base64 save bundle first.'; return; }
+        try {
+          if (raw.length > ArcadeBackup.maxEncodedLength) throw new Error('Bundle too large');
+          const parsed = JSON.parse(decodeURIComponent(escape(atob(raw))));
+          const result = ArcadeBackup.restore(localStorage, parsed);
+          if (result.status === 'restored') {
+            statusEl.textContent = 'Successfully restored and verified ' + result.count + ' game save(s).';
+          } else if (result.status === 'rolled_back') {
+            statusEl.textContent = 'Restore failed. All attempted changes were rolled back; your prior saves are intact.';
+          } else {
+            recoveryResult = result; recoveryButton.hidden = retryRecoveryButton.hidden = false;
+            importButton.disabled = exportButton.disabled = true;
+            statusEl.textContent = 'Restore and recovery were incomplete. Some saves may have changed. Use Show Prior Saves for Recovery before closing this page.';
+          }
+        } catch (_) {
+          statusEl.textContent = 'Invalid bundle or storage unavailable. No save writes were started.';
           return;
         }
-        try {
-          const jsonStr = decodeURIComponent(escape(atob(raw)));
-          const parsed = JSON.parse(jsonStr);
-          let count = 0;
-          Object.keys(parsed).forEach(function (k) {
-            if (k.indexOf('arcade_game_') === 0 && typeof parsed[k] === 'string') {
-              try {
-                localStorage.setItem(k, parsed[k]);
-                count++;
-              } catch (e) {}
-            }
-          });
-          statusEl.textContent = 'Successfully restored ' + count + ' game save(s)!';
-          renderGames();
-        } catch (err) {
-          statusEl.textContent = 'Invalid Base64 save bundle.';
-        }
+        try { renderGames(); } catch (_) { statusEl.textContent += ' The cabinet statistics could not be refreshed.'; }
       });
 
       renderGenreTags();

@@ -115,8 +115,10 @@ class InputManager {
         window.addEventListener('contextmenu', e => e.preventDefault());
         this.joystick = { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 };
         this.pointers = {};
+        this.tapQueued = false;
 
         window.addEventListener('keydown', e => {
+            if (e.repeat) return;
             this.keys[e.code] = true;
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
                 e.preventDefault();
@@ -135,7 +137,7 @@ class InputManager {
         window.addEventListener('mousedown', e => {
             if (e.button === 2) {
                 this.mouse.rightDown = true;
-            } else {
+            } else if (e.button === 0 || e.button === undefined) {
                 this.mouse.down = true;
                 this.handlePointerDown(e.clientX, e.clientY, 'mouse');
             }
@@ -144,7 +146,7 @@ class InputManager {
         window.addEventListener('mouseup', e => {
             if (e.button === 2) {
                 this.mouse.rightDown = false;
-            } else {
+            } else if (e.button === 0 || e.button === undefined) {
                 this.mouse.down = false;
                 this.handlePointerUp('mouse');
             }
@@ -176,6 +178,7 @@ class InputManager {
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 this.touches = this.touches.filter(tt => tt.id !== t.identifier);
+                this.handlePointerMove(t.clientX, t.clientY, t.identifier);
                 this.handlePointerUp(t.identifier);
             }
         });
@@ -184,12 +187,13 @@ class InputManager {
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 this.touches = this.touches.filter(tt => tt.id !== t.identifier);
-                this.handlePointerUp(t.identifier);
+                this.handlePointerUp(t.identifier, true);
             }
         });
     }
 
     handlePointerDown(x, y, id) {
+        this.pointers[id] = { x, y, moved: 0, started: performance.now(), suppressed: false };
         if (!this.joystick.active) {
             this.joystick.active = true;
             this.joystick.startX = x;
@@ -201,13 +205,21 @@ class InputManager {
     }
 
     handlePointerMove(x, y, id) {
+        const pointer = this.pointers[id];
+        if (pointer) pointer.moved = Math.max(pointer.moved, Math.hypot(x - pointer.x, y - pointer.y));
         if (this.joystick.active && this.joystick.id === id) {
             this.joystick.moveX = x;
             this.joystick.moveY = y;
         }
     }
 
-    handlePointerUp(id) {
+    handlePointerUp(id, cancelled = false) {
+        const pointer = this.pointers[id];
+        if (id !== 'mouse' && pointer && !cancelled && !pointer.suppressed &&
+            pointer.moved <= 10 && performance.now() - pointer.started <= 300) {
+            this.tapQueued = true;
+        }
+        delete this.pointers[id];
         if (this.joystick.active && this.joystick.id === id) {
             this.joystick.active = false;
         }
@@ -240,8 +252,26 @@ class InputManager {
         return { x: dx, y: dy };
     }
 
+    consumePointerAction() {
+        this.tapQueued = false;
+        for (const pointer of Object.values(this.pointers)) pointer.suppressed = true;
+    }
+
+    clear() {
+        this.keys = {};
+        this.mouse.down = false;
+        this.mouse.rightDown = false;
+        this.touches = [];
+        this.pointers = {};
+        this.tapQueued = false;
+        this.joystick.active = false;
+    }
+
     isActionPressed() {
-        return this.keys['Space'] || this.keys['Enter'] || this.mouse.down;
+        const tap = this.tapQueued;
+        this.tapQueued = false;
+        return !!(this.keys['Space'] || this.keys['Enter'] ||
+            (this.mouse.down && !this.pointers.mouse?.suppressed) || tap);
     }
 
     isSecondaryPressed() {
@@ -266,6 +296,31 @@ class Entity {
     }
 
     draw(ctx) {}
+}
+
+class Particle extends Entity {
+    constructor(x, y, color, size, lifetime) {
+        super(x, y, size);
+        this.color = color;
+        this.life = lifetime;
+        this.maxLife = lifetime;
+        this.vx = (Math.random() - 0.5) * 60;
+        this.vy = (Math.random() - 0.5) * 60;
+    }
+
+    update(dt) {
+        super.update(dt);
+        this.life = Math.max(0, this.life - dt);
+        this.active = this.life > 0;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.life / this.maxLife;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+        ctx.restore();
+    }
 }
 
 class Player extends Entity {
@@ -394,7 +449,7 @@ class Player extends Entity {
 
 
         // Shoot (cannot shoot while dashing)
-        if (input.isActionPressed() && this.hasAmmo && !game.shootCooldown && !this.isDashing) {
+        if (input.isActionPressed() && this.hasAmmo && game.shootCooldown <= 0 && !this.isDashing) {
             this.hasAmmo = false;
             game.shootCooldown = 0.5;
             this.recoilTimer = 0.1;
@@ -863,30 +918,6 @@ class HazardTrap {
 }
 
 
-class Particle {
-    constructor(x, y, color, size, duration) {
-        this.x = x;
-        this.y = y;
-        this.color = color;
-        this.size = size;
-        this.duration = duration;
-        this.timer = duration;
-        this.vx = (Math.random() - 0.5) * 100;
-        this.vy = (Math.random() - 0.5) * 100;
-    }
-    update(dt) {
-        this.timer -= dt;
-        this.x += this.vx * dt;
-        this.y += this.vy * dt;
-    }
-    draw(ctx) {
-        ctx.globalAlpha = Math.max(0, this.timer / this.duration);
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
-        ctx.globalAlpha = 1.0;
-    }
-}
-
 class ParallaxBackground {
     constructor(w, h) {
         this.w = w;
@@ -990,44 +1021,56 @@ class Game {
             this.sound.init();
             this.sound.resume();
 
-            if (e.code === 'Escape') {
-                if (this.state === 'PLAYING') this.state = 'PAUSED';
-                else if (this.state === 'PAUSED') this.state = 'PLAYING';
+            if (e.code === 'Escape' && !e.repeat) {
+                if (this.state === 'PLAYING') this.pauseGame();
+                else if (this.state === 'PAUSED') this.resumeGame();
             }
-            if (e.code === 'Space' || e.code === 'Enter') {
+            if (!e.repeat && (e.code === 'Space' || e.code === 'Enter')) {
                 if (this.state === 'TITLE') this.startGame();
                 else if (this.state === 'GAME_OVER') this.state = 'TITLE';
             }
         });
 
-        window.addEventListener('mousedown', () => {
+        window.addEventListener('mousedown', e => {
+            if (e.target?.closest?.('a, button, input, textarea')) return;
             this.sound.init();
             this.sound.resume();
             if (this.state === 'TITLE') this.startGame();
+            else if (this.state === 'PAUSED') this.resumeGame();
             else if (this.state === 'GAME_OVER') this.state = 'TITLE';
         });
 
-        window.addEventListener('touchstart', () => {
+        window.addEventListener('touchstart', e => {
+            if (e.target?.closest?.('a, button, input, textarea')) return;
             this.sound.init();
             this.sound.resume();
             if (this.state === 'TITLE') this.startGame();
+            else if (this.state === 'PAUSED') this.resumeGame();
             else if (this.state === 'GAME_OVER') this.state = 'TITLE';
         });
 
-        window.addEventListener('visibilitychange', () => {
-            if (document.hidden && this.state === 'PLAYING') {
-                this.state = 'PAUSED';
-            }
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) this.pauseGame();
         });
 
-        window.addEventListener('blur', () => {
-            if (this.state === 'PLAYING') {
-                this.state = 'PAUSED';
-            }
-        });
+        window.addEventListener('blur', () => this.pauseGame());
+    }
+
+    pauseGame() {
+        this.input.clear();
+        if (this.state === 'PLAYING') this.state = 'PAUSED';
+    }
+
+    resumeGame() {
+        // The resume gesture must never become a shot or a held movement.
+        this.input.clear();
+        if (this.state === 'PAUSED') this.state = 'PLAYING';
     }
 
     startGame() {
+        // Starting a run consumes keyboard, mouse and touch equally. The first
+        // gameplay action must be a fresh gesture, not the held title control.
+        this.input.clear();
         this.state = 'PLAYING';
         this.score = 0;
         this.wave = 1;
@@ -1037,6 +1080,7 @@ class Game {
     }
 
     loadWave() {
+        this.shootCooldown = 0;
         this.player = new Player(400, 500);
         this.enemies = [];
         this.obstacles = [];
@@ -1106,9 +1150,11 @@ class Game {
 
         this.parallax.update(dt);
 
-        if (this.shootCooldown > 0) this.shootCooldown -= dt;
+        this.shootCooldown = Math.max(0, this.shootCooldown - dt);
 
         this.player.update(dt, this.input, this);
+        for (const particle of this.particles) particle.update(dt);
+        this.particles = this.particles.filter(particle => particle.active);
 
         for (let e of this.enemies) {
             e.update(dt, this);
@@ -1120,13 +1166,6 @@ class Game {
 
         for (let p of this.projectiles) {
             p.update(dt, this);
-        }
-
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            this.particles[i].update(dt);
-            if (this.particles[i].timer <= 0) {
-                this.particles.splice(i, 1);
-            }
         }
 
         // Pick up grounded projectile
@@ -1185,6 +1224,8 @@ class Game {
                 this.ctx.font = '40px monospace';
                 this.ctx.textAlign = 'center';
                 this.ctx.fillText('PAUSED', this.width/2, this.height/2);
+                this.ctx.font = '18px monospace';
+                this.ctx.fillText('Tap, click or press Esc to resume', this.width/2, this.height/2 + 40);
             } else if (this.state === 'GAME_OVER') {
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                 this.ctx.fillRect(0, 0, this.width, this.height);

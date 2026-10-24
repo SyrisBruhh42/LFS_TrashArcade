@@ -37,43 +37,60 @@ class InputManager {
         this.keys = {};
         this.mouse = { x: 0, y: 0, down: false, clicked: false };
         this.touches = [];
+        this.touchIds = new Set();
+        this.suppressedTouches = new Set();
+        this.mouseHeld = false;
+        this.escapePressed = false;
+        this.dashRequested = false;
         this.canvas = canvas;
         this.rect = canvas.getBoundingClientRect();
 
-        window.addEventListener('keydown', (e) => this.keys[e.code] = true);
+        window.addEventListener('keydown', (e) => {
+            // Native controls own their activation keys. Repeated keydowns must
+            // not reactivate input cleared by a pause or a menu transition.
+            if (e.repeat || (e.code !== 'Escape' && e.target?.closest?.('button, a, input, select, textarea'))) return;
+            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+            if (e.code === 'Escape' && !this.keys[e.code]) this.escapePressed = true;
+            this.keys[e.code] = true;
+        });
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);
 
         canvas.addEventListener('mousemove', (e) => {
             this.updateMousePos(e);
         });
         canvas.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
             this.updateMousePos(e);
+            this.mouseHeld = true;
             this.mouse.down = true;
             this.mouse.clicked = true;
         });
-        window.addEventListener('mouseup', () => {
-            this.mouse.down = false;
+        window.addEventListener('mouseup', (e) => {
+            if (e.button !== 0) return;
+            this.mouseHeld = false;
+            this.mouse.down = this.touches.length > 0;
         });
 
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
+            for (const touch of e.changedTouches) this.touchIds.add(touch.identifier);
             this.updateTouches(e);
-            if(e.touches.length > 0) {
-                this.mouse.x = e.touches[0].clientX - this.rect.left;
-                this.mouse.y = e.touches[0].clientY - this.rect.top;
-                this.mouse.clicked = true;
-            }
+            if (this.touches.length > 0) this.mouse.clicked = true;
         }, {passive: false});
         canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
             this.updateTouches(e);
         }, {passive: false});
-        window.addEventListener('touchend', (e) => {
+        const endTouch = (e) => {
+            for (const touch of e.changedTouches) {
+                this.touchIds.delete(touch.identifier);
+                this.suppressedTouches.delete(touch.identifier);
+            }
             this.updateTouches(e);
-        });
-        window.addEventListener('touchcancel', (e) => {
-            this.updateTouches(e);
-        });
+            if (e.type === 'touchcancel') this.mouse.clicked = false;
+        };
+        window.addEventListener('touchend', endTouch);
+        window.addEventListener('touchcancel', endTouch);
 
         // Handle canvas resize
         const observer = new ResizeObserver(entries => {
@@ -85,22 +102,47 @@ class InputManager {
     }
 
     updateMousePos(e) {
-        this.mouse.x = e.clientX - this.rect.left;
-        this.mouse.y = e.clientY - this.rect.top;
+        const point = this.canvasPoint(e);
+        this.mouse.x = point.x;
+        this.mouse.y = point.y;
+    }
+
+    canvasPoint(e) {
+        this.rect = this.canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - this.rect.left) * this.canvas.width / Math.max(1, this.rect.width),
+            y: (e.clientY - this.rect.top) * this.canvas.height / Math.max(1, this.rect.height)
+        };
     }
 
     updateTouches(e) {
         this.touches = [];
-        for (let i = 0; i < e.touches.length; i++) {
-            this.touches.push({
-                x: e.touches[i].clientX - this.rect.left,
-                y: e.touches[i].clientY - this.rect.top
-            });
+        for (const touch of e.touches) {
+            // A second finger on Dash/Pause is not a movement target. A held
+            // title/resume gesture stays consumed until that finger is lifted.
+            if (this.touchIds.has(touch.identifier) && !this.suppressedTouches.has(touch.identifier)) {
+                this.touches.push(this.canvasPoint(touch));
+            }
         }
+        if (this.touches.length > 0) Object.assign(this.mouse, this.touches[0]);
+        this.mouse.down = this.mouseHeld || this.touches.length > 0;
+    }
+
+    clear() {
+        this.keys = {};
+        this.mouseHeld = false;
+        this.mouse.down = false;
+        this.mouse.clicked = false;
+        this.suppressedTouches = new Set(this.touchIds);
+        this.touches = [];
+        this.escapePressed = false;
+        this.dashRequested = false;
     }
 
     resetFrame() {
         this.mouse.clicked = false;
+        this.escapePressed = false;
+        this.dashRequested = false;
     }
 }
 
@@ -249,7 +291,7 @@ class Player extends Entity {
             }
 
             // Trigger dash
-            if ((input.keys['ShiftLeft'] || input.keys['ShiftRight']) && this.dashTimer <= 0) {
+            if ((input.keys['ShiftLeft'] || input.keys['ShiftRight'] || input.dashRequested) && this.dashTimer <= 0) {
                 this.isDashing = true;
                 this.dashTime = this.dashDuration;
                 this.dashTimer = this.dashCooldown;
@@ -726,18 +768,64 @@ class Game {
 
         this.resetGame();
 
-        window.addEventListener('visibilitychange', () => {
-            if (document.hidden && this.state === 'PLAYING') {
-                this.state = 'PAUSED';
-            }
+        this.pauseButton = document.getElementById('pause-button');
+        this.dashButton = document.getElementById('dash-button');
+        this.pauseButton.addEventListener('click', () => {
+            this.wakeAudio();
+            if (this.state === 'PLAYING') this.pauseGame();
+            else if (this.state === 'PAUSED') this.resumeGame();
         });
-        window.addEventListener('blur', () => {
-            if (this.state === 'PLAYING') {
-                this.state = 'PAUSED';
-            }
+        this.dashButton.addEventListener('click', () => {
+            this.wakeAudio();
+            if (this.state === 'PLAYING') this.input.dashRequested = true;
+            this.canvas.focus({ preventScroll: true });
         });
+        // Audio initialization belongs to an actual user event, not a later RAF.
+        this.canvas.addEventListener('pointerdown', () => this.wakeAudio());
+        window.addEventListener('keydown', () => this.wakeAudio());
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) this.pauseGame();
+        });
+        window.addEventListener('blur', () => this.pauseGame());
+        this.syncControls();
 
         requestAnimationFrame((t) => this.loop(t));
+    }
+
+    wakeAudio() {
+        this.sounds.init();
+        this.sounds.resume();
+    }
+
+    startGame() {
+        this.input.clear();
+        this.resetGame();
+        this.state = 'PLAYING';
+        this.syncControls();
+    }
+
+    pauseGame() {
+        this.input.clear();
+        if (this.state === 'PLAYING') this.state = 'PAUSED';
+        this.syncControls();
+    }
+
+    resumeGame() {
+        if (this.state !== 'PAUSED' || document.hidden) return;
+        this.input.clear();
+        this.state = 'PLAYING';
+        this.lastTime = performance.now();
+        this.syncControls();
+        this.canvas.focus({ preventScroll: true });
+    }
+
+    syncControls() {
+        const playing = this.state === 'PLAYING';
+        this.pauseButton.hidden = !playing && this.state !== 'PAUSED';
+        this.pauseButton.textContent = playing ? 'Pause' : 'Resume';
+        this.dashButton.hidden = !playing;
+        this.dashButton.disabled = !playing || this.player.dashTimer > 0;
+        this.dashButton.textContent = this.player.dashTimer > 0 ? 'Recharging' : 'Dash';
     }
 
     resize() {
@@ -886,9 +974,8 @@ class Game {
     }
 
     update(dt) {
-        if (this.input.keys['Escape']) {
-            this.input.keys['Escape'] = false;
-            this.state = 'PAUSED';
+        if (this.input.escapePressed) {
+            this.pauseGame();
             return;
         }
 
@@ -1037,6 +1124,8 @@ class Game {
 
     gameOver() {
         this.state = 'GAME_OVER';
+        this.input.clear();
+        this.syncControls();
         this.saves.data.totalGamesPlayed++;
         this.saves.data.totalScoreAccumulated += this.score;
         if (this.score > this.saves.data.highScore) {
@@ -1166,23 +1255,19 @@ class Game {
         const dt = Math.min((now - this.lastTime) / 1000, 0.1);
         this.lastTime = now;
 
-        if (this.input.mouse.clicked || Object.keys(this.input.keys).length > 0) {
-            this.sounds.init();
-            this.sounds.resume();
-        }
-
         if (this.state === 'TITLE') {
             this.drawBackground();
             this.ctx.fillStyle = '#fff';
             this.ctx.textAlign = 'center';
             this.ctx.font = '40px monospace';
-            this.ctx.fillText('ECHO FORGE FUSION', this.width/2, this.height/2 - 40);
+            this.ctx.fillText('ECHO FORGE FUSION', this.width/2, this.height/2 - 40, this.width - 24);
             this.ctx.font = '20px monospace';
-            this.ctx.fillText('Click or Press Space to Start', this.width/2, this.height/2 + 20);
-            this.ctx.fillText('Move: WASD/Arrows | Aim: Mouse/Touch', this.width/2, this.height/2 + 50);
+            this.ctx.fillText('Tap / Click / Space to Start', this.width/2, this.height/2 + 20, this.width - 24);
+            this.ctx.fillText('Move: WASD/Arrows or Hold/Drag', this.width/2, this.height/2 + 50, this.width - 24);
+            this.ctx.fillText('Blasts fire on the beat. Shift / Dash to dash.', this.width/2, this.height/2 + 75, this.width - 24);
             this.ctx.font = '16px monospace';
             this.ctx.fillStyle = '#aaa';
-            this.ctx.fillText(`High Score: ${this.saves.data.highScore}`, this.width/2, this.height/2 + 90);
+            this.ctx.fillText(`High Score: ${this.saves.data.highScore}`, this.width/2, this.height/2 + 105);
             this.ctx.fillText('<- Back to Arcade', this.width/2, this.height - 30); // requirement
 
             if (this.input.keys['Space'] || this.input.mouse.clicked) {
@@ -1190,9 +1275,7 @@ class Game {
                 if (this.input.mouse.clicked && this.input.mouse.y > this.height - 60) {
                     window.location.href = '../../index.html';
                 } else {
-                    this.input.keys['Space'] = false;
-                    this.resetGame();
-                    this.state = 'PLAYING';
+                    this.startGame();
                 }
             }
         } else if (this.state === 'PLAYING') {
@@ -1207,12 +1290,11 @@ class Game {
             this.ctx.font = '40px monospace';
             this.ctx.fillText('PAUSED', this.width/2, this.height/2);
             this.ctx.font = '20px monospace';
-            this.ctx.fillText('Press Esc to Resume', this.width/2, this.height/2 + 40);
+            this.ctx.fillText('Choose Resume or press Esc', this.width/2, this.height/2 + 40, this.width - 24);
             this.ctx.fillText('<- Back to Arcade', this.width/2, this.height - 30); // requirement
 
-            if (this.input.keys['Escape']) {
-                this.input.keys['Escape'] = false;
-                this.state = 'PLAYING';
+            if (this.input.escapePressed) {
+                this.resumeGame();
             }
             if (this.input.mouse.clicked && this.input.mouse.y > this.height - 60) {
                 window.location.href = '../../index.html';
@@ -1234,13 +1316,12 @@ class Game {
                 if (this.input.mouse.clicked && this.input.mouse.y > this.height - 60) {
                     window.location.href = '../../index.html';
                 } else {
-                    this.input.keys['Space'] = false;
-                    this.resetGame();
-                    this.state = 'PLAYING';
+                    this.startGame();
                 }
             }
         }
 
+        this.syncControls();
         this.input.resetFrame();
     }
 }
