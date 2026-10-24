@@ -532,9 +532,11 @@ class Game {
         this.canvas.height = window.innerHeight;
         this.width = this.canvas.width;
         this.height = this.canvas.height;
+        if (this.world) this.world.resize(this.width, this.height);
     }
 
     resetGame() {
+        this.world = new World(this.width, this.height);
         this.player = new Player(this.width / 2, this.height / 2);
         this.echoes = [];
         this.projectiles = [];
@@ -656,6 +658,14 @@ class Game {
             this.bgPulse -= dt;
         }
 
+        this.world.update(dt, this.player, this.enemies, this.echoes, this.projectiles);
+        if (this.player.inHazard) {
+            this.sounds.playHit();
+            this.gameOver();
+            this.player.inHazard = false;
+            return;
+        }
+
         this.player.update(dt, this.input, this);
 
         this.echoes.forEach(e => e.update(dt));
@@ -748,19 +758,9 @@ class Game {
         this.ctx.fillStyle = g;
         this.ctx.fillRect(0, 0, this.width, this.height);
 
-        // Grid / Cytoskeleton
-        this.ctx.strokeStyle = 'rgba(232, 87, 206, 0.05)';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        for(let x=0; x<this.width; x+=50) {
-            this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, this.height);
+        if (this.world) {
+            this.world.drawBackground(this.ctx);
         }
-        for(let y=0; y<this.height; y+=50) {
-            this.ctx.moveTo(0, y);
-            this.ctx.lineTo(this.width, y);
-        }
-        this.ctx.stroke();
 
         if (this.bgPulse > 0) {
             this.ctx.fillStyle = `rgba(232, 87, 206, ${this.bgPulse * 0.2})`;
@@ -816,6 +816,10 @@ class Game {
             this.ctx.arc(p.x, p.y, 2, 0, Math.PI*2);
             this.ctx.fill();
             this.ctx.globalAlpha = 1;
+        }
+
+        if (this.world) {
+            this.world.drawForeground(this.ctx);
         }
 
         this.drawHUD();
