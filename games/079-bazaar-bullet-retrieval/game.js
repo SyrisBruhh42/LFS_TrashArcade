@@ -633,6 +633,10 @@ class Game {
         this.particles = [];
         this.gameOverTimer = 0;
         this.world.reset(this.canvas.width, this.canvas.height);
+
+        this.combo = new ComboSystem();
+        this.upgradeSys = new UpgradeSystem();
+        this.pickups = [];
     }
 
     loop(time) {
@@ -652,6 +656,13 @@ class Game {
                 this.reset();
                 this.state = 'PLAYING';
             }
+            return;
+        }
+
+        if (this.state === 'UPGRADE') {
+            if (this.input.keys['Digit1']) { this.upgradeSys.applyChoice(0, this.player); this.state = 'PLAYING'; this.input.keys['Digit1'] = false; }
+            if (this.input.keys['Digit2']) { this.upgradeSys.applyChoice(1, this.player); this.state = 'PLAYING'; this.input.keys['Digit2'] = false; }
+            if (this.input.keys['Digit3']) { this.upgradeSys.applyChoice(2, this.player); this.state = 'PLAYING'; this.input.keys['Digit3'] = false; }
             return;
         }
 
@@ -726,6 +737,24 @@ class Game {
             }
         }
 
+        this.combo.update(dt);
+
+        for (let i = this.pickups.length - 1; i >= 0; i--) {
+            const p = this.pickups[i];
+            p.update(dt);
+            if (p.life <= 0) {
+                this.pickups.splice(i, 1);
+                continue;
+            }
+            const dx = p.x - this.player.x;
+            const dy = p.y - this.player.y;
+            if (dx * dx + dy * dy < (this.player.radius + p.radius) ** 2) {
+                this.combo.add(30);
+                this.pickups.splice(i, 1);
+                this.sound.playPickup();
+            }
+        }
+
         // Spawn Enemies
         this.waveTimer += dt;
         this.spawnTimer -= dt;
@@ -733,6 +762,12 @@ class Game {
         if (this.waveTimer > 10) {
             this.wave++;
             this.waveTimer = 0;
+
+            // Trigger upgrade draft when surviving a wave
+            this.state = 'UPGRADE';
+            this.upgradeSys.rollChoices();
+            this.bullets = [];
+
             if (this.wave % 5 === 0) {
                 // Spawn boss
                 this.bossWarningTimer = 3;
@@ -805,7 +840,11 @@ class Game {
             }
 
             if (e.hp <= 0) {
-                this.score += e.type === 'boss' ? 500 : 10;
+                this.score += (e.type === 'boss' ? 500 : 10) * this.combo.multiplier;
+                this.combo.add(e.type === 'boss' ? 50 : 15);
+                if (Math.random() < 0.3) {
+                    this.pickups.push(new ComboPickup(e.x, e.y));
+                }
                 if (e.type === 'splitter') {
                     const s1 = new SwarmerEnemy(e.x - 20, e.y);
                     const s2 = new SwarmerEnemy(e.x + 20, e.y);
@@ -855,6 +894,7 @@ class Game {
 
         this.world.drawBackground(this.ctx, this.canvas);
 
+        this.pickups.forEach(p => p.draw(this.ctx));
         this.bullets.forEach(b => b.draw(this.ctx));
         this.enemies.forEach(e => e.draw(this.ctx));
         this.enemyBullets.forEach(eb => eb.draw(this.ctx));
@@ -926,11 +966,15 @@ class Game {
                 this.ctx.fillText(activeBoss.name, this.canvas.width / 2, barY + 15);
             }
 
+            this.combo.draw(this.ctx, this.canvas.width);
+
             if (this.state === 'PAUSED') {
                 this.ctx.textAlign = 'center';
                 this.ctx.font = '40px monospace';
                 this.ctx.fillText('PAUSED', this.canvas.width / 2, this.canvas.height / 2);
             }
+        } else if (this.state === 'UPGRADE') {
+            this.upgradeSys.draw(this.ctx, this.canvas.width, this.canvas.height);
         } else if (this.state === 'GAME_OVER') {
             this.ctx.textAlign = 'center';
             this.ctx.font = '40px monospace';
