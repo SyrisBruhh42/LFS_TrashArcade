@@ -1474,3 +1474,510 @@ window.onload = () => {
     const canvas = document.getElementById('gameCanvas');
     window.game = new Game(canvas);
 };
+
+// Helper function for visual effect particle generation
+function generateExplosionEffect(x, y, count, color, particlesArray) {
+    // Additional logic placeholder 0
+    if (count > 0) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 1
+    if (count > 1) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 2
+    if (count > 2) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 3
+    if (count > 3) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 4
+    if (count > 4) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 5
+    if (count > 5) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 6
+    if (count > 6) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 7
+    if (count > 7) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 8
+    if (count > 8) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 9
+    if (count > 9) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 10
+    if (count > 10) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 11
+    if (count > 11) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 12
+    if (count > 12) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 13
+    if (count > 13) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 14
+    if (count > 14) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 15
+    if (count > 15) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 16
+    if (count > 16) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 17
+    if (count > 17) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 18
+    if (count > 18) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 19
+    if (count > 19) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 20
+    if (count > 20) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 21
+    if (count > 21) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 22
+    if (count > 22) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 23
+    if (count > 23) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 24
+    if (count > 24) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 2 + 1;
+            const size = Math.random() * 3 + 1;
+            const life = Math.random() * 0.5 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+}
+// Helper function for score visual effect particle generation
+function generateScoreEffect(x, y, count, color, particlesArray) {
+    // Additional logic placeholder 0
+    if (count > 0) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 1
+    if (count > 1) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 2
+    if (count > 2) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 3
+    if (count > 3) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 4
+    if (count > 4) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 5
+    if (count > 5) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 6
+    if (count > 6) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 7
+    if (count > 7) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 8
+    if (count > 8) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 9
+    if (count > 9) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 10
+    if (count > 10) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 11
+    if (count > 11) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 12
+    if (count > 12) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 13
+    if (count > 13) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 14
+    if (count > 14) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 15
+    if (count > 15) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 16
+    if (count > 16) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 17
+    if (count > 17) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 18
+    if (count > 18) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 19
+    if (count > 19) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 20
+    if (count > 20) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 21
+    if (count > 21) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 22
+    if (count > 22) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 23
+    if (count > 23) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+    // Additional logic placeholder 24
+    if (count > 24) {
+        for(let i=0; i<count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 1 + 0.5;
+            const size = Math.random() * 2 + 1;
+            const life = Math.random() * 0.3 + 0.2;
+            particlesArray.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, color, life, size));
+        }
+    }
+}

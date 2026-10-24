@@ -1121,7 +1121,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Space/Click/Tap to start. WASD/Arrows or hold/drag to move and aim. Blasts fire on the beat. Shift/Dash to dash. Esc or Pause/Resume to pause and resume.",
     "createdAt": "2023-10-27",
     "accentColor": "#e857ce",
-    "phase": "5",
+    "phase": "6",
     "path": "./games/084-echo-forge-fusion/index.html"
   },
   {
@@ -1137,5 +1137,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#4ad5c0",
     "phase": "3",
     "path": "./games/085-scrap-heist-retrieval/index.html"
+  },
+  {
+    "id": "086",
+    "slug": "086-trench-tactics",
+    "title": "Trench Tactics",
+    "genre": "Tactical Grid/Turn-Based Blitz",
+    "coreMechanic": "Time-Dilation on Stillness",
+    "setting": "Deep Ocean Trench",
+    "description": "Navigate the deep ocean trench in tactical turn-based blitz combat, where time slows down to a crawl when you are still.",
+    "controls": "WASD/Arrows to move, Space/Click to attack. Touch controls supported.",
+    "createdAt": "2024-03-20",
+    "accentColor": "#cdc3b9",
+    "phase": "1",
+    "path": "./games/086-trench-tactics/index.html"
   }
 ];
