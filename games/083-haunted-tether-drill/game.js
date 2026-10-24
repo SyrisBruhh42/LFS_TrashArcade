@@ -1192,6 +1192,202 @@ class SpectralSpikes extends Hazard {
     }
 }
 
+
+class Boss extends Enemy {
+    constructor(x, y, target, name, maxHp, color) {
+        super(x, y, target);
+        this.name = name;
+        this.maxHp = maxHp;
+        this.hp = maxHp;
+        this.displayHp = maxHp;
+        this.color = color;
+        this.radius = 30;
+        this.phase = 1;
+        this.warningTimer = 3.0; // 3 seconds of warning banner before active
+        this.active = true;
+    }
+
+    update(dt) {
+        if (this.warningTimer > 0) {
+            this.warningTimer -= dt;
+            return;
+        }
+
+        // Lerp display HP
+        this.displayHp += (this.hp - this.displayHp) * 5 * dt;
+
+        if (this.hp <= this.maxHp / 2 && this.phase === 1) {
+            this.phase = 2;
+            this.onPhaseTransition();
+        }
+    }
+
+    takeDamage() {
+        if (this.warningTimer > 0) return;
+        this.hp--;
+        if (this.hp <= 0) {
+            this.active = false;
+        }
+    }
+
+    onPhaseTransition() {}
+
+    drawBossUI(ctx, width, height) {
+        if (this.warningTimer > 0) {
+            // Draw Warning Banner
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.5)';
+            ctx.fillRect(0, height / 2 - 50, width, 100);
+            ctx.fillStyle = '#fff';
+            ctx.font = '40px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`WARNING: ${this.name} APPROACHING!`, width / 2, height / 2);
+
+            // Blink effect
+            if (Math.floor(this.warningTimer * 5) % 2 === 0) {
+                ctx.fillStyle = '#e74c3c';
+                ctx.fillText(`WARNING: ${this.name} APPROACHING!`, width / 2, height / 2);
+            }
+            return;
+        }
+
+        // Draw Health Bar
+        const barWidth = width * 0.6;
+        const barHeight = 20;
+        const barX = (width - barWidth) / 2;
+        const barY = 20;
+
+        ctx.fillStyle = '#333';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+
+        const hpPercent = Math.max(0, this.displayHp / this.maxHp);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${this.name} - PHASE ${this.phase}`, width / 2, barY + barHeight / 2);
+    }
+}
+
+class PoltergeistBoss extends Boss {
+    constructor(x, y, target, game) {
+        super(x, y, target, 'Poltergeist Alpha', 40, '#9b59b6');
+        this.game = game;
+        this.attackTimer = 0;
+        this.wobble = 0;
+    }
+    update(dt) {
+        super.update(dt);
+        if (this.warningTimer > 0) return;
+
+        this.wobble += dt * 5;
+
+        // Target tail if exists, else player
+        let targetX = this.target.x;
+        let targetY = this.target.y;
+        if (this.target.tail && this.target.tail.length > 0) {
+            const lastNode = this.target.tail[this.target.tail.length - 1];
+            targetX = lastNode.x;
+            targetY = lastNode.y;
+        }
+
+        const dx = targetX - this.x;
+        const dy = targetY - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+
+        this.speed = this.phase === 1 ? 50 : 90;
+
+        this.vx = (dx / dist) * this.speed + Math.cos(this.wobble) * 20;
+        this.vy = (dy / dist) * this.speed + Math.sin(this.wobble) * 20;
+
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) {
+            this.attackTimer = this.phase === 1 ? 3.0 : 1.5;
+            // Spawn hazard at target location
+            if (this.game && this.game.hazards) {
+                this.game.hazards.push(new SpectralSpikes(targetX, targetY));
+            }
+        }
+    }
+    onPhaseTransition() {
+        this.radius = 40;
+    }
+    draw(ctx) {
+        if (this.warningTimer > 0) return;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+    }
+}
+
+class SpecterKingBoss extends Boss {
+    constructor(x, y, target, game) {
+        super(x, y, target, 'Specter King', 60, '#f1c40f');
+        this.game = game;
+        this.state = 'CHARGE'; // CHARGE, SPAWN
+        this.stateTimer = 2.0;
+        this.speed = 120;
+    }
+    update(dt) {
+        super.update(dt);
+        if (this.warningTimer > 0) return;
+
+        this.stateTimer -= dt;
+
+        if (this.state === 'CHARGE') {
+            const dx = this.target.x - this.x;
+            const dy = this.target.y - this.y;
+            const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+
+            const currentSpeed = this.phase === 1 ? this.speed : this.speed * 1.5;
+            this.vx = (dx / dist) * currentSpeed;
+            this.vy = (dy / dist) * currentSpeed;
+
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+
+            if (this.stateTimer <= 0) {
+                this.state = 'SPAWN';
+                this.stateTimer = this.phase === 1 ? 2.0 : 1.0;
+                this.vx = 0;
+                this.vy = 0;
+            }
+        } else if (this.state === 'SPAWN') {
+            if (this.stateTimer <= 0) {
+                // Spawn swarmers
+                if (this.game && this.game.enemies) {
+                    for(let i=0; i < (this.phase === 1 ? 2 : 4); i++) {
+                        this.game.enemies.push(new Swarmer(this.x + (Math.random()-0.5)*50, this.y + (Math.random()-0.5)*50, this.target));
+                    }
+                }
+                this.state = 'CHARGE';
+                this.stateTimer = 3.0;
+            }
+        }
+    }
+    draw(ctx) {
+        if (this.warningTimer > 0) return;
+        ctx.fillStyle = this.state === 'SPAWN' ? '#fff' : this.color;
+        ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius*2, this.radius*2);
+        ctx.strokeStyle = '#000';
+        ctx.strokeRect(this.x - this.radius, this.y - this.radius, this.radius*2, this.radius*2);
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -1254,6 +1450,8 @@ class Game {
         this.resources = [];
         this.spawnTimer = 0;
         this.resourceTimer = 0;
+        this.bossesSpawned = 0;
+        this.activeBoss = null;
         this.state = 'PLAYING';
 
         this.soundEngine.init();
@@ -1353,10 +1551,24 @@ class Game {
             }
         }
 
-        this.spawnTimer -= dt;
-        if (this.spawnTimer <= 0) {
-            this.spawnEnemy();
-            this.spawnTimer = 2.0 - Math.min((this.score / 1000), 1.5);
+        if (!this.activeBoss && this.score >= (this.bossesSpawned + 1) * 500) {
+            this.bossesSpawned++;
+            const bossType = Math.random() < 0.5 ? PoltergeistBoss : SpecterKingBoss;
+            this.activeBoss = new bossType(this.width / 2, -50, this.player, this);
+            this.enemies.push(this.activeBoss);
+        }
+
+        if (this.activeBoss && !this.activeBoss.active) {
+            this.activeBoss = null;
+            this.score += 250 * this.multiplier; // Bonus for killing boss
+        }
+
+        if (!this.activeBoss || this.activeBoss.warningTimer <= 0) {
+            this.spawnTimer -= dt;
+            if (this.spawnTimer <= 0) {
+                this.spawnEnemy();
+                this.spawnTimer = 2.0 - Math.min((this.score / 1000), 1.5);
+            }
         }
 
         this.resourceTimer -= dt;
@@ -1517,6 +1729,10 @@ class Game {
                 this.ctx.fillStyle = this.player.dashCooldown <= 0 ? '#65bb98' : '#e74c3c';
                 const fillRatio = this.player.dashCooldown <= 0 ? 1 : 1 - (this.player.dashCooldown / this.player.dashCooldownMax);
                 this.ctx.fillRect(10, 100, 100 * fillRatio, 10);
+            }
+
+            if (this.activeBoss) {
+                this.activeBoss.drawBossUI(this.ctx, this.width, this.height);
             }
         }
 
