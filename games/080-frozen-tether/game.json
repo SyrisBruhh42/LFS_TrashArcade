@@ -1,0 +1,13 @@
+{
+  "id": "080",
+  "title": "Frozen Tether",
+  "slug": "080-frozen-tether",
+  "description": "Navigate a frozen research base using momentum grappling, and stand still to dilate time.",
+  "controls": "A/D or Arrows to Move. W/Up/Space to Jump. Click to Grapple.",
+  "createdAt": "2023-10-24",
+  "accentColor": "#769a87",
+  "phase": "1",
+  "genre": "Momentum/Grapple Platformer",
+  "coreMechanic": "Time-Dilation on Stillness",
+  "setting": "Frozen Arctic Research Base"
+}
