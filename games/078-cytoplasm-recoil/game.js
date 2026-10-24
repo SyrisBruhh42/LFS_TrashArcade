@@ -394,15 +394,60 @@ class Ammo {
     }
 }
 
+class EnemyProjectile {
+    constructor(x, y, dirX, dirY, speed) {
+        this.pos = new Vector(x, y);
+        let n = new Vector(dirX, dirY);
+        if (n.mag() > 0) n.normalize();
+        this.vel = new Vector(n.x * speed, n.y * speed);
+        this.radius = 4;
+        this.markedForDeletion = false;
+    }
+    update(dt) {
+        this.pos.add(new Vector(this.vel.x * dt, this.vel.y * dt));
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#ffeb3b';
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+class ToxicPuddle {
+    constructor(x, y) {
+        this.pos = new Vector(x, y);
+        this.radius = 25;
+        this.timer = 5;
+        this.markedForDeletion = false;
+    }
+    update(dt) {
+        this.timer -= dt;
+        if (this.timer <= 0) this.markedForDeletion = true;
+    }
+    draw(ctx) {
+        ctx.fillStyle = 'rgba(76, 175, 80, 0.4)';
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
 class Enemy {
     constructor(x, y) {
         this.pos = new Vector(x, y);
         this.radius = 12;
-        this.speed = MathUtils.randomRange(100, 150);
+        this.hp = 1;
         this.markedForDeletion = false;
+        this.speed = MathUtils.randomRange(100, 150);
     }
-    update(dt, playerPos) {
-        let dir = new Vector(playerPos.x - this.pos.x, playerPos.y - this.pos.y);
+    takeDamage(amount) {
+        this.hp -= amount;
+        if (this.hp <= 0) this.markedForDeletion = true;
+        return this.hp <= 0;
+    }
+    update(dt, game) {
+        let dir = new Vector(game.player.pos.x - this.pos.x, game.player.pos.y - this.pos.y);
         if (dir.mag() > 0) dir.normalize();
         dir.x += MathUtils.randomRange(-0.25, 0.25);
         dir.y += MathUtils.randomRange(-0.25, 0.25);
@@ -427,6 +472,121 @@ class Enemy {
         ctx.closePath();
         ctx.fill();
         ctx.strokeStyle = '#880e4f';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
+class Swarmer extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.speed = MathUtils.randomRange(160, 200);
+        this.radius = 8;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#ff5722';
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#bf360c';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
+class RangedSniper extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.speed = 40;
+        this.shootTimer = 3;
+    }
+    update(dt, game) {
+        let dist = MathUtils.distance(this.pos.x, this.pos.y, game.player.pos.x, game.player.pos.y);
+        if (dist > 150) {
+            let dir = new Vector(game.player.pos.x - this.pos.x, game.player.pos.y - this.pos.y);
+            if (dir.mag() > 0) dir.normalize();
+            this.pos.add(new Vector(dir.x * this.speed * dt, dir.y * this.speed * dt));
+        }
+        this.shootTimer -= dt;
+        if (this.shootTimer <= 0) {
+            let dx = game.player.pos.x - this.pos.x;
+            let dy = game.player.pos.y - this.pos.y;
+            game.enemyProjectiles.push(new EnemyProjectile(this.pos.x, this.pos.y, dx, dy, 250));
+            this.shootTimer = 3;
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#9c27b0';
+        ctx.beginPath();
+        ctx.moveTo(this.pos.x + this.radius, this.pos.y);
+        ctx.lineTo(this.pos.x - this.radius, this.pos.y + this.radius);
+        ctx.lineTo(this.pos.x - this.radius, this.pos.y - this.radius);
+        ctx.closePath();
+        ctx.fill();
+        if (this.shootTimer < 1) {
+            ctx.beginPath();
+            ctx.arc(this.pos.x, this.pos.y, this.radius + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 0, 0, ' + (1 - this.shootTimer) + ')';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+    }
+}
+
+class ShieldedBruiser extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.speed = 60;
+        this.radius = 18;
+        this.hp = 3;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#607d8b';
+        ctx.fillRect(this.pos.x - this.radius, this.pos.y - this.radius, this.radius * 2, this.radius * 2);
+        ctx.strokeStyle = '#263238';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(this.pos.x - this.radius, this.pos.y - this.radius, this.radius * 2, this.radius * 2);
+    }
+}
+
+class SplitterSpawner extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.speed = 50;
+        this.radius = 20;
+        this.hp = 2;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#00bcd4';
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#006064';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
+class AreaDenialHazard extends Enemy {
+    constructor(x, y) {
+        super(x, y);
+        this.speed = 70;
+        this.puddleTimer = 2;
+    }
+    update(dt, game) {
+        super.update(dt, game);
+        this.puddleTimer -= dt;
+        if (this.puddleTimer <= 0) {
+            game.enemyPuddles.push(new ToxicPuddle(this.pos.x, this.pos.y));
+            this.puddleTimer = 2;
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#cddc39';
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#827717';
         ctx.lineWidth = 2;
         ctx.stroke();
     }
@@ -652,6 +812,8 @@ class Game {
         this.bgLayers = [];
         this.streams = [];
         this.hazards = [];
+        this.enemyProjectiles = [];
+        this.enemyPuddles = [];
         this.resizeObserver = new ResizeObserver(() => this.resize());
         this.resizeObserver.observe(this.canvas);
         this.resize();
@@ -677,6 +839,8 @@ class Game {
         this.score = 0;
         this.enemySpawnTimer = 0;
         this.enemySpawnRate = 2.0;
+        this.enemyProjectiles = [];
+        this.enemyPuddles = [];
         this.bumpers = [];
         for (let i = 0; i < 6; i++) {
             this.bumpers.push(new Bumper(
@@ -805,20 +969,34 @@ class Game {
             if (side === 2) { ex = -20; ey = Math.random() * this.height; }
             if (side === 3) { ex = this.width + 20; ey = Math.random() * this.height; }
 
-            this.enemies.push(new Enemy(ex, ey));
+            let rand = Math.random();
+            if (rand < 0.2) this.enemies.push(new Swarmer(ex, ey));
+            else if (rand < 0.4) this.enemies.push(new RangedSniper(ex, ey));
+            else if (rand < 0.6) this.enemies.push(new ShieldedBruiser(ex, ey));
+            else if (rand < 0.8) this.enemies.push(new SplitterSpawner(ex, ey));
+            else if (rand < 0.9) this.enemies.push(new AreaDenialHazard(ex, ey));
+            else this.enemies.push(new Enemy(ex, ey));
+
             this.enemySpawnTimer = this.enemySpawnRate;
             this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.02);
         }
 
         for (let e of this.enemies) {
-            e.update(dt, this.player.pos);
+            e.update(dt, this);
             let dist = MathUtils.distance(this.player.pos.x, this.player.pos.y, e.pos.x, e.pos.y);
             if (dist < this.player.radius + e.radius) {
                 if (this.player.isDashing) {
-                    e.markedForDeletion = true;
-                    this.sound.hit();
-                    this.score += 20;
-                    this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 15);
+                    if (e.takeDamage(1)) {
+                        if (e instanceof SplitterSpawner) {
+                            this.enemies.push(new Swarmer(e.pos.x - 10, e.pos.y));
+                            this.enemies.push(new Swarmer(e.pos.x + 10, e.pos.y));
+                        }
+                        this.sound.hit();
+                        this.score += 20;
+                        this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 15);
+                    } else {
+                        this.spawnParticles(e.pos.x, e.pos.y, '#fff', 5);
+                    }
                 } else if (this.player.invulnTimer <= 0) {
                     this.sound.death();
                     this.saveManager.updateHighScore(this.score);
@@ -829,14 +1007,45 @@ class Game {
             if (this.ammo && this.ammo.active) {
                 let adist = MathUtils.distance(this.ammo.pos.x, this.ammo.pos.y, e.pos.x, e.pos.y);
                 if (adist < this.ammo.radius + e.radius) {
-                    e.markedForDeletion = true;
-                    this.sound.hit();
-                    this.score += 10;
-                    this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 10);
+                    if (e.takeDamage(1)) {
+                        if (e instanceof SplitterSpawner) {
+                            this.enemies.push(new Swarmer(e.pos.x - 10, e.pos.y));
+                            this.enemies.push(new Swarmer(e.pos.x + 10, e.pos.y));
+                        }
+                        this.sound.hit();
+                        this.score += 10;
+                        this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 10);
+                    } else {
+                        this.spawnParticles(e.pos.x, e.pos.y, '#fff', 5);
+                    }
                 }
             }
         }
         this.enemies = this.enemies.filter(e => !e.markedForDeletion);
+
+        for (let ep of this.enemyProjectiles) {
+            ep.update(dt);
+            let pdist = MathUtils.distance(this.player.pos.x, this.player.pos.y, ep.pos.x, ep.pos.y);
+            if (pdist < this.player.radius + ep.radius && this.player.invulnTimer <= 0 && !this.player.isDashing) {
+                this.sound.death();
+                this.saveManager.updateHighScore(this.score);
+                this.saveManager.addGamePlayed(this.score);
+                this.state = STATES.GAME_OVER;
+            }
+        }
+        this.enemyProjectiles = this.enemyProjectiles.filter(ep => !ep.markedForDeletion && ep.pos.x > -50 && ep.pos.x < this.width + 50 && ep.pos.y > -50 && ep.pos.y < this.height + 50);
+
+        for (let pud of this.enemyPuddles) {
+            pud.update(dt);
+            let pdist = MathUtils.distance(this.player.pos.x, this.player.pos.y, pud.pos.x, pud.pos.y);
+            if (pdist < this.player.radius + pud.radius && this.player.invulnTimer <= 0 && !this.player.isDashing) {
+                this.sound.death();
+                this.saveManager.updateHighScore(this.score);
+                this.saveManager.addGamePlayed(this.score);
+                this.state = STATES.GAME_OVER;
+            }
+        }
+        this.enemyPuddles = this.enemyPuddles.filter(p => !p.markedForDeletion);
 
         for (let h of this.hazards) {
             h.update(dt);
@@ -904,8 +1113,10 @@ class Game {
 
         for (let b of this.bumpers) b.draw(this.ctx);
         for (let h of this.hazards) h.draw(this.ctx);
+        for (let pud of this.enemyPuddles) pud.draw(this.ctx);
         if (this.ammo) this.ammo.draw(this.ctx);
         for (let e of this.enemies) e.draw(this.ctx);
+        for (let ep of this.enemyProjectiles) ep.draw(this.ctx);
         for (let p of this.particles) p.draw(this.ctx);
         if (this.player) this.player.draw(this.ctx);
 
