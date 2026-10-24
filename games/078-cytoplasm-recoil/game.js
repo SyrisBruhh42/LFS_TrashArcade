@@ -82,7 +82,7 @@ class SaveManager {
             totalGamesPlayed: 0,
             totalScoreAccumulated: 0,
             unlockedMilestones: [],
-            options: { musicVolume: 1, sfxVolume: 1, mute: false }
+            options: { musicVolume: 1, sfxVolume: 1, mute: false, screenShake: 1, particleDensity: 'high', highContrast: false, showFPS: false, touchControls: 'auto', touchHandedness: 'right' }
         };
         this.load();
     }
@@ -92,12 +92,20 @@ class SaveManager {
             if (stored) {
                 const parsed = JSON.parse(stored);
                 this.data = { ...this.data, ...parsed };
+                if (parsed.options) this.data.options = { ...this.data.options, ...parsed.options };
+                if (!this.data.unlockedMilestones) this.data.unlockedMilestones = [];
             }
         } catch (e) { console.warn("SaveManager error.", e); }
     }
     save() {
         try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); }
         catch (e) { console.warn("SaveManager error.", e); }
+    }
+    unlockMilestone(m) {
+        if (!this.data.unlockedMilestones.includes(m)) {
+            this.data.unlockedMilestones.push(m);
+            this.save();
+        }
     }
     updateHighScore(score) {
         if (score > this.data.highScore) {
@@ -164,6 +172,12 @@ class SoundEngine {
 
     updateMusic(dt, isBoss, isLowHp) {
         if (!this.initialized || !this.ctx) return;
+        if (window.game && window.game.saveManager && window.game.saveManager.data.options) {
+            let opt = window.game.saveManager.data.options;
+            this.masterGain.gain.value = opt.mute ? 0 : 0.6;
+            this.sfxGain.gain.value = opt.sfxVolume;
+            this.musicGain.gain.value = opt.musicVolume;
+        }
 
         this.isBoss = isBoss;
         this.isLowHp = isLowHp;
@@ -1289,6 +1303,9 @@ class Game {
         this.input = new InputManager(this.canvas);
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
+        this.ui = new UIManager(this);
+        this.dtFallback = 0.016;
+        window.game = this;
         this.state = STATES.TITLE;
         this.lastTime = 0;
         this.score = 0;
@@ -1402,10 +1419,18 @@ class Game {
         this.sound.start();
         this.state = STATES.PLAYING;
     }
+    triggerShake(amount, duration) {
+        this.shakeAmount = amount;
+        this.shakeTimer = duration;
+    }
     spawnParticles(x, y, color, count) {
+        if (this.saveManager && this.saveManager.data.options && this.saveManager.data.options.particleDensity === 'low') count = Math.ceil(count / 3);
         for (let i = 0; i < count; i++) this.particles.push(new Particle(x, y, color));
     }
     update(dt) {
+        this.dtFallback = dt;
+        if (this.ui) this.ui.update();
+        if (this.state === STATES.OPTIONS) return;
         if (this.state === STATES.TITLE) {
             if (this.input.mouse.clicked || this.input.keys['Enter'] || this.input.keys['Space']) {
                 this.initGame();
@@ -1781,11 +1806,24 @@ class Game {
         for (let p of this.particles) p.update(dt);
         this.particles = this.particles.filter(p => p.life > 0);
 
+        if (this.shakeTimer > 0) this.shakeTimer -= dt;
         this.input.update();
     }
     draw() {
         this.ctx.fillStyle = '#1a2a22';
         this.ctx.fillRect(0, 0, this.width, this.height);
+        this.ctx.save();
+        if (this.shakeTimer > 0) {
+            let mult = (this.saveManager && this.saveManager.data.options) ? this.saveManager.data.options.screenShake : 1;
+            let sx = (Math.random() - 0.5) * this.shakeAmount * mult;
+            let sy = (Math.random() - 0.5) * this.shakeAmount * mult;
+            this.ctx.translate(sx, sy);
+        }
+        if (this.saveManager && this.saveManager.data.options && this.saveManager.data.options.highContrast) {
+            this.canvas.style.filter = "contrast(150%) saturate(150%) hue-rotate(15deg)";
+        } else {
+            this.canvas.style.filter = "none";
+        }
 
         for (let layer of this.bgLayers) layer.draw(this.ctx);
         for (let stream of this.streams) stream.draw(this.ctx);
@@ -1793,7 +1831,9 @@ class Game {
         if (this.state === STATES.TITLE) {
             this.drawText("CYTOPLASM RECOIL", this.width/2, this.height/3, 50, '#448b6f');
             this.drawText("Click or Press Enter to Start", this.width/2, this.height/2, 24, '#fff');
-            this.drawText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, this.height/2 + 40, 20, '#aaa');
+            this.drawText("Press ESC for Options", this.width/2, this.height/2 + 30, 20, '#aaa');
+            this.drawText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, this.height/2 + 60, 20, '#aaa');
+            this.ui.drawMilestones(this.ctx, this.width/2, this.height/2 + 90);
             this.ctx.fillStyle = '#aaa';
             this.ctx.font = '16px monospace';
             this.ctx.textAlign = 'center';
@@ -1886,7 +1926,8 @@ class Game {
             this.ctx.fillRect(0, 0, this.width, this.height);
             this.drawText("CELL DESTROYED", this.width/2, this.height/3, 50, '#e91e63');
             this.drawText(`Final Score: ${this.score}`, this.width/2, this.height/2, 30, '#fff');
-            this.drawText("Click to Return", this.width/2, this.height/2 + 50, 20, '#aaa');
+            this.ui.drawMilestones(this.ctx, this.width/2, this.height/2 + 50);
+            this.drawText("Click to Return", this.width/2, this.height/2 + 190, 20, '#aaa');
         }
         if (this.state === STATES.PAUSED) {
             this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -1898,7 +1939,12 @@ class Game {
             this.ctx.fillText("Back to Arcade", this.width/2, this.height - 50);
         }
 
-        if (this.input.joystick.active) {
+        if (this.state === STATES.OPTIONS) {
+            this.ui.drawOptions(this.ctx);
+        }
+        this.ui.drawFPS(this.ctx);
+        this.ui.drawTouch(this.ctx);
+        if (this.input.joystick.active && (!this.saveManager.data.options || this.saveManager.data.options.touchControls !== 'off')) {
             this.ctx.strokeStyle = 'rgba(255,255,255,0.3)';
             this.ctx.beginPath();
             this.ctx.arc(this.input.joystick.baseX, this.input.joystick.baseY, 50, 0, Math.PI*2);
