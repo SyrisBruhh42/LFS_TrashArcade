@@ -189,30 +189,121 @@ class Entity {
 class Player extends Entity {
     constructor(x, y) {
         super(x, y, 15, '#e857ce');
-        this.speed = 300;
+        this.speed = 1000; // Acceleration
+        this.maxSpeed = 300;
+        this.friction = 0.9;
         this.echoTimer = 0;
         this.echoInterval = 2.0; // Place echo every 2 seconds
+
+        // Dash abilities
+        this.dashTimer = 0;
+        this.dashCooldown = 2.0;
+        this.isDashing = false;
+        this.dashDuration = 0.2;
+        this.dashTime = 0;
+
+        // Recoil
+        this.recoil = 0;
+        this.angle = 0;
     }
     update(dt, input, game) {
-        this.vx = 0;
-        this.vy = 0;
-        if (input.keys['KeyW'] || input.keys['ArrowUp']) this.vy -= this.speed;
-        if (input.keys['KeyS'] || input.keys['ArrowDown']) this.vy += this.speed;
-        if (input.keys['KeyA'] || input.keys['ArrowLeft']) this.vx -= this.speed;
-        if (input.keys['KeyD'] || input.keys['ArrowRight']) this.vx += this.speed;
+        // Dash cooldown
+        if (this.dashTimer > 0) this.dashTimer -= dt;
 
-        // Touch movement fallback (move towards touch/mouse)
-        if (input.mouse.down) {
-            const dx = input.mouse.x - this.x;
-            const dy = input.mouse.y - this.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist > this.radius) {
-                this.vx = (dx / dist) * this.speed;
-                this.vy = (dy / dist) * this.speed;
+        if (this.isDashing) {
+            this.dashTime -= dt;
+            if (this.dashTime <= 0) {
+                this.isDashing = false;
+            }
+        } else {
+            let ax = 0;
+            let ay = 0;
+            if (input.keys['KeyW'] || input.keys['ArrowUp']) ay -= this.speed;
+            if (input.keys['KeyS'] || input.keys['ArrowDown']) ay += this.speed;
+            if (input.keys['KeyA'] || input.keys['ArrowLeft']) ax -= this.speed;
+            if (input.keys['KeyD'] || input.keys['ArrowRight']) ax += this.speed;
+
+            // Touch movement fallback
+            if (input.mouse.down) {
+                const dx = input.mouse.x - this.x;
+                const dy = input.mouse.y - this.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > this.radius) {
+                    ax = (dx / dist) * this.speed;
+                    ay = (dy / dist) * this.speed;
+                }
+            }
+
+            this.vx += ax * dt;
+            this.vy += ay * dt;
+
+            // Friction
+            this.vx *= this.friction;
+            this.vy *= this.friction;
+
+            // Max speed clamp
+            const currentSpeed = Math.hypot(this.vx, this.vy);
+            if (currentSpeed > this.maxSpeed) {
+                this.vx = (this.vx / currentSpeed) * this.maxSpeed;
+                this.vy = (this.vy / currentSpeed) * this.maxSpeed;
+            }
+
+            // Trigger dash
+            if ((input.keys['ShiftLeft'] || input.keys['ShiftRight']) && this.dashTimer <= 0) {
+                this.isDashing = true;
+                this.dashTime = this.dashDuration;
+                this.dashTimer = this.dashCooldown;
+
+                // Dash velocity boost
+                let dashVx = this.vx;
+                let dashVy = this.vy;
+                const dashSpeed = 1000;
+
+                if (Math.hypot(dashVx, dashVy) < 10) {
+                    dashVx = dashSpeed; // Default right if not moving
+                    dashVy = 0;
+                } else {
+                    const norm = Math.hypot(dashVx, dashVy);
+                    dashVx = (dashVx / norm) * dashSpeed;
+                    dashVy = (dashVy / norm) * dashSpeed;
+                }
+
+                this.vx = dashVx;
+                this.vy = dashVy;
+                game.sounds.playShoot(); // Reuse shoot sound for dash
+                game.spawnParticles(this.x, this.y, 20, '#ffffff');
             }
         }
 
         super.update(dt);
+
+        // Recoil decay
+        if (this.recoil > 0) {
+            this.recoil -= dt * 10;
+            if (this.recoil < 0) this.recoil = 0;
+        }
+
+        // Aim angle towards mouse/touch or closest enemy
+        let targetX = input.mouse.x;
+        let targetY = input.mouse.y;
+        if (!input.mouse.down && game.enemies.length > 0) {
+            let closest = null;
+            let minDist = Infinity;
+            for(let e of game.enemies) {
+                let dx = e.x - this.x;
+                let dy = e.y - this.y;
+                let dist = Math.hypot(dx, dy);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closest = e;
+                }
+            }
+            if (closest) {
+                targetX = closest.x;
+                targetY = closest.y;
+            }
+        }
+        this.angle = Math.atan2(targetY - this.y, targetX - this.x);
 
         // Clamp to screen
         this.x = Math.max(this.radius, Math.min(game.width - this.radius, this.x));
@@ -225,23 +316,61 @@ class Player extends Entity {
         }
     }
     draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        // Apply recoil offset
+        ctx.translate(-Math.cos(this.angle) * this.recoil, -Math.sin(this.angle) * this.recoil);
+
+        // Blink if dashing
+        if (this.isDashing && Math.random() < 0.5) {
+            ctx.globalAlpha = 0.5;
+        }
+
+        // Rotate for telegraph
+        ctx.rotate(this.angle);
+
+        // Multi-part procedural player vector sprite
+        // Core body
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Organelle detailing for Microscopic Cell Interior
+        // Thrust trail
+        const speed = Math.hypot(this.vx, this.vy);
+        if (speed > 50) {
+            ctx.beginPath();
+            ctx.moveTo(-this.radius, -this.radius/2);
+            ctx.lineTo(-this.radius - speed/10, 0);
+            ctx.lineTo(-this.radius, this.radius/2);
+            ctx.fillStyle = 'rgba(232, 87, 206, 0.5)';
+            ctx.fill();
+        }
+
+        // Aim telegraph (barrel)
         ctx.beginPath();
-        ctx.arc(this.x - 4, this.y - 4, 4, 0, Math.PI * 2);
+        ctx.moveTo(this.radius, -4);
+        ctx.lineTo(this.radius + 8, 0);
+        ctx.lineTo(this.radius, 4);
+        ctx.fillStyle = '#00ffff';
+        ctx.fill();
+
+        // Organelle detailing for Microscopic Cell Interior
+        ctx.rotate(-this.angle); // rotate back for internal details to not spin crazily
+        ctx.beginPath();
+        ctx.arc(-4, -4, 4, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255,255,255,0.8)';
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(this.x + 5, this.y + 3, 2, 0, Math.PI * 2);
+        ctx.arc(5, 3, 2, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
         ctx.fill();
+
+        ctx.restore();
     }
 }
 
@@ -492,6 +621,9 @@ class Game {
                 const vx = (dx / dist) * 500;
                 const vy = (dy / dist) * 500;
                 this.projectiles.push(new Projectile(s.x, s.y, vx, vy, '#00ffff'));
+                if (s === this.player) {
+                    this.player.recoil = 5;
+                }
             }
         }
         this.sounds.playShoot();
@@ -546,9 +678,20 @@ class Game {
             const dx = this.player.x - enemy.x;
             const dy = this.player.y - enemy.y;
             if (Math.hypot(dx, dy) < this.player.radius + enemy.radius) {
-                this.sounds.playHit();
-                this.gameOver();
-                return;
+                if (!this.player.isDashing) {
+                    this.sounds.playHit();
+                    this.gameOver();
+                    return;
+                } else {
+                    // Dash damage
+                    enemy.hp -= 1;
+                    if (enemy.hp <= 0) {
+                        enemy.active = false;
+                        this.score += 10;
+                        this.sounds.playHit(); // Using hit sound for enemy death during dash
+                        this.spawnParticles(enemy.x, enemy.y, 15, enemy.color);
+                    }
+                }
             }
 
             // Projectile collision
@@ -639,6 +782,22 @@ class Game {
         this.ctx.fillRect(20, 100, 100, 10);
         this.ctx.fillStyle = '#e857ce';
         this.ctx.fillRect(20, 100, 100 * progress, 10);
+
+        // Dash cooldown
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '14px monospace';
+        this.ctx.fillText('DASH', 20, 130);
+        this.ctx.fillStyle = '#444';
+        this.ctx.fillRect(60, 120, 60, 10);
+
+        if (this.player.dashTimer <= 0) {
+            this.ctx.fillStyle = '#00ffff';
+            this.ctx.fillRect(60, 120, 60, 10);
+        } else {
+            const dashProg = 1 - (this.player.dashTimer / this.player.dashCooldown);
+            this.ctx.fillStyle = '#888';
+            this.ctx.fillRect(60, 120, 60 * dashProg, 10);
+        }
     }
 
     draw() {
