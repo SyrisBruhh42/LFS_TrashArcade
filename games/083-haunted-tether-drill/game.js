@@ -1388,7 +1388,33 @@ class SpecterKingBoss extends Boss {
     }
 }
 
+
+class Pickup extends Entity {
+    constructor(x, y, type) {
+        super(x, y, 8, '#f1c40f');
+        this.type = type;
+        this.life = 10.0;
+        if (this.type === 'COMBO') this.color = '#e74c3c';
+        else if (this.type === 'SCORE') this.color = '#f1c40f';
+        else if (this.type === 'SPEED') this.color = '#3498db';
+    }
+    update(dt) {
+        super.update(dt);
+        this.life -= dt;
+        if (this.life <= 0) this.active = false;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+    }
+}
+
 class Game {
+
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d', { alpha: false });
@@ -1409,6 +1435,7 @@ class Game {
         this.enemies = [];
         this.resources = [];
         this.hazards = [];
+        this.pickups = [];
         this.parallax = new ParallaxBackground();
 
         this.spawnTimer = 0;
@@ -1453,6 +1480,17 @@ class Game {
         this.bossesSpawned = 0;
         this.activeBoss = null;
         this.state = 'PLAYING';
+        this.pickups = this.pickups || [];
+
+        this.wave = 1;
+        this.killsThisWave = 0;
+        this.killsRequired = 10;
+        this.currentUpgrades = [];
+        this.pickups = this.pickups || [];
+        this.pickupChance = 0.1;
+        this.comboTimer = 0;
+        this.comboMaxTimer = 3.0;
+        this.comboLevel = 0;
 
         this.soundEngine.init();
         this.soundEngine.resume();
@@ -1531,6 +1569,27 @@ class Game {
     }
 
     updatePlaying(dt) {
+        if (this.comboTimer > 0) {
+            this.comboTimer -= dt;
+            if (this.comboTimer <= 0) {
+                this.comboLevel = 0;
+                this.multiplier = 1;
+            }
+        }
+
+        for (let i = this.pickups.length - 1; i >= 0; i--) {
+            const p = this.pickups[i];
+            p.update(dt);
+            if (this.player.collides(p)) {
+                if (p.type === 'COMBO') { this.comboTimer = this.comboMaxTimer; this.comboLevel += 2; this.multiplier = 1 + Math.floor(this.comboLevel / 5); }
+                else if (p.type === 'SCORE') { this.score += 50 * this.multiplier; }
+                else if (p.type === 'SPEED') { this.player.speed = Math.min(300, this.player.speed + 15); }
+                p.active = false;
+                this.soundEngine.playCollect();
+            }
+            if (!p.active) this.pickups.splice(i, 1);
+        }
+
         this.player.update(dt, this.inputManager, this.width, this.height);
         this.baseCamp.update(dt);
         this.parallax.update(dt, this.player.vx, this.player.vy);
@@ -1560,7 +1619,17 @@ class Game {
 
         if (this.activeBoss && !this.activeBoss.active) {
             this.activeBoss = null;
+            this.comboLevel += 5;
+            this.multiplier = 1 + Math.floor(this.comboLevel / 5);
+            this.comboTimer = this.comboMaxTimer;
             this.score += 250 * this.multiplier; // Bonus for killing boss
+            this.killsThisWave++;
+        }
+
+        if (this.killsThisWave >= this.killsRequired && !this.activeBoss) {
+            this.state = 'UPGRADE';
+            this.generateUpgrades();
+            return;
         }
 
         if (!this.activeBoss || this.activeBoss.warningTimer <= 0) {
@@ -1591,6 +1660,9 @@ class Game {
             if (this.player.tailLength > 0) {
                 this.player.baseDepositTimer += dt;
                 if (this.player.baseDepositTimer > 0.1) {
+                    this.comboLevel++;
+                    this.multiplier = 1 + Math.floor(this.comboLevel / 5);
+                    this.comboTimer = this.comboMaxTimer;
                     this.score += 10 * this.multiplier;
                     this.player.tailLength--;
                     this.player.baseDepositTimer = 0;
@@ -1617,7 +1689,15 @@ class Game {
                     this.soundEngine.playHit();
                     enemy.takeDamage();
                     if (!enemy.active) {
+                        this.comboLevel++;
+                        this.multiplier = 1 + Math.floor(this.comboLevel / 5);
+                        this.comboTimer = this.comboMaxTimer;
                         this.score += 20 * this.multiplier;
+                        this.killsThisWave++;
+                        if (Math.random() < this.pickupChance) {
+                            const types = ['COMBO', 'SCORE', 'SPEED'];
+                            this.pickups.push(new Pickup(enemy.x, enemy.y, types[Math.floor(Math.random()*types.length)]));
+                        }
                     }
                 }
             }
@@ -1657,6 +1737,37 @@ class Game {
         this.saveManager.updateHighScore(this.score);
     }
 
+
+    generateUpgrades() {
+        const pool = [
+            { name: 'Max Tail +10', desc: 'Increases max tether length', apply: () => this.player.maxTailLength += 10 },
+            { name: 'Dash Cooldown -0.2s', desc: 'Faster dash recharge', apply: () => this.player.dashCooldownMax = Math.max(0.5, this.player.dashCooldownMax - 0.2) },
+            { name: 'Speed Up', desc: 'Increase base speed', apply: () => this.player.speed = Math.min(300, this.player.speed + 15) },
+            { name: 'Max Combo Time +1s', desc: 'Longer combo duration', apply: () => { this.comboMaxTimer += 1.0; this.comboTimer = this.comboMaxTimer; } },
+            { name: 'More Pickups', desc: '+5% drop chance', apply: () => this.pickupChance += 0.05 },
+            { name: 'Drill Power', desc: 'Dash is faster', apply: () => this.player.dashSpeed += 50 }
+        ];
+        this.currentUpgrades = [];
+        let poolCopy = [...pool];
+        for(let i=0; i<3; i++) {
+            if (poolCopy.length === 0) break;
+            const idx = Math.floor(Math.random() * poolCopy.length);
+            this.currentUpgrades.push(poolCopy[idx]);
+            poolCopy.splice(idx, 1);
+        }
+        this.inputManager.mouse.down = false;
+        this.inputManager.touch.active = false;
+    }
+
+    applyUpgrade(index) {
+        if (this.currentUpgrades[index]) {
+            this.currentUpgrades[index].apply();
+        }
+        this.wave++;
+        this.killsRequired += 5 + Math.floor(this.wave * 2);
+        this.killsThisWave = 0;
+        this.state = 'PLAYING';
+    }
     update(dt) {
         if (this.state === 'TITLE') {
             if (this.inputManager.isDown('Space') || this.inputManager.mouse.down || this.inputManager.touch.active) {
@@ -1666,6 +1777,156 @@ class Game {
             }
         } else if (this.state === 'PLAYING') {
             this.updatePlaying(dt);
+        } else if (this.state === 'UPGRADE') {
+            if (this.inputManager.mouse.down || this.inputManager.touch.active) {
+                const mx = this.inputManager.mouse.x || this.inputManager.touch.x;
+                const my = this.inputManager.mouse.y || this.inputManager.touch.y;
+                const cardWidth = 200;
+                const cardHeight = 300;
+                const spacing = 40;
+                const startX = this.width / 2 - (cardWidth * 1.5 + spacing);
+                const startY = this.height / 2 - cardHeight / 2;
+
+                for(let i=0; i<3; i++) {
+                    const cx = startX + i * (cardWidth + spacing);
+                    if (mx >= cx && mx <= cx + cardWidth && my >= startY && my <= startY + cardHeight) {
+                        this.applyUpgrade(i);
+                        this.inputManager.mouse.down = false;
+                        this.inputManager.touch.active = false;
+                        break;
+                    }
+                }
+            }
+        } else if (this.state === 'PAUSED') {
+            if (this.inputManager.isDown('Space') || this.inputManager.isDown('Escape') || this.inputManager.mouse.down || this.inputManager.touch.active) {
+                this.state = 'PLAYING';
+                this.inputManager.keys['Space'] = false;
+                this.inputManager.keys['Escape'] = false;
+                this.inputManager.mouse.down = false;
+                this.inputManager.touch.active = false;
+            }
+        } else if (this.state === 'GAME_OVER') {
+            if (this.inputManager.isDown('Space') || this.inputManager.mouse.down || this.inputManager.touch.active) {
+                this.state = 'TITLE';
+                this.inputManager.mouse.down = false;
+                this.inputManager.touch.active = false;
+            }
+        }
+
+        this.inputManager.update();
+    }
+
+    draw() {
+        if (this.state === 'TITLE') {
+            this.ctx.fillStyle = '#111';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        } else {
+            this.parallax.draw(this.ctx, this.width, this.height);
+        }
+
+        if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER' || this.state === 'UPGRADE') {
+            this.hazards.forEach(h => {
+                if (h.active) h.draw(this.ctx);
+            });
+
+            if (this.baseCamp) {
+                this.baseCamp.draw(this.ctx);
+            }
+            this.resources.forEach(r => r.draw(this.ctx));
+
+            if (this.pickups) this.pickups.forEach(p => p.draw(this.ctx));
+            if (this.state !== 'GAME_OVER') {
+                if (this.player) {
+                    this.player.draw(this.ctx);
+                }
+            }
+
+            this.enemies.forEach(e => e.draw(this.ctx));
+
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '20px monospace';
+            this.ctx.textAlign = 'left';
+            this.ctx.fillText(`Score: ${this.score}`, 10, 30);
+
+            this.ctx.fillText(`Wave: ${this.wave}`, 10, 50);
+            this.ctx.fillText(`Combo: x${this.multiplier}`, this.width - 150, 30);
+            if (this.comboTimer > 0) {
+                this.ctx.fillStyle = '#e74c3c';
+                this.ctx.fillRect(this.width - 150, 40, 140 * (this.comboTimer / this.comboMaxTimer), 10);
+            }
+            this.ctx.fillStyle = '#fff';
+
+            const currentTail = this.player ? this.player.tailLength : 0;
+            const maxTail = this.player ? this.player.maxTailLength : 50;
+            this.ctx.fillText(`Tail: ${currentTail}/${maxTail}`, 10, 80);
+
+            if (this.player) {
+                this.ctx.fillText(`Dash: ${this.player.dashCooldown <= 0 ? 'READY' : this.player.dashCooldown.toFixed(1)}s`, 10, 110);
+
+                // Dash cooldown bar
+                this.ctx.fillStyle = '#333';
+                this.ctx.fillRect(10, 120, 100, 10);
+                this.ctx.fillStyle = this.player.dashCooldown <= 0 ? '#65bb98' : '#e74c3c';
+                const fillRatio = this.player.dashCooldown <= 0 ? 1 : 1 - (this.player.dashCooldown / this.player.dashCooldownMax);
+                this.ctx.fillRect(10, 120, 100 * fillRatio, 10);
+            }
+
+            if (this.activeBoss) {
+                this.activeBoss.drawBossUI(this.ctx, this.width, this.height);
+            }
+        }
+
+        if (this.state === 'TITLE') {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            this.ctx.fillStyle = ACCENT_COLOR;
+            this.ctx.font = '40px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('HAUNTED TETHER DRILL', this.width / 2, this.height / 2 - 40);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '20px monospace';
+            this.ctx.fillText('Click or Press Space to Start', this.width / 2, this.height / 2 + 20);
+            this.ctx.font = '16px monospace';
+            this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width / 2, this.height / 2 + 60);
+
+            const cardWidth = 200;
+            const cardHeight = 300;
+            const spacing = 40;
+            const startX = this.width / 2 - (cardWidth * 1.5 + spacing);
+            const startY = this.height / 2 - cardHeight / 2;
+
+            for(let i=0; i<3; i++) {
+                const cx = startX + i * (cardWidth + spacing);
+                this.ctx.fillStyle = '#222';
+                this.ctx.fillRect(cx, startY, cardWidth, cardHeight);
+                this.ctx.strokeStyle = ACCENT_COLOR;
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(cx, startY, cardWidth, cardHeight);
+
+                if (this.currentUpgrades[i]) {
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.font = '20px monospace';
+                    this.ctx.fillText(this.currentUpgrades[i].name, cx + cardWidth/2, startY + 50);
+
+                    this.ctx.font = '14px monospace';
+                    this.ctx.fillStyle = '#aaa';
+                    const words = this.currentUpgrades[i].desc.split(' ');
+                    let line = '';
+                    let y = startY + 100;
+                    for (let n = 0; n < words.length; n++) {
+                        const testLine = line + words[n] + ' ';
+                        const metrics = this.ctx.measureText(testLine);
+                        if (metrics.width > cardWidth - 20 && n > 0) {
+                            this.ctx.fillText(line, cx + cardWidth/2, y);
+                            line = words[n] + ' ';
+                            y += 20;
+                        } else {
+                            line = testLine;
+                        }
+                    }
+                    this.ctx.fillText(line, cx + cardWidth/2, y);
+                }
+            }
         } else if (this.state === 'PAUSED') {
             if (this.inputManager.isDown('Space') || this.inputManager.isDown('Escape') || this.inputManager.mouse.down || this.inputManager.touch.active) {
                 this.state = 'PLAYING';
@@ -1703,6 +1964,7 @@ class Game {
             }
             this.resources.forEach(r => r.draw(this.ctx));
 
+            if (this.pickups) this.pickups.forEach(p => p.draw(this.ctx));
             if (this.state !== 'GAME_OVER') {
                 if (this.player) {
                     this.player.draw(this.ctx);
@@ -1716,19 +1978,27 @@ class Game {
             this.ctx.textAlign = 'left';
             this.ctx.fillText(`Score: ${this.score}`, 10, 30);
 
+            this.ctx.fillText(`Wave: ${this.wave}`, 10, 50);
+            this.ctx.fillText(`Combo: x${this.multiplier}`, this.width - 150, 30);
+            if (this.comboTimer > 0) {
+                this.ctx.fillStyle = '#e74c3c';
+                this.ctx.fillRect(this.width - 150, 40, 140 * (this.comboTimer / this.comboMaxTimer), 10);
+            }
+            this.ctx.fillStyle = '#fff';
+
             const currentTail = this.player ? this.player.tailLength : 0;
             const maxTail = this.player ? this.player.maxTailLength : 50;
-            this.ctx.fillText(`Tail: ${currentTail}/${maxTail}`, 10, 60);
+            this.ctx.fillText(`Tail: ${currentTail}/${maxTail}`, 10, 80);
 
             if (this.player) {
-                this.ctx.fillText(`Dash: ${this.player.dashCooldown <= 0 ? 'READY' : this.player.dashCooldown.toFixed(1)}s`, 10, 90);
+                this.ctx.fillText(`Dash: ${this.player.dashCooldown <= 0 ? 'READY' : this.player.dashCooldown.toFixed(1)}s`, 10, 110);
 
                 // Dash cooldown bar
                 this.ctx.fillStyle = '#333';
-                this.ctx.fillRect(10, 100, 100, 10);
+                this.ctx.fillRect(10, 120, 100, 10);
                 this.ctx.fillStyle = this.player.dashCooldown <= 0 ? '#65bb98' : '#e74c3c';
                 const fillRatio = this.player.dashCooldown <= 0 ? 1 : 1 - (this.player.dashCooldown / this.player.dashCooldownMax);
-                this.ctx.fillRect(10, 100, 100 * fillRatio, 10);
+                this.ctx.fillRect(10, 120, 100 * fillRatio, 10);
             }
 
             if (this.activeBoss) {
@@ -1748,6 +2018,52 @@ class Game {
             this.ctx.fillText('Click or Press Space to Start', this.width / 2, this.height / 2 + 20);
             this.ctx.font = '16px monospace';
             this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width / 2, this.height / 2 + 60);
+        } else if (this.state === 'UPGRADE') {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            this.ctx.fillStyle = ACCENT_COLOR;
+            this.ctx.font = '40px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('WAVE CLEAR! SELECT UPGRADE', this.width / 2, this.height / 2 - 200);
+
+            const cardWidth = 200;
+            const cardHeight = 300;
+            const spacing = 40;
+            const startX = this.width / 2 - (cardWidth * 1.5 + spacing);
+            const startY = this.height / 2 - cardHeight / 2;
+
+            for(let i=0; i<3; i++) {
+                const cx = startX + i * (cardWidth + spacing);
+                this.ctx.fillStyle = '#222';
+                this.ctx.fillRect(cx, startY, cardWidth, cardHeight);
+                this.ctx.strokeStyle = ACCENT_COLOR;
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(cx, startY, cardWidth, cardHeight);
+
+                if (this.currentUpgrades[i]) {
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.font = '20px monospace';
+                    this.ctx.fillText(this.currentUpgrades[i].name, cx + cardWidth/2, startY + 50);
+
+                    this.ctx.font = '14px monospace';
+                    this.ctx.fillStyle = '#aaa';
+                    const words = this.currentUpgrades[i].desc.split(' ');
+                    let line = '';
+                    let y = startY + 100;
+                    for (let n = 0; n < words.length; n++) {
+                        const testLine = line + words[n] + ' ';
+                        const metrics = this.ctx.measureText(testLine);
+                        if (metrics.width > cardWidth - 20 && n > 0) {
+                            this.ctx.fillText(line, cx + cardWidth/2, y);
+                            line = words[n] + ' ';
+                            y += 20;
+                        } else {
+                            line = testLine;
+                        }
+                    }
+                    this.ctx.fillText(line, cx + cardWidth/2, y);
+                }
+            }
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
             this.ctx.fillRect(0, 0, this.width, this.height);
