@@ -556,6 +556,13 @@ class Enemy extends Entity {
         super.update(dt);
     }
 
+    takeDamage() {
+        this.hp--;
+        if (this.hp <= 0) {
+            this.active = false;
+        }
+    }
+
     draw(ctx) {
         ctx.fillStyle = this.color;
         ctx.beginPath();
@@ -567,6 +574,306 @@ class Enemy extends Entity {
         ctx.arc(this.x - 4, this.y - 2, 2, 0, Math.PI * 2);
         ctx.arc(this.x + 4, this.y - 2, 2, 0, Math.PI * 2);
         ctx.fill();
+    }
+}
+
+class Swarmer extends Enemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.radius = 8;
+        this.speed = 150 + Math.random() * 50;
+        this.color = '#ff9ff3';
+        this.wobble = Math.random() * Math.PI * 2;
+        this.hp = 1;
+        this.state = 'CHASE';
+        this.telegraphTimer = 0;
+    }
+    update(dt) {
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        if (this.state === 'CHASE') {
+            this.wobble += dt * 10;
+            this.vx = (dx / dist) * this.speed + Math.cos(this.wobble) * 100;
+            this.vy = (dy / dist) * this.speed + Math.sin(this.wobble) * 100;
+            if (dist < 100 && Math.random() < 0.05) {
+                this.state = 'TELEGRAPH';
+                this.telegraphTimer = 0;
+            }
+        } else if (this.state === 'TELEGRAPH') {
+            this.telegraphTimer += dt;
+            this.vx = 0;
+            this.vy = 0;
+            if (this.telegraphTimer > 0.4) {
+                this.state = 'DASH';
+                this.telegraphTimer = 0;
+                this.vx = (dx / dist) * this.speed * 3;
+                this.vy = (dy / dist) * this.speed * 3;
+            }
+        } else if (this.state === 'DASH') {
+            this.telegraphTimer += dt;
+            if (this.telegraphTimer > 0.3) {
+                this.state = 'CHASE';
+            }
+        }
+        super.update(dt);
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.state === 'TELEGRAPH' ? '#fff' : this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y - this.radius);
+        ctx.fill();
+        if (this.state === 'TELEGRAPH') {
+            ctx.strokeStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 10, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+}
+
+class Bruiser extends Enemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.radius = 20;
+        this.speed = 40;
+        this.color = '#c0392b';
+        this.hp = 3;
+        this.state = 'WALK';
+        this.telegraphTimer = 0;
+    }
+    update(dt) {
+        if (this.state === 'WALK') {
+            if (Math.random() < 0.01) {
+                this.state = 'TELEGRAPH';
+                this.telegraphTimer = 0;
+            }
+        } else if (this.state === 'TELEGRAPH') {
+            this.telegraphTimer += dt;
+            this.vx = 0; this.vy = 0;
+            if (this.telegraphTimer > 1) {
+                this.state = 'WALK';
+            }
+        }
+        super.update(dt);
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        if (this.state === 'TELEGRAPH') {
+            ctx.fillStyle = (Math.floor(this.telegraphTimer * 10) % 2 === 0) ? '#fff' : this.color;
+        }
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (Math.PI * 2 / 6) * i;
+            const px = this.x + Math.cos(angle) * this.radius;
+            const py = this.y + Math.sin(angle) * this.radius;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        if (this.state === 'TELEGRAPH') {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 10, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < this.hp; i++) {
+            ctx.arc(this.x - 6 + i * 6, this.y - 10, 2, 0, Math.PI * 2);
+        }
+        ctx.stroke();
+    }
+}
+
+class Sniper extends Enemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.radius = 10;
+        this.speed = 60;
+        this.color = '#9b59b6';
+        this.hp = 1;
+        this.state = 'IDLE';
+        this.timer = 0;
+        this.dashDir = {x:0, y:0};
+    }
+    update(dt) {
+        if (this.state === 'IDLE') {
+            this.timer += dt;
+            const dx = this.target.x - this.x;
+            const dy = this.target.y - this.y;
+            const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+            if (dist > 150) {
+                this.vx = (dx/dist) * this.speed;
+                this.vy = (dy/dist) * this.speed;
+            } else {
+                this.vx = -(dx/dist) * this.speed;
+                this.vy = -(dy/dist) * this.speed;
+            }
+            if (this.timer > 3 && dist < 300) {
+                this.state = 'TELEGRAPH';
+                this.timer = 0;
+                this.dashDir = { x: dx/dist, y: dy/dist };
+                this.vx = 0; this.vy = 0;
+            }
+        } else if (this.state === 'TELEGRAPH') {
+            this.timer += dt;
+            if (this.timer > 1) {
+                this.state = 'DASH';
+                this.timer = 0;
+            }
+        } else if (this.state === 'DASH') {
+            this.timer += dt;
+            this.vx = this.dashDir.x * 400;
+            this.vy = this.dashDir.y * 400;
+            if (this.timer > 0.5) {
+                this.state = 'IDLE';
+                this.timer = 0;
+            }
+        }
+        super.update(dt);
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y);
+        ctx.lineTo(this.x, this.y - this.radius);
+        ctx.fill();
+        if (this.state === 'TELEGRAPH') {
+            ctx.strokeStyle = '#e74c3c';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x + this.dashDir.x * 300, this.y + this.dashDir.y * 300);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + this.timer * 20, 0, Math.PI*2);
+            ctx.stroke();
+        }
+    }
+}
+
+class Splitter extends Enemy {
+    constructor(x, y, target, game) {
+        super(x, y, target);
+        this.radius = 16;
+        this.color = '#3498db';
+        this.game = game;
+        this.hp = 1;
+        this.state = 'MOVE';
+        this.telegraphTimer = 0;
+    }
+    update(dt) {
+        if (this.state === 'MOVE') {
+            if (Math.random() < 0.02) {
+                this.state = 'TELEGRAPH';
+                this.telegraphTimer = 0;
+            }
+        } else if (this.state === 'TELEGRAPH') {
+            this.telegraphTimer += dt;
+            this.vx = 0; this.vy = 0;
+            if (this.telegraphTimer > 0.5) {
+                this.state = 'MOVE';
+            }
+        }
+        super.update(dt);
+    }
+    takeDamage() {
+        this.hp--;
+        if (this.hp <= 0) {
+            this.active = false;
+            if (this.game && this.game.enemies) {
+                this.game.enemies.push(new Swarmer(this.x - 10, this.y, this.target));
+                this.game.enemies.push(new Swarmer(this.x + 10, this.y, this.target));
+            }
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.state === 'TELEGRAPH' ? '#fff' : this.color;
+        ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius*2, this.radius*2);
+
+        if (this.state === 'TELEGRAPH') {
+            ctx.strokeStyle = '#e74c3c';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(this.x - this.radius - 5, this.y - this.radius - 5);
+            ctx.lineTo(this.x + this.radius + 5, this.y + this.radius + 5);
+            ctx.moveTo(this.x + this.radius + 5, this.y - this.radius - 5);
+            ctx.lineTo(this.x - this.radius - 5, this.y + this.radius + 5);
+            ctx.stroke();
+        }
+
+        ctx.strokeStyle = '#2980b9';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.stroke();
+    }
+}
+
+class Haunt extends Enemy {
+    constructor(x, y, target) {
+        super(x, y, target);
+        this.radius = 14;
+        this.color = '#2ecc71';
+        this.phase = 0;
+        this.hp = 2;
+        this.state = 'FADE';
+        this.telegraphTimer = 0;
+    }
+    update(dt) {
+        this.phase += dt * 2;
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+
+        if (this.state === 'FADE') {
+            this.vx = (dx/dist) * this.speed * Math.sin(this.phase);
+            this.vy = (dy/dist) * this.speed * Math.cos(this.phase);
+            if (Math.sin(this.phase) > 0.9) {
+                this.state = 'TELEGRAPH';
+                this.telegraphTimer = 0;
+            }
+        } else if (this.state === 'TELEGRAPH') {
+            this.telegraphTimer += dt;
+            this.vx = 0; this.vy = 0;
+            if (this.telegraphTimer > 0.8) {
+                this.state = 'FADE';
+            }
+        }
+        super.update(dt);
+    }
+    draw(ctx) {
+        ctx.globalAlpha = this.state === 'TELEGRAPH' ? 1.0 : 0.5 + Math.sin(this.phase) * 0.5;
+        ctx.fillStyle = this.state === 'TELEGRAPH' ? ((Math.floor(this.telegraphTimer * 15) % 2 === 0) ? '#fff' : this.color) : this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI, true);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius/2, this.y + this.radius/2);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.lineTo(this.x + this.radius/2, this.y + this.radius/2);
+        ctx.lineTo(this.x + this.radius, this.y + this.radius);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+
+        if (this.state === 'TELEGRAPH') {
+            ctx.strokeStyle = '#e74c3c';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 15 - this.telegraphTimer * 10, 0, Math.PI * 2);
+            ctx.stroke();
+        }
     }
 }
 
@@ -1004,21 +1311,25 @@ class Game {
     spawnEnemy() {
         let x, y;
         if (Math.random() < 0.5) {
-            if (Math.random() < 0.5) {
-                x = -20;
-            } else {
-                x = this.width + 20;
-            }
+            x = Math.random() < 0.5 ? -20 : this.width + 20;
             y = Math.random() * this.height;
         } else {
             x = Math.random() * this.width;
-            if (Math.random() < 0.5) {
-                y = -20;
-            } else {
-                y = this.height + 20;
-            }
+            y = Math.random() < 0.5 ? -20 : this.height + 20;
         }
-        this.enemies.push(new Enemy(x, y, this.player));
+
+        const r = Math.random();
+        if (r < 0.2) {
+            this.enemies.push(new Swarmer(x, y, this.player));
+        } else if (r < 0.4) {
+            this.enemies.push(new Bruiser(x, y, this.player));
+        } else if (r < 0.6) {
+            this.enemies.push(new Sniper(x, y, this.player));
+        } else if (r < 0.8) {
+            this.enemies.push(new Splitter(x, y, this.player, this));
+        } else {
+            this.enemies.push(new Haunt(x, y, this.player));
+        }
     }
 
     updatePlaying(dt) {
@@ -1090,10 +1401,12 @@ class Game {
                     this.gameOver();
                     return;
                 } else {
-                    // Dash kills enemy
+                    // Dash hits enemy
                     this.soundEngine.playHit();
-                    enemy.active = false;
-                    this.score += 20 * this.multiplier;
+                    enemy.takeDamage();
+                    if (!enemy.active) {
+                        this.score += 20 * this.multiplier;
+                    }
                 }
             }
 
@@ -1105,7 +1418,7 @@ class Game {
                 if (Math.sqrt(dx*dx + dy*dy) < enemy.radius + 5) {
                     this.player.tailLength = j;
                     this.soundEngine.playHit();
-                    enemy.active = false;
+                    enemy.takeDamage();
                     tailCut = true;
                     this.score = Math.max(0, this.score - 50);
                     break;
