@@ -3,7 +3,7 @@
  */
 
 const SAVE_KEY = "arcade_game_078_078-cytoplasm-recoil_v1";
-const STATES = { TITLE: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3 };
+const STATES = { TITLE: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, DRAFTING: 4 };
 
 class MathUtils {
     static clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
@@ -12,6 +12,54 @@ class MathUtils {
     static distance(x1, y1, x2, y2) { return Math.sqrt((x2 - x1)**2 + (y2 - y1)**2); }
 }
 
+
+const PERKS = [
+    { name: "Rapid Ammo", desc: "+20% Ammo Speed", apply: (g) => { g.stats.ammoSpeedMultiplier += 0.2; } },
+    { name: "Agility", desc: "+20% Move Speed", apply: (g) => { g.stats.moveSpeedMultiplier += 0.2; } },
+    { name: "Bouncy", desc: "+2 Max Bounces", apply: (g) => { g.stats.maxBouncesBonus += 2; } },
+    { name: "Large Ribosome", desc: "+30% Ammo Size", apply: (g) => { g.stats.ammoRadiusMultiplier += 0.3; } },
+    { name: "Combo Master", desc: "+2s Combo Duration", apply: (g) => { g.stats.comboDuration += 2; } },
+    { name: "Quick Dash", desc: "-20% Dash Cooldown", apply: (g) => { g.stats.dashCooldownMultiplier *= 0.8; } },
+    { name: "Power Pierce", desc: "Ammo deals +1 Damage", apply: (g) => { g.stats.ammoDamageBonus += 1; } },
+    { name: "Cellular Shield", desc: "Gain 1 Shield (Block hit)", apply: (g) => { g.player.shield = (g.player.shield || 0) + 1; } }
+];
+
+class Pickup {
+    constructor(x, y, type) {
+        this.pos = new Vector(x, y);
+        this.type = type; // 0: score, 1: combo refresh, 2: shield
+        this.radius = 8;
+        this.markedForDeletion = false;
+        this.lifeTime = 10.0;
+
+        let angle = Math.random() * Math.PI * 2;
+        let speed = MathUtils.randomRange(20, 50);
+        this.vel = new Vector(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    }
+    update(dt, gameWidth, gameHeight) {
+        this.pos.add(new Vector(this.vel.x * dt, this.vel.y * dt));
+        this.lifeTime -= dt;
+        if (this.lifeTime <= 0) this.markedForDeletion = true;
+
+        if (this.pos.x < this.radius || this.pos.x > gameWidth - this.radius) this.vel.x *= -1;
+        if (this.pos.y < this.radius || this.pos.y > gameHeight - this.radius) this.vel.y *= -1;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, this.lifeTime);
+        if (this.type === 0) ctx.fillStyle = '#ffeb3b';
+        else if (this.type === 1) ctx.fillStyle = '#03a9f4';
+        else if (this.type === 2) ctx.fillStyle = '#4caf50';
+
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+    }
+}
 class SaveManager {
     constructor() {
         this.data = {
@@ -237,6 +285,7 @@ class Player {
         if (this.dashCooldown > 0) this.dashCooldown -= dt;
         if (this.invulnTimer > 0) this.invulnTimer -= dt;
 
+        this.dashCooldownMax = 3.0 * (window.game ? window.game.stats.dashCooldownMultiplier : 1.0);
         if ((input.keys['ShiftLeft'] || input.keys['ShiftRight']) && this.dashCooldown <= 0 && !this.isDashing && move.mag() > 0 && this.hasAmmo) {
             this.isDashing = true;
             this.dashTimer = this.dashDuration;
@@ -255,8 +304,9 @@ class Player {
             this.vel.add(move.mult(this.accel * dt));
             this.vel.mult(this.friction);
             let speed = this.vel.mag();
-            if (speed > this.maxSpeed) {
-                this.vel.normalize().mult(this.maxSpeed);
+            let currentMaxSpeed = this.maxSpeed * (window.game ? window.game.stats.moveSpeedMultiplier : 1.0);
+            if (speed > currentMaxSpeed) {
+                this.vel.normalize().mult(currentMaxSpeed);
             }
         }
 
@@ -341,13 +391,15 @@ class Player {
 }
 
 class Ammo {
-    constructor(x, y, dir) {
+    constructor(x, y, dir, game) {
         this.pos = new Vector(x, y);
-        this.vel = dir.mult(800);
-        this.radius = 8;
+        let speed = 800 * (game ? game.stats.ammoSpeedMultiplier : 1.0);
+        this.vel = dir.mult(speed);
+        this.radius = 8 * (game ? game.stats.ammoRadiusMultiplier : 1.0);
         this.active = true;
         this.bounces = 0;
-        this.maxBounces = 5;
+        this.maxBounces = 5 + (game ? game.stats.maxBouncesBonus : 0);
+        this.damage = 1 + (game ? game.stats.ammoDamageBonus : 0);
     }
     update(dt, gameWidth, gameHeight, bumpers) {
         if (!this.active) return false;
@@ -942,6 +994,10 @@ class Game {
         this.state = STATES.TITLE;
         this.lastTime = 0;
         this.score = 0;
+        this.combo = 0;
+        this.comboTimer = 0;
+        this.pickups = [];
+        this.stats = { comboDuration: 5.0 };
         this.player = null;
         this.ammo = null;
         this.enemies = [];
@@ -975,8 +1031,33 @@ class Game {
         this.width = this.canvas.width;
         this.height = this.canvas.height;
     }
+
+    addScore(points) {
+        let gained = Math.floor(points * (1 + this.combo * 0.1));
+        this.score += gained;
+        this.combo++;
+        this.comboTimer = this.stats.comboDuration;
+    }
+    startDraft() {
+        this.state = STATES.DRAFTING;
+        let shuffled = PERKS.slice().sort(() => 0.5 - Math.random());
+        this.draftChoices = shuffled.slice(0, 3);
+    }
     initGame() {
+        this.stats = {
+            ammoSpeedMultiplier: 1.0,
+            moveSpeedMultiplier: 1.0,
+            maxBouncesBonus: 0,
+            ammoRadiusMultiplier: 1.0,
+            comboDuration: 5.0,
+            dashCooldownMultiplier: 1.0,
+            ammoDamageBonus: 0
+        };
+        this.combo = 0;
+        this.comboTimer = 0;
+        this.pickups = [];
         this.player = new Player(this.width / 2, this.height / 2);
+        this.player.shield = 0;
         this.ammo = null;
         this.enemies = [];
         this.particles = [];
@@ -1031,6 +1112,28 @@ class Game {
             if (this.input.mouse.clicked || this.input.keys['Enter'] || this.input.keys['Space']) this.initGame();
             return;
         }
+        if (this.state === STATES.DRAFTING) {
+            if (this.input.mouse.clicked) {
+                let mx = this.input.mouse.x;
+                let my = this.input.mouse.y;
+                let bw = 250;
+                let bh = 80;
+                let startY = this.height / 2 - 100;
+                for (let i = 0; i < 3; i++) {
+                    let bx = this.width / 2 - bw / 2;
+                    let by = startY + i * (bh + 20);
+                    if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
+                        this.draftChoices[i].apply(this);
+                        this.state = STATES.PLAYING;
+                        this.sound.pickup();
+                        this.input.mouse.clicked = false;
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+
         if (this.state === STATES.GAME_OVER) {
             if (this.input.mouse.clicked || this.input.keys['Enter']) this.state = STATES.TITLE;
             return;
@@ -1051,6 +1154,30 @@ class Game {
             pMove = this.player.vel.copy().mult(dt);
         }
         for (let layer of this.bgLayers) layer.update(dt, pMove, this.width, this.height);
+
+        for (let p of this.pickups) {
+            p.update(dt, this.width, this.height);
+            let dist = MathUtils.distance(this.player.pos.x, this.player.pos.y, p.pos.x, p.pos.y);
+            if (dist < this.player.radius + p.radius) {
+                p.markedForDeletion = true;
+                this.sound.pickup();
+                if (p.type === 0) {
+                    this.addScore(50);
+                } else if (p.type === 1) {
+                    this.comboTimer = this.stats.comboDuration;
+                } else if (p.type === 2) {
+                    this.player.shield = (this.player.shield || 0) + 1;
+                }
+            }
+        }
+        this.pickups = this.pickups.filter(p => !p.markedForDeletion);
+
+        if (this.comboTimer > 0) {
+            this.comboTimer -= dt;
+            if (this.comboTimer <= 0) {
+                this.combo = 0;
+            }
+        }
 
         for (let stream of this.streams) {
             stream.update(dt);
@@ -1083,7 +1210,7 @@ class Game {
             if (dir.mag() > 0) dir.normalize();
             else dir = new Vector(1, 0);
 
-            this.ammo = new Ammo(this.player.pos.x, this.player.pos.y, dir);
+            this.ammo = new Ammo(this.player.pos.x, this.player.pos.y, dir, this);
             this.player.hasAmmo = false;
 
             this.player.vel.sub(dir.copy().mult(400));
@@ -1113,9 +1240,10 @@ class Game {
                 this.activeBoss = null;
                 this.nextBossThreshold += 300;
                 this.bossEncounterCounter++;
-                this.score += 100;
+                this.addScore(100);
                 this.sound.playTone(440, 'square', 0.1, 1);
                 this.enemySpawnTimer = 3.0; // Break before next waves
+                this.startDraft();
             }
         } else {
             if (this.score >= this.nextBossThreshold && this.warningTimer <= 0) {
@@ -1173,29 +1301,44 @@ class Game {
                             this.enemies.push(new Swarmer(e.pos.x + 10, e.pos.y));
                         }
                         this.sound.hit();
-                        this.score += 20;
+                        this.addScore(20);
                         this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 15);
+                        if (Math.random() < 0.3) {
+                            let type = Math.random() < 0.6 ? 0 : (Math.random() < 0.8 ? 1 : 2);
+                            this.pickups.push(new Pickup(e.pos.x, e.pos.y, type));
+                        }
                     } else {
                         this.spawnParticles(e.pos.x, e.pos.y, '#fff', 5);
                     }
                 } else if (this.player.invulnTimer <= 0) {
-                    this.sound.death();
-                    this.saveManager.updateHighScore(this.score);
-                    this.saveManager.addGamePlayed(this.score);
-                    this.state = STATES.GAME_OVER;
+                    if (this.player.shield > 0) {
+                        this.player.shield--;
+                        this.player.invulnTimer = 1.0;
+                        this.sound.hit();
+                        this.spawnParticles(this.player.pos.x, this.player.pos.y, '#4caf50', 20);
+                    } else {
+                        this.sound.death();
+                        this.saveManager.updateHighScore(this.score);
+                        this.saveManager.addGamePlayed(this.score);
+                        this.state = STATES.GAME_OVER;
+                    }
                 }
             }
             if (this.ammo && this.ammo.active) {
                 let adist = MathUtils.distance(this.ammo.pos.x, this.ammo.pos.y, e.pos.x, e.pos.y);
                 if (adist < this.ammo.radius + e.radius) {
-                    if (e.takeDamage(1)) {
+                    if (e.takeDamage(this.ammo.damage)) {
                         if (e instanceof SplitterSpawner) {
                             this.enemies.push(new Swarmer(e.pos.x - 10, e.pos.y));
                             this.enemies.push(new Swarmer(e.pos.x + 10, e.pos.y));
                         }
                         this.sound.hit();
-                        this.score += 10;
+                        this.addScore(10);
                         this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 10);
+                        if (Math.random() < 0.2) {
+                            let type = Math.random() < 0.6 ? 0 : (Math.random() < 0.8 ? 1 : 2);
+                            this.pickups.push(new Pickup(e.pos.x, e.pos.y, type));
+                        }
                     } else {
                         this.spawnParticles(e.pos.x, e.pos.y, '#fff', 5);
                     }
@@ -1208,10 +1351,17 @@ class Game {
             ep.update(dt);
             let pdist = MathUtils.distance(this.player.pos.x, this.player.pos.y, ep.pos.x, ep.pos.y);
             if (pdist < this.player.radius + ep.radius && this.player.invulnTimer <= 0 && !this.player.isDashing) {
-                this.sound.death();
-                this.saveManager.updateHighScore(this.score);
-                this.saveManager.addGamePlayed(this.score);
-                this.state = STATES.GAME_OVER;
+                if (this.player.shield > 0) {
+                    this.player.shield--;
+                    this.player.invulnTimer = 1.0;
+                    this.sound.hit();
+                    this.spawnParticles(this.player.pos.x, this.player.pos.y, '#4caf50', 20);
+                } else {
+                    this.sound.death();
+                    this.saveManager.updateHighScore(this.score);
+                    this.saveManager.addGamePlayed(this.score);
+                    this.state = STATES.GAME_OVER;
+                }
             }
         }
         this.enemyProjectiles = this.enemyProjectiles.filter(ep => !ep.markedForDeletion && ep.pos.x > -50 && ep.pos.x < this.width + 50 && ep.pos.y > -50 && ep.pos.y < this.height + 50);
@@ -1220,10 +1370,17 @@ class Game {
             pud.update(dt);
             let pdist = MathUtils.distance(this.player.pos.x, this.player.pos.y, pud.pos.x, pud.pos.y);
             if (pdist < this.player.radius + pud.radius && this.player.invulnTimer <= 0 && !this.player.isDashing) {
-                this.sound.death();
-                this.saveManager.updateHighScore(this.score);
-                this.saveManager.addGamePlayed(this.score);
-                this.state = STATES.GAME_OVER;
+                if (this.player.shield > 0) {
+                    this.player.shield--;
+                    this.player.invulnTimer = 1.0;
+                    this.sound.hit();
+                    this.spawnParticles(this.player.pos.x, this.player.pos.y, '#4caf50', 20);
+                } else {
+                    this.sound.death();
+                    this.saveManager.updateHighScore(this.score);
+                    this.saveManager.addGamePlayed(this.score);
+                    this.state = STATES.GAME_OVER;
+                }
             }
         }
         this.enemyPuddles = this.enemyPuddles.filter(p => !p.markedForDeletion);
@@ -1306,6 +1463,23 @@ class Game {
         this.ctx.textAlign = 'left';
         this.ctx.fillText(`Score: ${this.score}`, 20, 40);
 
+        if (this.combo > 0) {
+            this.ctx.fillStyle = '#f39c12';
+            this.ctx.fillText(`Combo: x${(1 + this.combo * 0.1).toFixed(1)}`, 20, 70);
+
+            // Combo Bar
+            this.ctx.fillStyle = '#e67e22';
+            let ratio = Math.max(0, this.comboTimer / this.stats.comboDuration);
+            this.ctx.fillRect(20, 80, 100 * ratio, 5);
+        }
+
+        if (this.player && this.player.shield > 0) {
+            this.ctx.fillStyle = '#4caf50';
+            this.ctx.fillText(`Shield: ${this.player.shield}`, 20, this.combo > 0 ? 110 : 70);
+        }
+
+        for (let p of this.pickups) p.draw(this.ctx);
+
         if (this.activeBoss && !this.activeBoss.markedForDeletion) {
             this.activeBoss.drawHpBar(this.ctx, this.width);
         }
@@ -1325,6 +1499,34 @@ class Game {
             this.ctx.strokeStyle = '#fff';
             this.ctx.lineWidth = 1;
             this.ctx.strokeRect(20, 50, 100, 10);
+        }
+
+        if (this.state === STATES.DRAFTING) {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+
+            this.drawText("WAVE CLEARED!", this.width/2, this.height/2 - 150, 40, '#fff');
+            this.drawText("CHOOSE AN UPGRADE", this.width/2, this.height/2 - 110, 20, '#aaa');
+
+            let bw = 250;
+            let bh = 80;
+            let startY = this.height / 2 - 100;
+
+            for (let i = 0; i < 3; i++) {
+                let bx = this.width / 2 - bw / 2;
+                let by = startY + i * (bh + 20);
+
+                this.ctx.fillStyle = '#2c3e50';
+                this.ctx.fillRect(bx, by, bw, bh);
+                this.ctx.strokeStyle = '#34495e';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(bx, by, bw, bh);
+
+                if (this.draftChoices && this.draftChoices[i]) {
+                    this.drawText(this.draftChoices[i].name, this.width/2, by + 30, 20, '#f1c40f');
+                    this.drawText(this.draftChoices[i].desc, this.width/2, by + 60, 14, '#bdc3c7');
+                }
+            }
         }
 
         if (this.state === STATES.GAME_OVER) {
