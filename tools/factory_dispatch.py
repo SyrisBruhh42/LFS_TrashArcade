@@ -441,17 +441,27 @@ def set_outcome(rec: dict, outcome: str | None) -> None:
     previous = rec.get("outcome")
     if previous == outcome:
         return
+    observed_at = iso(now())
+    same_failure = bool(previous and previous.startswith("failed:") and
+                        outcome and outcome.startswith("failed:"))
     if previous:
-        history = {"outcome": previous, "finished": rec.get("finished"), "superseded_at": iso(now())}
-        if "breaker_reset" in rec:
-            history["breaker_reset"] = rec["breaker_reset"]
+        history = {"outcome": previous, "finished": rec.get("finished"), "superseded_at": observed_at}
+        for field in ("breaker_reset", "outcome_observed_at"):
+            if field in rec:
+                history[field] = rec[field]
         rec.setdefault("outcome_history", []).append(history)
-    rec.pop("breaker_reset", None)  # An old diagnosed failure cannot exempt reopened work's next failure.
+    if not same_failure:
+        rec.pop("breaker_reset", None)  # Reopened work cannot inherit an old failure's reviewed exemption.
     if outcome is None:
         rec.pop("outcome", None)
         rec.pop("finished", None)
+        rec.pop("outcome_observed_at", None)
     else:
-        rec.update(outcome=outcome, finished=iso(now()))
+        rec.update(outcome=outcome, outcome_observed_at=observed_at)
+        if not same_failure:
+            rec["finished"] = observed_at
+        # A different label for the same failure is not a new failure event.
+        # Preserve its timestamp (or legacy absence) and reviewed breaker reset.
 
 
 def postmerge_maintenance_scope(cfg: dict, state: dict, incident_id: str | None) -> bool:

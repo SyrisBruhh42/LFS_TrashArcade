@@ -741,6 +741,88 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(rec["finished"], "2026-10-24T01:00:00Z")
         self.assertNotIn("outcome_history", rec)
 
+    def test_failed_reclassification_does_not_promote_old_event_into_breaker_window(self):
+        current = f.now()
+        # Five recent failures are below the 6/12 breaker. Observing an old closed
+        # PR must not insert a sixth failure into that operational event window.
+        for index in range(12):
+            self.state["sessions"][f"recent{index}"] = self.record(
+                created=f.iso(current - timedelta(days=2)),
+                outcome="failed:closed" if index >= 7 else "merged",
+                finished=f.iso(current - timedelta(hours=12-index)))
+        original_finished = f.iso(current - timedelta(days=3))
+        rec = self.record(created=f.iso(current - timedelta(days=4)), outcome="failed:gate",
+                          finished=original_finished, pr=f"https://github.com/{self.cfg['repo']}/pull/118")
+        self.state["sessions"]["old"] = rec
+        session = self.session(sid="old", state="COMPLETED", hours=96)
+        with patch.object(f, "gh", return_value=json.dumps({"state": "CLOSED"})), patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, {"old": session}, False)
+        api.assert_not_called()
+        args = self.tick_fixture()
+        args.no_dispatch = True
+        with patch.object(f, "inventory", return_value={}), patch.object(f, "main_acceptance", return_value=SHA), patch.object(f, "dispatch") as dispatch:
+            self.assertEqual(f.tick(args), 0)
+        saved = f.load_state()
+        self.assertNotIn("breaker", saved)
+        self.assertEqual(saved["healthy_ticks"], 1)
+        self.assertEqual(saved["sessions"]["old"]["finished"], original_finished)
+        self.assertEqual(saved["sessions"]["old"]["outcome"], "failed:closed")
+        self.assertEqual(saved["sessions"]["old"]["outcome_history"][0]["finished"], original_finished)
+        dispatch.assert_not_called()
+        # An actual reopen followed by another failure is new work, and must
+        # still become the sixth recent failure and trip the same real tick gate.
+        f.set_outcome(saved["sessions"]["old"], None)
+        f.set_outcome(saved["sessions"]["old"], "failed:closed")
+        f.save_state(saved)
+        with patch.object(f, "inventory", return_value={}), patch.object(f, "main_acceptance", return_value=SHA), patch.object(f, "dispatch") as dispatch:
+            self.assertEqual(f.tick(args), 0)
+        self.assertEqual(f.load_state()["breaker"]["reason"], "recent_session_failure_rate")
+        self.assertEqual(f.load_state()["healthy_ticks"], 0)
+        dispatch.assert_not_called()
+
+    def test_failure_reclassification_preserves_review_and_repeated_observation_is_noop(self):
+        original = f.now() - timedelta(days=3)
+        observed = original + timedelta(days=2)
+        rec = self.record(outcome="failed:gate", finished=f.iso(original), breaker_reset=True)
+        with patch.object(f, "now", return_value=observed):
+            f.set_outcome(rec, "failed:closed")
+        self.assertTrue(rec.get("breaker_reset"))
+        self.assertEqual(rec["finished"], f.iso(original))
+        self.assertEqual(rec["outcome_observed_at"], f.iso(observed))
+        self.assertEqual(rec["outcome_history"], [{"outcome": "failed:gate", "finished": f.iso(original),
+            "superseded_at": f.iso(observed), "breaker_reset": True}])
+        unchanged = copy.deepcopy(rec)
+        with patch.object(f, "now", return_value=observed + timedelta(hours=1)):
+            f.set_outcome(rec, "failed:closed")
+        self.assertEqual(rec, unchanged)
+        with patch.object(f, "now", return_value=observed + timedelta(hours=2)):
+            f.set_outcome(rec, "failed:session_failed")
+        self.assertTrue(rec["breaker_reset"])
+        self.assertEqual(rec["finished"], f.iso(original))
+        self.assertEqual(rec["outcome_history"][-1]["outcome_observed_at"], f.iso(observed))
+
+    def test_reopened_reclassified_failure_is_a_new_event_without_old_reset_exemption(self):
+        original = f.now() - timedelta(days=3)
+        rec = self.record(outcome="failed:gate", finished=f.iso(original), breaker_reset=True)
+        with patch.object(f, "now", return_value=original + timedelta(days=1)):
+            f.set_outcome(rec, "failed:closed")
+        with patch.object(f, "now", return_value=original + timedelta(days=2)):
+            f.set_outcome(rec, None)
+        for field in ("outcome", "finished", "outcome_observed_at", "breaker_reset"):
+            self.assertNotIn(field, rec)
+        new_failure = original + timedelta(days=3)
+        with patch.object(f, "now", return_value=new_failure):
+            f.set_outcome(rec, "failed:closed")
+        self.assertNotIn("breaker_reset", rec)
+        self.assertEqual(rec["finished"], f.iso(new_failure))
+        self.assertEqual(rec.get("outcome_observed_at"), f.iso(new_failure))
+        self.assertEqual([h["outcome"] for h in rec["outcome_history"]], ["failed:gate", "failed:closed"])
+        self.assertTrue(all(h["finished"] == f.iso(original) and h["breaker_reset"] for h in rec["outcome_history"]))
+        # Optional observation metadata survives the existing schema-2 loader.
+        self.state["sessions"]["s1"] = rec
+        f.save_state(self.state)
+        self.assertEqual(f.load_state()["sessions"]["s1"], rec)
+
     def test_repair_pause_after_intent_is_known_unsent_and_can_retry_once(self):
         rec, session, pr = self.report_fixture()
         original_save = f.save_state
