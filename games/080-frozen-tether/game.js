@@ -111,6 +111,9 @@ class SoundEngine {
     playGrappleHit() {
         this.playTone(600, 'triangle', 0.1, 0.4);
     }
+    playDash() {
+        this.playTone(400, 'triangle', 0.15, 0.4);
+    }
     playEnemyHit() {
         this.playTone(150, 'sawtooth', 0.3, 0.6);
     }
@@ -215,6 +218,18 @@ class Player {
         this.movementThreshold = 10;
         this.stillTime = 0;
         this.timeDilationFactor = 1.0;
+
+        // Dash & Reactive Vector Rig
+        this.dashCooldown = 3.0;
+        this.dashTimer = 0;
+        this.dashActive = false;
+        this.dashDuration = 0.2;
+        this.invulnTime = 0;
+        this.aimX = 0;
+        this.aimY = 0;
+        this.recoilX = 0;
+        this.recoilY = 0;
+        this.thrustIntensity = 0;
     }
 
     update(dt, input, platforms, sound) {
@@ -233,16 +248,56 @@ class Player {
 
         this.vx += ax * this.speed * dt * (this.grounded ? 2 : 1);
 
-        // Friction
+        // Tighter momentum/collision logic via enhanced friction
         if (this.grounded) {
-            this.vx *= 0.85;
+            this.vx *= 0.80; // slightly tighter ground friction
         } else {
-            this.vx *= 0.98;
+            this.vx *= 0.95; // slightly tighter air friction
         }
+
+        // Recoil decay
+        this.recoilX *= 0.9;
+        this.recoilY *= 0.9;
+        this.vx += this.recoilX * dt * 10;
+        this.vy += this.recoilY * dt * 10;
+
+        // Thrust logic for visuals
+        if (Math.abs(ax) > 0) {
+            this.thrustIntensity = Math.min(1, this.thrustIntensity + dt * 5);
+        } else {
+            this.thrustIntensity = Math.max(0, this.thrustIntensity - dt * 5);
+        }
+
+        // Update aim
+        this.aimX = input.mouse.x;
+        this.aimY = input.mouse.y;
 
         this.vy += this.gravity * dt;
 
-        if (input.mouse.justPressed) {
+        // Dash logic
+        if (this.dashTimer > 0) this.dashTimer -= dt;
+        if (this.invulnTime > 0) this.invulnTime -= dt;
+
+        if (this.dashActive) {
+            if (this.dashTimer > this.dashCooldown - this.dashDuration) {
+                this.vy = 0; // lock y during dash
+            } else {
+                this.dashActive = false;
+            }
+        } else if ((input.isKeyDown('ShiftLeft') || input.isKeyDown('ShiftRight')) && this.dashTimer <= 0) {
+            this.dashActive = true;
+            this.dashTimer = this.dashCooldown;
+            this.invulnTime = this.dashDuration + 0.1;
+
+            // Dash towards mouse
+            let angle = Math.atan2(this.aimY - this.y, this.aimX - this.x);
+            let dashSpeed = 1200;
+            this.vx = Math.cos(angle) * dashSpeed;
+            this.vy = Math.sin(angle) * dashSpeed;
+            sound.playDash();
+        }
+
+        if (input.mouse.justPressed && !this.dashActive) {
             this.shootGrapple(input.mouse.x, input.mouse.y, platforms, sound);
         } else if (!input.mouse.down && this.grapple.active) {
             this.grapple.active = false;
@@ -329,6 +384,12 @@ class Player {
                     this.grapple.x = cx;
                     this.grapple.y = cy;
                     this.grapple.length = Math.hypot(cx - this.x, cy - this.y) * 0.8; // pull slightly
+
+                    // Apply recoil
+                    const rAngle = Math.atan2(this.y - cy, this.x - cx);
+                    this.recoilX = Math.cos(rAngle) * 300;
+                    this.recoilY = Math.sin(rAngle) * 300;
+
                     sound.playGrappleHit();
                     return;
                 }
@@ -337,11 +398,17 @@ class Player {
     }
 
     draw(ctx) {
+        // Blink if invulnerable
+        if (this.invulnTime > 0 && Math.floor(this.invulnTime * 20) % 2 === 0) return;
+
+        // Draw Grapple Line & Hook
         if (this.grapple.active) {
             ctx.beginPath();
             ctx.moveTo(this.x, this.y);
             ctx.lineTo(this.grapple.x, this.grapple.y);
-            ctx.strokeStyle = '#ffffff';
+            // Dynamic tension color
+            const curDist = Math.hypot(this.grapple.x - this.x, this.grapple.y - this.y);
+            ctx.strokeStyle = curDist > this.grapple.length ? '#ffaa00' : '#ffffff';
             ctx.lineWidth = 2;
             ctx.stroke();
 
@@ -351,10 +418,95 @@ class Player {
             ctx.fill();
         }
 
+        // Aim Telegraph
+        let aimAngle = Math.atan2(this.aimY - this.y, this.aimX - this.x);
+        if (!this.grapple.active && this.dashTimer <= 0) {
+            ctx.beginPath();
+            ctx.moveTo(this.x + Math.cos(aimAngle)*this.radius, this.y + Math.sin(aimAngle)*this.radius);
+            ctx.lineTo(this.x + Math.cos(aimAngle)*(this.radius + 15), this.y + Math.sin(aimAngle)*(this.radius + 15));
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        // Recoil offset visual
+        ctx.translate(-this.recoilX * 0.02, -this.recoilY * 0.02);
+
+        // Thrust flame
+        if (this.thrustIntensity > 0 || this.dashActive) {
+            let thrustAngle = this.dashActive ? aimAngle + Math.PI : Math.atan2(-this.vy, -this.vx);
+            let thrustLen = this.dashActive ? 25 : 10 + this.thrustIntensity * 10;
+            ctx.save();
+            ctx.rotate(thrustAngle);
+            ctx.beginPath();
+            ctx.moveTo(-this.radius, 0);
+            ctx.lineTo(-this.radius - thrustLen, 5);
+            ctx.lineTo(-this.radius - thrustLen * 1.2, 0);
+            ctx.lineTo(-this.radius - thrustLen, -5);
+            ctx.closePath();
+            ctx.fillStyle = this.dashActive ? '#00ffff' : '#ffaa00';
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Multi-part procedural body (Hexagon)
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            let a = (i * Math.PI) / 3;
+            let hx = Math.cos(a) * this.radius;
+            let hy = Math.sin(a) * this.radius;
+            if (i === 0) ctx.moveTo(hx, hy);
+            else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.fillStyle = this.dashActive ? '#aaaaaa' : this.color;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Visor
+        ctx.rotate(aimAngle);
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(this.radius * 0.2, -this.radius * 0.4, this.radius * 0.6, this.radius * 0.8);
+        ctx.fillStyle = '#00ffff';
+        ctx.fillRect(this.radius * 0.4, -this.radius * 0.2, this.radius * 0.3, this.radius * 0.4);
+
+        ctx.restore();
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 400;
+        this.vy = (Math.random() - 0.5) * 400;
+        this.life = 1.0;
+        this.color = color;
+        this.radius = Math.random() * 4 + 2;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt * 2.0;
+        if (this.life < 0) {
+            this.life = 0;
+        }
+    }
+    draw(ctx) {
+        if (this.life <= 0) {
+            return;
+        }
+        ctx.globalAlpha = this.life;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
         ctx.fill();
+        ctx.globalAlpha = 1.0;
     }
 }
 
@@ -432,6 +584,7 @@ class Game {
         this.player = null;
         this.enemies = [];
         this.platforms = [];
+        this.particles = [];
         this.score = 0;
 
         this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -466,6 +619,7 @@ class Game {
         this.player = new Player(400, 300);
         this.score = 0;
         this.enemies = [];
+        this.particles = [];
         this.platforms = [
             { x: 0, y: 580, w: 800, h: 20 },
             { x: 100, y: 450, w: 200, h: 20 },
@@ -507,23 +661,44 @@ class Game {
                 // Collision with player
                 const dist = Math.hypot(e.x - this.player.x, e.y - this.player.y);
                 if (dist < e.radius + this.player.radius) {
-                    // Check if player is falling on top
-                    if (this.player.vy > 0 && this.player.y < e.y) {
+                    if (this.player.dashActive || (this.player.vy > 0 && this.player.y < e.y)) {
+                        // Kill enemy if dashing or falling on top
                         e.active = false;
-                        this.player.vy = this.player.jumpForce * 0.8; // Bounce
+                        if (!this.player.dashActive) {
+                             this.player.vy = this.player.jumpForce * 0.8; // Bounce
+                        }
                         this.score += 100;
                         this.sound.playEnemyHit();
                         this.sound.playScore();
                         this.enemies.splice(i, 1);
 
+
+                        for (let k = 0; k < 10; k++) {
+                            this.particles.push(new Particle(e.x, e.y, e.color));
+                        }
+
                         // Spawn new enemy to keep game going
                         this.enemies.push(new Enemy(100 + Math.random() * 600, 50));
-                    } else {
+                    } else if (this.player.invulnTime <= 0) {
+                        for (let k = 0; k < 20; k++) {
+                            this.particles.push(new Particle(this.player.x, this.player.y, this.player.color));
+                        }
                         // Game Over
                         this.state = 'GAME_OVER';
                         this.sound.playGameOver();
                         this.saveManager.updateScore(this.score);
                     }
+                }
+            }
+
+            if (this.player.dashActive) {
+                this.particles.push(new Particle(this.player.x, this.player.y, '#00ffff'));
+            }
+
+            for (let i = this.particles.length - 1; i >= 0; i--) {
+                this.particles[i].update(effectiveDt);
+                if (this.particles[i].life <= 0) {
+                    this.particles.splice(i, 1);
                 }
             }
 
@@ -599,8 +774,12 @@ class Game {
                 e.draw(this.ctx);
             }
 
-            if (this.player) {
+            if (this.player && this.state !== 'GAME_OVER') {
                 this.player.draw(this.ctx);
+            }
+
+            for (let p of this.particles) {
+                p.draw(this.ctx);
             }
 
             this.ctx.fillStyle = '#fff';
@@ -610,6 +789,19 @@ class Game {
             this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, 20, 60);
             if (this.player) {
                 this.ctx.fillText(`Time Dilation: ${this.player.timeDilationFactor.toFixed(2)}x`, 20, 90);
+
+                // Dash Cooldown HUD
+                this.ctx.fillText(`Dash: `, 20, 120);
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                this.ctx.fillRect(80, 105, 100, 15);
+                if (this.player.dashTimer <= 0) {
+                    this.ctx.fillStyle = '#00ffff';
+                    this.ctx.fillRect(80, 105, 100, 15);
+                } else {
+                    this.ctx.fillStyle = '#ff5555';
+                    let pct = 1.0 - (this.player.dashTimer / this.player.dashCooldown);
+                    this.ctx.fillRect(80, 105, 100 * pct, 15);
+                }
             }
 
             if (this.state === 'PAUSED') {
