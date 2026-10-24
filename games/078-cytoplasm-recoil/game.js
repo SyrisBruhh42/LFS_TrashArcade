@@ -47,13 +47,27 @@ class Pickup {
     draw(ctx) {
         ctx.save();
         ctx.globalAlpha = Math.min(1, this.lifeTime);
-        if (this.type === 0) ctx.fillStyle = '#ffeb3b';
-        else if (this.type === 1) ctx.fillStyle = '#03a9f4';
-        else if (this.type === 2) ctx.fillStyle = '#4caf50';
+        if (this.type === 0) {
+            ctx.fillStyle = '#ffeb3b';
+        } else if (this.type === 1) {
+            ctx.fillStyle = '#03a9f4';
+        } else if (this.type === 2) {
+            ctx.fillStyle = '#4caf50';
+        } else {
+            ctx.fillStyle = '#ffffff';
+        }
 
         ctx.beginPath();
-        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+        let bounce = Math.sin(this.lifeTime * Math.PI * 2) * 2;
+        ctx.arc(this.pos.x, this.pos.y + bounce, this.radius, 0, Math.PI * 2);
         ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y + bounce, this.radius * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.globalAlpha = Math.min(1, this.lifeTime) * 0.5;
+        ctx.fill();
+
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1;
         ctx.stroke();
@@ -804,23 +818,104 @@ class Bumper {
     }
 }
 
+class FloatingText {
+    constructor(text, x, y, color, duration = 1.0) {
+        this.text = text;
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.life = duration;
+        this.maxLife = duration;
+        this.vy = -50;
+        this.vx = (Math.random() - 0.5) * 20;
+        this.scaleMult = 1.0;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt;
+
+        if (this.life < this.maxLife * 0.5) {
+            this.vy *= 0.95;
+            this.vx *= 0.95;
+        }
+    }
+    draw(ctx) {
+        if (this.life <= 0) {
+            return;
+        }
+        ctx.save();
+        let alpha = Math.max(0, this.life / this.maxLife);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = this.color;
+        let scale = 1 + Math.sin(Math.PI * (1 - this.life / this.maxLife)) * 0.5;
+        ctx.font = `bold ${Math.floor(20 * scale * this.scaleMult)}px monospace`;
+        ctx.textAlign = 'center';
+
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.restore();
+    }
+}
+
+class MotionTrail {
+    constructor(x, y, radius, color, duration = 0.3) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.color = color;
+        this.life = duration;
+        this.maxLife = duration;
+        this.shrinkRate = 1.0;
+    }
+    update(dt) {
+        this.life -= dt;
+    }
+    draw(ctx) {
+        if (this.life <= 0) {
+            return;
+        }
+        ctx.save();
+        let alpha = Math.max(0, this.life / this.maxLife) * 0.5;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        let currentRadius = this.radius * (this.life / this.maxLife) * this.shrinkRate;
+        ctx.arc(this.x, this.y, Math.max(0, currentRadius), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
 class Particle {
-    constructor(x, y, color) {
+    constructor(x, y, color, inputAngle = null, spread = Math.PI * 2) {
         this.pos = new Vector(x, y);
-        let angle = Math.random() * Math.PI * 2;
+        let angle = inputAngle !== null ? inputAngle + (Math.random() - 0.5) * spread : Math.random() * Math.PI * 2;
         let speed = MathUtils.randomRange(50, 150);
         this.vel = new Vector(Math.cos(angle) * speed, Math.sin(angle) * speed);
         this.life = 1.0;
+        this.maxLife = 1.0;
         this.color = color;
         this.size = MathUtils.randomRange(2, 5);
+        this.friction = 0.98;
+        this.gravity = 0;
     }
     update(dt) {
+        this.vel.mult(this.friction);
+        this.vel.y += this.gravity * dt;
         this.pos.add(new Vector(this.vel.x * dt, this.vel.y * dt));
         this.life -= dt * 2;
     }
     draw(ctx) {
+        if (this.life <= 0) {
+            return;
+        }
         ctx.fillStyle = this.color;
-        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
         ctx.beginPath();
         ctx.arc(this.pos.x, this.pos.y, this.size, 0, Math.PI*2);
         ctx.fill();
@@ -1109,7 +1204,10 @@ class Game {
     }
     update(dt) {
         if (this.state === STATES.TITLE) {
-            if (this.input.mouse.clicked || this.input.keys['Enter'] || this.input.keys['Space']) this.initGame();
+            if (this.input.mouse.clicked || this.input.keys['Enter'] || this.input.keys['Space']) {
+                this.initGame();
+                this.triggerShake(5, 0.2);
+            }
             return;
         }
         if (this.state === STATES.DRAFTING) {
@@ -1135,11 +1233,16 @@ class Game {
         }
 
         if (this.state === STATES.GAME_OVER) {
-            if (this.input.mouse.clicked || this.input.keys['Enter']) this.state = STATES.TITLE;
+            if (this.input.mouse.clicked || this.input.keys['Enter']) {
+                this.state = STATES.TITLE;
+            }
             return;
         }
         if (this.state === STATES.PAUSED) {
-            if (this.input.keys['KeyP'] || this.input.mouse.clicked) this.state = STATES.PLAYING;
+            if (this.input.keys['KeyP'] || this.input.mouse.clicked) {
+                this.state = STATES.PLAYING;
+                this.input.keys['KeyP'] = false;
+            }
             return;
         }
         if (this.input.keys['KeyP']) {
@@ -1163,10 +1266,13 @@ class Game {
                 this.sound.pickup();
                 if (p.type === 0) {
                     this.addScore(50);
+                    this.floatingTexts.push(new FloatingText("+50", p.pos.x, p.pos.y, "#ffeb3b", 1.0));
                 } else if (p.type === 1) {
                     this.comboTimer = this.stats.comboDuration;
+                    this.floatingTexts.push(new FloatingText("COMBO", p.pos.x, p.pos.y, "#03a9f4", 1.0));
                 } else if (p.type === 2) {
                     this.player.shield = (this.player.shield || 0) + 1;
+                    this.floatingTexts.push(new FloatingText("SHIELD", p.pos.x, p.pos.y, "#4caf50", 1.0));
                 }
             }
         }
@@ -1216,27 +1322,51 @@ class Game {
             this.player.vel.sub(dir.copy().mult(400));
             this.player.invulnTimer = 0.1;
 
+            let oppositeAngle = Math.atan2(-dir.y, -dir.x);
+            this.spawnParticles(this.player.pos.x, this.player.pos.y, '#fff', 10, oppositeAngle, Math.PI / 4);
+
             this.sound.shoot();
         }
 
         if (this.ammo) {
+            this.trails.push(new MotionTrail(this.ammo.pos.x, this.ammo.pos.y, this.ammo.radius, '#ffeb3b', 0.1));
             let bounced = this.ammo.update(dt, this.width, this.height, this.bumpers);
+
             if (bounced) {
                 this.sound.bounce();
                 this.spawnParticles(this.ammo.pos.x, this.ammo.pos.y, '#ffeb3b', 3);
+                this.triggerShake(1, 0.05);
             }
+
             if (!this.ammo.active) {
                 let dist = MathUtils.distance(this.player.pos.x, this.player.pos.y, this.ammo.pos.x, this.ammo.pos.y);
                 if (dist < this.player.radius + this.ammo.radius) {
                     this.player.hasAmmo = true;
                     this.ammo = null;
                     this.sound.pickup();
+                    this.spawnParticles(this.player.pos.x, this.player.pos.y, '#ffeb3b', 5);
+                } else {
+                    let dX = this.player.pos.x - this.ammo.pos.x;
+                    let dY = this.player.pos.y - this.ammo.pos.y;
+                    let mag = Math.sqrt(dX * dX + dY * dY);
+
+                    if (mag > 0 && mag < 150 && this.player.isDashing) {
+                        this.ammo.pos.x += (dX / mag) * 50 * dt;
+                        this.ammo.pos.y += (dY / mag) * 50 * dt;
+                        this.trails.push(new MotionTrail(this.ammo.pos.x, this.ammo.pos.y, this.ammo.radius * 0.5, '#fff', 0.1));
+                    }
                 }
             }
         }
 
         if (this.activeBoss) {
             if (this.activeBoss.markedForDeletion) {
+
+                this.triggerShake(15, 0.5);
+                this.hitStop = 0.2;
+                this.spawnParticles(this.activeBoss.pos.x, this.activeBoss.pos.y, '#ffeb3b', 50);
+                this.floatingTexts.push(new FloatingText("BOSS VANQUISHED", this.activeBoss.pos.x, this.activeBoss.pos.y, "#ffeb3b", 2.0));
+
                 this.activeBoss = null;
                 this.nextBossThreshold += 300;
                 this.bossEncounterCounter++;
@@ -1302,7 +1432,14 @@ class Game {
                         }
                         this.sound.hit();
                         this.addScore(20);
-                        this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 15);
+
+                        let hitAngle = Math.atan2(e.pos.y - this.player.pos.y, e.pos.x - this.player.pos.x);
+                        this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 15, hitAngle, Math.PI / 2);
+
+                        this.triggerShake(5, 0.1);
+                        this.hitStop = 0.05;
+                        this.floatingTexts.push(new FloatingText("+20", e.pos.x, e.pos.y, "#fff", 0.5));
+
                         if (Math.random() < 0.3) {
                             let type = Math.random() < 0.6 ? 0 : (Math.random() < 0.8 ? 1 : 2);
                             this.pickups.push(new Pickup(e.pos.x, e.pos.y, type));
@@ -1334,7 +1471,14 @@ class Game {
                         }
                         this.sound.hit();
                         this.addScore(10);
-                        this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 10);
+
+                        let hitAngle = Math.atan2(e.pos.y - this.ammo.pos.y, e.pos.x - this.ammo.pos.x);
+                        this.spawnParticles(e.pos.x, e.pos.y, '#e91e63', 10, hitAngle, Math.PI / 2);
+
+                        this.triggerShake(3, 0.05);
+                        this.hitStop = 0.02;
+                        this.floatingTexts.push(new FloatingText("+10", e.pos.x, e.pos.y, "#fff", 0.5));
+
                         if (Math.random() < 0.2) {
                             let type = Math.random() < 0.6 ? 0 : (Math.random() < 0.8 ? 1 : 2);
                             this.pickups.push(new Pickup(e.pos.x, e.pos.y, type));
@@ -1555,6 +1699,8 @@ class Game {
             this.ctx.arc(this.input.joystick.curX, this.input.joystick.curY, 20, 0, Math.PI*2);
             this.ctx.stroke();
         }
+
+        this.ctx.restore();
     }
     drawText(text, x, y, size, color) {
         this.ctx.fillStyle = color;
