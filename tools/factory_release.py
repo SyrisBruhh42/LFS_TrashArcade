@@ -147,11 +147,32 @@ def stage(args):
     print(f"Staged {args.revision}; active units and timer unchanged")
 
 
-def unit_quote(value):
+def unit_value(value):
     value = str(value)
-    if any(c in value for c in "\r\n\x00$"):
+    if "$" in value or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in value):
         raise ReleaseError("Unsupported control character or dollar sign in unit path")
+    return value
+
+
+def unit_quote(value):
+    """Quote one ExecStart/Environment word, whose parsers unescape C strings."""
+    value = unit_value(value)
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
+
+
+def unit_path(value):
+    """Serialize WorkingDirectory's literal path, not a quoted command word.
+
+    Its parser expands specifiers but does not unquote or C-unescape. A final
+    slash protects a literal trailing space/backslash from the INI line parser;
+    systemd then simplifies that slash without changing the directory identity.
+    """
+    value = unit_value(value)
+    if not Path(value).is_absolute():
+        raise ReleaseError("Unit directory paths must be absolute")
+    if value.endswith((" ", "\\")):
+        value += "/"
+    return value.replace("%", "%%")
 
 
 def render_units(args, revision, python, gh_directory):
@@ -161,7 +182,7 @@ def render_units(args, revision, python, gh_directory):
                    "JULES_API_KEY_FILE": str(args.key_file)}
     service = ("[Unit]\nDescription=LFS TrashArcade pinned factory tick\nAfter=network-online.target\n"
                "Wants=network-online.target\n\n[Service]\nType=oneshot\n"
-               f"WorkingDirectory={unit_quote(repo)}\n")
+               f"WorkingDirectory={unit_path(repo)}\n")
     service += "".join(f"Environment={unit_quote(k + '=' + v)}\n" for k, v in environment.items())
     service += (f"ExecStart={unit_quote(python)} {unit_quote(repo / 'tools/factory_dispatch.py')}\n"
                 "TimeoutStartSec=600\nNice=10\n")

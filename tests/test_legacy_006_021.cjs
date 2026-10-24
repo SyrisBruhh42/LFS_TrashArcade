@@ -8,17 +8,24 @@ const vm = require('node:vm');
 const {spawnSync} = require('node:child_process');
 const test = require('node:test');
 const root = path.resolve(__dirname, '..');
+// runtime_gate owns a 90 s browser/group deadline. Leave time for its cleanup
+// and receipt instead of killing Python during the 30 s browser startup stage.
+const BROWSER_PARENT_TIMEOUT_MS = 120000;
 
 test('006 visible Play receives an ordinary native click despite inactive modal buttons', () => {
     const probe = `
-import json, sys
+import json, signal, subprocess, sys
 from pathlib import Path
 sys.path.insert(0, 'tools')
 from runtime_gate import run_game
+# Route an outer watchdog through run_browser's existing process-group cleanup.
+def parent_timeout(_signum, _frame):
+ raise subprocess.TimeoutExpired('legacy test parent watchdog', ${BROWSER_PARENT_TIMEOUT_MS / 1000})
+signal.signal(signal.SIGTERM, parent_timeout)
 contract={'title':"document.querySelector('#ui-title.active') !== null",'playing':"document.querySelector('#ui-playing.active') !== null",'start':{'kind':'click','selector':'#btn-play'}}
 print(json.dumps(run_game(Path('games/006-arctic-perimeter'),contract)))
 `;
-    const result = spawnSync('python3', ['-c', probe], {cwd:root, encoding:'utf8', timeout:30000});
+    const result = spawnSync('python3', ['-c', probe], {cwd:root, encoding:'utf8', timeout:BROWSER_PARENT_TIMEOUT_MS});
     assert.equal(result.error, undefined, result.error?.message);
     assert.equal(result.status, 0, result.stderr);
     const receipt = JSON.parse(result.stdout);

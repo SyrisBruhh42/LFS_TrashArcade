@@ -1,11 +1,15 @@
-"""Offline installer failure injection. All process calls are stubbed."""
+"""Installer failure injection plus native, non-executing unit-parser checks."""
+import argparse
 import contextlib
 import fcntl
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -311,6 +315,19 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaises(f.ReleaseError):
             f.unit_quote('/tmp/$UNTRUSTED')
 
+    def test_control_characters_and_dollars_rejected_before_processes_or_writes(self):
+        for character in ("\x00", "\n", "\r", "\t", "\v", "\x1f", "\x7f", "\x85", "$"):
+            with self.subTest(character=repr(character)):
+                self.data = self.root / ("unsafe" + character + "path")
+                self.assertEqual(self.invoke("activate", SHA), 1)
+                for serializer in (f.unit_quote, f.unit_path):
+                    with self.assertRaises(f.ReleaseError):
+                        serializer(self.data)
+        with self.assertRaises(f.ReleaseError):
+            f.unit_path("relative/path")
+        self.assertEqual(self.calls, [])
+        self.assertEqual(list(self.root.iterdir()), [])
+
     def test_status_is_read_only(self):
         self.assertEqual(self.invoke("status"), 0)
         self.assertEqual(self.calls, [])
@@ -463,6 +480,79 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(["systemctl", "--user", "is-active", f.UNITS[1]], self.calls)
         self.assertIn(["systemctl", "--user", "is-enabled", f.UNITS[1]], self.calls)
         self.assertFalse(any("stop" in call and f.UNITS[0] in call for call in self.calls))
+
+
+@unittest.skipUnless(shutil.which("systemd-analyze"), "native systemd-analyze unavailable")
+class NativeUnitParserTests(unittest.TestCase):
+    """Parse temporary units only: no systemctl, daemon reload, or execution."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="factory-native-unit-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        # Hosted runners need no user manager or bus: verify constructs its own
+        # parser/manager. Supply a private runtime directory and isolate user
+        # configuration; a deliberately absent bus prevents accidental reliance.
+        environment = patch.dict(os.environ, {
+            "XDG_RUNTIME_DIR": str(self.root), "XDG_CONFIG_HOME": str(self.root / "config-home"),
+            "XDG_DATA_HOME": str(self.root / "data-home"), "LC_ALL": "C", "SYSTEMD_COLORS": "0",
+            "DBUS_SESSION_BUS_ADDRESS": "unix:path=" + str(self.root / "absent-bus")})
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.args = argparse.Namespace(data_dir=self.root / "data", config_dir=self.root / "config",
+            state_home=self.root / "state", key_file=self.root / "unread-key")
+
+    def verify(self, units):
+        paths = []
+        for name, content in units.items():
+            path = self.root / name
+            path.write_bytes(content)
+            paths.append(str(path))
+        # The debug dump gives the actual parsed path, so acceptance alone cannot
+        # hide expansion, duplicated backslashes, trimmed spaces, or lost quotes.
+        result = subprocess.run([shutil.which("systemd-analyze"), "--user", "verify", *paths],
+            capture_output=True, text=True, timeout=30,
+            env=dict(os.environ, SYSTEMD_LOG_LEVEL="debug", SYSTEMD_COLORS="0",
+                     XDG_RUNTIME_DIR=str(self.root)))
+        return result.returncode, result.stdout + result.stderr
+
+    def test_rendered_units_pass_native_validation_and_old_quoted_directory_fails(self):
+        units = f.render_units(self.args, SHA, sys.executable, "/usr/bin")
+        directory = f.release_dir(self.args, SHA) / "repo"
+        old = dict(units)
+        old[f.UNITS[0]] = units[f.UNITS[0]].replace(
+            f"WorkingDirectory={f.unit_path(directory)}\n".encode(),
+            f"WorkingDirectory={f.unit_quote(directory)}\n".encode())
+        code, output = self.verify(old)
+        self.assertNotEqual(code, 0, output)
+        self.assertIn("WorkingDirectory= path is not absolute", output)
+        code, output = self.verify(units)
+        self.assertEqual(code, 0, output)
+        self.assertIn(f"\tWorkingDirectory: {directory}\n", output)
+        # Exercise the exact production validator as well as debug readback.
+        f.verify_units(units)
+
+    def test_native_working_directory_preserves_spaces_specifiers_quotes_and_backslashes(self):
+        for suffix in ("space dir", 'percent%h%Z%%quote"single\'dir', r"literal\n\x20\dir"):
+            with self.subTest(suffix=suffix):
+                self.args.data_dir = self.root / suffix
+                units = f.render_units(self.args, SHA, sys.executable, "/usr/bin")
+                directory = f.release_dir(self.args, SHA) / "repo"
+                code, output = self.verify(units)
+                self.assertEqual(code, 0, output)
+                self.assertIn(f"\tWorkingDirectory: {directory}\n", output)
+
+    def test_native_directory_trailing_space_or_backslash_cannot_trim_or_continue_line(self):
+        for suffix in ("trailing ", "trailing\\", "trailing \\"):
+            with self.subTest(suffix=suffix):
+                directory = self.root / suffix
+                units = {"path-fixture.service": (
+                    f"[Service]\nType=oneshot\nWorkingDirectory={f.unit_path(directory)}\n"
+                    f"ExecStart={f.unit_quote(sys.executable)} -V\n").encode()}
+                code, output = self.verify(units)
+                self.assertEqual(code, 0, output)
+                self.assertIn(f"\tWorkingDirectory: {directory}\n", output)
+                self.assertIn("Command Line:", output)
 
 
 if __name__ == "__main__":
