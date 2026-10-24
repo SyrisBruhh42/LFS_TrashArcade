@@ -502,6 +502,88 @@ class Particle {
     }
 }
 
+class Environment {
+    constructor(width, height) {
+        this.width = width; this.height = height;
+        this.sandTimer = 0;
+    }
+    update(dt) {
+        this.sandTimer += dt;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#c28e5c';
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        for (let i = 0; i < 5; i++) {
+            const offset = (this.sandTimer * 20 * (i+1)) % this.width;
+            ctx.beginPath();
+            ctx.arc((this.width * 0.2 * i - offset + this.width) % this.width, this.height * 0.8, 150, 0, Math.PI, true);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc((this.width * 0.25 * i - offset*1.5 + this.width) % this.width, this.height * 0.2, 100, 0, Math.PI, true);
+            ctx.fill();
+        }
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = 1;
+        const gridOffset = (this.sandTimer * 10) % 50;
+        ctx.beginPath();
+        for (let x = -50; x < this.width; x += 50) {
+            ctx.moveTo(x + gridOffset, 0); ctx.lineTo(x + gridOffset, this.height);
+        }
+        for (let y = -50; y < this.height; y += 50) {
+            ctx.moveTo(0, y + gridOffset); ctx.lineTo(this.width, y + gridOffset);
+        }
+        ctx.stroke();
+    }
+}
+
+class QuicksandZone {
+    constructor(x, y, radius) {
+        this.x = x; this.y = y; this.radius = radius;
+        this.anim = 0;
+    }
+    update(dt) {
+        this.anim += dt;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.anim * 0.5);
+        ctx.fillStyle = 'rgba(100, 50, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(100, 50, 0, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 15]);
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius - 5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class DestructibleCover {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.width = 40; this.height = 40;
+        this.hp = 3;
+        this.active = true;
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(this.x - this.width/2 + 5, this.y - this.height/2 + 5, this.width - 10, this.height - 10);
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px monospace';
+        ctx.fillText(this.hp, this.x - 4, this.y + 4);
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
@@ -588,6 +670,17 @@ class Game {
         this.bullets = []; this.ammos = []; this.enemies = []; this.particles = [];
         this.score = 0;
         this.enemySpawnTimer = 0; this.enemySpawnRate = 2.0;
+        this.environment = new Environment(this.width, this.height);
+        this.quicksandZones = [
+            new QuicksandZone(this.width * 0.2, this.height * 0.2, 80),
+            new QuicksandZone(this.width * 0.8, this.height * 0.8, 80)
+        ];
+        this.covers = [
+            new DestructibleCover(this.width * 0.5, this.height * 0.3),
+            new DestructibleCover(this.width * 0.5, this.height * 0.7),
+            new DestructibleCover(this.width * 0.2, this.height * 0.5),
+            new DestructibleCover(this.width * 0.8, this.height * 0.5)
+        ];
 
         for(let i=0; i<this.player.maxAmmo; i++) {
             if (i < 5) {
@@ -633,11 +726,82 @@ class Game {
     }
     update(dt) {
         if (this.state !== 'PLAYING') return;
+
+        let playerSlow = 1.0;
+        if (this.quicksandZones) {
+            this.quicksandZones.forEach(qz => {
+                qz.update(dt);
+                if (Math.hypot(this.player.x - qz.x, this.player.y - qz.y) < qz.radius) {
+                    playerSlow = 0.4;
+                }
+            });
+        }
+        const origSpeed = this.player.speed;
+        this.player.speed *= playerSlow;
         this.player.update(dt, this.input, this);
+        this.player.speed = origSpeed;
+
         this.bullets.forEach(b => b.update(dt, this));
         this.ammos.forEach(a => a.update(dt));
-        this.enemies.forEach(e => e.update(dt, this));
+
+        this.enemies.forEach(e => {
+            let enemySlow = 1.0;
+            if (this.quicksandZones) {
+                this.quicksandZones.forEach(qz => {
+                    if (Math.hypot(e.x - qz.x, e.y - qz.y) < qz.radius) {
+                        enemySlow = 0.4;
+                    }
+                });
+            }
+            const eOrigSpeed = e.speed;
+            e.speed *= enemySlow;
+            e.update(dt, this);
+            e.speed = eOrigSpeed;
+        });
+
         this.particles.forEach(p => p.update(dt));
+        if (this.environment) this.environment.update(dt);
+
+        if (this.covers) {
+            for (let i = 0; i < this.covers.length; i++) {
+                const c = this.covers[i];
+                if (!c.active) continue;
+
+                for(let j=0; j<this.bullets.length; j++) {
+                    const b = this.bullets[j];
+                    if (!b.active) continue;
+                    if (Math.abs(b.x - c.x) < c.width/2 && Math.abs(b.y - c.y) < c.height/2) {
+                        b.active = false;
+                        c.hp--;
+                        this.spawnParticles(b.x, b.y, '#8b4513', 5);
+                        if (c.hp <= 0) {
+                            c.active = false;
+                            this.spawnParticles(c.x, c.y, '#8b4513', 20);
+                            this.sound.playHit();
+                        }
+                    }
+                }
+                const px = this.player.x, py = this.player.y, pr = this.player.radius;
+                if (Math.abs(px - c.x) < c.width/2 + pr && Math.abs(py - c.y) < c.height/2 + pr) {
+                    if (Math.abs(px - c.x) > Math.abs(py - c.y)) {
+                        this.player.x = px > c.x ? c.x + c.width/2 + pr : c.x - c.width/2 - pr;
+                    } else {
+                        this.player.y = py > c.y ? c.y + c.height/2 + pr : c.y - c.height/2 - pr;
+                    }
+                }
+                this.enemies.forEach(e => {
+                    if (!e.active) return;
+                    const er = e.radius;
+                    if (Math.abs(e.x - c.x) < c.width/2 + er && Math.abs(e.y - c.y) < c.height/2 + er) {
+                        if (Math.abs(e.x - c.x) > Math.abs(e.y - c.y)) {
+                            e.x = e.x > c.x ? c.x + c.width/2 + er : c.x - c.width/2 - er;
+                        } else {
+                            e.y = e.y > c.y ? c.y + c.height/2 + er : c.y - c.height/2 - er;
+                        }
+                    }
+                });
+            }
+        }
 
         for (let i = 0; i < this.bullets.length; i++) {
             const b = this.bullets[i];
@@ -693,33 +857,18 @@ class Game {
             }
         }
     }
-    drawBazaarBackground(ctx) {
-        ctx.fillStyle = '#c28e5c';
-        ctx.fillRect(0, 0, this.width, this.height);
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-        for (let i = 0; i < 5; i++) {
-            ctx.beginPath();
-            ctx.arc(this.width * 0.2 * i, this.height * 0.8, 150, 0, Math.PI, true);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(this.width * 0.25 * i, this.height * 0.2, 100, 0, Math.PI, true);
-            ctx.fill();
-        }
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let x = 0; x < this.width; x += 50) {
-            ctx.moveTo(x, 0); ctx.lineTo(x, this.height);
-        }
-        for (let y = 0; y < this.height; y += 50) {
-            ctx.moveTo(0, y); ctx.lineTo(this.width, y);
-        }
-        ctx.stroke();
-    }
     draw() {
-        this.drawBazaarBackground(this.ctx);
+        if (this.environment) {
+            this.environment.draw(this.ctx);
+        } else {
+            this.ctx.fillStyle = '#c28e5c';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        }
+
         if (this.state === 'PLAYING' || this.state === 'GAME_OVER' || this.state === 'PAUSED') {
+            if (this.quicksandZones) this.quicksandZones.forEach(qz => qz.draw(this.ctx));
             this.ammos.forEach(a => a.draw(this.ctx));
+            if (this.covers) this.covers.forEach(c => c.draw(this.ctx));
             this.bullets.forEach(b => b.draw(this.ctx));
             this.enemies.forEach(e => e.draw(this.ctx));
             this.particles.forEach(p => p.draw(this.ctx));

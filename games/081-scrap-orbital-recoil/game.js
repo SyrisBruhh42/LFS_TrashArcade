@@ -446,6 +446,10 @@ class Player extends Entity {
       }
     }
 
+    if (this.vel.mag() > 50 && Math.random() < 0.3) {
+      game.floatingTexts.push(new MotionTrail(this.pos.x, this.pos.y, this.color, this.radius, 0.4));
+    }
+
     // Procedural animation update
     if (this.recoilOffset > 0) this.recoilOffset -= dt * 50;
     if (this.recoilOffset < 0) this.recoilOffset = 0;
@@ -496,6 +500,9 @@ class Player extends Entity {
     this.invulnTimer = 1.0;
     game.sound.playHit();
     game.spawnParticles(this.pos.x, this.pos.y, 20, '#ff4444');
+    game.addScreenShake(10);
+    game.hitStopTimer = 0.1;
+    game.floatingTexts.push(new FloatingText(this.pos.x, this.pos.y, `-1 HP`, '#ff4444', true));
 
     // Intense knockback towards center (gravity pull effect on hit)
     const center = new Vector2(game.width / 2, game.height / 2);
@@ -703,9 +710,13 @@ class Enemy extends Entity {
     if (this.health <= 0) {
       this.active = false;
       const mult = 1 + game.comboCount * 0.1;
-      game.score += Math.floor(this.points * mult);
+      const pts = Math.floor(this.points * mult);
+      game.score += pts;
       game.sound.playExplosion();
       game.spawnParticles(this.pos.x, this.pos.y, 10, this.color);
+      game.floatingTexts.push(new FloatingText(this.pos.x, this.pos.y, `+${pts}`, '#44ff44', this.points >= 1000));
+      game.addScreenShake(this.points >= 1000 ? 20 : 5);
+      if (this.points >= 1000) game.hitStopTimer = 0.3;
 
       if (Math.random() < 0.2) {
         game.pickups.push(new Pickup(this.pos.x, this.pos.y, Math.random() < 0.2 ? 'health' : 'score'));
@@ -840,11 +851,15 @@ class Game {
 
     this.state = 'TITLE'; // TITLE, PLAYING, GAME_OVER, PAUSED
 
+    this.screenShake = 0;
+    this.hitStopTimer = 0;
+
     this.lastTime = performance.now();
     this.time = 0;
 
     this.entities = [];
     this.particles = [];
+    this.floatingTexts = [];
     this.projectiles = [];
     this.enemies = [];
     this.enemyProjectiles = [];
@@ -915,6 +930,7 @@ class Game {
 
     this.entities = [];
     this.particles = [];
+    this.floatingTexts = [];
     this.projectiles = [];
     this.enemies = [];
     this.enemyProjectiles = [];
@@ -962,7 +978,20 @@ class Game {
     else this.enemies.push(new HazardDeployerEnemy(x, y));
   }
 
+  addScreenShake(intensity) {
+    this.screenShake = Math.max(this.screenShake, intensity);
+  }
+
   update(dt) {
+    if (this.hitStopTimer > 0) {
+      this.hitStopTimer -= dt;
+      if (this.hitStopTimer > 0) return;
+    }
+    if (this.screenShake > 0) {
+      this.screenShake -= dt * 10;
+      if (this.screenShake < 0) this.screenShake = 0;
+    }
+
     if (this.state === 'TITLE') {
       if (this.input.consumeAnyInput()) {
         this.initGame();
@@ -1097,6 +1126,12 @@ class Game {
       if (!p.active) this.particles.splice(i, 1);
     }
 
+    for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+      const ft = this.floatingTexts[i];
+      ft.update(dt);
+      if (!ft.active) this.floatingTexts.splice(i, 1);
+    }
+
     for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
       const p = this.enemyProjectiles[i];
       p.update(dt, this);
@@ -1124,6 +1159,15 @@ class Game {
   draw() {
     this.ctx.fillStyle = '#0a0a0c'; // space background
     this.ctx.fillRect(0, 0, this.width, this.height);
+
+    this.ctx.save();
+    let shakeOpt = this.saveManager.data.options.screenShake !== undefined ? this.saveManager.data.options.screenShake : 1.0;
+    if (this.screenShake > 0 && shakeOpt > 0) {
+      const dx = (Math.random() - 0.5) * this.screenShake * 2 * shakeOpt;
+      const dy = (Math.random() - 0.5) * this.screenShake * 2 * shakeOpt;
+      this.ctx.translate(dx, dy);
+    }
+
     this.worldManager.drawBackground(this.ctx);
 
     // Draw grid
@@ -1177,9 +1221,13 @@ class Game {
     for (let p of this.projectiles) p.draw(this.ctx);
     for (let ep of this.enemyProjectiles) ep.draw(this.ctx);
 
+    for (let ft of this.floatingTexts) ft.draw(this.ctx);
+
     if (this.player && this.player.active) {
       this.player.draw(this.ctx);
     }
+
+    this.ctx.restore();
 
     // UI
     if (this.state === 'PLAYING' || this.state === 'GAME_OVER' || this.state === 'PAUSED') {
