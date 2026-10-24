@@ -1135,7 +1135,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move, Space/Click to shoot. Touch joystick and tap.",
     "createdAt": "2023-10-24",
     "accentColor": "#4ad5c0",
-    "phase": "1",
+    "phase": "2",
     "path": "./games/085-scrap-heist-retrieval/index.html"
   }
 ];
