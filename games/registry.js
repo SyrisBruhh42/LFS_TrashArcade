@@ -1051,7 +1051,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD to move, Mouse to aim and shoot. Touch joystick and shoot button on mobile.",
     "createdAt": "2026-10-24",
     "accentColor": "#e2fc7a",
-    "phase": "4",
+    "phase": "5",
     "path": "./games/079-bazaar-bullet-retrieval/index.html"
   }
 ];
