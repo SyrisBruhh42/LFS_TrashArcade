@@ -115,7 +115,65 @@
                 <h1>Dune Ammo Scramble</h1>
                 <p>Limited Ammo Must Be Physically Retrieved</p>
                 <button id="btn-start">Start Game</button>
+                <button id="btn-settings">Settings</button>
+                <button id="btn-milestones">Milestones</button>
                 <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+            </div>
+
+            <div id="settings-screen" class="screen">
+                <h2>SETTINGS</h2>
+                <div style="display:flex; flex-direction:column; gap:10px; align-items:center;">
+                    <label><input type="checkbox" id="chk-mute"> Master Mute</label>
+                    <label>SFX Vol: <input type="range" id="sld-sfx" min="0" max="1" step="0.1"></label>
+                    <label>Music Vol: <input type="range" id="sld-music" min="0" max="1" step="0.1"></label>
+                    <label>Screen Shake:
+                        <select id="sel-shake">
+                            <option value="1">100%</option>
+                            <option value="0.5">50%</option>
+                            <option value="0">Off</option>
+                        </select>
+                    </label>
+                    <label>Particles:
+                        <select id="sel-particles">
+                            <option value="high">High</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </label>
+                    <label><input type="checkbox" id="chk-colorblind"> High-Contrast Mode</label>
+                    <label><input type="checkbox" id="chk-fps"> Show FPS</label>
+                    <label>Touch Controls:
+                        <select id="sel-touch">
+                            <option value="auto">Auto</option>
+                            <option value="always">Always</option>
+                            <option value="off">Off</option>
+                        </select>
+                    </label>
+                    <label><input type="checkbox" id="chk-touch-swap"> Swap L/R Touch Controls</label>
+                    <button id="btn-export-save">Export Save</button>
+                    <div style="display:flex; gap:10px;">
+                        <input type="text" id="inp-import-save" placeholder="Paste Base64 Save">
+                        <button id="btn-import-save">Import Save</button>
+                    </div>
+                    <button id="btn-reset-save">Reset Save (Click 2x)</button>
+                </div>
+                <button id="btn-close-settings">Back</button>
+            </div>
+
+            <div id="milestones-screen" class="screen">
+                <h2>MILESTONES</h2>
+                <div id="milestones-list" style="display:flex; flex-direction:column; gap:10px; max-height:400px; overflow-y:auto; padding:20px; width:80%;"></div>
+                <button id="btn-close-milestones">Back</button>
+            </div>
+
+            <div id="fps-display" style="position:absolute; top:20px; right:20px; font-size:1.5em; font-weight:bold; display:none; pointer-events:none; text-shadow:1px 1px 0 #000;">FPS: 0</div>
+
+            <div id="touch-controls" style="display:none; position:absolute; bottom:20px; width:100%; justify-content:space-between; padding:0 20px; box-sizing:border-box; pointer-events:none; z-index:100;">
+                <div id="joystick-area" style="width:150px; height:150px; background:rgba(255,255,255,0.2); border-radius:50%; position:relative; pointer-events:auto;">
+                    <div id="joystick-knob" style="width:50px; height:50px; background:rgba(255,255,255,0.5); border-radius:50%; position:absolute; top:50px; left:50px; pointer-events:none;"></div>
+                </div>
+                <div id="action-buttons-area" style="display:flex; gap:20px; pointer-events:auto; align-items:center;">
+                    <button id="btn-touch-dash" style="width:80px; height:80px; border-radius:50%; font-size:1em; margin:0; pointer-events:auto;">DASH</button>
+                </div>
             </div>
 
             <div id="pause-screen" class="screen">
@@ -141,5 +199,6 @@
     </div>
     <script defer src="./vfx.js"></script>
     <script defer src="./game.js"></script>
+    <script defer src="./ui.js"></script>
 </body>
 </html>
