@@ -778,6 +778,7 @@ class Game {
     this.input = new InputManager(canvas);
     this.saveManager = new SaveManager();
     this.sound = new SoundEngine();
+    this.worldManager = new WorldManager(this);
 
     this.width = 800;
     this.height = 600;
@@ -859,6 +860,7 @@ class Game {
     this.player = new Player(this.width / 2 - 100, this.height / 2);
     this.gravityWell = new GravityWell(this.width / 2, this.height / 2);
 
+    this.worldManager.init();
     this.saveManager.incrementGamesPlayed();
   }
 
@@ -930,6 +932,8 @@ class Game {
       this.gravityWell.update(dt, this);
     }
 
+    this.worldManager.update(dt);
+
     // Update collections
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
@@ -979,6 +983,7 @@ class Game {
   draw() {
     this.ctx.fillStyle = '#0a0a0c'; // space background
     this.ctx.fillRect(0, 0, this.width, this.height);
+    this.worldManager.drawBackground(this.ctx);
 
     // Draw grid
     this.ctx.strokeStyle = '#222';
@@ -1022,6 +1027,8 @@ class Game {
     }
 
     if (this.gravityWell) this.gravityWell.draw(this.ctx);
+
+    this.worldManager.drawHazards(this.ctx);
 
     for (let p of this.particles) p.draw(this.ctx);
     for (let e of this.enemies) e.draw(this.ctx);
