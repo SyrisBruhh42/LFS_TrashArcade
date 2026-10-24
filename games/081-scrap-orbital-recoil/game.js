@@ -792,6 +792,7 @@ class Game {
     this.particles = [];
     this.projectiles = [];
     this.enemies = [];
+    this.enemyProjectiles = [];
 
     this.player = null;
     this.gravityWell = null;
@@ -856,6 +857,7 @@ class Game {
     this.particles = [];
     this.projectiles = [];
     this.enemies = [];
+    this.enemyProjectiles = [];
 
     this.player = new Player(this.width / 2 - 100, this.height / 2);
     this.gravityWell = new GravityWell(this.width / 2, this.height / 2);
@@ -884,7 +886,13 @@ class Game {
     const dist = Math.max(this.width, this.height) / 2 + 50;
     const x = this.width / 2 + Math.cos(angle) * dist;
     const y = this.height / 2 + Math.sin(angle) * dist;
-    this.enemies.push(new Enemy(x, y));
+
+    const r = Math.random();
+    if (r < 0.3) this.enemies.push(new SwarmerEnemy(x, y));
+    else if (r < 0.5) this.enemies.push(new SniperEnemy(x, y));
+    else if (r < 0.7) this.enemies.push(new ShieldedBruiserEnemy(x, y));
+    else if (r < 0.85) this.enemies.push(new SplitterEnemy(x, y));
+    else this.enemies.push(new HazardDeployerEnemy(x, y));
   }
 
   update(dt) {
@@ -966,6 +974,16 @@ class Game {
       if (!p.active) this.particles.splice(i, 1);
     }
 
+    for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
+      const p = this.enemyProjectiles[i];
+      p.update(dt, this);
+      if (this.player && this.player.active && p.checkCollision(this.player)) {
+        this.player.hit(this);
+        p.active = false;
+      }
+      if (!p.active) this.enemyProjectiles.splice(i, 1);
+    }
+
     // Projectile vs Enemy collisions
     for (let p of this.projectiles) {
       if (!p.active) continue;
@@ -1033,6 +1051,7 @@ class Game {
     for (let p of this.particles) p.draw(this.ctx);
     for (let e of this.enemies) e.draw(this.ctx);
     for (let p of this.projectiles) p.draw(this.ctx);
+    for (let ep of this.enemyProjectiles) ep.draw(this.ctx);
 
     if (this.player && this.player.active) {
       this.player.draw(this.ctx);
