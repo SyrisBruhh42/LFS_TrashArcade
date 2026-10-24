@@ -426,67 +426,280 @@ class Projectile extends Entity {
     }
 }
 
+
+class EnemyProjectile extends Entity {
+    constructor(x, y, vx, vy, color) {
+        super(x, y, 4, color);
+        this.vx = vx;
+        this.vy = vy;
+        this.life = 3.0;
+    }
+    update(dt) {
+        super.update(dt);
+        this.life -= dt;
+        if (this.life <= 0) this.active = false;
+    }
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = this.color;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+
 class Enemy extends Entity {
     constructor(x, y, type) {
         super(x, y, 14, '#44ff44');
         this.type = type;
         this.hp = 1;
         this.speed = 100 + Math.random() * 50;
-        if (type === 'fast') {
-            this.speed = 200;
+        this.timer = 0;
+        this.state = 'idle';
+        this.maxHp = 1;
+
+        if (type === 'swarmer') {
+            this.speed = 150 + Math.random() * 50;
+            this.radius = 8;
+            this.color = '#44ff44';
+            this.offset = Math.random() * Math.PI * 2;
+        } else if (type === 'dasher') {
+            this.speed = 250;
             this.radius = 10;
             this.color = '#ffcc00';
-        } else if (type === 'tank') {
-            this.speed = 60;
+            this.dashDirX = 0;
+            this.dashDirY = 0;
+            this.state = 'prep';
+        } else if (type === 'bruiser') {
+            this.speed = 50;
             this.radius = 22;
             this.color = '#ff4444';
+            this.hp = 5;
+            this.maxHp = 5;
+            this.shieldRot = 0;
+        } else if (type === 'sniper') {
+            this.speed = 90;
+            this.radius = 12;
+            this.color = '#00ffff';
+            this.state = 'reposition';
+            this.targetX = 0;
+            this.targetY = 0;
+        } else if (type === 'spawner') {
+            this.speed = 60;
+            this.radius = 18;
+            this.color = '#ff00ff';
             this.hp = 3;
+            this.maxHp = 3;
+            this.pulse = 0;
         }
     }
-    update(dt, player) {
-        // Pathogen behavior: track player
+    update(dt, player, game) {
+        this.timer += dt;
         const dx = player.x - this.x;
         const dy = player.y - this.y;
         const dist = Math.hypot(dx, dy);
-        if (dist > 0) {
-            this.vx = (dx / dist) * this.speed;
-            this.vy = (dy / dist) * this.speed;
+
+        if (this.type === 'swarmer') {
+            // Erratic sine wave tracking
+            if (dist > 0) {
+                let angle = Math.atan2(dy, dx);
+                angle += Math.sin(this.timer * 5 + this.offset) * 0.5;
+                this.vx = Math.cos(angle) * this.speed;
+                this.vy = Math.sin(angle) * this.speed;
+            }
+        } else if (this.type === 'dasher') {
+            if (this.state === 'prep') {
+                this.vx = 0;
+                this.vy = 0;
+                if (this.timer > 1.0) {
+                    this.state = 'dash';
+                    this.timer = 0;
+                    if (dist > 0) {
+                        this.dashDirX = (dx / dist) * this.speed;
+                        this.dashDirY = (dy / dist) * this.speed;
+                    }
+                }
+            } else if (this.state === 'dash') {
+                this.vx = this.dashDirX;
+                this.vy = this.dashDirY;
+                if (this.timer > 0.5) {
+                    this.state = 'prep';
+                    this.timer = 0;
+                }
+            }
+        } else if (this.type === 'bruiser') {
+            if (dist > 0) {
+                this.vx = (dx / dist) * this.speed;
+                this.vy = (dy / dist) * this.speed;
+            }
+            this.shieldRot += dt * 2;
+        } else if (this.type === 'sniper') {
+            if (this.state === 'reposition') {
+                // Keep distance of ~200
+                if (dist < 200) {
+                    this.vx = -(dx / dist) * this.speed;
+                    this.vy = -(dy / dist) * this.speed;
+                } else if (dist > 300) {
+                    this.vx = (dx / dist) * this.speed;
+                    this.vy = (dy / dist) * this.speed;
+                } else {
+                    this.vx = 0;
+                    this.vy = 0;
+                }
+
+                if (this.timer > 2.0 && dist < 400) {
+                    this.state = 'aim';
+                    this.timer = 0;
+                    this.targetX = player.x;
+                    this.targetY = player.y;
+                    this.vx = 0;
+                    this.vy = 0;
+                }
+            } else if (this.state === 'aim') {
+                // Tracking target
+                this.targetX = player.x;
+                this.targetY = player.y;
+                if (this.timer > 1.0) {
+                    this.state = 'shoot';
+                    this.timer = 0;
+                    // Fire projectile
+                    const p_dx = this.targetX - this.x;
+                    const p_dy = this.targetY - this.y;
+                    const p_dist = Math.hypot(p_dx, p_dy);
+                    if (p_dist > 0 && game && game.enemyProjectiles) {
+                        game.enemyProjectiles.push(new EnemyProjectile(
+                            this.x, this.y,
+                            (p_dx / p_dist) * 200,
+                            (p_dy / p_dist) * 200,
+                            this.color
+                        ));
+                        game.sounds.playHit(); // reuse sound
+                    }
+                }
+            } else if (this.state === 'shoot') {
+                if (this.timer > 0.5) {
+                    this.state = 'reposition';
+                    this.timer = 0;
+                }
+            }
+        } else if (this.type === 'spawner') {
+            this.pulse = Math.sin(this.timer * 4) * 0.5 + 0.5;
+            // Move slowly towards center or player
+            if (dist > 0) {
+                this.vx = (dx / dist) * this.speed;
+                this.vy = (dy / dist) * this.speed;
+            }
+            if (this.timer > 3.0) {
+                this.timer = 0;
+                // Spawn a swarmer
+                if (game && game.enemies) {
+                    game.enemies.push(new Enemy(this.x, this.y, 'swarmer'));
+                    game.spawnParticles(this.x, this.y, 5, this.color);
+                }
+            }
         }
+
         super.update(dt);
     }
+
     draw(ctx) {
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate(Math.atan2(this.vy, this.vx));
 
         ctx.beginPath();
-        if (this.type === 'tank') {
-            ctx.rect(-15, -15, 30, 30);
-            ctx.fillStyle = this.color;
+        if (this.type === 'swarmer') {
+            ctx.moveTo(this.radius, 0);
+            ctx.lineTo(0, this.radius);
+            ctx.lineTo(-this.radius, 0);
+            ctx.lineTo(0, -this.radius);
+            ctx.closePath();
+            ctx.fillStyle = '#222';
             ctx.fill();
-            ctx.strokeStyle = '#fff';
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 2;
             ctx.stroke();
-            // Membrane
-            ctx.beginPath();
-            ctx.arc(0, 0, 8, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        } else if (this.type === 'dasher') {
+            ctx.moveTo(this.radius * 1.5, 0);
+            ctx.lineTo(-this.radius, this.radius);
+            ctx.lineTo(-this.radius * 0.5, 0);
+            ctx.lineTo(-this.radius, -this.radius);
+            ctx.closePath();
+            ctx.fillStyle = '#222';
             ctx.fill();
-        } else {
-            // Spiky virus
-            for(let i=0; i<6; i++) {
+            if (this.state === 'prep') {
+                ctx.strokeStyle = `rgba(255, 204, 0, ${Math.sin(this.timer * 10) * 0.5 + 0.5})`;
+            } else {
+                ctx.strokeStyle = this.color;
+            }
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else if (this.type === 'bruiser') {
+            ctx.rotate(this.shieldRot);
+            ctx.rect(-15, -15, 30, 30);
+            ctx.fillStyle = '#222';
+            ctx.fill();
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Shield segments
+            for (let i=0; i<4; i++) {
+                ctx.beginPath();
+                ctx.arc(0, 0, 24, i * Math.PI/2 + 0.2, (i+1) * Math.PI/2 - 0.2);
+                ctx.strokeStyle = `rgba(255, 68, 68, ${this.hp / this.maxHp})`;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            }
+        } else if (this.type === 'sniper') {
+            // Star shape
+            for(let i=0; i<4; i++) {
                 ctx.moveTo(0, 0);
-                const angle = (i/6) * Math.PI * 2;
+                const angle = (i/4) * Math.PI * 2;
                 ctx.lineTo(Math.cos(angle) * this.radius * 1.5, Math.sin(angle) * this.radius * 1.5);
             }
             ctx.strokeStyle = this.color;
             ctx.lineWidth = 2;
             ctx.stroke();
-
             ctx.beginPath();
-            ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+            ctx.arc(0, 0, this.radius * 0.5, 0, Math.PI * 2);
             ctx.fillStyle = '#222';
             ctx.fill();
             ctx.stroke();
+
+            if (this.state === 'aim') {
+                ctx.restore();
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.targetX, this.targetY);
+                ctx.strokeStyle = `rgba(0, 255, 255, ${this.timer / 1.0})`;
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+            }
+        } else if (this.type === 'spawner') {
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius + this.pulse * 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 0, 255, 0.2)';
+            ctx.fill();
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Inner cells
+            for(let i=0; i<3; i++) {
+                const angle = (i/3) * Math.PI * 2 + this.timer;
+                const cx = Math.cos(angle) * (this.radius * 0.5);
+                const cy = Math.sin(angle) * (this.radius * 0.5);
+                ctx.beginPath();
+                ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
         }
         ctx.restore();
     }
@@ -541,6 +754,7 @@ class Game {
         this.echoes = [];
         this.projectiles = [];
         this.enemies = [];
+        this.enemyProjectiles = [];
         this.particles = [];
 
         this.score = 0;
@@ -582,9 +796,19 @@ class Game {
             y = Math.random() < 0.5 ? -30 : this.height + 30;
         }
 
-        let type = 'normal';
-        if (this.wave > 2 && Math.random() < 0.3) type = 'fast';
-        if (this.wave > 4 && Math.random() < 0.2) type = 'tank';
+        let type = 'swarmer';
+        let roll = Math.random();
+
+        if (this.wave > 1) {
+            if (roll < 0.2) type = 'dasher';
+        }
+        if (this.wave > 2) {
+            if (roll >= 0.2 && roll < 0.4) type = 'bruiser';
+            if (roll >= 0.4 && roll < 0.5) type = 'sniper';
+        }
+        if (this.wave > 3) {
+            if (roll >= 0.5 && roll < 0.6) type = 'spawner';
+        }
 
         this.enemies.push(new Enemy(x, y, type));
     }
@@ -670,7 +894,8 @@ class Game {
 
         this.echoes.forEach(e => e.update(dt));
         this.projectiles.forEach(p => p.update(dt));
-        this.enemies.forEach(e => e.update(dt, this.player));
+        this.enemies.forEach(e => e.update(dt, this.player, this));
+        this.enemyProjectiles.forEach(p => p.update(dt));
 
         // Particles
         for (let p of this.particles) {
@@ -715,7 +940,20 @@ class Game {
                     this.spawnParticles(enemy.x, enemy.y, 5, enemy.color);
                     if (enemy.hp <= 0) {
                         enemy.active = false;
-                        this.score += (enemy.type === 'tank' ? 50 : 10);
+
+                        // Spawner death logic
+                        if (enemy.type === 'spawner') {
+                            for(let s=0; s<3; s++) {
+                                this.enemies.push(new Enemy(enemy.x + (Math.random()-0.5)*20, enemy.y + (Math.random()-0.5)*20, 'swarmer'));
+                            }
+                        }
+
+                        let points = 10;
+                        if (enemy.type === 'bruiser') points = 50;
+                        if (enemy.type === 'spawner') points = 40;
+                        if (enemy.type === 'sniper') points = 30;
+                        this.score += points;
+
                         this.spawnParticles(enemy.x, enemy.y, 20, enemy.color);
                         this.sounds.playHit();
                     }
@@ -724,10 +962,25 @@ class Game {
             }
         }
 
+        // Enemy Projectile Collision with Player
+        for (let j = this.enemyProjectiles.length - 1; j >= 0; j--) {
+            let ep = this.enemyProjectiles[j];
+            const epdx = this.player.x - ep.x;
+            const epdy = this.player.y - ep.y;
+            if (Math.hypot(epdx, epdy) < this.player.radius + ep.radius) {
+                if (!this.player.isDashing) {
+                    this.sounds.playHit();
+                    this.gameOver();
+                    return;
+                }
+            }
+        }
+
         // Cleanup inactive
         this.echoes = this.echoes.filter(e => e.active);
         this.projectiles = this.projectiles.filter(p => p.active);
         this.enemies = this.enemies.filter(e => e.active);
+        this.enemyProjectiles = this.enemyProjectiles.filter(p => p.active);
 
         // Wave progression (simple)
         if (this.score > this.wave * 200) {
@@ -807,6 +1060,7 @@ class Game {
         this.echoes.forEach(e => e.draw(this.ctx));
         this.player.draw(this.ctx);
         this.enemies.forEach(e => e.draw(this.ctx));
+        this.enemyProjectiles.forEach(p => p.draw(this.ctx));
         this.projectiles.forEach(p => p.draw(this.ctx));
 
         for (let p of this.particles) {

@@ -51,7 +51,7 @@ function retrieval() {
     const h=load('085-scrap-heist-retrieval',['game.js']);
     h.input=h.evaluate('globalThis.input=new InputManager();input');
     h.fire=()=>h.evaluate(`(() => {
-        const game={width:800,height:600,obstacles:[],shootCooldown:0,projectiles:[],sound:{playShoot(){}}};
+        const game={width:800,height:600,obstacles:[],shootCooldown:0,projectiles:[],particles:[],sound:{playShoot(){}}};
         const player=new Player(200,200);
         player.update(0.016,input,game);
         return game.projectiles.length;
@@ -90,4 +90,51 @@ test('085 start gesture is consumed, then a fresh tap can fire',()=>{
     assert.equal(h.fire(),0);
     h.window.emit('touchstart',{changedTouches:[touch(2)]});h.advance(100);
     h.window.emit('touchend',{changedTouches:[touch(2)]});assert.equal(h.fire(),1);
+});
+
+
+test('085 phase2 right-click dash stays separate from shooting and retains cooldown repairs',()=>{
+    const h=retrieval();
+    h.evaluate(`globalThis.game={width:800,height:600,obstacles:[],shootCooldown:0,projectiles:[],particles:[],sound:{playShoot(){}}}; globalThis.player=new Player(200,200);`);
+    h.window.emit('mousedown',{button:2,clientX:100,clientY:100});
+    assert.equal(h.input.isSecondaryPressed(),true);
+    assert.equal(h.input.isActionPressed(),false);
+    h.window.emit('mousedown',{button:0,clientX:100,clientY:100});
+    h.evaluate('player.update(0.016,input,game)');
+    assert.equal(h.evaluate('player.isDashing'),true);
+    assert.equal(h.evaluate('player.hasAmmo'),true);
+    assert.equal(h.evaluate('game.projectiles.length'),0);
+    h.evaluate('player.update(0.05,input,game)');
+    assert.ok(h.evaluate('game.particles.length')>=1);
+    h.window.emit('mouseup',{button:2});
+    assert.equal(h.input.isSecondaryPressed(),false);
+    assert.equal(h.input.mouse.down,true);
+    h.evaluate('player.update(0.2,input,game)');
+    assert.equal(h.evaluate('player.isDashing'),false);
+    assert.equal(h.evaluate('game.projectiles.length'),1);
+    assert.equal(h.evaluate('game.shootCooldown'),0.5);
+    assert.equal(h.evaluate('player.recoilTimer'),0.1);
+    h.window.emit('mouseup',{button:0});
+    h.window.emit('keydown',{code:'ShiftLeft'});
+    h.evaluate('player.update(0.016,input,game)');
+    assert.equal(h.evaluate('player.isDashing'),false,'dash cannot restart before its own cooldown');
+});
+
+test('085 phase2 particles update, expire, draw, and reset with a new wave',()=>{
+    const h=retrieval();
+    const result=h.evaluate(`(() => {
+        const particle=new Particle(200,200,'#fff',3,0.2);
+        particle.update(0.1);
+        let drawn=false;
+        particle.draw({save(){},restore(){},fillRect(){drawn=true;}});
+        const halfway=particle.life;
+        particle.update(0.2);
+        const game={width:800,height:600,wave:1,particles:[particle]};
+        Game.prototype.loadWave.call(game);
+        return {drawn,halfway,active:particle.active,reset:game.particles.length};
+    })()`);
+    assert.equal(result.drawn,true);
+    assert.equal(result.halfway,0.1);
+    assert.equal(result.active,false);
+    assert.equal(result.reset,0);
 });

@@ -10,9 +10,19 @@ class SaveManager {
             bestCombo: 0,
             totalGamesPlayed: 0,
             totalScoreAccumulated: 0,
+            highestWave: 0,
+            maxTailReached: 0,
+            bossesDefeated: 0,
+            bestRunScore: 0,
             unlockedMilestones: [],
             options: {
                 mute: false,
+                sfxVolume: 100,
+                musicVolume: 100,
+                highContrast: false,
+                fpsCounter: false,
+                touchControls: 'Auto',
+                touchHandedness: 'Right',
                 particles: 'High',
                 screenShake: 100
             }
@@ -46,6 +56,7 @@ class SaveManager {
     updateHighScore(score) {
         if (score > this.data.highScore) {
             this.data.highScore = score;
+        if (score > this.data.bestRunScore) this.data.bestRunScore = score;
         }
         this.data.totalScoreAccumulated += score;
         this.data.totalGamesPlayed += 1;
@@ -125,7 +136,15 @@ class SoundEngine {
     }
 
     update(dt, game) {
-        if (!this.initialized || this.muted) return;
+        if (!this.initialized) return;
+        if (game && game.saveManager) {
+            const opts = game.saveManager.data.options;
+            this.muted = opts.mute;
+            this.masterGain.gain.value = this.muted ? 0 : 1;
+            this.sfxGain.gain.value = 0.5 * (opts.sfxVolume / 100);
+            this.musicGain.gain.value = 0.3 * (opts.musicVolume / 100);
+        }
+        if (this.muted) return;
 
         let targetTempoMulti = 1.0;
         let targetFilterFreq = 1000;
@@ -304,7 +323,15 @@ class SoundEngine {
     }
 
     playDash() {
-        if (!this.initialized || this.muted) return;
+        if (!this.initialized) return;
+        if (game && game.saveManager) {
+            const opts = game.saveManager.data.options;
+            this.muted = opts.mute;
+            this.masterGain.gain.value = this.muted ? 0 : 1;
+            this.sfxGain.gain.value = 0.5 * (opts.sfxVolume / 100);
+            this.musicGain.gain.value = 0.3 * (opts.musicVolume / 100);
+        }
+        if (this.muted) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'triangle';
@@ -319,7 +346,15 @@ class SoundEngine {
     }
 
     playBossSpawn() {
-        if (!this.initialized || this.muted) return;
+        if (!this.initialized) return;
+        if (game && game.saveManager) {
+            const opts = game.saveManager.data.options;
+            this.muted = opts.mute;
+            this.masterGain.gain.value = this.muted ? 0 : 1;
+            this.sfxGain.gain.value = 0.5 * (opts.sfxVolume / 100);
+            this.musicGain.gain.value = 0.3 * (opts.musicVolume / 100);
+        }
+        if (this.muted) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sawtooth';
@@ -353,7 +388,15 @@ class SoundEngine {
     }
 
     playEnemyDeath() {
-        if (!this.initialized || this.muted) return;
+        if (!this.initialized) return;
+        if (game && game.saveManager) {
+            const opts = game.saveManager.data.options;
+            this.muted = opts.mute;
+            this.masterGain.gain.value = this.muted ? 0 : 1;
+            this.sfxGain.gain.value = 0.5 * (opts.sfxVolume / 100);
+            this.musicGain.gain.value = 0.3 * (opts.musicVolume / 100);
+        }
+        if (this.muted) return;
         const noise = this.ctx.createBufferSource();
         const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.2, this.ctx.sampleRate);
         const output = buffer.getChannelData(0);
@@ -1660,6 +1703,7 @@ class Game {
         this.pickups = [];
         this.parallax = new ParallaxBackground();
         this.vfxManager = new VFXManager(this);
+        this.uiManager = new UIManager(this);
 
         this.spawnTimer = 0;
         this.resourceTimer = 0;
@@ -1852,6 +1896,7 @@ class Game {
             this.comboTimer = this.comboMaxTimer;
             this.score += 250 * this.multiplier; // Bonus for killing boss
             this.killsThisWave++;
+                        this.saveManager.data.bossesDefeated++;
         }
 
         if (this.killsThisWave >= this.killsRequired && !this.activeBoss) {
@@ -1926,7 +1971,9 @@ class Game {
                         this.multiplier = 1 + Math.floor(this.comboLevel / 5);
                         this.comboTimer = this.comboMaxTimer;
                         this.score += 20 * this.multiplier;
+                        if (this.score > this.saveManager.data.bestRunScore) this.saveManager.data.bestRunScore = this.score;
                         this.killsThisWave++;
+                        this.saveManager.data.bossesDefeated++;
                         if (Math.random() < this.pickupChance) {
                             const types = ['COMBO', 'SCORE', 'SPEED'];
                             this.pickups.push(new Pickup(enemy.x, enemy.y, types[Math.floor(Math.random()*types.length)]));
@@ -2346,15 +2393,20 @@ class Game {
         this.dt = Math.min((now - this.lastTime) / 1000, 0.1);
         this.lastTime = now;
 
-        if (this.vfxManager && this.vfxManager.hitStopTimer > 0) {
+        if (this.state === 'OPTIONS') {
+            if (this.uiManager) this.uiManager.update(this.dt);
+            if (this.inputManager) this.inputManager.update();
+        } else if (this.vfxManager && this.vfxManager.hitStopTimer > 0) {
             this.vfxManager.update(this.dt);
             // Hit stop freezes the game logic, but we can still draw
         } else {
             if (this.vfxManager) this.vfxManager.update(this.dt);
             this.update(this.dt);
+            if (this.uiManager) this.uiManager.update(this.dt);
         }
 
         this.draw();
+        if (this.uiManager) this.uiManager.draw(this.ctx);
 
         requestAnimationFrame(this.loop);
     }
@@ -2440,7 +2492,7 @@ class VFXManager {
     }
 
     spawnHitParticles(x, y, dx, dy, color = '#fff') {
-        if (this.game.saveManager.data.options.particles === 'Low') return;
+
         const count = this.game.saveManager.data.options.particles === 'High' ? 15 : 5;
         for (let i = 0; i < count; i++) {
             let angle = Math.atan2(dy, dx) + (Math.random() - 0.5);
@@ -2457,7 +2509,7 @@ class VFXManager {
     }
 
     spawnExplosion(x, y, color = '#ff0') {
-        if (this.game.saveManager.data.options.particles === 'Low') return;
+
         const count = this.game.saveManager.data.options.particles === 'High' ? 30 : 10;
         for (let i = 0; i < count; i++) {
             let angle = Math.random() * Math.PI * 2;
@@ -2503,3 +2555,372 @@ class VFXManager {
 window.onload = () => {
     window.game = new Game();
 };
+
+class UIManager {
+    constructor(game) {
+        this.game = game;
+        this.fps = 0;
+        this.frameCount = 0;
+        this.lastFpsTime = 0;
+
+        this.optionsMenu = {
+            selectedIdx: 0,
+            items: [
+                { label: 'Master Mute', key: 'mute', type: 'toggle' },
+                { label: 'SFX Volume', key: 'sfxVolume', type: 'slider', min: 0, max: 100, step: 10 },
+                { label: 'Music Volume', key: 'musicVolume', type: 'slider', min: 0, max: 100, step: 10 },
+                { label: 'Screen Shake', key: 'screenShake', type: 'choice', choices: [100, 50, 0] },
+                { label: 'Particles', key: 'particles', type: 'choice', choices: ['High', 'Low'] },
+                { label: 'High Contrast', key: 'highContrast', type: 'toggle' },
+                { label: 'FPS Counter', key: 'fpsCounter', type: 'toggle' },
+                { label: 'Touch Controls', key: 'touchControls', type: 'choice', choices: ['Auto', 'Always', 'Off'] },
+                { label: 'Touch Hand', key: 'touchHandedness', type: 'choice', choices: ['Right', 'Left'] },
+                { label: 'Export Save', type: 'action', action: 'export' },
+                { label: 'Import Save', type: 'action', action: 'import' },
+                { label: 'Reset Save', type: 'action', action: 'reset' },
+                { label: 'Back', type: 'action', action: 'back' }
+            ],
+            resetState: 0
+        };
+
+        this.milestones = [
+            { id: 'first_dig', label: 'First Dig', desc: 'Play 1 game', req: (s) => s.totalGamesPlayed >= 1 },
+            { id: 'score_master', label: 'Score Master', desc: 'Score 5000 in one run', req: (s) => s.bestRunScore >= 5000 },
+            { id: 'combo_king', label: 'Combo King', desc: 'Reach 10x combo', req: (s) => s.bestCombo >= 10 },
+            { id: 'deep_diver', label: 'Deep Diver', desc: 'Reach Wave 5', req: (s) => s.highestWave >= 5 },
+            { id: 'tail_growth', label: 'Tail Growth', desc: 'Max tail length', req: (s) => s.maxTailReached >= 50 },
+            { id: 'boss_slayer', label: 'Boss Slayer', desc: 'Defeat a boss', req: (s) => s.bossesDefeated >= 1 }
+        ];
+    }
+
+    checkMilestones() {
+        const stats = this.game.saveManager.data;
+        let unlockedAny = false;
+        if (!stats.unlockedMilestones) stats.unlockedMilestones = [];
+
+        for (let m of this.milestones) {
+            if (!stats.unlockedMilestones.includes(m.id) && m.req(stats)) {
+                stats.unlockedMilestones.push(m.id);
+                unlockedAny = true;
+            }
+        }
+        if (unlockedAny) this.game.saveManager.save();
+    }
+
+    update(dt) {
+        if (this.game.wave > this.game.saveManager.data.highestWave) {
+            this.game.saveManager.data.highestWave = this.game.wave;
+        }
+        if (this.game.player && this.game.player.tailLength > this.game.saveManager.data.maxTailReached) {
+            this.game.saveManager.data.maxTailReached = this.game.player.tailLength;
+        }
+        if (this.game.multiplier > this.game.saveManager.data.bestCombo) {
+            this.game.saveManager.data.bestCombo = this.game.multiplier;
+        }
+
+        this.checkMilestones();
+        if (this.game.state === 'OPTIONS') {
+            this.updateOptionsMenu();
+        } else if (this.game.state === 'TITLE' || this.game.state === 'PAUSED') {
+            if (this.game.inputManager.justPressed('KeyO')) {
+                this.game.previousState = this.game.state;
+                this.game.state = 'OPTIONS';
+            }
+        } else if (this.game.state === 'TITLE' || this.game.state === 'PAUSED') {
+            if (this.game.inputManager.justPressed('KeyO')) {
+                this.game.previousState = this.game.state;
+                this.game.previousState = this.game.state; this.game.state = 'OPTIONS';
+            }
+        }
+
+        // FPS Counter
+        this.frameCount++;
+        this.updateTouchControls();
+        if (this.updateTouchControls) this.updateTouchControls();
+        if (performance.now() - this.lastFpsTime >= 1000) {
+            this.fps = this.frameCount;
+            this.frameCount = 0;
+            this.lastFpsTime = performance.now();
+        }
+    }
+
+    updateOptionsMenu() {
+        const input = this.game.inputManager;
+
+        if (input.justPressed('ArrowUp') || input.justPressed('KeyW')) {
+            this.optionsMenu.selectedIdx = (this.optionsMenu.selectedIdx - 1 + this.optionsMenu.items.length) % this.optionsMenu.items.length;
+            this.optionsMenu.resetState = 0;
+            if (this.game.soundEngine) this.game.soundEngine.playMenuHover();
+        }
+        if (input.justPressed('ArrowDown') || input.justPressed('KeyS')) {
+            this.optionsMenu.selectedIdx = (this.optionsMenu.selectedIdx + 1) % this.optionsMenu.items.length;
+            this.optionsMenu.resetState = 0;
+            if (this.game.soundEngine) this.game.soundEngine.playMenuHover();
+        }
+
+        const item = this.optionsMenu.items[this.optionsMenu.selectedIdx];
+        const data = this.game.saveManager.data.options;
+
+        if (input.justPressed('ArrowLeft') || input.justPressed('KeyA')) {
+            this.adjustOption(item, data, -1);
+        }
+        if (input.justPressed('ArrowRight') || input.justPressed('KeyD')) {
+            this.adjustOption(item, data, 1);
+        }
+        if (input.justPressed('Enter') || input.justPressed('Space')) {
+            this.activateOption(item, data);
+        }
+    }
+
+    adjustOption(item, data, dir) {
+        if (item.type === 'slider') {
+            data[item.key] = Math.max(item.min, Math.min(item.max, data[item.key] + dir * item.step));
+            this.game.saveManager.save();
+            if (this.game.soundEngine) this.game.soundEngine.playMenuClick();
+        } else if (item.type === 'choice') {
+            let idx = item.choices.indexOf(data[item.key]);
+            idx = (idx + dir + item.choices.length) % item.choices.length;
+            data[item.key] = item.choices[idx];
+            this.game.saveManager.save();
+            if (this.game.soundEngine) this.game.soundEngine.playMenuClick();
+        }
+    }
+
+    activateOption(item, data) {
+        if (item.type === 'toggle') {
+            data[item.key] = !data[item.key];
+            this.game.saveManager.save();
+            if (this.game.soundEngine) this.game.soundEngine.playMenuClick();
+        } else if (item.type === 'action') {
+            if (item.action === 'back') {
+                this.game.state = this.game.previousState || 'TITLE';
+                this.optionsMenu.resetState = 0;
+                if (this.game.soundEngine) this.game.soundEngine.playMenuClick();
+            } else if (item.action === 'export') {
+                const saveString = btoa(JSON.stringify(this.game.saveManager.data));
+                prompt("Copy your save data:", saveString);
+            } else if (item.action === 'import') {
+                const inputStr = prompt("Paste your save data:");
+                if (inputStr) {
+                    try {
+                        const parsed = JSON.parse(atob(inputStr));
+                        this.game.saveManager.data = parsed;
+                        this.game.saveManager.save();
+                        alert("Save imported successfully!");
+                    } catch (e) {
+                        alert("Invalid save data.");
+                    }
+                }
+            } else if (item.action === 'reset') {
+                if (this.optionsMenu.resetState === 0) {
+                    this.optionsMenu.resetState = 1;
+                } else {
+                    localStorage.removeItem('arcade_game_083_083-haunted-tether-drill_v1');
+                    window.location.reload();
+                }
+            }
+        }
+    }
+
+    draw(ctx) {
+        const data = this.game.saveManager.data.options;
+
+        if (this.game.state === 'OPTIONS') {
+            ctx.fillStyle = 'rgba(0,0,0,0.9)';
+            ctx.fillRect(0, 0, this.game.width, this.game.height);
+            ctx.fillStyle = '#fff';
+            ctx.font = '30px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('OPTIONS', this.game.width / 2, 50);
+
+            ctx.font = '20px monospace';
+            const startY = 120;
+            const spacing = 35;
+
+            for (let i = 0; i < this.optionsMenu.items.length; i++) {
+                const item = this.optionsMenu.items[i];
+                let text = item.label;
+
+                if (item.type === 'toggle') {
+                    text += ': ' + (data[item.key] ? 'ON' : 'OFF');
+                } else if (item.type === 'slider' || item.type === 'choice') {
+                    text += ': < ' + data[item.key] + ' >';
+                } else if (item.action === 'reset') {
+                    text = this.optionsMenu.resetState === 1 ? 'Are you sure? (Press again)' : item.label;
+                }
+
+                ctx.fillStyle = i === this.optionsMenu.selectedIdx ? ACCENT_COLOR : '#aaa';
+                ctx.fillText(text, this.game.width / 2, startY + i * spacing);
+            }
+        }
+
+        if (data.fpsCounter) {
+            ctx.fillStyle = '#0f0';
+            ctx.font = '16px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText('FPS: ' + this.fps, this.game.width - 10, 20);
+        }
+
+        const isTouchActive = data.touchControls === 'Always' || (data.touchControls === 'Auto' && ('ontouchstart' in window || navigator.maxTouchPoints > 0));
+
+        if (isTouchActive && this.game.state === 'PLAYING') {
+            this.drawTouchControls(ctx, data.touchHandedness);
+        }
+
+        if (this.game.state === 'TITLE' || this.game.state === 'PAUSED') {
+            ctx.fillStyle = '#fff';
+            ctx.font = '24px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText('⚙️ [O]ptions', this.game.width - 20, this.game.height - 20);
+
+
+        }
+
+        if (this.game.state === 'TITLE' || this.game.state === 'GAME_OVER') {
+            this.drawMilestones(ctx, 20, this.game.height - 150);
+        }
+
+        if (data.highContrast) {
+            this.game.canvas.style.filter = 'contrast(1.5) saturate(1.5) hue-rotate(45deg)';
+        } else {
+            this.game.canvas.style.filter = 'none';
+        }
+    }
+
+
+    updateTouchControls() {
+        const input = this.game.inputManager;
+        const data = this.game.saveManager.data.options;
+        const isTouchActive = data.touchControls === 'Always' || (data.touchControls === 'Auto' && ('ontouchstart' in window || navigator.maxTouchPoints > 0));
+
+        if (!isTouchActive || this.game.state !== 'PLAYING') return;
+
+        const hand = data.touchHandedness;
+        const padX = hand === 'Right' ? 100 : this.game.width - 100;
+        const padY = this.game.height - 100;
+        const dashX = hand === 'Right' ? this.game.width - 100 : 100;
+        const dashY = this.game.height - 100;
+
+        // Reset virtual keys
+        input.keys['ArrowUp'] = false;
+        input.keys['ArrowDown'] = false;
+        input.keys['ArrowLeft'] = false;
+        input.keys['ArrowRight'] = false;
+        input.keys['Space'] = false;
+
+        if (input.touch.active) {
+            const tx = input.mouse.x; // mapped in InputManager
+            const ty = input.mouse.y;
+
+            // Check Dash Button
+            const distDash = Math.hypot(tx - dashX, ty - dashY);
+            if (distDash < 60) {
+                input.keys['Space'] = true;
+            }
+
+            // Check D-Pad
+            const distPad = Math.hypot(tx - padX, ty - padY);
+            if (distPad < 100) {
+                const angle = Math.atan2(ty - padY, tx - padX);
+                // 8-way directional mapping
+                if (angle > -Math.PI*5/8 && angle < -Math.PI*3/8) input.keys['ArrowUp'] = true;
+                if (angle > Math.PI*3/8 && angle < Math.PI*5/8) input.keys['ArrowDown'] = true;
+                if (angle > Math.PI*7/8 || angle < -Math.PI*7/8) input.keys['ArrowLeft'] = true;
+                if (angle > -Math.PI/8 && angle < Math.PI/8) input.keys['ArrowRight'] = true;
+
+                // diagonals
+                if (angle >= -Math.PI*7/8 && angle <= -Math.PI*5/8) { input.keys['ArrowLeft'] = true; input.keys['ArrowUp'] = true; }
+                if (angle >= -Math.PI*3/8 && angle <= -Math.PI/8) { input.keys['ArrowRight'] = true; input.keys['ArrowUp'] = true; }
+                if (angle >= Math.PI/8 && angle <= Math.PI*3/8) { input.keys['ArrowRight'] = true; input.keys['ArrowDown'] = true; }
+                if (angle >= Math.PI*5/8 && angle <= Math.PI*7/8) { input.keys['ArrowLeft'] = true; input.keys['ArrowDown'] = true; }
+            }
+        }
+    }
+
+
+    updateTouchControls() {
+        const input = this.game.inputManager;
+        const data = this.game.saveManager.data.options;
+        const isTouchActive = data.touchControls === 'Always' || (data.touchControls === 'Auto' && ('ontouchstart' in window || navigator.maxTouchPoints > 0));
+
+        if (!isTouchActive || this.game.state !== 'PLAYING') return;
+
+        const hand = data.touchHandedness;
+        const padX = hand === 'Right' ? 100 : this.game.width - 100;
+        const padY = this.game.height - 100;
+        const dashX = hand === 'Right' ? this.game.width - 100 : 100;
+        const dashY = this.game.height - 100;
+
+        // Ensure virtual keys are only reset when we touch?
+        // Let's directly overwrite them while touch is active
+        if (input.touch.active) {
+            const tx = input.mouse.x;
+            const ty = input.mouse.y;
+
+            const distDash = Math.hypot(tx - dashX, ty - dashY);
+            if (distDash < 60) {
+                input.keys['Space'] = true;
+            }
+
+            const distPad = Math.hypot(tx - padX, ty - padY);
+            if (distPad < 100) {
+                const angle = Math.atan2(ty - padY, tx - padX);
+                if (angle > -Math.PI*5/8 && angle < -Math.PI*3/8) input.keys['ArrowUp'] = true;
+                if (angle > Math.PI*3/8 && angle < Math.PI*5/8) input.keys['ArrowDown'] = true;
+                if (angle > Math.PI*7/8 || angle < -Math.PI*7/8) input.keys['ArrowLeft'] = true;
+                if (angle > -Math.PI/8 && angle < Math.PI/8) input.keys['ArrowRight'] = true;
+
+                if (angle >= -Math.PI*7/8 && angle <= -Math.PI*5/8) { input.keys['ArrowLeft'] = true; input.keys['ArrowUp'] = true; }
+                if (angle >= -Math.PI*3/8 && angle <= -Math.PI/8) { input.keys['ArrowRight'] = true; input.keys['ArrowUp'] = true; }
+                if (angle >= Math.PI/8 && angle <= Math.PI*3/8) { input.keys['ArrowRight'] = true; input.keys['ArrowDown'] = true; }
+                if (angle >= Math.PI*5/8 && angle <= Math.PI*7/8) { input.keys['ArrowLeft'] = true; input.keys['ArrowDown'] = true; }
+            }
+        }
+    }
+
+    drawTouchControls(ctx, hand) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 2;
+
+        const padX = hand === 'Right' ? 100 : this.game.width - 100;
+        const padY = this.game.height - 100;
+        const dashX = hand === 'Right' ? this.game.width - 100 : 100;
+        const dashY = this.game.height - 100;
+
+        ctx.beginPath();
+        ctx.arc(padX, padY, 50, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(dashX, dashY, 40, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('DASH', dashX, dashY);
+
+        ctx.restore();
+    }
+
+    drawMilestones(ctx, x, y) {
+        ctx.save();
+        ctx.textAlign = 'left';
+        ctx.font = '14px monospace';
+        const stats = this.game.saveManager.data;
+        let count = 0;
+        ctx.fillStyle = '#fff';
+        ctx.fillText('MILESTONES', x, y - 20);
+        for (let m of this.milestones) {
+            const unlocked = stats.unlockedMilestones && stats.unlockedMilestones.includes(m.id);
+            ctx.fillStyle = unlocked ? ACCENT_COLOR : '#555';
+            ctx.fillText('[' + (unlocked ? 'X' : ' ') + '] ' + m.label, x, y + count * 20);
+            count++;
+        }
+        ctx.restore();
+    }
+}

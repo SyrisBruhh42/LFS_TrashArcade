@@ -706,6 +706,7 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
     save_state(state)  # fsync file + directory BEFORE the non-idempotent network request.
     try:
         if PAUSE_FILE.exists():
+            intent.update(status="rejected", reason="local_pause_no_request")
             raise Hold("Create stopped by local pause before POST")
         session = api("POST", "/sessions", body, timeout=60)
         sid = session_id(session)
@@ -719,7 +720,8 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
         intent["http_status"] = exc.status
         raise
     except Exception:
-        intent["status"] = "ambiguous"
+        if intent.get("reason") != "local_pause_no_request":
+            intent["status"] = "ambiguous"
         raise
     finally:
         save_state(state)

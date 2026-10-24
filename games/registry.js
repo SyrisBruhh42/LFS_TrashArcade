@@ -1107,7 +1107,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move and drill. Click or Space to dash. Touch to drag and steer.",
     "createdAt": "2024-10-24",
     "accentColor": "#65bb98",
-    "phase": "8",
+    "phase": "9",
     "path": "./games/083-haunted-tether-drill/index.html"
   },
   {
@@ -1121,7 +1121,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD to move, Space/Click to blast.",
     "createdAt": "2023-10-27",
     "accentColor": "#e857ce",
-    "phase": "3",
+    "phase": "4",
     "path": "./games/084-echo-forge-fusion/index.html"
   },
   {
@@ -1135,7 +1135,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move, Space/Click to shoot. Touch joystick and tap.",
     "createdAt": "2023-10-24",
     "accentColor": "#4ad5c0",
-    "phase": "1",
+    "phase": "2",
     "path": "./games/085-scrap-heist-retrieval/index.html"
   }
 ];

@@ -135,6 +135,28 @@ class RealBrowserFaultTests(unittest.TestCase):
         result=self.exercise("window.game={state:'TITLE'};document.querySelector('#start').click=()=>game.state='PLAYING';")
         self.assertEqual("FAIL",result["status"],result)
 
+    def test_pressed_control_can_hide_before_pointer_or_mouse_release(self):
+        for kind in ("pointer","mouse"):
+            with self.subTest(kind=kind):
+                contract={**CONTRACT,"start":{"kind":kind,"selector":"#start"}}
+                result=self.exercise("""
+                  window.game={state:'TITLE'};
+                  const button=document.querySelector('#start');
+                  button.addEventListener('%sdown',()=>{button.style.display='none';game.state='PRESSED';});
+                  button.addEventListener('%sup',()=>{game.state='PLAYING';});
+                """ % (kind,kind),contract=contract)
+                self.assertEqual("PASS",result["status"],result)
+
+    def test_hidden_initial_pointer_control_still_fails_with_useful_diagnostic(self):
+        contract={**CONTRACT,"start":{"kind":"pointer","selector":"#start"}}
+        result=self.exercise("""
+          window.game={state:'TITLE'};
+          const button=document.querySelector('#start');button.style.display='none';
+          button.addEventListener('pointerdown',()=>{game.state='PLAYING';});
+        """,contract=contract)
+        self.assertEqual("FAIL",result["status"],result)
+        self.assertTrue(any("Control missing/hidden/disabled" in error for error in result["evidence"]["errors"]),result)
+
     def test_reviewed_followup_tutorial_click_is_preserved(self):
         contract={**CONTRACT,"start":{"kind":"click","selector":"#start","followup_click":"#tutorial"}}
         result=self.exercise("""

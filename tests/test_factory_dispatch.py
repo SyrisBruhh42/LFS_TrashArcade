@@ -530,5 +530,28 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(rec["hold"], "repair_scope_unverified")
 
 
+    def test_pause_after_intent_before_post_is_known_rejection_not_ambiguity(self):
+        self.dispatch_fixture()
+        original_save = f.save_state
+        def save_then_pause(state):
+            original_save(state)
+            if any(intent["status"] == "pending" for intent in state["intents"].values()):
+                f.PAUSE_FILE.parent.mkdir(parents=True, exist_ok=True)
+                f.PAUSE_FILE.write_text("pause before request")
+        with patch.object(f, "save_state", side_effect=save_then_pause), patch.object(f, "api") as api:
+            with self.assertRaisesRegex(f.Hold, "before POST"):
+                f.dispatch(self.cfg, self.state, False, SHA)
+            restored = f.load_state()
+            intent = next(iter(restored["intents"].values()))
+            self.assertEqual(intent["status"], "rejected")
+            self.assertEqual(intent["reason"], "local_pause_no_request")
+            self.assertRegex(intent["body_hash"], r"^[0-9a-f]{64}$")
+            self.assertFalse(restored["sessions"])
+            with self.assertRaises(f.Hold):
+                f.dispatch(self.cfg, restored, False, SHA)
+            api.assert_not_called()
+            self.assertEqual(len(restored["intents"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

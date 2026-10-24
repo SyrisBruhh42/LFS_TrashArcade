@@ -43,7 +43,7 @@ async function main() {
   }
   async function evaluate(expression,contextId) {
     const value=await send('Runtime.evaluate',{expression,contextId,returnByValue:true},activeSession);
-    if(value.exceptionDetails)throw new Error('Adapter/observer expression failed: '+String(value.exceptionDetails.text));
+    if(value.exceptionDetails)throw new Error('Adapter/observer expression failed: '+String(value.exceptionDetails.exception?.description||value.exceptionDetails.text||'Unknown exception').slice(0,1000));
     return value.result?.value;
   }
   async function pause(ms) {
@@ -95,14 +95,16 @@ async function main() {
       const query=Document.prototype.querySelector,rect=Element.prototype.getBoundingClientRect;
       const click=HTMLElement.prototype.click,dispatch=EventTarget.prototype.dispatchEvent;
       const style=window.getComputedStyle.bind(window),Keyboard=KeyboardEvent,Pointer=PointerEvent,Mouse=MouseEvent;
-      function target(selector){const node=query.call(document,selector);if(!node||node.disabled||!node.getClientRects().length||style(node).visibility==='hidden')throw new Error('Control missing/hidden/disabled');return node;}
+      function target(selector,release=false){const node=query.call(document,selector);if(!node||(!release&&(node.disabled||!node.getClientRects().length||style(node).visibility==='hidden')))throw new Error('Control missing/hidden/disabled');return node;}
       function interaction(start,type){
         if(start.kind==='click'){click.call(target(start.selector));return true;}
         if(start.kind==='key'){
           const node=start.target==='document'?document:start.target&&start.target!=='window'?target(start.target):window;
           dispatch.call(node,new Keyboard(type,{key:start.key,code:start.code,bubbles:true}));return true;
         }
-        const node=target(start.selector),box=rect.call(node);
+        // Start controls may hide or disable themselves on press. Release still
+        // reaches that existing element, while every initial press stays strict.
+        const node=target(start.selector,type==='pointerup'||type==='mouseup'),box=rect.call(node);
         const options={clientX:box.left+box.width*(start.x??0.5),clientY:box.top+box.height*(start.y??0.5),bubbles:true};
         if(start.kind==='pointer')dispatch.call(node,new Pointer(type,{...options,pointerId:1,pointerType:'touch'}));
         else if(start.kind==='mouse')dispatch.call(node,new Mouse(type,{...options,button:0}));
