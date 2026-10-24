@@ -118,7 +118,7 @@ class InputManager {
         this.tapQueued = false;
         this.dashButtonDown = false;
 
-        const dashBtn = document.getElementById('dash-button');
+        const dashBtn = document.getElementById?.('dash-button');
         if (dashBtn) {
             const pressDash = (e) => {
                 e.preventDefault();
@@ -1009,7 +1009,7 @@ class Game {
         this.sound = new SoundEngine();
 
         this.state = 'TITLE';
-        const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none';
+        const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none';
         this.lastTime = performance.now();
         this.score = 0;
 
@@ -1060,7 +1060,7 @@ class Game {
             }
             if (!e.repeat && (e.code === 'Space' || e.code === 'Enter')) {
                 if (this.state === 'TITLE') this.startGame();
-                else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none'; }
+                else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none'; }
             }
         });
 
@@ -1070,7 +1070,7 @@ class Game {
             this.sound.resume();
             if (this.state === 'TITLE') this.startGame();
             else if (this.state === 'PAUSED') this.resumeGame();
-            else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none'; }
+            else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none'; }
         });
 
         window.addEventListener('touchstart', e => {
@@ -1079,7 +1079,7 @@ class Game {
             this.sound.resume();
             if (this.state === 'TITLE') this.startGame();
             else if (this.state === 'PAUSED') this.resumeGame();
-            else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none'; }
+            else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none'; }
         });
 
         document.addEventListener('visibilitychange', () => {
@@ -1091,13 +1091,13 @@ class Game {
 
     pauseGame() {
         this.input.clear();
-        if (this.state === 'PLAYING') { this.state = 'PAUSED'; const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none'; }
+        if (this.state === 'PLAYING') { this.state = 'PAUSED'; const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none'; }
     }
 
     resumeGame() {
         // The resume gesture must never become a shot or a held movement.
         this.input.clear();
-        if (this.state === 'PAUSED') { this.state = 'PLAYING'; const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'block'; }
+        if (this.state === 'PAUSED') { this.state = 'PLAYING'; const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'block'; }
     }
 
     startGame() {
@@ -1105,7 +1105,7 @@ class Game {
         // gameplay action must be a fresh gesture, not the held title control.
         this.input.clear();
         this.state = 'PLAYING';
-        const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'block';
+        const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'block';
         this.score = 0;
         this.wave = 1;
         this.saveManager.data.totalGamesPlayed++;
@@ -1161,7 +1161,7 @@ class Game {
 
     gameOver() {
         this.state = 'GAME_OVER';
-        const btn = document.getElementById('dash-button'); if(btn) btn.style.display = 'none';
+        const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none';
         if (this.score > this.saveManager.data.highScore) {
             this.saveManager.data.highScore = this.score;
         }

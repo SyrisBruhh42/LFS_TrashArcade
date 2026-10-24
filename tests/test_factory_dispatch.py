@@ -27,6 +27,7 @@ class FactoryTests(unittest.TestCase):
         self.cfg = json.loads(f.CONFIG_FILE.read_text())
         self.cfg.update(account_active_cap=20, account_daily_cap=100, account_active_reserve=1,
                         account_daily_reserve=5, healthy_ticks_required=2, generation_enabled=True,
+                        local_integration_enabled=False,  # Integration tests opt in independently of release policy.
                         repair_owner="controller", controller_native_repairs_disabled=True)
         self.state = f.empty_state()
         self.patches = contextlib.ExitStack()
@@ -68,6 +69,17 @@ class FactoryTests(unittest.TestCase):
         self.patches.enter_context(patch.object(f.subprocess, "run", return_value=Mock(stdout=json.dumps(brief))))
         self.patches.enter_context(patch.object(f, "gh", return_value=SHA))
         f.observe_account(self.cfg, self.state, {})
+
+    def test_production_phase_policy_keeps_native_ownership_and_bounded_budgets(self):
+        cfg = json.loads((Path(__file__).resolve().parents[1] / "factory/config.json").read_text())
+        f.validate_config(cfg)
+        expected = {"schema": 2, "enabled": True, "generation_enabled": True, "local_integration_enabled": True,
+                    "maintenance_enabled": True, "repair_owner": "native", "controller_native_repairs_disabled": False,
+                    "daily_cap": 96, "max_active_sessions": 12, "max_open_prs": 8, "max_unfinished_games": 2,
+                    "account_active_cap": 60, "account_daily_cap": 300, "account_active_reserve": 1,
+                    "account_daily_reserve": 5, "max_repair_messages": 1, "max_rebase_messages": 1,
+                    "max_repairs_per_tick": 1, "healthy_ticks_required": 2, "inventory_max_age_seconds": 180}
+        self.assertEqual({key: cfg[key] for key in expected}, expected)
 
     def test_legacy_412_records_preserved_in_memory_and_after_save(self):
         old = {"sessions": {f"s{i}": self.record(outcome="merged", legacy_field=i) for i in range(412)},
@@ -410,6 +422,208 @@ class FactoryTests(unittest.TestCase):
         self.assertTrue(f.load_state()["migration"]["admission_hold"])
         dispatch.assert_not_called()
         api.assert_not_called()
+
+    def integration_only_guards(self, stack):
+        """Fail immediately if merge-only routing reaches any paid-work path."""
+        for owner, name in ((f, "reconcile"), (f.maintenance, "reconcile"), (f.maintenance, "select"),
+                            (f, "capacity"), (f, "dispatch"), (f, "api")):
+            stack.enter_context(patch.object(owner, name, side_effect=AssertionError("Unexpected " + name)))
+
+    def test_integrate_only_all_decisions_return_before_paid_work(self):
+        args = self.tick_fixture()
+        args.integrate_only = True
+        for decision in ({"status": status} for status in (
+                "disabled", "no_candidate", "ready_read_only", "merged_awaiting_main", "accepted")):
+            with self.subTest(decision=decision), contextlib.ExitStack() as stack:
+                self.integration_only_guards(stack)
+                stack.enter_context(patch.object(f, "inventory", return_value={}))
+                integrate = stack.enter_context(patch.object(f.integration, "run_tick", return_value=decision))
+                self.assertEqual(f.tick(args), 0)
+                integrate.assert_called_once()
+                self.assertFalse(integrate.call_args.kwargs["read_only"])
+
+    def test_integrate_only_errors_never_route_postmerge_maintenance(self):
+        args = self.tick_fixture()
+        args.integrate_only = True
+        errors = (f.integration.MainAcceptanceHold("red main"), f.integration.Hold("candidate changed"),
+                  f.integration.GitHubError("unavailable"), ValueError(), TypeError(), KeyError(), AttributeError())
+        for error in errors:
+            with self.subTest(error=type(error).__name__), contextlib.ExitStack() as stack:
+                self.integration_only_guards(stack)
+                stack.enter_context(patch.object(f, "inventory", return_value={}))
+                # An ordinary tick could route this confirmed merge to maintenance.
+                stack.enter_context(patch.object(f.integration, "ledger", return_value={
+                    "intents": {"merge": {"status": "awaiting_main_acceptance"}}}))
+                stack.enter_context(patch.object(f, "postmerge_maintenance_scope", return_value=True))
+                integrate = stack.enter_context(patch.object(f.integration, "run_tick", side_effect=error))
+                self.assertEqual(f.tick(args), 0)
+                integrate.assert_called_once()
+
+    def test_integrate_only_malformed_decision_cannot_fall_through(self):
+        args = self.tick_fixture()
+        args.integrate_only = True
+        for decision in (None, [], {}, {"status": []}, {"status": "unexpected"}):
+            with self.subTest(decision=decision), contextlib.ExitStack() as stack:
+                self.integration_only_guards(stack)
+                stack.enter_context(patch.object(f, "inventory", return_value={}))
+                stack.enter_context(patch.object(f.integration, "run_tick", return_value=decision))
+                self.assertEqual(f.tick(args), 0)
+
+    def integration_only_fixture(self):
+        """Real dispatcher/ledger/transport sequencing; lower evidence gates have their own suite."""
+        self.cfg["local_integration_enabled"] = True
+        remote = {}
+        for number, correlation in ((1, "b" * 32), (2, "c" * 32)):
+            sid = f"s{number}"
+            prompt = "Assignment\nFactory correlation: " + correlation
+            title = f"[factory:{correlation}] assignment"
+            rec = self.record(correlation=correlation, assigned_folder="games/083-game", baseline_sha=SHA,
+                              mode="advance", title=title, pr=f"https://github.com/{self.cfg['repo']}/pull/{number}",
+                              gate_status="passed_waiting_merge")
+            self.state["sessions"][sid] = rec
+            self.state["intents"][correlation] = {
+                "status": "accepted", "session_id": sid, "created": rec["created"], "title": title,
+                "body_hash": "f" * 64, "prompt_hash": f.digest(prompt), "record": copy.deepcopy(rec)}
+            remote[sid] = {**self.session(sid, "COMPLETED"), "prompt": prompt, "title": title,
+                           "outputs": [{"pullRequest": {"url": rec["pr"]}}]}
+        args = self.tick_fixture()
+        args.integrate_only = True
+        head, merged_sha = "d" * 40, "e" * 40
+        transport = {"calls": [], "merged": False, "uncertain": False}
+
+        def github(endpoint, method="GET", body=None):
+            transport["calls"].append((method, endpoint))
+            if endpoint.endswith("/merge"):
+                self.assertEqual(method, "PUT")
+                durable = list(f.load_state()["integration"]["intents"].values())
+                self.assertEqual(len(durable), 1)
+                self.assertEqual(durable[0]["status"], "pending")
+                self.assertEqual(body, {"sha": head, "merge_method": "squash"})
+                transport["merged"] = True
+                if transport["uncertain"]:
+                    raise f.integration.GitHubError("lost response")
+                return {"merged": True, "sha": merged_sha}
+            self.assertEqual(method, "GET")
+            if endpoint.endswith("/pulls/1"):
+                if transport["merged"] and transport["uncertain"]:
+                    raise f.integration.GitHubError("readback unavailable")
+                return {"number": 1, "head": {"sha": head, "repo": {"full_name": self.cfg["repo"]}},
+                        "base": {"sha": SHA, "ref": "main"}, "merged": transport["merged"],
+                        "merge_commit_sha": merged_sha if transport["merged"] else None}
+            if endpoint.endswith("/ARCADE_AUTO_MERGE"):
+                return {"name": "ARCADE_AUTO_MERGE", "value": "false"}
+            if "/issues?" in endpoint:
+                return []
+            if endpoint.endswith("/git/ref/heads/main"):
+                return {"object": {"sha": merged_sha}}
+            if "/runs?" in endpoint:
+                return {"total_count": 1, "workflow_runs": [{
+                    "id": 100, "head_sha": merged_sha, "head_branch": "main", "event": "push",
+                    "status": "completed", "conclusion": "success", "created_at": f.iso(f.now()),
+                    "updated_at": f.iso(f.now() - timedelta(seconds=1))}]}
+            if "/jobs?" in endpoint:
+                return {"total_count": 1, "jobs": [{"id": 1, "name": "Main guard", "status": "completed", "conclusion": "success"}]}
+            self.fail("Unexpected integration endpoint: " + endpoint)
+
+        self.patches.enter_context(patch.object(f, "inventory", return_value=remote))
+        self.patches.enter_context(patch.object(f.integration, "api", side_effect=github))
+        self.patches.enter_context(patch.object(f.integration, "clean_controller"))
+        self.patches.enter_context(patch.object(f.integration.policy, "verify_protection"))
+        self.patches.enter_context(patch.object(f.integration.policy, "verify_pr"))
+        self.patches.enter_context(patch.object(f.integration, "scope"))
+        self.patches.enter_context(patch.object(f.integration, "attestation", return_value="99"))
+        self.patches.enter_context(patch.object(f.integration, "main_deadline", return_value=f.now() + timedelta(hours=1)))
+        return args, transport
+
+    def test_integrate_only_merges_at_most_one_candidate_with_durable_intent(self):
+        args, transport = self.integration_only_fixture()
+        with contextlib.ExitStack() as stack:
+            self.integration_only_guards(stack)
+            self.assertEqual(f.tick(args), 0)
+        self.assertEqual([method for method, _ in transport["calls"] if method != "GET"], ["PUT"])
+        saved = f.load_state()
+        self.assertEqual(next(iter(saved["integration"]["intents"].values()))["status"], "awaiting_main_acceptance")
+        self.assertEqual(saved["sessions"]["s1"]["outcome"], "merged")
+        self.assertNotIn("outcome", saved["sessions"]["s2"])
+
+    def test_integrate_only_ambiguous_merge_recovers_with_gets_without_other_candidate(self):
+        args, transport = self.integration_only_fixture()
+        transport["uncertain"] = True
+        with contextlib.ExitStack() as stack:
+            self.integration_only_guards(stack)
+            self.assertEqual(f.tick(args), 0)
+            self.assertEqual(next(iter(f.load_state()["integration"]["intents"].values()))["status"], "ambiguous")
+            self.assertEqual([method for method, _ in transport["calls"] if method != "GET"], ["PUT"])
+            transport["uncertain"] = False
+            transport["calls"].clear()
+            self.assertEqual(f.tick(args), 0)
+        self.assertTrue(transport["calls"])
+        self.assertTrue(all(method == "GET" for method, _ in transport["calls"]))
+        saved = f.load_state()
+        self.assertEqual(next(iter(saved["integration"]["intents"].values()))["status"], "accepted")
+        self.assertNotIn("outcome", saved["sessions"]["s2"])
+
+    def test_integrate_only_obeys_disabled_and_migration_controls(self):
+        args, transport = self.integration_only_fixture()
+        for disabled, held in ((True, False), (False, True)):
+            with self.subTest(disabled=disabled, held=held), contextlib.ExitStack() as stack:
+                self.integration_only_guards(stack)
+                f.CONFIG_FILE.write_text(json.dumps({**self.cfg, "local_integration_enabled": not disabled}))
+                self.state["migration"] = {"admission_hold": held}
+                f.save_state(self.state)
+                transport["calls"].clear()
+                self.assertEqual(f.tick(args), 0)
+                self.assertEqual(transport["calls"], [])
+                self.assertNotIn("integration", f.load_state())
+
+    def test_integrate_only_cli_rejects_conflicting_modes_before_any_io(self):
+        for other in (["--status"], ["--initialize-state"], ["--reset-breaker"], ["--reconcile-only"],
+                      ["--enqueue-incident", "/spec.json"], ["--retry-incident", "incident"],
+                      ["--accept-incident", "/receipt.json"], ["--no-dispatch"],
+                      ["--enqueue-incident", ""], ["--retry-incident", ""], ["--accept-incident", ""]):
+            with self.subTest(other=other), patch.object(f.sys, "argv", ["factory_dispatch.py", "--integrate-only", *other]), \
+                    contextlib.redirect_stderr(io.StringIO()), patch.object(f, "tick") as tick, self.assertRaises(SystemExit) as result:
+                f.main()
+            self.assertEqual(result.exception.code, 2)
+            tick.assert_not_called()
+            self.assertFalse(f.STATE_DIR.exists())
+
+    def test_integrate_only_resolves_existing_create_by_get_without_repeating_it(self):
+        _, session = self.install_intent("ambiguous")
+        listed = {key: value for key, value in session.items() if key != "prompt"}
+        args = self.tick_fixture()  # Integration remains disabled, even after resolving the create.
+        args.integrate_only = True
+        with contextlib.ExitStack() as stack:
+            self.integration_only_guards(stack)
+            stack.enter_context(patch.object(f, "inventory", return_value={"s1": listed}))
+            detail = stack.enter_context(patch.object(f, "api_retry", return_value=session))
+            github = stack.enter_context(patch.object(f.integration, "api", side_effect=AssertionError("Integration disabled")))
+            self.assertEqual(f.tick(args), 0)
+        detail.assert_called_once_with("GET", "/sessions/s1")
+        github.assert_not_called()
+        saved = f.load_state()
+        self.assertEqual(saved["intents"][CORRELATION]["status"], "accepted")
+        self.assertEqual(saved["intents"][CORRELATION]["session_id"], "s1")
+        self.assertEqual(list(saved["sessions"]), ["s1"])
+
+    def test_integrate_only_cli_dry_run_makes_no_writes_or_merge(self):
+        _, transport = self.integration_only_fixture()
+        before = {p.name: p.read_bytes() for p in f.STATE_DIR.iterdir()}
+        with contextlib.ExitStack() as stack:
+            self.integration_only_guards(stack)
+            stack.enter_context(patch.object(f.sys, "argv", ["factory_dispatch.py", "--integrate-only", "--dry-run"]))
+            self.assertEqual(f.main(), 0)
+        self.assertTrue(transport["calls"])
+        self.assertTrue(all(method == "GET" for method, _ in transport["calls"]))
+        self.assertEqual(before, {p.name: p.read_bytes() for p in f.STATE_DIR.iterdir()})
+
+    def test_integrate_only_cli_respects_existing_tick_lock(self):
+        self.tick_fixture()
+        with f.LOCK_FILE.open("a") as lock:
+            f.fcntl.flock(lock, f.fcntl.LOCK_EX | f.fcntl.LOCK_NB)
+            with patch.object(f.sys, "argv", ["factory_dispatch.py", "--integrate-only"]), patch.object(f, "tick") as tick:
+                self.assertEqual(f.main(), 0)
+            tick.assert_not_called()
 
     def test_two_consecutive_healthy_ticks_required_before_create(self):
         args = self.tick_fixture()
@@ -1111,6 +1325,32 @@ class FactoryTests(unittest.TestCase):
                 intent = next(iter(f.load_state()["intents"].values()))
                 self.assertEqual(intent["status"], "rejected")
                 self.assertEqual(intent["reason"], "create_admission_no_request")
+
+    def test_cut_loss_releases_stalled_session_and_feeds_second_pass(self):
+        intent, session = self.install_intent("accepted")
+        session["state"] = "AWAITING_USER_FEEDBACK"
+        session["updateTime"] = f.iso(f.now() - timedelta(minutes=35))
+        rec = {**intent["record"], "game_id": "001", "phase": "1", "assigned_folder": "games/001-game"}
+        intent["record"] = copy.deepcopy(rec)
+        self.state["sessions"]["s1"] = rec
+        # First observation records the hold without auto-answering.
+        f.reconcile(self.cfg, self.state, {"s1": session}, False)
+        self.assertEqual(rec.get("hold"), "awaiting_user_feedback")
+        self.assertTrue(f.assignment_occupied(rec))
+        # Second observation past grace cuts losses, marks abandoned, and releases game lock.
+        f.reconcile(self.cfg, self.state, {"s1": session}, False)
+        self.assertTrue(rec.get("abandoned"))
+        self.assertEqual(rec.get("outcome"), "failed:cut_loss")
+        self.assertNotIn("hold", rec)
+        self.assertFalse(f.assignment_occupied(rec))
+        self.assertEqual(f.capacity(self.cfg, self.state, {"s1": session})["account_active"], 1)
+        # Second pass receives the cut-loss lesson in its prompt.
+        self.dispatch_fixture()
+        with patch.object(f, "api", return_value=self.session("s2")) as api:
+            f.dispatch(self.cfg, self.state, False, SHA)
+        prompt = api.call_args.args[2]["prompt"]
+        self.assertIn("Second-Pass Failure Lesson", prompt)
+        self.assertIn("awaiting_user_feedback", prompt)
 
 
 if __name__ == "__main__":

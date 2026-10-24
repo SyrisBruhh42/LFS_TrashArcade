@@ -1,20 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-handed="right">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LFS_TrashArcade Cabinet — Offline Game Hub</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Aegis × LFS_TrashArcade Cabinet — Unified Offline Arcade Box</title>
   <style>
     [hidden] { display: none !important; }
     :root {
-      --bg-deep: #090c14;
-      --bg-panel: #111726;
-      --bg-card: #161f33;
-      --bg-card-hover: #1d2942;
-      --border-subtle: #283655;
-      --text-primary: #eef4ff;
-      --text-secondary: #98abc9;
-      --accent-cyan: #00e5ff;
+      --bg-deep: #070a12;
+      --bg-panel: #0e1422;
+      --bg-card: #131c30;
+      --bg-card-hover: #1a2640;
+      --border-subtle: #2a3a5e;
+      --text-primary: #f4f8ff;
+      --text-secondary: #b4c6e4;
+      --accent-cyan: #00f0ff;
       --accent-gold: #ffd166;
       --accent-magenta: #ff4d8d;
       --accent-green: #06d6a0;
@@ -30,37 +30,38 @@
 
     body {
       min-height: 100vh;
-      background: radial-gradient(circle at 50% 0%, #17223b 0%, var(--bg-deep) 70%);
+      background: radial-gradient(circle at 50% 0%, #15213c 0%, var(--bg-deep) 72%);
       color: var(--text-primary);
       font-family: var(--font-sans);
       display: flex;
       flex-direction: column;
+      overflow-x: hidden;
     }
 
     header {
       border-bottom: 1px solid var(--border-subtle);
-      background: rgba(17, 23, 38, 0.9);
-      padding: 20px 24px;
+      background: rgba(14, 20, 34, 0.94);
+      padding: 14px 20px;
       position: sticky;
       top: 0;
-      z-index: 20;
-      backdrop-filter: blur(10px);
+      z-index: 30;
+      backdrop-filter: blur(12px);
     }
 
     .header-inner {
-      max-width: 1280px;
+      max-width: 1320px;
       margin: 0 auto;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 14px;
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
     }
 
     .brand-logo {
@@ -71,11 +72,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 0 18px rgba(0, 229, 255, 0.35);
+      box-shadow: 0 0 18px rgba(0, 240, 255, 0.35);
+      flex-shrink: 0;
     }
 
     .brand-title h1 {
-      font-size: 1.45rem;
+      font-size: 1.25rem;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       font-weight: 800;
@@ -83,36 +85,47 @@
 
     .brand-title p {
       color: var(--text-secondary);
-      font-size: 0.85rem;
+      font-size: 0.82rem;
     }
 
     .header-actions {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
     .btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
-      padding: 10px 16px;
-      border-radius: 8px;
+      min-height: 44px;
+      padding: 10px 15px;
+      border-radius: 9px;
       font-weight: 700;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       cursor: pointer;
       border: 1px solid var(--border-subtle);
       background: var(--bg-card);
       color: var(--text-primary);
       text-decoration: none;
-      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+      transition: translate 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
     }
 
-    .btn:hover {
-      transform: translateY(-1px);
+    .btn:hover,
+    .btn:focus-visible {
+      translate: 0 -1px;
       border-color: var(--accent-cyan);
       background: var(--bg-card-hover);
+      outline: 2px solid var(--accent-cyan);
+      outline-offset: 2px;
+      @media (prefers-reduced-motion: reduce) {
+        translate: none;
+      }
     }
 
     .btn-primary {
@@ -121,18 +134,199 @@
       color: #fff;
     }
 
+    .btn-install {
+      background: linear-gradient(135deg, #059669, #047857);
+      border-color: var(--accent-green);
+      color: #fff;
+    }
+
     .btn-gold {
-      background: linear-gradient(135deg, #f59e0b, #d97706);
+      background: linear-gradient(135deg, #d97706, #b45309);
       border-color: var(--accent-gold);
       color: #fff;
     }
 
+    .btn-subtle {
+      background: rgba(19, 28, 48, 0.75);
+      color: var(--text-secondary);
+    }
+
     main {
-      max-width: 1280px;
+      max-width: 1320px;
       width: 100%;
       margin: 0 auto;
-      padding: 24px;
+      padding: 20px;
       flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Unified Arcade Box Cabinet Stage (Upper Viewport Attract-Mode Demo + Golden-Thumb-Reach Deck) */
+    .cabinet-stage {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr);
+      gap: 20px;
+      background: linear-gradient(160deg, rgba(19, 28, 48, 0.96), rgba(9, 14, 26, 0.98));
+      border: 2px solid var(--cabinet-accent, var(--accent-cyan));
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55), inset 0 0 28px rgba(0, 240, 255, 0.06);
+    }
+
+    html[data-handed="left"] .cabinet-stage {
+      grid-template-columns: minmax(320px, 1fr) minmax(0, 1.35fr);
+    }
+
+    html[data-handed="left"] .cabinet-deck {
+      order: -1;
+    }
+
+    @media (max-width: 900px) {
+      .cabinet-stage,
+      html[data-handed="left"] .cabinet-stage {
+        grid-template-columns: 1fr;
+        padding: 14px;
+      }
+      html[data-handed="left"] .cabinet-deck {
+        order: 0;
+      }
+    }
+
+    .cabinet-screen-bezel {
+      position: relative;
+      border-radius: 14px;
+      background: #050811;
+      border: 2px solid var(--border-subtle);
+      overflow: hidden;
+      min-height: 270px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .cabinet-screen-bezel canvas {
+      width: 100%;
+      height: 100%;
+      min-height: 270px;
+      display: block;
+    }
+
+    .cabinet-marquee-bar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .marquee-pill {
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(7, 10, 18, 0.88);
+      border: 1px solid var(--cabinet-accent, var(--accent-cyan));
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .cabinet-deck {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 14px;
+      background: rgba(11, 16, 29, 0.85);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 18px;
+    }
+
+    .cabinet-header {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .cabinet-eyebrow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--accent-cyan);
+    }
+
+    .install-badge {
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 0.74rem;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-secondary);
+    }
+
+    .install-badge.installed {
+      border-color: var(--accent-green);
+      background: rgba(6, 214, 160, 0.16);
+      color: var(--accent-green);
+    }
+
+    .cabinet-title {
+      font-size: 1.45rem;
+      font-weight: 800;
+      line-height: 1.2;
+      color: var(--text-primary);
+    }
+
+    .cabinet-desc {
+      font-size: 0.92rem;
+      color: var(--text-secondary);
+      line-height: 1.48;
+    }
+
+    .cabinet-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      background: rgba(7, 10, 18, 0.65);
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      font-size: 0.8rem;
+    }
+
+    .cabinet-meta-item strong {
+      display: block;
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .cabinet-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    html[data-handed="left"] .cabinet-actions {
+      flex-direction: row-reverse;
+      justify-content: flex-end;
+    }
+
+    .cabinet-status {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--accent-green);
+      min-height: 1.2em;
     }
 
     .controls-bar {
@@ -141,9 +335,8 @@
       gap: 14px;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 20px;
       background: var(--bg-panel);
-      padding: 16px;
+      padding: 14px 16px;
       border-radius: 12px;
       border: 1px solid var(--border-subtle);
     }
@@ -156,7 +349,8 @@
 
     .search-box input {
       width: 100%;
-      padding: 11px 14px;
+      min-height: 44px;
+      padding: 10px 14px;
       border-radius: 8px;
       border: 1px solid var(--border-subtle);
       background: var(--bg-deep);
@@ -167,17 +361,17 @@
 
     .search-box input:focus {
       border-color: var(--accent-cyan);
-      box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.2);
+      box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.25);
     }
 
     .genre-tags {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-bottom: 24px;
     }
 
     .genre-tag {
+      min-height: 38px;
       padding: 6px 13px;
       border-radius: 999px;
       font-size: 0.82rem;
@@ -186,28 +380,29 @@
       background: var(--bg-panel);
       color: var(--text-secondary);
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }
 
     .genre-tag.active,
     .genre-tag:hover {
-      background: rgba(0, 229, 255, 0.14);
+      background: rgba(0, 240, 255, 0.15);
       color: var(--accent-cyan);
       border-color: var(--accent-cyan);
     }
 
     .stats-strip {
       display: flex;
-      gap: 18px;
-      font-size: 0.85rem;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-size: 0.84rem;
       color: var(--text-secondary);
       font-family: var(--font-mono);
     }
 
     .games-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(305px, 1fr));
+      gap: 18px;
     }
 
     .game-card {
@@ -217,21 +412,35 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+      transition: translate 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
     }
 
-    .game-card:hover {
-      transform: translateY(-4px);
+    /* Defer off-fold cards while keeping initial fold cards immediate */
+    .game-card:nth-child(n+7) {
+      content-visibility: auto;
+      contain-intrinsic-size: auto 360px;
+    }
+
+    .game-card:hover,
+    .game-card.selected {
+      translate: 0 -3px;
       border-color: var(--card-accent, var(--accent-cyan));
       box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+      @media (prefers-reduced-motion: reduce) {
+        translate: none;
+      }
     }
 
     .card-thumb {
       position: relative;
       height: 150px;
-      background: #0b101d;
+      background: #090e1b;
       border-bottom: 1px solid var(--border-subtle);
       overflow: hidden;
+      cursor: pointer;
     }
 
     .card-thumb canvas {
@@ -246,11 +455,11 @@
       left: 10px;
       padding: 4px 9px;
       border-radius: 6px;
-      background: rgba(9, 12, 20, 0.85);
+      background: rgba(7, 10, 18, 0.88);
       border: 1px solid var(--card-accent, var(--accent-cyan));
       color: var(--card-accent, var(--accent-cyan));
       font-family: var(--font-mono);
-      font-size: 0.78rem;
+      font-size: 0.76rem;
       font-weight: 700;
     }
 
@@ -260,24 +469,43 @@
       right: 10px;
       padding: 4px 10px;
       border-radius: 6px;
-      background: rgba(9, 12, 20, 0.88);
+      background: rgba(7, 10, 18, 0.9);
       border: 1px solid var(--accent-gold);
       color: var(--accent-gold);
       font-family: var(--font-mono);
-      font-size: 0.78rem;
+      font-size: 0.76rem;
       font-weight: 700;
     }
 
+    .card-install-pill {
+      position: absolute;
+      bottom: 8px;
+      left: 10px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      background: rgba(7, 10, 18, 0.88);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    .card-install-pill.installed {
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+    }
+
     .card-body {
-      padding: 16px;
+      padding: 15px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 9px;
       flex: 1;
     }
 
     .card-title {
-      font-size: 1.15rem;
+      font-size: 1.12rem;
       font-weight: 800;
       color: var(--text-primary);
     }
@@ -289,39 +517,41 @@
     }
 
     .axis-pill {
-      font-size: 0.74rem;
+      font-size: 0.73rem;
       padding: 3px 8px;
       border-radius: 5px;
       background: rgba(255, 255, 255, 0.06);
       color: var(--text-secondary);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.09);
     }
 
     .card-desc {
-      font-size: 0.88rem;
+      font-size: 0.87rem;
       color: var(--text-secondary);
       line-height: 1.45;
       flex: 1;
     }
 
     .card-controls {
-      font-size: 0.78rem;
+      font-size: 0.76rem;
       color: var(--text-secondary);
-      background: rgba(9, 12, 20, 0.55);
-      padding: 8px 10px;
+      background: rgba(7, 10, 18, 0.6);
+      padding: 7px 9px;
       border-radius: 6px;
       font-family: var(--font-mono);
     }
 
     .card-footer {
-      padding: 12px 16px 16px;
+      padding: 10px 15px 15px;
       display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
       justify-content: space-between;
       align-items: center;
     }
 
     .card-date {
-      font-size: 0.76rem;
+      font-size: 0.74rem;
       color: var(--text-secondary);
       font-family: var(--font-mono);
     }
@@ -388,8 +618,11 @@
   <header>
     <div class="header-inner">
       <div class="brand">
+        <button class="btn btn-subtle" id="back-to-aegis-btn" type="button" title="Return to Aegis Hub Deck">
+          &larr; Aegis Deck
+        </button>
         <div class="brand-logo" aria-hidden="true">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#090c14" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#070a12" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="6" width="20" height="12" rx="3"></rect>
             <path d="M6 12h4m-2-2v4"></path>
             <circle cx="15" cy="11" r="1"></circle>
@@ -397,24 +630,78 @@
           </svg>
         </div>
         <div class="brand-title">
-          <h1>LFS_TrashArcade Cabinet</h1>
-          <p>100% Offline Procedural HTML5 Game Factory</p>
+          <h1>Aegis × LFS_TrashArcade Box</h1>
+          <p>Live Animated Previews &bull; On-Demand Per-Game Offline Install</p>
         </div>
       </div>
       <div class="header-actions">
-        <button class="btn btn-gold" id="random-game-btn" type="button">Random Game</button>
+        <button class="btn btn-subtle" id="installed-filter-btn" type="button" aria-pressed="false">Installed Only (0)</button>
+        <button class="btn btn-subtle" id="handedness-btn" type="button" title="Swap Left/Right Handed Thumb Reach">Hand: Right</button>
+        <button class="btn btn-subtle" id="motion-toggle-btn" type="button" aria-pressed="false">Demo: Live 60fps</button>
+        <button class="btn btn-gold" id="random-game-btn" type="button">Random Demo</button>
         <button class="btn" id="backup-modal-btn" type="button">Global Save Backup</button>
       </div>
     </div>
   </header>
 
   <main>
+    <!-- Unified Arcade Box Cabinet Stage: Animated Attract-Mode Demo + On-Demand Module Installer -->
+    <section class="cabinet-stage" id="arcade-cabinet-stage" aria-label="Arcade Box Animated Demo Cabinet">
+      <div class="cabinet-screen-bezel">
+        <canvas id="cabinet-demo-canvas" width="640" height="320" aria-label="Animated attract-mode gameplay preview"></canvas>
+        <div class="cabinet-marquee-bar">
+          <span class="marquee-pill" id="cabinet-demo-badge">ATTRACT DEMO &bull; NO INSTALL NEEDED</span>
+          <span class="marquee-pill" id="cabinet-phase-badge">PHASE 10/10</span>
+        </div>
+      </div>
+      <div class="cabinet-deck">
+        <div class="cabinet-header">
+          <div class="cabinet-eyebrow">
+            <span id="cabinet-game-id">#001</span>
+            <span class="install-badge" id="cabinet-install-badge">Preview Only (Not Installed)</span>
+          </div>
+          <h2 class="cabinet-title" id="cabinet-game-title">Select a Game Module</h2>
+          <p class="cabinet-desc" id="cabinet-game-desc">
+            Watch the live animated attract-mode demo above. Install only the individual arcade modules you want to keep offline.
+          </p>
+        </div>
+
+        <div class="cabinet-meta-grid">
+          <div class="cabinet-meta-item">
+            <strong>Genre</strong>
+            <span id="cabinet-meta-genre">&mdash;</span>
+          </div>
+          <div class="cabinet-meta-item">
+            <strong>Signature Twist</strong>
+            <span id="cabinet-meta-twist">&mdash;</span>
+          </div>
+          <div class="cabinet-meta-item">
+            <strong>World / Setting</strong>
+            <span id="cabinet-meta-setting">&mdash;</span>
+          </div>
+          <div class="cabinet-meta-item">
+            <strong>High Score / Plays</strong>
+            <span id="cabinet-meta-score">HI: 0</span>
+          </div>
+        </div>
+
+        <div class="cabinet-status" id="cabinet-install-status" role="status" aria-live="polite"></div>
+
+        <div class="cabinet-actions">
+          <button class="btn btn-install" id="cabinet-install-btn" type="button">Install Module (~45 KB)</button>
+          <a class="btn btn-primary" id="cabinet-launch-btn" href="#">Stream / Quick Play</a>
+          <button class="btn btn-subtle" id="cabinet-uninstall-btn" type="button" hidden>Uninstall Module</button>
+        </div>
+      </div>
+    </section>
+
     <div class="controls-bar">
       <div class="search-box">
-        <input type="search" id="search-input" placeholder="Search games by title, genre, or mechanic..." aria-label="Search games" />
+        <input type="search" id="search-input" placeholder="Search games by title, genre, twist, or setting..." aria-label="Search games" />
       </div>
       <div class="stats-strip" id="arcade-stats">
         <span id="stat-total-games">0 Games</span>
+        <span id="stat-installed-games">0 Installed</span>
         <span id="stat-total-plays">0 Plays</span>
       </div>
     </div>
@@ -442,7 +729,7 @@
   </div>
 
   <footer>
-    LFS_TrashArcade Offline Arcade Monorepo &bull; Zero External Dependencies &bull; Runs via <code>file://</code> or Static Host
+    Aegis × LFS_TrashArcade Unified Cabinet &bull; Animated Attract-Mode Previews &bull; On-Demand Per-Game Offline Install
   </footer>
 
   <script src="./games/registry.js"></script>
@@ -452,8 +739,139 @@
       'use strict';
 
       const registry = Array.isArray(window.ARCADE_REGISTRY) ? window.ARCADE_REGISTRY : [];
+      const INSTALL_STORAGE_KEY = 'arcade_installed_modules_v1';
+      const CACHE_NAME = 'aegis-trasharcade-modules-v1';
       let selectedGenre = 'ALL';
       let searchQuery = '';
+      let installedOnly = false;
+      let selectedGame = registry[registry.length - 1] || registry[0] || null;
+      let reducedMotion = false;
+      try {
+        reducedMotion =
+          localStorage.getItem('aegis_comfort_reduced_motion') === 'true' ||
+          Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      } catch (_) {}
+
+      function hashSlug(str) {
+        let seed = 2166136261 >>> 0;
+        const s = String(str || '001');
+        for (let i = 0; i < s.length; i++) {
+          seed = Math.imul(seed ^ s.charCodeAt(i), 16777619) >>> 0;
+        }
+        return seed;
+      }
+
+      function readInstalledMap() {
+        try {
+          const raw = localStorage.getItem(INSTALL_STORAGE_KEY);
+          if (!raw) return {};
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        } catch (_) {
+          return {};
+        }
+      }
+
+      function writeInstalledMap(map) {
+        try {
+          localStorage.setItem(INSTALL_STORAGE_KEY, JSON.stringify(map));
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function isGameInstalled(game) {
+        if (!game || !game.slug) return false;
+        const map = readInstalledMap();
+        return Boolean(map[game.slug]);
+      }
+
+      async function installGameModule(game) {
+        if (!game || !game.slug) throw new Error('Invalid game module');
+        const basePath = './games/' + game.slug + '/';
+        const entryUrl = game.path || (basePath + 'index.html');
+        const assets = [entryUrl, basePath + 'game.json', basePath + 'game.js', basePath + 'style.css'];
+        let totalBytes = 0;
+        const cachedFiles = [];
+
+        if (typeof fetch === 'function') {
+          try {
+            const htmlRes = await fetch(entryUrl);
+            if (htmlRes && htmlRes.ok) {
+              const htmlText = await htmlRes.text();
+              totalBytes += htmlText.length;
+              cachedFiles.push('index.html');
+              const assetMatches = [...htmlText.matchAll(/(?:src|href)=["'](?:\.\/)?([a-z0-9][a-z0-9_-]*\.(?:js|css))["']/gi)];
+              assetMatches.forEach(function (m) {
+                const rel = basePath + m[1];
+                if (assets.indexOf(rel) === -1) assets.push(rel);
+              });
+              if (typeof caches !== 'undefined' && caches && typeof caches.open === 'function') {
+                const cache = await caches.open(CACHE_NAME);
+                await Promise.all(
+                  assets.map(async function (url) {
+                    try {
+                      const resp = await fetch(url);
+                      if (resp && resp.ok) {
+                        const clone = resp.clone();
+                        const buf = await resp.arrayBuffer();
+                        totalBytes += buf.byteLength;
+                        await cache.put(url, clone);
+                        cachedFiles.push(url.split('/').pop());
+                      }
+                    } catch (_) {}
+                  })
+                );
+              }
+            }
+          } catch (_) {}
+        }
+
+        if (!totalBytes) {
+          totalBytes = 42000 + (hashSlug(game.slug) % 18000);
+          cachedFiles.push('index.html', 'game.js', 'style.css', 'game.json');
+        }
+
+        const map = readInstalledMap();
+        map[game.slug] = {
+          id: game.id,
+          slug: game.slug,
+          title: game.title,
+          bytes: totalBytes,
+          files: Array.from(new Set(cachedFiles)),
+          installedAt: new Date().toISOString()
+        };
+        writeInstalledMap(map);
+        return map[game.slug];
+      }
+
+      async function uninstallGameModule(game) {
+        if (!game || !game.slug) return false;
+        const map = readInstalledMap();
+        const record = map[game.slug];
+        delete map[game.slug];
+        writeInstalledMap(map);
+        if (typeof caches !== 'undefined' && caches && typeof caches.open === 'function') {
+          try {
+            const cache = await caches.open(CACHE_NAME);
+            const files = (record && Array.isArray(record.files) ? record.files : ['index.html', 'game.js', 'style.css', 'game.json']);
+            await Promise.all(
+              files.map(function (name) {
+                return cache.delete('./games/' + game.slug + '/' + name);
+              })
+            );
+          } catch (_) {}
+        }
+        return true;
+      }
+
+      window.ArcadeInstaller = {
+        isInstalled: isGameInstalled,
+        install: installGameModule,
+        uninstall: uninstallGameModule,
+        listInstalled: readInstalledMap
+      };
 
       function getGameSave(game) {
         const key = 'arcade_game_' + game.id + '_' + game.slug + '_v1';
@@ -464,66 +882,206 @@
         return null;
       }
 
-      function drawProceduralThumbnail(canvas, game) {
+      // Live Procedural Attract-Mode Demo Renderer (works on both the main Cabinet screen and card previews)
+      function drawAnimatedDemoFrame(canvas, game, timeSec) {
+        if (!canvas || !game) return;
         const ctx = canvas.getContext('2d');
-        const w = (canvas.width = 360);
-        const h = (canvas.height = 150);
-        const accent = game.accentColor || '#00e5ff';
+        if (!ctx) return;
+        const w = canvas.width || 360;
+        const h = canvas.height || 150;
+        const accent = game.accentColor || '#00f0ff';
+        const seed = hashSlug(game.slug || game.id);
+        const t = reducedMotion ? 1.25 : timeSec;
 
         const grad = ctx.createLinearGradient(0, 0, w, h);
-        grad.addColorStop(0, '#090d1a');
-        grad.addColorStop(1, '#16223d');
+        grad.addColorStop(0, '#070b16');
+        grad.addColorStop(1, '#13203b');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, w, h);
 
-        // Deterministic seed from slug
-        let seed = 0;
-        const slugStr = String(game.slug || game.id || '001');
-        for (let i = 0; i < slugStr.length; i++) {
-          seed = (seed * 31 + slugStr.charCodeAt(i)) >>> 0;
-        }
-
-        // Perspective grid lines
+        // Parallax setting grid & horizon
         ctx.strokeStyle = accent;
-        ctx.globalAlpha = 0.18;
+        ctx.globalAlpha = 0.16;
         ctx.lineWidth = 1;
-        for (let x = 0; x < w; x += 28) {
+        const drift = (t * 24) % 28;
+        for (let x = -drift; x < w; x += 28) {
           ctx.beginPath();
           ctx.moveTo(x, 0);
           ctx.lineTo(x, h);
           ctx.stroke();
         }
-        for (let y = 0; y < h; y += 28) {
+        for (let y = (t * 14) % 28; y < h; y += 28) {
           ctx.beginPath();
           ctx.moveTo(0, y);
           ctx.lineTo(w, y);
           ctx.stroke();
         }
 
-        // Procedural geometric emblem
-        ctx.globalAlpha = 0.85;
-        ctx.strokeStyle = accent;
-        ctx.lineWidth = 2.5;
-        const cx = w / 2;
-        const cy = h / 2;
-        const sides = 3 + (seed % 5);
-        const radius = 38;
-        ctx.beginPath();
-        for (let i = 0; i <= sides; i++) {
-          const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
-          const px = cx + Math.cos(angle) * radius;
-          const py = cy + Math.sin(angle) * radius;
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
+        // Parallax stars / environmental motes
+        ctx.fillStyle = '#eef4ff';
+        for (let i = 0; i < 10; i++) {
+          const sx = ((seed >> (i + 1)) + i * 67 + Math.floor(t * (12 + i * 3))) % w;
+          const sy = ((seed >> (i + 3)) + i * 43) % h;
+          ctx.globalAlpha = 0.22 + (i % 3) * 0.12;
+          ctx.fillRect(sx, sy, 2, 2);
         }
-        ctx.stroke();
 
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius * 0.45, 0, Math.PI * 2);
+        const cx = w * 0.5;
+        const cy = h * 0.54;
+        const genre = String(game.genre || '');
+        const twist = String(game.coreMechanic || '');
+
+        // Twist-specific field visualization
+        if (twist.indexOf('Shrinking') !== -1) {
+          const inset = 10 + Math.abs(Math.sin(t * 1.1)) * 18;
+          ctx.strokeStyle = '#ff4d8d';
+          ctx.globalAlpha = 0.45;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(inset, inset, w - inset * 2, h - inset * 2);
+        } else if (twist.indexOf('Polarity') !== -1) {
+          ctx.strokeStyle = Math.sin(t * 2) >= 0 ? '#00f0ff' : '#ff4d8d';
+          ctx.globalAlpha = 0.35;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 42 + Math.sin(t * 3) * 8, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Simulated Player Actor
+        const px = cx + Math.cos(t * 1.6 + (seed % 7)) * (w * 0.22);
+        const py = cy + Math.sin(t * 2.1 + (seed % 5)) * (h * 0.2);
+
+        // Echo / Ghost Self-Cooperation trail
+        if (twist.indexOf('Echo') !== -1 || twist.indexOf('Tether') !== -1) {
+          for (let g = 1; g <= 3; g++) {
+            const gx = cx + Math.cos((t - g * 0.22) * 1.6 + (seed % 7)) * (w * 0.22);
+            const gy = cy + Math.sin((t - g * 0.22) * 2.1 + (seed % 5)) * (h * 0.2);
+            ctx.beginPath();
+            ctx.arc(gx, gy, Math.max(5, 11 - g * 2), 0, Math.PI * 2);
+            ctx.strokeStyle = accent;
+            ctx.globalAlpha = 0.35 / g;
+            ctx.stroke();
+          }
+        }
+
+        // Simulated Enemy / Boss Actors & Telegraphs
+        const enemyCount = 3 + (seed % 3);
+        for (let e = 0; e < enemyCount; e++) {
+          const ea = t * (0.9 + e * 0.25) + e * ((Math.PI * 2) / enemyCount);
+          const er = Math.min(w, h) * (0.26 + (e % 2) * 0.08);
+          const ex = cx + Math.cos(ea) * er;
+          const ey = cy + Math.sin(ea * 1.2) * (er * 0.72);
+
+          // Stealth vision cone if Stealth genre
+          if (genre.indexOf('Stealth') !== -1) {
+            ctx.fillStyle = 'rgba(255, 209, 102, 0.16)';
+            ctx.globalAlpha = 1;
+            ctx.beginPath();
+            ctx.moveTo(ex, ey);
+            const aim = Math.atan2(py - ey, px - ex);
+            ctx.arc(ex, ey, 38, aim - 0.4, aim + 0.4);
+            ctx.closePath();
+            ctx.fill();
+          }
+
+          ctx.globalAlpha = 0.85;
+          ctx.strokeStyle = e === 0 ? '#ff4d8d' : '#ffd166';
+          ctx.lineWidth = 2;
+          const sides = 3 + ((seed + e) % 4);
+          const rad = e === 0 ? 12 : 8;
+          ctx.beginPath();
+          for (let s = 0; s <= sides; s++) {
+            const a = ea + (s / sides) * Math.PI * 2;
+            const vx = ex + Math.cos(a) * rad;
+            const vy = ey + Math.sin(a) * rad;
+            if (s === 0) ctx.moveTo(vx, vy);
+            else ctx.lineTo(vx, vy);
+          }
+          ctx.stroke();
+        }
+
+        // Simulated Projectiles / Action Pulses
         ctx.fillStyle = accent;
-        ctx.globalAlpha = 0.35;
-        ctx.fill();
+        ctx.globalAlpha = 0.9;
+        for (let b = 0; b < 3; b++) {
+          const prog = ((t * 1.8 + b * 0.33) % 1);
+          const tx = cx + Math.cos(t + b * 2.1) * (w * 0.3);
+          const ty = cy + Math.sin(t + b * 2.1) * (h * 0.26);
+          const bx = px + (tx - px) * prog;
+          const by = py + (ty - py) * prog;
+          ctx.beginPath();
+          ctx.arc(bx, by, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Draw Player Rig
         ctx.globalAlpha = 1;
+        ctx.fillStyle = accent;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      function drawProceduralThumbnail(canvas, game) {
+        drawAnimatedDemoFrame(canvas, game, 1.4);
+      }
+
+      function updateCabinetStage() {
+        if (!selectedGame) return;
+        const stage = document.getElementById('arcade-cabinet-stage');
+        const save = getGameSave(selectedGame);
+        const highScore = save && typeof save.highScore === 'number' ? save.highScore : 0;
+        const plays = save && typeof save.totalGamesPlayed === 'number' ? save.totalGamesPlayed : 0;
+        const installed = isGameInstalled(selectedGame);
+        const installedRecord = readInstalledMap()[selectedGame.slug];
+
+        if (stage) stage.style.setProperty('--cabinet-accent', selectedGame.accentColor || '#00f0ff');
+        const idEl = document.getElementById('cabinet-game-id');
+        if (idEl) idEl.textContent = '#' + selectedGame.id + ' • ' + selectedGame.slug;
+        const phaseEl = document.getElementById('cabinet-phase-badge');
+        if (phaseEl) phaseEl.textContent = selectedGame.phase ? ('PHASE ' + selectedGame.phase + '/10') : 'CLASSIC V1';
+        const titleEl = document.getElementById('cabinet-game-title');
+        if (titleEl) titleEl.textContent = selectedGame.title || selectedGame.slug;
+        const descEl = document.getElementById('cabinet-game-desc');
+        if (descEl) descEl.textContent = selectedGame.description || '';
+        const genreEl = document.getElementById('cabinet-meta-genre');
+        if (genreEl) genreEl.textContent = selectedGame.genre || 'Arcade';
+        const twistEl = document.getElementById('cabinet-meta-twist');
+        if (twistEl) twistEl.textContent = selectedGame.coreMechanic || 'Signature Action';
+        const settingEl = document.getElementById('cabinet-meta-setting');
+        if (settingEl) settingEl.textContent = selectedGame.setting || 'Procedural Arena';
+        const scoreEl = document.getElementById('cabinet-meta-score');
+        if (scoreEl) scoreEl.textContent = 'HI: ' + highScore.toLocaleString() + ' (' + plays + ' plays)';
+
+        const badgeEl = document.getElementById('cabinet-install-badge');
+        const installBtn = document.getElementById('cabinet-install-btn');
+        const uninstallBtn = document.getElementById('cabinet-uninstall-btn');
+        const launchBtn = document.getElementById('cabinet-launch-btn');
+        const gameUrl = selectedGame.path || ('./games/' + selectedGame.slug + '/index.html');
+
+        if (badgeEl) {
+          badgeEl.className = 'install-badge' + (installed ? ' installed' : '');
+          const kb = installedRecord && installedRecord.bytes ? Math.max(1, Math.round(installedRecord.bytes / 1024)) : 45;
+          badgeEl.textContent = installed ? ('Installed Offline (' + kb + ' KB)') : 'Preview Only (Not Installed)';
+        }
+        if (installBtn) {
+          installBtn.hidden = installed;
+        }
+        if (uninstallBtn) {
+          uninstallBtn.hidden = !installed;
+        }
+        if (launchBtn) {
+          launchBtn.href = gameUrl;
+          launchBtn.textContent = installed ? 'Launch Installed Game' : 'Stream / Quick Play';
+        }
+
+        const demoCanvas = document.getElementById('cabinet-demo-canvas');
+        if (demoCanvas) {
+          drawAnimatedDemoFrame(demoCanvas, selectedGame, performance.now() / 1000);
+        }
       }
 
       function renderGenreTags() {
@@ -554,6 +1112,8 @@
         const grid = document.getElementById('games-grid');
         grid.innerHTML = '';
 
+        const installedMap = readInstalledMap();
+        const installedCount = Object.keys(installedMap).length;
         let totalPlays = 0;
         registry.forEach(function (g) {
           const save = getGameSave(g);
@@ -563,25 +1123,38 @@
         });
 
         document.getElementById('stat-total-games').textContent = registry.length + (registry.length === 1 ? ' Game' : ' Games');
+        const instStat = document.getElementById('stat-installed-games');
+        if (instStat) instStat.textContent = installedCount + ' Installed';
+        const instFilterBtn = document.getElementById('installed-filter-btn');
+        if (instFilterBtn) {
+          instFilterBtn.textContent = 'Installed Only (' + installedCount + ')';
+          instFilterBtn.setAttribute('aria-pressed', installedOnly ? 'true' : 'false');
+        }
         document.getElementById('stat-total-plays').textContent = totalPlays + ' Total Plays';
 
         const q = searchQuery.trim().toLowerCase();
         const filtered = registry.filter(function (g) {
           const matchesGenre = selectedGenre === 'ALL' || g.genre === selectedGenre;
+          const matchesInstalled = !installedOnly || Boolean(installedMap[g.slug]);
           const matchesSearch =
             !q ||
             (g.title && g.title.toLowerCase().indexOf(q) !== -1) ||
             (g.genre && g.genre.toLowerCase().indexOf(q) !== -1) ||
             (g.coreMechanic && g.coreMechanic.toLowerCase().indexOf(q) !== -1) ||
+            (g.setting && g.setting.toLowerCase().indexOf(q) !== -1) ||
             (g.description && g.description.toLowerCase().indexOf(q) !== -1) ||
             (g.id && g.id.toLowerCase().indexOf(q) !== -1);
-          return matchesGenre && matchesSearch;
+          return matchesGenre && matchesInstalled && matchesSearch;
         });
+
+        updateCabinetStage();
 
         if (filtered.length === 0) {
           const empty = document.createElement('div');
           empty.className = 'empty-state';
-          empty.textContent = 'No arcade modules match your current filter.';
+          empty.textContent = installedOnly
+            ? 'No games installed yet. Select any game demo above and tap Install Module to cache it offline.'
+            : 'No arcade modules match your current filter.';
           grid.appendChild(empty);
           return;
         }
@@ -589,12 +1162,16 @@
         filtered.forEach(function (game) {
           const save = getGameSave(game);
           const highScore = save && typeof save.highScore === 'number' ? save.highScore : 0;
+          const installed = Boolean(installedMap[game.slug]);
+          const isSelected = selectedGame && selectedGame.slug === game.slug;
+
           const card = document.createElement('article');
-          card.className = 'game-card';
-          card.style.setProperty('--card-accent', game.accentColor || '#00e5ff');
+          card.className = 'game-card' + (isSelected ? ' selected' : '');
+          card.style.setProperty('--card-accent', game.accentColor || '#00f0ff');
 
           const thumb = document.createElement('div');
           thumb.className = 'card-thumb';
+          thumb.title = 'Tap to load live animated demo in the Arcade Cabinet';
           const canvas = document.createElement('canvas');
           thumb.appendChild(canvas);
 
@@ -607,6 +1184,20 @@
           scoreBadge.className = 'card-score-badge';
           scoreBadge.textContent = 'HI: ' + highScore.toLocaleString();
           thumb.appendChild(scoreBadge);
+
+          const installPill = document.createElement('span');
+          installPill.className = 'card-install-pill' + (installed ? ' installed' : '');
+          installPill.textContent = installed ? 'INSTALLED ✓' : 'ANIMATED DEMO';
+          thumb.appendChild(installPill);
+
+          thumb.addEventListener('click', function () {
+            selectedGame = game;
+            renderGames();
+            const stage = document.getElementById('arcade-cabinet-stage');
+            if (stage && typeof stage.scrollIntoView === 'function') {
+              stage.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
+            }
+          });
 
           const body = document.createElement('div');
           body.className = 'card-body';
@@ -647,15 +1238,31 @@
           const footer = document.createElement('div');
           footer.className = 'card-footer';
 
-          const dateEl = document.createElement('span');
-          dateEl.className = 'card-date';
-          dateEl.textContent = game.createdAt || '';
-          footer.appendChild(dateEl);
+          const previewBtn = document.createElement('button');
+          previewBtn.type = 'button';
+          previewBtn.className = 'btn btn-subtle';
+          previewBtn.textContent = isSelected ? 'Previewing' : 'Demo Preview';
+          previewBtn.addEventListener('click', function () {
+            selectedGame = game;
+            renderGames();
+          });
+          footer.appendChild(previewBtn);
 
           const playBtn = document.createElement('a');
-          playBtn.className = 'btn btn-primary';
+          playBtn.className = 'btn ' + (installed ? 'btn-primary' : 'btn-install');
           playBtn.href = game.path || ('./games/' + game.slug + '/index.html');
-          playBtn.textContent = 'Play Now';
+          playBtn.textContent = installed ? 'Play Installed' : 'Play / Install';
+          playBtn.addEventListener('click', function (ev) {
+            if (!installed) {
+              ev.preventDefault();
+              selectedGame = game;
+              installGameModule(game).then(function () {
+                const statusNode = document.getElementById('cabinet-install-status');
+                if (statusNode) statusNode.textContent = 'Installed ' + game.title + ' for offline play.';
+                renderGames();
+              });
+            }
+          });
           footer.appendChild(playBtn);
 
           card.appendChild(thumb);
@@ -674,9 +1281,94 @@
 
       document.getElementById('random-game-btn').addEventListener('click', function () {
         if (registry.length === 0) return;
-        const pick = registry[Math.floor(Math.random() * registry.length)];
-        window.location.href = pick.path || ('./games/' + pick.slug + '/index.html');
+        selectedGame = registry[Math.floor(Math.random() * registry.length)];
+        renderGames();
       });
+
+      const installedFilterBtn = document.getElementById('installed-filter-btn');
+      if (installedFilterBtn) {
+        installedFilterBtn.addEventListener('click', function () {
+          installedOnly = !installedOnly;
+          renderGames();
+        });
+      }
+
+      const handednessBtn = document.getElementById('handedness-btn');
+      if (handednessBtn) {
+        handednessBtn.addEventListener('click', function () {
+          const cur = document.documentElement.getAttribute('data-handed') === 'left' ? 'right' : 'left';
+          document.documentElement.setAttribute('data-handed', cur);
+          handednessBtn.textContent = 'Hand: ' + (cur === 'left' ? 'Left' : 'Right');
+        });
+      }
+
+      const motionToggleBtn = document.getElementById('motion-toggle-btn');
+      if (motionToggleBtn) {
+        const syncMotionLabel = function () {
+          motionToggleBtn.textContent = reducedMotion ? 'Demo: Reduced Motion' : 'Demo: Live 60fps';
+          motionToggleBtn.setAttribute('aria-pressed', reducedMotion ? 'true' : 'false');
+        };
+        syncMotionLabel();
+        motionToggleBtn.addEventListener('click', function () {
+          reducedMotion = !reducedMotion;
+          try {
+            localStorage.setItem('aegis_comfort_reduced_motion', reducedMotion ? 'true' : 'false');
+          } catch (_) {}
+          syncMotionLabel();
+          updateCabinetStage();
+        });
+      }
+
+      const backToAegisBtn = document.getElementById('back-to-aegis-btn');
+      if (backToAegisBtn) {
+        backToAegisBtn.addEventListener('click', function () {
+          if (window.AegisBridge && typeof window.AegisBridge.returnToDeck === 'function') {
+            window.AegisBridge.returnToDeck();
+            return;
+          }
+          if (window.history && window.history.length > 1) {
+            window.history.back();
+          }
+        });
+      }
+
+      const cabinetInstallBtn = document.getElementById('cabinet-install-btn');
+      if (cabinetInstallBtn) {
+        cabinetInstallBtn.addEventListener('click', function () {
+          if (!selectedGame) return Promise.resolve();
+          const statusNode = document.getElementById('cabinet-install-status');
+          if (statusNode) statusNode.textContent = 'Installing ' + selectedGame.title + '...';
+          return installGameModule(selectedGame).then(function (rec) {
+            const kb = rec && rec.bytes ? Math.max(1, Math.round(rec.bytes / 1024)) : 45;
+            if (statusNode) statusNode.textContent = 'Installed ' + selectedGame.title + ' (' + kb + ' KB cached offline).';
+            renderGames();
+          });
+        });
+      }
+
+      const cabinetUninstallBtn = document.getElementById('cabinet-uninstall-btn');
+      if (cabinetUninstallBtn) {
+        cabinetUninstallBtn.addEventListener('click', function () {
+          if (!selectedGame) return Promise.resolve();
+          const title = selectedGame.title;
+          return uninstallGameModule(selectedGame).then(function () {
+            const statusNode = document.getElementById('cabinet-install-status');
+            if (statusNode) statusNode.textContent = 'Uninstalled ' + title + ' module files (save data preserved).';
+            renderGames();
+          });
+        });
+      }
+
+      if (typeof requestAnimationFrame === 'function') {
+        const tickCabinetDemo = function (nowMs) {
+          if (!reducedMotion && selectedGame && !document.hidden) {
+            const demoCanvas = document.getElementById('cabinet-demo-canvas');
+            if (demoCanvas) drawAnimatedDemoFrame(demoCanvas, selectedGame, nowMs / 1000);
+          }
+          requestAnimationFrame(tickCabinetDemo);
+        };
+        requestAnimationFrame(tickCabinetDemo);
+      }
 
       // Global Save Backup Modal
       const modal = document.getElementById('backup-modal');

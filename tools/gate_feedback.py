@@ -6,13 +6,17 @@ import re
 from pathlib import Path
 
 
+SAFE_DIAGNOSTIC_RE = re.compile(r"[A-Za-z0-9_./:;,'() -]{1,180}\Z")
+
+
 def render(directory: Path, head: str, base: str, run: str, result: str, mode: str) -> str:
     if not re.fullmatch(r"[a-f0-9]{40}", head) or not re.fullmatch(r"[a-f0-9]{40}", base):
         raise ValueError("invalid pinned revision")
     if not re.fullmatch(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+", run):
         raise ValueError("invalid workflow run URL")
     classification = "infrastructure"
-    for name in ("gate-evidence.json", "targets.json"):
+    diagnostics = []
+    for name, prefix in (("gate-evidence.json", "ERROR: "), ("targets.json", "PATH GUARD: ")):
         path = directory / name
         if not path.is_file() or path.is_symlink() or path.stat().st_size > 2_000_000:
             continue
@@ -20,15 +24,18 @@ def render(directory: Path, head: str, base: str, run: str, result: str, mode: s
             item = json.loads(path.read_text())
             if item.get("schema_version") != 1 or item.get("head_sha") != head or item.get("base_sha") != base:
                 continue
-            if item.get("classification") in ("content", "coverage", "runtime", "infrastructure"):
+            if classification == "infrastructure" and item.get("classification") in ("content", "coverage", "runtime", "infrastructure"):
                 classification = item["classification"]
-                break
+            for raw in item.get("errors", []) or []:
+                if isinstance(raw, str) and SAFE_DIAGNOSTIC_RE.fullmatch(raw) and len(diagnostics) < 5:
+                    diagnostics.append(prefix + raw)
         except (ValueError, OSError, AttributeError):
             continue
     message = "PASS: bounded gate checks passed." if result == "success" else "FAILED: validation failed; inspect the gate-evidence artifact in the linked run."
+    extra = ("\n" + "\n".join(diagnostics)) if result != "success" and diagnostics else ""
     return ("<!-- arcade-gate-report -->\n### Arcade gate evidence\n\n"
             f"Head: {head}\nBase: {base}\nRun: {run}\nClassification: {classification}\nMode: {mode}\n\n"
-            f"{message}\n\nIntegration is a separate decision. An owner must review maintenance/infrastructure changes; "
+            f"{message}{extra}\n\nIntegration is a separate decision. An owner must review maintenance/infrastructure changes; "
             "phase integration requires the enabled protected-integration job and its independent evidence.\n")
 
 
