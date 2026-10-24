@@ -219,6 +219,10 @@ class Player {
         this.stillTime = 0;
         this.timeDilationFactor = 1.0;
 
+        this.comboCount = 0;
+        this.comboTimer = 0;
+        this.comboMaxTimer = 3.0;
+
         // Dash & Reactive Vector Rig
         this.dashCooldown = 3.0;
         this.dashTimer = 0;
@@ -273,6 +277,11 @@ class Player {
         this.aimY = input.mouse.y;
 
         this.vy += this.gravity * dt;
+
+        if (this.comboTimer > 0) {
+            this.comboTimer -= dt;
+            if (this.comboTimer <= 0) this.comboCount = 0;
+        }
 
         // Dash logic
         if (this.dashTimer > 0) this.dashTimer -= dt;
@@ -893,6 +902,8 @@ class Game {
         this.score = 0;
         this.enemies = [];
         this.particles = [];
+        this.pickups = [];
+        this.upgradeChoices = [];
         this.platforms = [
             { x: 0, y: 580, w: 800, h: 20 },
             { x: 100, y: 450, w: 200, h: 20 },
@@ -993,7 +1004,9 @@ class Game {
 
                                 if (e.hp <= 0) {
                                     e.active = false;
-                                    this.score += 500;
+                                    this.score += 500 * (1 + this.player.comboCount * 0.1);
+                                    this.player.comboCount++;
+                                    this.player.comboTimer = this.player.comboMaxTimer;
                                     this.sound.playScore();
                                     this.enemies.splice(i, 1);
                                     this.bossActive = false;
@@ -1002,10 +1015,10 @@ class Game {
                                         this.particles.push(new Particle(e.x, e.y, e.color));
                                     }
 
-                                    // Resume normal waves
-                                    for(let j = 0; j < 5; j++) {
-                                        this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50));
-                                    }
+                                    this.state = 'UPGRADE';
+                                    this.upgradeChoices = WaveDirector.getUpgrades(3);
+                                    this.player.vx = 0;
+                                    this.player.vy = 0;
                                 }
                             }
                         } else if (e.type === 'bruiser' && e.shielded) {
@@ -1022,10 +1035,16 @@ class Game {
                             if (!this.player.dashActive) {
                                  this.player.vy = this.player.jumpForce * 0.8; // Bounce
                             }
-                            this.score += 100;
+                            this.score += 100 * (1 + this.player.comboCount * 0.1);
+                            this.player.comboCount++;
+                            this.player.comboTimer = this.player.comboMaxTimer;
                             this.sound.playEnemyHit();
                             this.sound.playScore();
                             this.enemies.splice(i, 1);
+
+                            if (Math.random() < 0.3) {
+                                this.pickups.push(new Pickup(e.x, e.y));
+                            }
 
                             for (let k = 0; k < 10; k++) {
                                 this.particles.push(new Particle(e.x, e.y, e.color));
@@ -1070,6 +1089,46 @@ class Game {
                 }
             }
 
+            for (let i = this.pickups.length - 1; i >= 0; i--) {
+                let p = this.pickups[i];
+                p.update(effectiveDt, this.platforms);
+                let dist = Math.hypot(p.x - this.player.x, p.y - this.player.y);
+                if (dist < p.radius + this.player.radius) {
+                    if (p.type === 'combo') {
+                        this.player.comboTimer = this.player.comboMaxTimer;
+                    } else {
+                        this.score += 50 * (1 + this.player.comboCount * 0.1);
+                    }
+                    this.sound.playScore();
+                    this.pickups.splice(i, 1);
+                } else if (!p.active) {
+                    this.pickups.splice(i, 1);
+                }
+            }
+
+        } else if (this.state === 'UPGRADE') {
+            if (this.input.mouse.justPressed) {
+                const mx = this.input.mouse.x;
+                const my = this.input.mouse.y;
+                const boxWidth = 200;
+                const boxHeight = 100;
+                const spacing = 20;
+                const totalWidth = 3 * boxWidth + 2 * spacing;
+                const startX = this.logicalWidth / 2 - totalWidth / 2;
+                const startY = this.logicalHeight / 2 - boxHeight / 2;
+
+                for (let i = 0; i < this.upgradeChoices.length; i++) {
+                    let bx = startX + i * (boxWidth + spacing);
+                    if (mx > bx && mx < bx + boxWidth && my > startY && my < startY + boxHeight) {
+                        this.upgradeChoices[i].apply(this.player);
+                        this.state = 'PLAYING';
+                        for(let j = 0; j < 5; j++) {
+                            this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50));
+                        }
+                        break;
+                    }
+                }
+            }
         } else if (this.state === 'PAUSED') {
             if (this.input.isKeyDown('Enter') || this.input.mouse.justPressed) {
                 this.state = 'PLAYING';
@@ -1139,6 +1198,10 @@ class Game {
                 e.draw(this.ctx);
             }
 
+            for (let p of this.pickups) {
+                p.draw(this.ctx);
+            }
+
             if (this.player && this.state !== 'GAME_OVER') {
                 this.player.draw(this.ctx);
             }
@@ -1182,26 +1245,63 @@ class Game {
             this.ctx.fillStyle = '#fff';
             this.ctx.font = '20px sans-serif';
             this.ctx.textAlign = 'left';
-            this.ctx.fillText(`Score: ${this.score}`, 20, 30);
-            this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, 20, 60);
+            this.ctx.fillText(`Score: ${Math.floor(this.score)}`, 20, 30);
+            this.ctx.fillText(`High Score: ${Math.floor(this.saveManager.data.highScore)}`, 20, 60);
             if (this.player) {
                 this.ctx.fillText(`Time Dilation: ${this.player.timeDilationFactor.toFixed(2)}x`, 20, 90);
+                if (this.player.comboCount > 0) {
+                    this.ctx.fillStyle = '#ffff00';
+                    this.ctx.fillText(`Combo x${this.player.comboCount}`, 20, 120);
+                    this.ctx.fillRect(20, 125, 100 * (this.player.comboTimer / this.player.comboMaxTimer), 5);
+                }
 
                 // Dash Cooldown HUD
-                this.ctx.fillText(`Dash: `, 20, 120);
+                this.ctx.fillText(`Dash: `, 20, 150);
                 this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-                this.ctx.fillRect(80, 105, 100, 15);
+                this.ctx.fillRect(80, 135, 100, 15);
                 if (this.player.dashTimer <= 0) {
                     this.ctx.fillStyle = '#00ffff';
-                    this.ctx.fillRect(80, 105, 100, 15);
+                    this.ctx.fillRect(80, 135, 100, 15);
                 } else {
                     this.ctx.fillStyle = '#ff5555';
                     let pct = 1.0 - (this.player.dashTimer / this.player.dashCooldown);
-                    this.ctx.fillRect(80, 105, 100 * pct, 15);
+                    this.ctx.fillRect(80, 135, 100 * pct, 15);
                 }
             }
 
-            if (this.state === 'PAUSED') {
+            if (this.state === 'UPGRADE') {
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '36px sans-serif';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('WAVE CLEARED - SELECT UPGRADE', this.logicalWidth / 2, this.logicalHeight / 4);
+
+                const boxWidth = 200;
+                const boxHeight = 100;
+                const spacing = 20;
+                const totalWidth = 3 * boxWidth + 2 * spacing;
+                const startX = this.logicalWidth / 2 - totalWidth / 2;
+                const startY = this.logicalHeight / 2 - boxHeight / 2;
+
+                for (let i = 0; i < this.upgradeChoices.length; i++) {
+                    let bx = startX + i * (boxWidth + spacing);
+                    let choice = this.upgradeChoices[i];
+
+                    this.ctx.fillStyle = '#2c3e50';
+                    this.ctx.fillRect(bx, startY, boxWidth, boxHeight);
+                    this.ctx.strokeStyle = '#769a87';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.strokeRect(bx, startY, boxWidth, boxHeight);
+
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.font = '18px sans-serif';
+                    this.ctx.fillText(choice.name, bx + boxWidth / 2, startY + 40);
+                    this.ctx.font = '14px sans-serif';
+                    this.ctx.fillStyle = '#aaa';
+                    this.ctx.fillText(choice.desc, bx + boxWidth / 2, startY + 70);
+                }
+            } else if (this.state === 'PAUSED') {
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                 this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
                 this.ctx.fillStyle = '#fff';
