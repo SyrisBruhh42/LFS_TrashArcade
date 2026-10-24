@@ -1559,13 +1559,25 @@ class Game {
             y = Math.random() < 0.5 ? -20 : this.height + 20;
         }
         const rand = Math.random();
-        if (rand < 0.3) {
+
+        let swarmerProb = Math.max(0.1, 0.5 - this.wave * 0.05);
+        let sniperProb = Math.max(0.1, 0.3 - this.wave * 0.02);
+        let bruiserProb = Math.min(0.3, 0.1 + this.wave * 0.03);
+        let splitterProb = Math.min(0.3, 0.05 + this.wave * 0.03);
+
+        let total = swarmerProb + sniperProb + bruiserProb + splitterProb;
+        swarmerProb /= total;
+        sniperProb /= total;
+        bruiserProb /= total;
+        splitterProb /= total;
+
+        if (rand < swarmerProb) {
             this.enemies.push(new EnemySwarmer(x, y));
-        } else if (rand < 0.5) {
+        } else if (rand < swarmerProb + sniperProb) {
             this.enemies.push(new EnemyRangedSniper(x, y));
-        } else if (rand < 0.7) {
+        } else if (rand < swarmerProb + sniperProb + bruiserProb) {
             this.enemies.push(new EnemyShieldedBruiser(x, y));
-        } else if (rand < 0.9) {
+        } else if (rand < swarmerProb + sniperProb + bruiserProb + splitterProb) {
             this.enemies.push(new EnemySplitter(x, y));
         } else {
             this.enemies.push(new EnemyAreaDenial(x, y));
@@ -1736,6 +1748,15 @@ class Game {
         if (this.enemyProjectiles) this.enemyProjectiles = this.enemyProjectiles.filter(ep => ep.active);
         if (this.hazards) this.hazards = this.hazards.filter(h => h.active);
 
+        // Cap arrays to prevent memory leaks
+        if (this.particles.length > 300) this.particles.splice(0, this.particles.length - 300);
+        if (this.enemies.length > 100) this.enemies.splice(0, this.enemies.length - 100);
+        if (this.enemyProjectiles && this.enemyProjectiles.length > 150) this.enemyProjectiles.splice(0, this.enemyProjectiles.length - 150);
+        if (this.hazards && this.hazards.length > 50) this.hazards.splice(0, this.hazards.length - 50);
+        if (this.bullets && this.bullets.length > 100) this.bullets.splice(0, this.bullets.length - 100);
+        if (this.ammos && this.ammos.length > 200) this.ammos.splice(0, this.ammos.length - 200);
+        if (this.pickups && this.pickups.length > 50) this.pickups.splice(0, this.pickups.length - 50);
+
         if (this.score >= this.nextBossScore && !this.bossActive && this.bossWarningTimer <= 0) {
             this.bossWarningTimer = 3.0;
         }
@@ -1760,8 +1781,10 @@ class Game {
             this.enemySpawnTimer -= dt;
             if (this.enemySpawnTimer <= 0) {
                 this.spawnEnemy();
+                // Base spawn rate decreases with wave, gets faster as wave progresses
+                let targetSpawnRate = Math.max(0.2, 2.0 - (this.wave * 0.15));
                 this.enemySpawnTimer = this.enemySpawnRate;
-                this.enemySpawnRate = Math.max(0.5, this.enemySpawnRate - 0.05);
+                this.enemySpawnRate = Math.max(targetSpawnRate, this.enemySpawnRate - 0.05);
             }
         }
 
@@ -1827,6 +1850,16 @@ class Game {
                 this.ctx.font = 'bold 24px monospace';
                 this.ctx.fillText(`Combo x${this.combo}`, 20, 60);
                 this.ctx.fillRect(20, 70, 100 * (this.comboTimer / (this.activeUpgrades.includes('comboUp') ? this.comboTimerMax * 1.5 : this.comboTimerMax)), 10);
+                this.ctx.restore();
+            }
+
+            if (this.wave === 1 && this.state === 'PLAYING') {
+                this.ctx.save();
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                this.ctx.font = 'bold 20px monospace';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('Move: WASD | Aim/Shoot: Mouse', this.width / 2, this.height - 80);
+                this.ctx.fillText('Shoot enemies to drop ammo. Pick up ammo to reload!', this.width / 2, this.height - 50);
                 this.ctx.restore();
             }
 
@@ -2035,8 +2068,10 @@ class BossSandWorm extends Boss {
         this.radius = 40;
         this.speed = 120;
         this.color = '#c2a176';
-        this.maxHp = 50;
-        this.hp = 50;
+        // Base max HP 50, scales up with game wave (assuming it's passed or available globally via window.game, but here we can just use the global reference or passed arguments later. However Boss constructor doesn't take game. So we'll access window.game)
+        let wave = window.game ? window.game.wave : 1;
+        this.maxHp = 50 + (wave * 25);
+        this.hp = this.maxHp;
         this.state = 'DIGGING';
         this.stateTimer = 3.0;
     }
@@ -2115,8 +2150,9 @@ class BossDuneLord extends Boss {
         this.radius = 35;
         this.speed = 80;
         this.color = '#8b0000';
-        this.maxHp = 60;
-        this.hp = 60;
+        let wave = window.game ? window.game.wave : 1;
+        this.maxHp = 60 + (wave * 30);
+        this.hp = this.maxHp;
         this.actionTimer = 2.0;
     }
     update(dt, game) {
