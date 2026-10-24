@@ -179,6 +179,12 @@ class VFXManager {
                 this.particles.splice(i, 1);
             }
         }
+        if (this.waveIntro) {
+            this.waveIntro.update(dt);
+            if (this.waveIntro.life <= 0) {
+                this.waveIntro = null;
+            }
+        }
     }
 
     applyShake(ctx) {
@@ -201,5 +207,36 @@ class VFXManager {
         for (let a of this.afterimages) a.draw(ctx);
         for (let p of this.particles) p.draw(ctx);
         for (let ft of this.floatingTexts) ft.draw(ctx);
+        if (this.waveIntro) this.waveIntro.draw(ctx);
+    }
+}
+
+// Add wave intro visual effect
+class WaveIntro {
+    constructor(waveNum) {
+        this.waveNum = waveNum;
+        this.life = 3.0;
+        this.y = -50;
+    }
+    update(dt) {
+        this.life -= dt;
+        if (this.life > 2.5) {
+            this.y += (300 - this.y) * 10 * dt;
+        } else if (this.life < 0.5) {
+            this.y -= 500 * dt;
+        }
+    }
+    draw(ctx) {
+        if (this.life <= 0) return;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1.0, this.life);
+        ctx.font = 'bold 48px sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText("WAVE " + this.waveNum, 400, this.y);
+        ctx.strokeStyle = '#00aaaa';
+        ctx.lineWidth = 2;
+        ctx.strokeText("WAVE " + this.waveNum, 400, this.y);
+        ctx.restore();
     }
 }
