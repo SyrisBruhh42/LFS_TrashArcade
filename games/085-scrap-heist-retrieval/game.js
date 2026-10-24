@@ -789,6 +789,146 @@ class Collectible {
     }
 }
 
+class HazardConveyor {
+    constructor(x, y, w, h, speedX, speedY) {
+        this.x = x; this.y = y; this.w = w; this.h = h;
+        this.speedX = speedX; this.speedY = speedY;
+        this.animOffset = 0;
+    }
+    update(dt, game) {
+        this.animOffset = (this.animOffset + dt * 20) % 20;
+        let entities = [game.player, ...game.enemies];
+        for (let e of entities) {
+            if (e && e.x > this.x && e.x < this.x + this.w && e.y > this.y && e.y < this.y + this.h) {
+                e.x += this.speedX * dt;
+                e.y += this.speedY * dt;
+            }
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        ctx.strokeStyle = '#555';
+        ctx.beginPath();
+        for (let i = this.animOffset; i < this.w; i += 20) {
+            ctx.moveTo(this.x + i, this.y);
+            ctx.lineTo(this.x + i, this.y + this.h);
+        }
+        ctx.stroke();
+    }
+}
+
+class HazardTrap {
+    constructor(x, y, radius) {
+        this.x = x; this.y = y; this.radius = radius;
+        this.timer = 0;
+        this.active = false;
+    }
+    update(dt, game) {
+        this.timer += dt;
+        if (this.timer > 3) {
+            this.active = true;
+            this.timer = 0;
+        }
+        if (this.active && this.timer > 0.5) {
+            this.active = false;
+        }
+        if (this.active) {
+            let entities = [game.player, ...game.enemies];
+            for (let e of entities) {
+                if (e && Math.hypot(e.x - this.x, e.y - this.y) < this.radius + e.radius) {
+                    if (e === game.player) {
+                        e.vx += (e.x - this.x) * 2;
+                        e.vy += (e.y - this.y) * 2;
+                    } else if (e.state && e.state !== 'STUNNED') {
+                        e.state = 'STUNNED';
+                        e.stunTimer = 2.0;
+                    }
+                }
+            }
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.active ? '#ff0000' : '#440000';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#880000';
+        ctx.stroke();
+    }
+}
+
+
+class Particle {
+    constructor(x, y, color, size, duration) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = size;
+        this.duration = duration;
+        this.timer = duration;
+        this.vx = (Math.random() - 0.5) * 100;
+        this.vy = (Math.random() - 0.5) * 100;
+    }
+    update(dt) {
+        this.timer -= dt;
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.timer / this.duration);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class ParallaxBackground {
+    constructor(w, h) {
+        this.w = w;
+        this.h = h;
+        this.layers = [
+            { speed: 10, items: this.generateItems(20, '#111', 50, 100) }, // Distant junk mountains
+            { speed: 25, items: this.generateItems(15, '#1a1a1a', 30, 80) }, // Mid-ground cranes/structures
+            { speed: 50, items: this.generateItems(10, '#252525', 20, 60) }  // Foreground floating debris
+        ];
+    }
+    generateItems(count, color, minSize, maxSize) {
+        let items = [];
+        for (let i = 0; i < count; i++) {
+            items.push({
+                x: Math.random() * this.w,
+                y: Math.random() * this.h,
+                w: minSize + Math.random() * (maxSize - minSize),
+                h: minSize + Math.random() * (maxSize - minSize),
+                color: color
+            });
+        }
+        return items;
+    }
+    update(dt) {
+        for (let layer of this.layers) {
+            for (let item of layer.items) {
+                item.x -= layer.speed * dt;
+                if (item.x + item.w < 0) {
+                    item.x = this.w;
+                    item.y = Math.random() * this.h;
+                }
+            }
+        }
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, this.w, this.h);
+        for (let layer of this.layers) {
+            for (let item of layer.items) {
+                ctx.fillStyle = item.color;
+                ctx.fillRect(item.x, item.y, item.w, item.h);
+            }
+        }
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -810,9 +950,13 @@ class Game {
         this.obstacles = [];
         this.projectiles = [];
         this.collectibles = [];
+        this.hazards = [];
+        this.particles = [];
 
         this.shootCooldown = 0;
         this.wave = 1;
+
+        this.parallax = new ParallaxBackground(this.width, this.height);
 
         this.initResizeObserver();
         this.bindEvents();
@@ -894,6 +1038,12 @@ class Game {
         this.obstacles = [];
         this.projectiles = [];
         this.collectibles = [];
+        this.hazards = [];
+        this.particles = [];
+
+        // Hazards
+        this.hazards.push(new HazardConveyor(200, 200, 400, 50, 100, 0));
+        this.hazards.push(new HazardTrap(400, 400, 50));
 
         // Border obstacles
         this.obstacles.push(new Obstacle(0, 0, this.width, 20));
@@ -948,6 +1098,8 @@ class Game {
     update(dt) {
         if (this.state !== 'PLAYING') return;
 
+        this.parallax.update(dt);
+
         if (this.shootCooldown > 0) this.shootCooldown -= dt;
 
         this.player.update(dt, this.input, this);
@@ -956,8 +1108,19 @@ class Game {
             e.update(dt, this);
         }
 
+        for (let h of this.hazards) {
+            h.update(dt, this);
+        }
+
         for (let p of this.projectiles) {
             p.update(dt, this);
+        }
+
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            this.particles[i].update(dt);
+            if (this.particles[i].timer <= 0) {
+                this.particles.splice(i, 1);
+            }
         }
 
         // Pick up grounded projectile
@@ -994,26 +1157,17 @@ class Game {
     }
 
     draw() {
-        this.ctx.fillStyle = '#222';
-        this.ctx.fillRect(0, 0, this.width, this.height);
-
-        // Grid pattern
-        this.ctx.strokeStyle = '#333';
-        this.ctx.lineWidth = 1;
-        for (let i = 0; i < this.width; i += 40) {
-            this.ctx.beginPath(); this.ctx.moveTo(i, 0); this.ctx.lineTo(i, this.height); this.ctx.stroke();
-        }
-        for (let i = 0; i < this.height; i += 40) {
-            this.ctx.beginPath(); this.ctx.moveTo(0, i); this.ctx.lineTo(this.width, i); this.ctx.stroke();
-        }
+        this.parallax.draw(this.ctx);
 
         if (this.state === 'TITLE') {
             this.drawTitle();
         } else if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
             for (let c of this.collectibles) c.draw(this.ctx);
             for (let o of this.obstacles) o.draw(this.ctx);
+            for (let h of this.hazards) h.draw(this.ctx);
             for (let p of this.projectiles) p.draw(this.ctx);
             for (let e of this.enemies) e.draw(this.ctx);
+            for (let part of this.particles) part.draw(this.ctx);
             if (this.player) this.player.draw(this.ctx);
 
             this.drawHUD();
