@@ -386,13 +386,13 @@ class Bullet extends Entity {
 }
 
 class Enemy extends Entity {
-    constructor(x, y, type) {
-        super(x, y, 20);
-        this.type = type;
-        this.hp = type === 'boss' ? 50 : 3;
-        this.speed = type === 'boss' ? 50 : 100;
-        this.radius = type === 'boss' ? 40 : 20;
+    constructor(x, y, radius, hp, speed) {
+        super(x, y, radius);
+        this.type = 'normal';
+        this.hp = hp;
+        this.speed = speed;
         this.shootTimer = 0;
+        this.bulletsToSpawn = [];
     }
     update(dt, playerX, playerY) {
         const dx = playerX - this.x;
@@ -403,21 +403,193 @@ class Enemy extends Entity {
             this.vx = (dx / dist) * this.speed;
             this.vy = (dy / dist) * this.speed;
         }
-
         super.update(dt);
-
-        if (this.type === 'boss') {
-            this.shootTimer -= dt;
-            if (this.shootTimer <= 0) {
-                this.shootTimer = 2;
-                return true; // Indicates boss shot
-            }
-        }
         return false;
     }
     draw(ctx) {
-        ctx.fillStyle = this.type === 'boss' ? '#f55' : '#a5f';
+        ctx.fillStyle = '#a5f';
         ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+    }
+}
+
+class SwarmerEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 15, 2, 140);
+        this.type = 'swarmer';
+        this.wobbleTime = Math.random() * Math.PI * 2;
+    }
+    update(dt, playerX, playerY) {
+        const dx = playerX - this.x;
+        const dy = playerY - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        this.wobbleTime += dt * 5;
+
+        if (dist > 0) {
+            const angle = Math.atan2(dy, dx) + Math.sin(this.wobbleTime) * 0.5;
+            this.vx = Math.cos(angle) * this.speed;
+            this.vy = Math.sin(angle) * this.speed;
+        }
+        Entity.prototype.update.call(this, dt);
+        return false;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#f0f';
+        ctx.beginPath();
+        ctx.moveTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x - this.radius, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y - this.radius);
+        ctx.fill();
+    }
+}
+
+class SniperEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 20, 2, 60);
+        this.type = 'sniper';
+        this.shootTimer = 3;
+        this.state = 'move'; // move, aim, shoot
+    }
+    update(dt, playerX, playerY) {
+        const dx = playerX - this.x;
+        const dy = playerY - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        this.shootTimer -= dt;
+
+        if (this.shootTimer > 1) {
+            this.state = 'move';
+            if (dist > 200) {
+                this.vx = (dx / dist) * this.speed;
+                this.vy = (dy / dist) * this.speed;
+            } else if (dist < 150) {
+                this.vx = -(dx / dist) * this.speed;
+                this.vy = -(dy / dist) * this.speed;
+            } else {
+                this.vx = 0;
+                this.vy = 0;
+            }
+        } else if (this.shootTimer > 0) {
+            this.state = 'aim';
+            this.vx = 0;
+            this.vy = 0;
+            this.aimAngle = Math.atan2(dy, dx);
+        } else {
+            this.state = 'shoot';
+            this.bulletsToSpawn.push(new EnemyBullet(this.x, this.y, Math.cos(this.aimAngle) * 300, Math.sin(this.aimAngle) * 300));
+            this.shootTimer = 4;
+        }
+
+        Entity.prototype.update.call(this, dt);
+        return false;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#0ff';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        if (this.state === 'aim') {
+            ctx.strokeStyle = '#f00';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x + Math.cos(this.aimAngle) * 50, this.y + Math.sin(this.aimAngle) * 50);
+            ctx.stroke();
+        }
+    }
+}
+
+class BruiserEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 30, 8, 40);
+        this.type = 'bruiser';
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#888';
+        ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+    }
+}
+
+class SplitterEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 25, 4, 80);
+        this.type = 'splitter';
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#0f0';
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y);
+        ctx.fill();
+    }
+}
+
+class HazardEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 20, 3, 50);
+        this.type = 'hazard';
+        this.shootTimer = 2;
+    }
+    update(dt, playerX, playerY) {
+        this.shootTimer -= dt;
+        if (this.shootTimer <= 0) {
+            this.shootTimer = 3;
+            this.bulletsToSpawn.push(new HazardBullet(this.x, this.y));
+        }
+        return super.update(dt, playerX, playerY);
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#ff0';
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+            ctx.lineTo(this.x + Math.cos((18 + i * 72) / 180 * Math.PI) * this.radius,
+                       this.y - Math.sin((18 + i * 72) / 180 * Math.PI) * this.radius);
+            ctx.lineTo(this.x + Math.cos((54 + i * 72) / 180 * Math.PI) * (this.radius / 2),
+                       this.y - Math.sin((54 + i * 72) / 180 * Math.PI) * (this.radius / 2));
+        }
+        ctx.closePath();
+        ctx.fill();
+    }
+}
+
+class BossEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 40, 50, 50);
+        this.type = 'boss';
+        this.shootTimer = 2;
+    }
+    update(dt, playerX, playerY) {
+        const res = super.update(dt, playerX, playerY);
+        this.shootTimer -= dt;
+        if (this.shootTimer <= 0) {
+            this.shootTimer = 2;
+            return true;
+        }
+        return res;
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#f55';
+        ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+    }
+}
+
+class HazardBullet extends Entity {
+    constructor(x, y) {
+        super(x, y, 15);
+        this.life = 5;
+    }
+    update(dt) {
+        this.life -= dt;
+    }
+    draw(ctx) {
+        ctx.fillStyle = `rgba(255, 100, 0, ${Math.max(0, this.life) / 5})`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
     }
 }
 
@@ -582,7 +754,7 @@ class Game {
             this.waveTimer = 0;
             if (this.wave % 5 === 0) {
                 // Spawn boss
-                this.enemies.push(new Enemy(this.canvas.width / 2, -50, 'boss'));
+                this.enemies.push(new BossEnemy(this.canvas.width / 2, -50));
             }
         }
 
@@ -597,13 +769,23 @@ class Game {
                 sx = Math.random() * this.canvas.width;
                 sy = Math.random() < 0.5 ? -30 : this.canvas.height + 30;
             }
-            this.enemies.push(new Enemy(sx, sy, 'normal'));
+
+            const r = Math.random();
+            if (r < 0.2) this.enemies.push(new SwarmerEnemy(sx, sy));
+            else if (r < 0.4) this.enemies.push(new SniperEnemy(sx, sy));
+            else if (r < 0.6) this.enemies.push(new BruiserEnemy(sx, sy));
+            else if (r < 0.8) this.enemies.push(new SplitterEnemy(sx, sy));
+            else this.enemies.push(new HazardEnemy(sx, sy));
         }
 
         // Update Enemies & Collisions
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
             const bossShot = e.update(dt, this.player.x, this.player.y);
+
+            while(e.bulletsToSpawn && e.bulletsToSpawn.length > 0) {
+                this.enemyBullets.push(e.bulletsToSpawn.pop());
+            }
 
             if (bossShot) {
                 for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
@@ -637,6 +819,11 @@ class Game {
 
             if (e.hp <= 0) {
                 this.score += e.type === 'boss' ? 500 : 10;
+                if (e.type === 'splitter') {
+                    const s1 = new SwarmerEnemy(e.x - 20, e.y);
+                    const s2 = new SwarmerEnemy(e.x + 20, e.y);
+                    this.enemies.push(s1, s2);
+                }
                 this.enemies.splice(i, 1);
             }
         }
@@ -645,6 +832,11 @@ class Game {
         for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
             const eb = this.enemyBullets[i];
             eb.update(dt);
+
+            if (eb.life !== undefined && eb.life <= 0) {
+                this.enemyBullets.splice(i, 1);
+                continue;
+            }
 
             if (this.player.invulnTimer <= 0) {
                 const dx = eb.x - this.player.x;
