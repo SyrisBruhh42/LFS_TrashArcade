@@ -441,17 +441,27 @@ def set_outcome(rec: dict, outcome: str | None) -> None:
     previous = rec.get("outcome")
     if previous == outcome:
         return
+    observed_at = iso(now())
+    same_failure = bool(previous and previous.startswith("failed:") and
+                        outcome and outcome.startswith("failed:"))
     if previous:
-        history = {"outcome": previous, "finished": rec.get("finished"), "superseded_at": iso(now())}
-        if "breaker_reset" in rec:
-            history["breaker_reset"] = rec["breaker_reset"]
+        history = {"outcome": previous, "finished": rec.get("finished"), "superseded_at": observed_at}
+        for field in ("breaker_reset", "outcome_observed_at"):
+            if field in rec:
+                history[field] = rec[field]
         rec.setdefault("outcome_history", []).append(history)
-    rec.pop("breaker_reset", None)  # An old diagnosed failure cannot exempt reopened work's next failure.
+    if not same_failure:
+        rec.pop("breaker_reset", None)  # Reopened work cannot inherit an old failure's reviewed exemption.
     if outcome is None:
         rec.pop("outcome", None)
         rec.pop("finished", None)
+        rec.pop("outcome_observed_at", None)
     else:
-        rec.update(outcome=outcome, finished=iso(now()))
+        rec.update(outcome=outcome, outcome_observed_at=observed_at)
+        if not same_failure:
+            rec["finished"] = observed_at
+        # A different label for the same failure is not a new failure event.
+        # Preserve its timestamp (or legacy absence) and reviewed breaker reset.
 
 
 def postmerge_maintenance_scope(cfg: dict, state: dict, incident_id: str | None) -> bool:
@@ -670,6 +680,13 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
                 rec["hold"] = "tracked_session_missing_from_inventory"
             continue
         st = session.get("state", "UNKNOWN")
+        # An observed provider restart without a PR is new work, not a relabeling
+        # of its old failure. Existing PRs instead follow OPEN/CLOSED readback;
+        # an active provider alone must not retime a still-closed PR's failure.
+        if (rec.get("provider_state") in TERMINAL and st in ACTIVE and
+                rec.get("outcome", "").startswith("failed:") and
+                not rec.get("pr") and not first_pr_url(session, cfg)):
+            set_outcome(rec, None)
         rec["provider_state"] = st
         if rec.get("hold") in {"tracked_session_missing_from_inventory", "stale_provider_session",
                                "awaiting_plan_approval", "awaiting_user_feedback", "terminal_record_provider_active"}:
