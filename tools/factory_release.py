@@ -251,6 +251,11 @@ def state_health(args, repo, python):
             required.add("migration_admission_hold")
         if "maintenance" in raw:
             required.add("maintenance_queue")
+        integration = raw.get("integration", {})
+        if not isinstance(integration, dict) or not isinstance(integration.get("intents", {}), dict):
+            raise ValueError
+        if integration.get("intents"):
+            required.add("local_integration_intents")
         if not isinstance(contract, dict) or any(contract.get(key) is not True for key in required):
             raise ValueError
     except (ValueError, TypeError, KeyError, AttributeError):

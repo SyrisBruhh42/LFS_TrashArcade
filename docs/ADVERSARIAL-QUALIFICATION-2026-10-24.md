@@ -1,5 +1,7 @@
 # Adversarial repair qualification — 2026-10-24
 
+**Historical checkpoint:** this receipt remains bound to `e2caaa4`. Later implementation and qualification do not change its results or unrun checks. Consult [Factory operations](FACTORY-OPERATIONS.md) for the current source contract and fresh external readbacks for deployment state.
+
 **Status: bounded local source qualification passed. No live provider, hosted workflow, installation, deployment or release qualification.**
 
 Tested clean source: `e2caaa4c9603cdea3da249c8e280d05e08d36041`, branch `codex/repair-jules-pipeline-20261024`. Incoming main was reconciled through `0b14fff4649de68a3eb8e244b54e8f913b3b7e83` at local merge checkpoint `dd24a78`. The receipt itself and final audit clarifications are subsequent documentation-only changes.

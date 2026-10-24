@@ -3,6 +3,7 @@
   "_note": "Verified Ultra account caps 2026-10-24: 60 active and 300 rolling-24h. Local budgets remain lower. Generation is disabled during the release pilot; reviewed maintenance and native repair observation are separate. Set enabled=false or create local PAUSE to stop provider mutations. Editing this candidate changes no live settings.",
   "enabled": true,
   "generation_enabled": false,
+  "local_integration_enabled": false,
   "maintenance_enabled": true,
   "repair_owner": "native",
   "controller_native_repairs_disabled": false,

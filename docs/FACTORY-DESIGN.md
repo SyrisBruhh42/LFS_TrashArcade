@@ -1,5 +1,7 @@
 # Factory repair: evidence and design decisions
 
+This retains the initial research and design checkpoint. Later implementation and operating commands are documented in [Factory operations](FACTORY-OPERATIONS.md); live-unqualified items below describe this checkpoint rather than a current account or deployment readback.
+
 Research checked 2026-10-24. Initial baseline source: `b6e98cd5ba85541cf679485cd5f595e448587b97`; reconciled through live main `567405654f729374615a6b1792ad23973c6f71ed`, preserving PR386–389 phase additions. The five-day activity review covers 2026-10-19 17:13:01 UTC through 2026-10-24 17:13:01 UTC. It observed 384 PR creations, 372 merges, 751 main commits (371 registry rebuilds), 401 Actions runs and no formal GitHub PR reviews. Median creation-to-merge was 21 seconds. These are delivery-activity measures, not quality or savings measures.
 
 ## Observations and falsification

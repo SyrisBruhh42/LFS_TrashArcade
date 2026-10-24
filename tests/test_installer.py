@@ -415,6 +415,27 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual((self.data / "active.json").read_bytes(), original)
         self.assertFalse(any("enable" in call for call in self.calls))
 
+    def test_rollback_rejects_merge_history_without_matching_capability_and_preserves_state(self):
+        self.activate(OLD)
+        self.activate(SHA)
+        state = self.seed_state(integration={"schema_version": 1, "intents": {"retained": {"status": "ambiguous"}}})
+        before = state.read_bytes()
+        active = (self.data / "active.json").read_bytes()
+        self.assertEqual(self.invoke("rollback", OLD), 1)
+        self.assertEqual(state.read_bytes(), before)
+        self.assertEqual((self.data / "active.json").read_bytes(), active)
+        self.state_contract["local_integration_intents"] = True
+        self.assertEqual(self.invoke("rollback", OLD), 0)
+        self.assertEqual(state.read_bytes(), before)
+
+    def test_empty_merge_ledger_does_not_prevent_compatible_rollback(self):
+        self.activate(OLD)
+        self.activate(SHA)
+        state = self.seed_state(integration={"schema_version": 1, "intents": {}})
+        before = state.read_bytes()
+        self.assertEqual(self.invoke("rollback", OLD), 0)
+        self.assertEqual(state.read_bytes(), before)
+
     def test_failed_restoration_readback_keeps_disabled_timer_and_reports_unverified_recovery(self):
         self.activate(OLD)
         self.stage(SHA)

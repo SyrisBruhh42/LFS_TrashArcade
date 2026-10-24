@@ -365,6 +365,52 @@ class FactoryTests(unittest.TestCase):
         f.save_state(self.state)
         return argparse.Namespace(status=False, dry_run=False, no_dispatch=False)
 
+    def test_local_integration_precedes_capacity_and_stops_paid_work_after_merge(self):
+        self.cfg["local_integration_enabled"] = True
+        args = self.tick_fixture()
+        with patch.object(f, "inventory", return_value={}), patch.object(f.integration, "run_tick", return_value={"status": "merged_awaiting_main", "pr": 1}) as integrate, patch.object(f, "capacity", side_effect=f.Hold("full")) as capacity, patch.object(f, "reconcile") as reconcile, patch.object(f, "dispatch") as dispatch:
+            self.assertEqual(f.tick(args), 0)
+        integrate.assert_called_once()
+        capacity.assert_not_called()
+        reconcile.assert_not_called()
+        dispatch.assert_not_called()
+
+    def test_unknown_provider_scope_prevents_local_integration(self):
+        self.cfg["local_integration_enabled"] = True
+        args = self.tick_fixture()
+        with patch.object(f, "inventory", return_value={"s1": self.session(state="UNKNOWN")}), patch.object(f.integration, "run_tick") as integrate:
+            self.assertEqual(f.tick(args), 0)
+        integrate.assert_not_called()
+
+    def test_local_integration_pending_prevents_paid_feedback_when_disabled(self):
+        args = self.tick_fixture()
+        with patch.object(f, "inventory", return_value={}), patch.object(f.integration, "run_tick", side_effect=f.integration.Hold("unresolved merge")), patch.object(f, "reconcile") as reconcile, patch.object(f, "dispatch") as dispatch:
+            self.assertEqual(f.tick(args), 0)
+        reconcile.assert_not_called()
+        dispatch.assert_not_called()
+
+    def test_paid_admission_independently_honors_merge_ledger(self):
+        with patch.object(f.integration, "blocked", return_value=True), self.assertRaisesRegex(f.Hold, "durable merge"):
+            f.repair_admission(self.cfg, self.state)
+
+    def test_no_dispatch_and_dry_run_pass_read_only_integration_flag(self):
+        args = self.tick_fixture()
+        args.no_dispatch = True
+        with patch.object(f, "inventory", return_value={}), patch.object(f.integration, "run_tick", return_value={"status": "no_candidate"}) as integrate, patch.object(f, "main_acceptance", return_value=SHA):
+            self.assertEqual(f.tick(args), 0)
+        self.assertTrue(integrate.call_args.kwargs["read_only"])
+
+    def test_reconcile_only_invokes_get_only_merge_recovery_without_paid_actions(self):
+        self.state["migration"] = {"admission_hold": True}
+        args = self.tick_fixture()
+        args.reconcile_only = True
+        with patch.object(f, "inventory", return_value={}), patch.object(f.integration, "run_tick", return_value={"status": "no_pending_merge"}) as integrate, patch.object(f, "dispatch") as dispatch, patch.object(f, "api") as api:
+            self.assertEqual(f.tick(args), 0)
+        self.assertTrue(integrate.call_args.kwargs["recovery_only"])
+        self.assertTrue(f.load_state()["migration"]["admission_hold"])
+        dispatch.assert_not_called()
+        api.assert_not_called()
+
     def test_two_consecutive_healthy_ticks_required_before_create(self):
         args = self.tick_fixture()
         with patch.object(f, "inventory", return_value={}), patch.object(f, "main_acceptance", return_value=SHA), patch.object(f, "dispatch") as dispatch:

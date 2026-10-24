@@ -1,5 +1,7 @@
 # Jules pipeline and product audit — 2026-10-24
 
+**Historical checkpoint:** findings and implementation states below describe the revisions named here. Subsequent repairs are documented in [Factory operations](FACTORY-OPERATIONS.md); this retained audit is not the current deployment record.
+
 ## Decision
 
 The candidate is a safer, bounded game-generation controller. It is **not yet a qualified autonomous post-merge maintenance system**. Better prompts alone cannot close missing lifecycle transitions, overlapping provider repair channels, stale integration, or inadequate behavioral acceptance. Prior green tests did not cover the defects reproduced in this audit.

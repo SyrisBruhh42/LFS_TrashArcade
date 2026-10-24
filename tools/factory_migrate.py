@@ -104,6 +104,10 @@ def prepare_release(raw, evidence_path):
             raise MigrationError("Unresolved provider history remains; migration hold cannot be released")
     if any(intent.get("status") in {"pending", "ambiguous"} for intent in candidate.get("intents", {}).values()):
         raise MigrationError("Uncertain provider requests remain; migration hold cannot be released")
+    integration = candidate.get("integration", {}).get("intents", {})
+    if integration and (receipt.get("integration_sha256") != digest(candidate["integration"]) or
+                        any(i.get("status") in {"pending", "ambiguous", "awaiting_main_acceptance"} for i in integration.values())):
+        raise MigrationError("Merge history is unresolved or changed since reconciliation")
     if evidence_path is None or not evidence_path.is_absolute() or evidence_path.is_symlink() or not evidence_path.is_file():
         raise MigrationError("Hold release needs an absolute regular --evidence-file with reviewed owner evidence")
     evidence_raw = evidence_path.read_bytes()

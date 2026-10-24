@@ -210,6 +210,20 @@ class MigrationTests(unittest.TestCase):
     def release(self, apply=True):
         return self.invoke(apply, extra=("--release-hold", "--evidence-file", str(self.evidence)))
 
+    def test_hold_release_cannot_bypass_pending_merge_or_changed_merge_digest(self):
+        current = self.reviewed_release()
+        item = {"repo": "owner/arcade", "pr": 1, "head": "b" * 40, "base": "a" * 40,
+                "run_id": "100", "controller_sha": "c" * 40, "session_id": "s1",
+                "created_at": datetime.now(timezone.utc).isoformat(), "status": "pending"}
+        key = m.digest({k: item[k] for k in ("repo", "pr", "head", "base", "run_id")})
+        current["integration"] = {"schema_version": 1, "intents": {key: item}}
+        current["migration"]["reconciliation"]["integration_sha256"] = m.digest(current["integration"])
+        with self.assertRaisesRegex(m.MigrationError, "Merge history"):
+            m.prepare_release(m.encode(current), self.evidence)
+        item.update(status="accepted", merge_sha="d" * 40)
+        with self.assertRaisesRegex(m.MigrationError, "Merge history"):
+            m.prepare_release(m.encode(current), self.evidence)
+
     def test_reviewed_hold_release_is_backed_and_preserves_legacy_records_without_granting_scope(self):
         current = self.reviewed_release()
         before = self.state.read_bytes()

@@ -29,6 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import factory_maintenance as maintenance
+import local_integrate as integration
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_FILE = ROOT / "factory" / "config.json"
@@ -160,6 +161,10 @@ def load_state() -> dict:
     state.setdefault("lessons", [])
     state.setdefault("api_fail_streak", 0)
     maintenance.ledger(state)
+    try:
+        integration.ledger(state)
+    except (integration.Hold, TypeError, AttributeError):
+        raise StateError("Invalid integration ledger; preserve state") from None
     return state
 
 
@@ -449,12 +454,49 @@ def set_outcome(rec: dict, outcome: str | None) -> None:
         rec.update(outcome=outcome, finished=iso(now()))
 
 
-def repair_admission(cfg: dict, state: dict, operation: str = "Repair") -> None:
+def postmerge_maintenance_scope(cfg: dict, state: dict, incident_id: str | None) -> bool:
+    """Narrow routing permission; dispatch still proves catalog/current-game scope."""
+    if not incident_id or not cfg.get("maintenance_enabled", True):
+        return False
+    pending = [i for i in integration.ledger(state)["intents"].values() if i["status"] in integration.BLOCKING]
+    if len(pending) != 1 or pending[0]["status"] != "awaiting_main_acceptance":
+        return False
+    merge = pending[0]
+    item = maintenance.ledger(state).get(incident_id, {})
+    spec = item.get("spec", {})
+    rec = state["sessions"].get(merge["session_id"], {})
+    original = state["intents"].get(rec.get("correlation"), {})
+    assignment = original.get("record", {})
+    if (merge["repo"] != cfg["repo"] or rec.get("outcome") != "merged" or
+            rec.get("merge_sha") != merge["merge_sha"] or original.get("status") != "accepted" or
+            original.get("session_id") != merge["session_id"] or rec.get("mode") not in {"advance", "new"} or
+            item.get("status") not in {"queued", "dispatched"} or item.get("spec_hash") != maintenance.digest(spec) or
+            spec.get("repository") != cfg["repo"] or
+            rec.get("pr") != f"https://github.com/{cfg['repo']}/pull/{merge['pr']}" or
+            any(rec.get(k) != assignment.get(k) for k in ("assigned_folder", "game_id", "phase", "mode", "baseline_sha")) or
+            spec.get("assigned_folder") != rec.get("assigned_folder") or spec.get("game_id") != rec.get("game_id") or
+            spec.get("protected_phase") != rec.get("phase")):
+        return False
+    observed = spec.get("observed_sha", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", observed):
+        return False
+    if observed != merge["merge_sha"]:
+        comparison = json.loads(gh("api", f"repos/{cfg['repo']}/compare/{merge['merge_sha']}...{observed}"))
+        if (comparison.get("status") != "ahead" or comparison.get("base_commit", {}).get("sha") != merge["merge_sha"] or
+                comparison.get("merge_base_commit", {}).get("sha") != merge["merge_sha"]):
+            return False
+    return True
+
+
+def repair_admission(cfg: dict, state: dict, operation: str = "Repair", *, incident_id: str | None = None) -> None:
     """Repair may fix red main, but still requires fresh shared-account headroom."""
     if not cfg.get("enabled") or PAUSE_FILE.exists():
         raise Hold("Paid mutation stopped by local kill switch")
     if state.get("migration", {}).get("admission_hold") is True:
         raise Hold("Migration admission hold requires reviewed reconciliation and explicit release")
+    if integration.blocked(state) and not (operation in {"Create", "Dispatch"} and
+                                           postmerge_maintenance_scope(cfg, state, incident_id)):
+        raise Hold("Paid mutation held until durable merge recovery and exact-main acceptance")
     observation = state.get("inventory", {})
     if not observation.get("complete"):
         raise Hold(f"{operation} requires complete account inventory")
@@ -977,7 +1019,7 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
     folder = f"games/{brief['slug']}"
     if not re.fullmatch(r"games/\d{3}-[a-z0-9-]+", folder) or not re.fullmatch(r"[0-9a-f]{40}", baseline_sha):
         raise Hold("Invalid assignment scope or baseline")
-    repair_admission(cfg, state, operation="Create")
+    repair_admission(cfg, state, operation="Create", incident_id=incident_id)
     recheck_assignment_prs(cfg, state, gid, folder)
     prompt = (("" if incident_id else PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n") + brief["markdown"] +
               f"\n\nFactory correlation: {correlation}\nBaseline commit: {baseline_sha}\n")
@@ -1010,10 +1052,10 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
             if PAUSE_FILE.exists():
                 intent.update(status="rejected", reason="local_pause_no_request")
                 raise Hold("Create stopped by local pause before POST")
-            repair_admission(cfg, state, operation="Create")
+            repair_admission(cfg, state, operation="Create", incident_id=incident_id)
             if gh("api", f"repos/{cfg['repo']}/commits/{cfg['starting_branch']}", "--jq", ".sha").strip() != baseline_sha:
                 raise Hold("Main advanced during assignment readback; observe a fresh accepted revision")
-            repair_admission(cfg, state, operation="Create")  # Reads and durable writes can exhaust evidence freshness.
+            repair_admission(cfg, state, operation="Create", incident_id=incident_id)  # Reads and durable writes can exhaust evidence freshness.
         except Exception:
             intent.update(status="rejected", reason=intent.get("reason", "create_admission_no_request"))
             raise
@@ -1041,7 +1083,7 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
 def status(state: dict) -> None:
     records = list(state["sessions"].values())
     print(json.dumps({"schema": state["schema"], "tracked": len(records),
-                      "state_contract": {"durable_intents": True, "migration_admission_hold": True, "maintenance_queue": True},
+                      "state_contract": {"durable_intents": True, "migration_admission_hold": True, "maintenance_queue": True, "local_integration_intents": True},
                       "outcomes": dict(Counter(r.get("outcome", "in_flight") for r in records)),
                       "merged": sum(r.get("outcome") == "merged" for r in records),
                       "failed": sum(r.get("outcome", "").startswith("failed") for r in records),
@@ -1051,11 +1093,12 @@ def status(state: dict) -> None:
                       "inventory": state.get("inventory", {"complete": False}), "breaker": state.get("breaker"),
                       "maintenance": dict(Counter(item["status"] for item in maintenance.ledger(state).values())),
                       "migration_admission_hold": state.get("migration", {}).get("admission_hold", False),
+                      "integration": dict(Counter(i["status"] for i in integration.ledger(state)["intents"].values())),
                       "measurement_note": "Merged is repository acceptance, not runtime/customer acceptance. Counts are not billing or token charges."}, indent=1))
 
 
 def validate_config(cfg: dict) -> None:
-    for key, default in (("generation_enabled", False), ("maintenance_enabled", True),
+    for key, default in (("generation_enabled", False), ("maintenance_enabled", True), ("local_integration_enabled", False),
                          ("controller_native_repairs_disabled", False)):
         if type(cfg.setdefault(key, default)) is not bool:
             raise StateError("Invalid policy boolean: " + key)
@@ -1121,7 +1164,8 @@ def reconciliation_receipt(cfg: dict, state: dict, remote: dict) -> None:
         "missing_unresolved": sum(not rec.get("outcome") and sid not in remote for sid, rec in state["sessions"].items()),
         "unresolved_intents": sum(i["status"] in {"pending", "ambiguous"} for i in state["intents"].values()),
         "sessions_sha256": digest(state["sessions"]), "intents_sha256": digest(state["intents"]),
-        "legacy_scope_annotations_sha256": digest(state.get("legacy_scope_annotations", {}))}
+        "legacy_scope_annotations_sha256": digest(state.get("legacy_scope_annotations", {})),
+        "integration_sha256": digest(state.get("integration", {}))}
 
 
 def tick(args: argparse.Namespace) -> int:
@@ -1152,19 +1196,57 @@ def tick(args: argparse.Namespace) -> int:
                 log("reconciliation_observation_hold", reason=str(exc))
             reconcile(cfg, state, remote, True)
             maintenance.reconcile(state)
+            try:
+                decision = integration.run_tick(cfg, state, remote, controller_sha, save=save_state,
+                                                paused=PAUSE_FILE.exists, recovery_only=True)
+                log("integration_recovery_observed", **decision)
+            except (integration.Hold, integration.GitHubError) as exc:
+                log("integration_recovery_hold", reason=str(exc))
+            except (ValueError, TypeError, KeyError, AttributeError):
+                log("integration_recovery_hold", reason="Malformed merge recovery evidence")
             reconciliation_receipt(cfg, state, remote)
             log("reconciled_without_paid_actions", tracked=len(state["sessions"]))
             return 0
         observe_account(cfg, state, remote)  # No paid feedback while inventory or scope is uncertain.
+        # Drain reviewed phase PRs before capacity admission. This consumes no Jules
+        # quota. Any unresolved merge also blocks paid feedback and new creates.
+        postmerge_incident = None
+        try:
+            decision = integration.run_tick(cfg, state, remote, controller_sha, save=save_state,
+                                            paused=PAUSE_FILE.exists, read_only=args.dry_run or args.no_dispatch)
+        except integration.MainAcceptanceHold as exc:
+            # Confirmed merges must not deadlock the diagnosed repair needed to
+            # make Main guard green. Uncertain merge transport never gets this path.
+            pending = [i for i in integration.ledger(state)["intents"].values() if i["status"] in integration.BLOCKING]
+            if len(pending) != 1 or pending[0]["status"] != "awaiting_main_acceptance":
+                raise Hold("Local integration: " + str(exc)) from None
+            reconcile(cfg, state, remote, True)
+            maintenance.reconcile(state)
+            candidate = maintenance.select(state) if cfg["maintenance_enabled"] else None
+            if not candidate or not postmerge_maintenance_scope(cfg, state, candidate["spec"]["id"]):
+                raise Hold("Local integration: " + str(exc)) from None
+            postmerge_incident = candidate["spec"]["id"]
+            decision = {"status": "scoped_postmerge_maintenance"}
+            log("postmerge_maintenance_routed", incident=postmerge_incident, acceptance_hold=str(exc))
+        except (integration.Hold, integration.GitHubError) as exc:
+            raise Hold("Local integration: " + str(exc)) from None
+        except (ValueError, TypeError, KeyError, AttributeError):
+            raise Hold("Local integration evidence malformed; no further mutations") from None
+        if decision["status"] in {"merged_awaiting_main", "accepted"}:
+            log("local_integration", **decision)
+            raise Hold("Integration completed its one action; require a fresh tick before paid work")
         # --no-dispatch remains reconciliation-only, but may deliver bounded repairs.
         mutations_held = (bool(state.get("breaker")) or state.get("migration", {}).get("admission_hold") is True or
                           cfg.get("account_active_cap") is None or cfg.get("account_daily_cap") is None or
                           (state.get("cooldown_until") and now() < parse_ts(state["cooldown_until"])))
-        reconcile(cfg, state, remote, args.dry_run or bool(mutations_held))
-        maintenance.reconcile(state)
+        if not postmerge_incident:
+            reconcile(cfg, state, remote, args.dry_run or bool(mutations_held))
+            maintenance.reconcile(state)
         capacity(cfg, state, remote)
-        repair_admission(cfg, state, "Dispatch")
         selected = maintenance.select(state) if cfg["maintenance_enabled"] else None
+        if postmerge_incident and (not selected or selected["spec"]["id"] != postmerge_incident):
+            raise Hold("Postmerge maintenance selection changed; no paid action")
+        repair_admission(cfg, state, "Dispatch", incident_id=postmerge_incident)
         if selected:
             baseline_sha = gh("api", f"repos/{cfg['repo']}/commits/{cfg['starting_branch']}", "--jq", ".sha").strip()
             if not re.fullmatch(r"[0-9a-f]{40}", baseline_sha):

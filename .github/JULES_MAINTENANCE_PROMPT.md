@@ -7,13 +7,15 @@ TASK {task_id}; INCIDENT {incident_id}; TYPE {defect_repair|ux_improvement}
 Repository: {owner/repository}
 Assigned folder: games/{id-slug}/
 Observed main: {sha}; current phase: {phase}; preserve phase and identity.
-Actual checkout: record its SHA before editing; reconcile any mismatch.
-Repair owner/channel: {native_ci|controller_message|owner_review}
-Attempt and time allowance: {admitted limits}; stop on exhaustion.
+Baseline commit: {exact admitted current-main SHA}
+Actual checkout: record its SHA before editing; stop if it differs from Baseline commit.
+Repair owner: {native|controller}
+Attempt allowance: {admitted max_attempts}; stop on exhaustion.
 
 Problem: {one specific observed failure or user friction}
 Expected behavior: {observable result}
 Evidence: {trusted report URL/path, tested SHA, scenario ID, artifact hash}
+Reviewer-local evidence paths are provenance, not promised checkout files.
 Reproduce: {ordinary input steps, viewport, fixture/seed}
 Protected behavior: {working controls, save format and game identity}
 Acceptance: {named repro plus neighboring regression and player journey}
@@ -50,10 +52,18 @@ python3 tools/preflight.py --base origin/main --head HEAD --mode maintenance \
 If main/head changes, invalidate old integration evidence and recheck.
 
 Open or update one maintenance PR with task/incident IDs and evidence.
+Copy these exact lines into its body:
+Factory incident: {incident_id}
+Factory incident spec: {spec_hash}
 Request the arcade:maintenance review lane; no automatic merge or release.
+The owner verifies the PR and applies the lane label before its gate;
+the dispatcher does not apply it automatically.
 If an admitted existing PR/session owns this repair, keep that PR. Do not
 create a replacement to reset failures. If native repair is already
 working, report that activity rather than starting competing work.
+Controller ownership requires the operator to disable native automatic
+repair before enabling controller messages; do not change those settings
+from this game assignment. Never create a replacement session yourself.
 
 Stop on scope expansion, unknown ownership, unavailable dependencies,
 ambiguous provider delivery or exhausted budget. Return a concise result:
@@ -63,3 +73,5 @@ verification of the merged main revision and the required user journey.
 ```
 
 For a usability assignment, replace vague “professional overhaul” language with one journey and measurable friction: for example, “resume the existing run after app switching using a visible touch control, without firing or losing progress.” A visual redesign or shared launcher change needs its own reviewed assignment and acceptance examples.
+
+The executable brief is authoritative for the admitted incident/spec hash. The provider API selects a source branch rather than enforcing an exact commit pin, so the checkout/baseline comparison is required. The trusted base catalog binds that incident to its game, phase, scenario and expectation hash. See `docs/FACTORY-OPERATIONS.md` for intake, ownership and independent post-merge receipt commands; neither this template nor provider-generated PASS text grants acceptance. Required scenarios and protected checks do not cover every feature.
