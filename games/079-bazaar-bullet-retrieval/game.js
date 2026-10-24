@@ -556,26 +556,6 @@ class HazardEnemy extends Enemy {
     }
 }
 
-class BossEnemy extends Enemy {
-    constructor(x, y) {
-        super(x, y, 40, 50, 50);
-        this.type = 'boss';
-        this.shootTimer = 2;
-    }
-    update(dt, playerX, playerY) {
-        const res = super.update(dt, playerX, playerY);
-        this.shootTimer -= dt;
-        if (this.shootTimer <= 0) {
-            this.shootTimer = 2;
-            return true;
-        }
-        return res;
-    }
-    draw(ctx) {
-        ctx.fillStyle = '#f55';
-        ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
-    }
-}
 
 class HazardBullet extends Entity {
     constructor(x, y) {
@@ -649,6 +629,7 @@ class Game {
         this.wave = 1;
         this.waveTimer = 0;
         this.spawnTimer = 0;
+        this.bossWarningTimer = 0;
         this.particles = [];
         this.gameOverTimer = 0;
         this.world.reset(this.canvas.width, this.canvas.height);
@@ -754,8 +735,14 @@ class Game {
             this.waveTimer = 0;
             if (this.wave % 5 === 0) {
                 // Spawn boss
-                this.enemies.push(new BossEnemy(this.canvas.width / 2, -50));
+                this.bossWarningTimer = 3;
+                const bossClass = Math.random() < 0.5 ? SandstormDjinn : BazaarOgre;
+                this.enemies.push(new bossClass(this.canvas.width / 2, -50));
             }
+        }
+
+        if (this.bossWarningTimer > 0) {
+            this.bossWarningTimer -= dt;
         }
 
         if (this.spawnTimer <= 0 && this.enemies.length < 5 + this.wave) {
@@ -906,6 +893,37 @@ class Game {
             } else {
                 this.ctx.fillStyle = '#f55';
                 this.ctx.fillRect(20, 130, 100 * (1 - this.player.dashCooldown / this.player.dashCooldownMax), 10);
+            }
+
+            // Boss Warning Banner
+            if (this.bossWarningTimer > 0) {
+                if (Math.floor(this.bossWarningTimer * 10) % 2 === 0) {
+                    this.ctx.fillStyle = '#f00';
+                    this.ctx.fillRect(0, this.canvas.height / 2 - 40, this.canvas.width, 80);
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.font = '30px monospace';
+                    this.ctx.fillText('WARNING: BOSS APPROACHING', this.canvas.width / 2, this.canvas.height / 2 + 10);
+                }
+            }
+
+            // Boss Health Bar
+            const activeBoss = this.enemies.find(e => e.type === 'boss');
+            if (activeBoss) {
+                const barWidth = this.canvas.width * 0.6;
+                const barHeight = 20;
+                const barX = (this.canvas.width - barWidth) / 2;
+                const barY = 30;
+
+                this.ctx.fillStyle = '#444';
+                this.ctx.fillRect(barX, barY, barWidth, barHeight);
+                this.ctx.fillStyle = activeBoss.phase === 2 ? '#f00' : '#f55';
+                this.ctx.fillRect(barX, barY, barWidth * (activeBoss.hp / activeBoss.maxHp), barHeight);
+
+                this.ctx.fillStyle = '#fff';
+                this.ctx.textAlign = 'center';
+                this.ctx.font = '16px monospace';
+                this.ctx.fillText(activeBoss.name, this.canvas.width / 2, barY + 15);
             }
 
             if (this.state === 'PAUSED') {
