@@ -862,6 +862,10 @@ class Game {
     this.player = new Player(this.width / 2 - 100, this.height / 2);
     this.gravityWell = new GravityWell(this.width / 2, this.height / 2);
 
+    this.boss = null;
+    this.bossWarningTimer = 0;
+    this.lastBossWave = 0;
+
     this.worldManager.init();
     this.saveManager.incrementGamesPlayed();
   }
@@ -923,14 +927,38 @@ class Game {
       this.input.keys['Escape'] = false;
     }
 
-    this.enemySpawnTimer -= dt;
-    if (this.enemySpawnTimer <= 0) {
-      this.spawnEnemy();
-      this.enemySpawnTimer = Math.max(0.5, 2.0 - (this.wave * 0.1));
+    if (this.bossWarningTimer > 0) {
+      this.bossWarningTimer -= dt;
+      if (this.bossWarningTimer <= 0) {
+        // Spawn Boss
+        const bx = this.width / 2;
+        const by = -50; // spawn slightly offscreen
+        this.boss = Math.random() < 0.5 ? new JunkGoliathBoss(bx, by) : new MagneticWarlordBoss(bx, by);
+        this.enemies.push(this.boss);
+      }
+    } else if (this.boss) {
+      if (!this.boss.active) {
+        this.boss = null;
+        // give a breather after boss
+        this.enemySpawnTimer = 3.0;
+        this.lastBossWave = this.wave;
+      }
+    } else {
+      this.enemySpawnTimer -= dt;
+      if (this.enemySpawnTimer <= 0) {
+        this.spawnEnemy();
+        this.enemySpawnTimer = Math.max(0.5, 2.0 - (this.wave * 0.1));
+      }
     }
 
     // Every 1000 points, wave increases
     this.wave = Math.floor(this.score / 1000) + 1;
+
+    // Check for boss trigger
+    if (this.wave > this.lastBossWave && this.wave % 5 === 0 && !this.boss && this.bossWarningTimer <= 0) {
+      this.bossWarningTimer = 3.0; // 3 seconds of warning
+      this.lastBossWave = this.wave; // ensure we only trigger once per wave
+    }
 
     if (this.player && this.player.active) {
       this.player.update(dt, this);
@@ -1059,6 +1087,28 @@ class Game {
 
     // UI
     if (this.state === 'PLAYING' || this.state === 'GAME_OVER' || this.state === 'PAUSED') {
+      if (this.bossWarningTimer > 0) {
+        this.ctx.fillStyle = Date.now() % 500 < 250 ? '#ff0000' : '#ffff00';
+        this.ctx.textAlign = 'center';
+        this.ctx.font = '40px sans-serif';
+        this.ctx.fillText("WARNING: BOSS APPROACHING", this.width / 2, this.height / 4);
+      }
+
+      if (this.boss && this.boss.active) {
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+        this.ctx.font = '20px sans-serif';
+        this.ctx.fillText(this.boss.title + " (Phase " + this.boss.phase + ")", this.width / 2, 40);
+
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(this.width / 2 - 200, 50, 400, 20);
+        this.ctx.fillStyle = this.boss.phase === 1 ? '#ff4444' : '#ff0000';
+        const pct = Math.max(0, this.boss.health / this.boss.maxHealth);
+        this.ctx.fillRect(this.width / 2 - 200, 50, 400 * pct, 20);
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.strokeRect(this.width / 2 - 200, 50, 400, 20);
+      }
+
       this.ctx.fillStyle = '#fff';
       this.ctx.textAlign = 'left';
       this.ctx.font = '20px sans-serif';
