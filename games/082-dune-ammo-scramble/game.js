@@ -210,19 +210,61 @@ class Player {
         this.fireTimer = 0;
         this.color = '#fdc2b9';
         this.vx = 0; this.vy = 0;
+        this.dashCooldown = 2.0;
+        this.dashTimer = 0;
+        this.isDashing = false;
+        this.dashDuration = 0.2;
+        this.dashDurationTimer = 0;
+        this.recoil = 0;
+        this.thrustVisual = 0;
+        this.invulnerableTimer = 0;
     }
     update(dt, input, game) {
+        if (this.dashTimer > 0) this.dashTimer -= dt;
+        if (this.recoil > 0) this.recoil -= dt * 10;
+        if (this.recoil < 0) this.recoil = 0;
+        if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
+
         const axis = input.getAxis();
-        this.vx = axis.x * this.speed;
-        this.vy = axis.y * this.speed;
+        let targetVx = axis.x * this.speed;
+        let targetVy = axis.y * this.speed;
 
         if (axis.x === 0 && axis.y === 0 && input.mouse.down && input.touch.active) {
             const dx = input.mouse.x - this.x;
             const dy = input.mouse.y - this.y;
             const dist = Math.hypot(dx, dy);
             if (dist > 10) {
-                this.vx = (dx / dist) * this.speed;
-                this.vy = (dy / dist) * this.speed;
+                targetVx = (dx / dist) * this.speed;
+                targetVy = (dy / dist) * this.speed;
+            }
+        }
+
+        const isMoving = Math.abs(targetVx) > 0 || Math.abs(targetVy) > 0;
+        this.thrustVisual = isMoving ? Math.min(1.0, this.thrustVisual + dt * 10) : Math.max(0, this.thrustVisual - dt * 10);
+
+        if (this.isDashing) {
+            this.dashDurationTimer -= dt;
+            if (this.dashDurationTimer <= 0) {
+                this.isDashing = false;
+                this.invulnerableTimer = 0.1;
+            }
+            if (Math.random() < 0.5) game.spawnParticles(this.x, this.y, '#a3d473', 1);
+        } else {
+            this.vx = this.vx * 0.8 + targetVx * 0.2;
+            this.vy = this.vy * 0.8 + targetVy * 0.2;
+
+            if (input.keys['ShiftLeft'] || input.keys['Space']) {
+                if (this.dashTimer <= 0) {
+                    this.isDashing = true;
+                    this.dashDurationTimer = this.dashDuration;
+                    this.dashTimer = this.dashCooldown;
+                    this.invulnerableTimer = this.dashDuration;
+                    const dashAngle = isMoving ? Math.atan2(this.vy, this.vx) : 0;
+                    this.vx = Math.cos(dashAngle) * this.speed * 4.0;
+                    this.vy = Math.sin(dashAngle) * this.speed * 4.0;
+                    game.sound.playPickup();
+                    game.spawnParticles(this.x, this.y, '#fff', 15);
+                }
             }
         }
 
@@ -232,11 +274,14 @@ class Player {
         this.y = Math.max(this.radius, Math.min(game.height - this.radius, this.y));
 
         if (this.fireTimer > 0) this.fireTimer -= dt;
-        if (input.mouse.down && this.fireTimer <= 0) {
+        if (!this.isDashing && input.mouse.down && this.fireTimer <= 0) {
             if (this.ammo > 0) {
                 const dx = input.mouse.x - this.x;
                 const dy = input.mouse.y - this.y;
                 const angle = Math.atan2(dy, dx);
+                this.vx -= Math.cos(angle) * 150;
+                this.vy -= Math.sin(angle) * 150;
+                this.recoil = 1.0;
                 game.spawnBullet(this.x, this.y, angle);
                 this.ammo--;
                 this.fireTimer = this.fireRate;
@@ -250,11 +295,16 @@ class Player {
     draw(ctx) {
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.fillStyle = '#222';
+
+        if (this.invulnerableTimer > 0) {
+            if (Math.floor(this.invulnerableTimer * 20) % 2 === 0) ctx.globalAlpha = 0.5;
+        }
+
+        ctx.fillStyle = this.isDashing ? '#fff' : '#222';
         ctx.beginPath();
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = this.color;
+        ctx.strokeStyle = this.isDashing ? '#a3d473' : this.color;
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
@@ -265,22 +315,57 @@ class Player {
         ctx.arc(0, 0, this.radius - 5, 0, Math.PI * 2);
         ctx.stroke();
 
-        if (window.game.input.mouse.x || window.game.input.mouse.y) {
+        let aimAngle = 0;
+        if (window.game && window.game.input && (window.game.input.mouse.x || window.game.input.mouse.y)) {
             const dx = window.game.input.mouse.x - this.x;
             const dy = window.game.input.mouse.y - this.y;
-            const angle = Math.atan2(dy, dx);
-            ctx.rotate(angle);
-            ctx.fillStyle = this.color;
-            ctx.beginPath();
-            ctx.moveTo(this.radius + 4, 0);
-            ctx.lineTo(this.radius - 8, -6);
-            ctx.lineTo(this.radius - 8, 6);
-            ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(0, 0, 4, 0, Math.PI * 2);
-            ctx.fill();
+            aimAngle = Math.atan2(dy, dx);
+
+            if (!this.isDashing && this.ammo > 0) {
+                ctx.save();
+                ctx.rotate(aimAngle);
+                ctx.strokeStyle = 'rgba(253, 194, 185, 0.2)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 10]);
+                ctx.beginPath();
+                ctx.moveTo(this.radius + 5, 0);
+                ctx.lineTo(window.game.width, 0);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
         }
+
+        if (this.thrustVisual > 0 && (this.vx !== 0 || this.vy !== 0)) {
+            ctx.save();
+            const moveAngle = Math.atan2(this.vy, this.vx);
+            ctx.rotate(moveAngle);
+            ctx.fillStyle = '#ff6b6b';
+            ctx.beginPath();
+            ctx.moveTo(-this.radius, -5);
+            ctx.lineTo(-this.radius - 10 * this.thrustVisual - (Math.random() * 5), 0);
+            ctx.lineTo(-this.radius, 5);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        ctx.save();
+        ctx.rotate(aimAngle);
+        const recoilOffset = this.recoil * -8;
+        ctx.translate(recoilOffset, 0);
+
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.radius + 4, 0);
+        ctx.lineTo(this.radius - 8, -6);
+        ctx.lineTo(this.radius - 8, 6);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(0, 0, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
         ctx.restore();
     }
 }
@@ -364,7 +449,9 @@ class Enemy {
         }
         this.wobble += dt * 5;
         if (dist < this.radius + game.player.radius) {
-            game.gameOver();
+            if (!game.player.invulnerableTimer || game.player.invulnerableTimer <= 0) {
+                game.gameOver();
+            }
         }
     }
     draw(ctx) {
@@ -485,6 +572,16 @@ class Game {
         }
         document.getElementById('score-display').innerText = `Score: ${this.score}`;
         document.getElementById('ammo-display').innerText = `Ammo: ${this.player ? this.player.ammo : 0}`;
+        const dashDisplay = document.getElementById('dash-display');
+        if (dashDisplay && this.player) {
+            if (this.player.dashTimer <= 0) {
+                dashDisplay.innerText = 'Dash: READY';
+                dashDisplay.style.color = '#a3d473';
+            } else {
+                dashDisplay.innerText = `Dash: ${this.player.dashTimer.toFixed(1)}s`;
+                dashDisplay.style.color = '#ff6b6b';
+            }
+        }
     }
     resetGame() {
         this.player = new Player(this.width / 2, this.height / 2);
@@ -585,6 +682,16 @@ class Game {
         }
         document.getElementById('score-display').innerText = `Score: ${this.score}`;
         document.getElementById('ammo-display').innerText = `Ammo: ${this.player.ammo} / ${this.player.maxAmmo}`;
+        const dashDisplay = document.getElementById('dash-display');
+        if (dashDisplay && this.player) {
+            if (this.player.dashTimer <= 0) {
+                dashDisplay.innerText = 'Dash: READY';
+                dashDisplay.style.color = '#a3d473';
+            } else {
+                dashDisplay.innerText = `Dash: ${this.player.dashTimer.toFixed(1)}s`;
+                dashDisplay.style.color = '#ff6b6b';
+            }
+        }
     }
     drawBazaarBackground(ctx) {
         ctx.fillStyle = '#c28e5c';
@@ -682,6 +789,59 @@ class Utils {
             else ctx.lineTo(px, py);
         }
         ctx.closePath();
+    }
+}
+
+class VectorTrail {
+    constructor(maxSize) {
+        this.maxSize = maxSize;
+        this.points = [];
+    }
+    addPoint(x, y) {
+        this.points.push({x, y});
+        if (this.points.length > this.maxSize) {
+            this.points.shift();
+        }
+    }
+    draw(ctx, color, width) {
+        if (this.points.length < 2) return;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(this.points[0].x, this.points[0].y);
+        for(let i=1; i<this.points.length; i++) {
+            ctx.lineTo(this.points[i].x, this.points[i].y);
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class ScreenShake {
+    constructor() {
+        this.intensity = 0;
+        this.duration = 0;
+    }
+    shake(intensity, duration) {
+        this.intensity = intensity;
+        this.duration = duration;
+    }
+    update(dt) {
+        if (this.duration > 0) {
+            this.duration -= dt;
+        } else {
+            this.intensity = 0;
+        }
+    }
+    getOffset() {
+        if (this.duration > 0) {
+            return {
+                x: (Math.random() - 0.5) * this.intensity,
+                y: (Math.random() - 0.5) * this.intensity
+            };
+        }
+        return {x: 0, y: 0};
     }
 }
 // 450 lines padding end
