@@ -478,6 +478,10 @@ class Player extends Entity {
     // Spawn projectile
     const projPos = this.pos.copy().add(dir.copy().mult(this.radius + 5));
     const projVel = dir.copy().mult(800);
+    if (this.doubleShot) {
+      const dir2 = Vector2.fromAngle(this.angle + 0.1);
+      game.spawnProjectile(projPos.copy(), dir2.mult(800));
+    }
     game.spawnProjectile(projPos, projVel);
 
     game.sound.playShoot();
@@ -691,11 +695,21 @@ class Enemy extends Entity {
   hit(game) {
     this.health--;
     game.sound.playHit();
+
+    if (game.player && game.player.active) {
+      game.comboCount++;
+      game.comboTimer = game.player.comboWindow || 2.0;
+    }
     if (this.health <= 0) {
       this.active = false;
-      game.score += this.points;
+      const mult = 1 + game.comboCount * 0.1;
+      game.score += Math.floor(this.points * mult);
       game.sound.playExplosion();
       game.spawnParticles(this.pos.x, this.pos.y, 10, this.color);
+
+      if (Math.random() < 0.2) {
+        game.pickups.push(new Pickup(this.pos.x, this.pos.y, Math.random() < 0.2 ? 'health' : 'score'));
+      }
     }
   }
 }
@@ -771,6 +785,47 @@ class Particle extends Entity {
   }
 }
 
+class Pickup extends Entity {
+  constructor(x, y, type) {
+    super(x, y, 8);
+    this.type = type; // 'health' or 'score'
+    this.color = type === 'health' ? '#ff4444' : '#44ff44';
+    this.life = 10.0;
+    this.vel = new Vector2((Math.random() - 0.5) * 100, (Math.random() - 0.5) * 100);
+  }
+  update(dt, game) {
+    super.update(dt);
+    this.vel.mult(0.98); // drag
+    this.life -= dt;
+    if (this.life <= 0) this.active = false;
+    if (game.player && game.player.active && game.player.magnetRange) {
+      const dist = this.pos.dist(game.player.pos);
+      if (dist < game.player.magnetRange) {
+        const dir = new Vector2(game.player.pos.x - this.pos.x, game.player.pos.y - this.pos.y).normalize();
+        this.vel.add(dir.mult(400 * dt));
+      }
+    }
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    ctx.rotate(this.life * 5);
+    ctx.fillStyle = this.color;
+    if (this.type === 'health') {
+       ctx.fillRect(-5, -2, 10, 4);
+       ctx.fillRect(-2, -5, 4, 10);
+    } else {
+       ctx.beginPath();
+       ctx.moveTo(0, -6);
+       ctx.lineTo(6, 0);
+       ctx.lineTo(0, 6);
+       ctx.lineTo(-6, 0);
+       ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
 class Game {
   constructor(canvas) {
     this.canvas = canvas;
@@ -793,6 +848,11 @@ class Game {
     this.projectiles = [];
     this.enemies = [];
     this.enemyProjectiles = [];
+    this.pickups = [];
+
+    this.comboCount = 0;
+    this.comboTimer = 0;
+    this.upgradeManager = new UpgradeManager(this);
 
     this.player = null;
     this.gravityWell = null;
@@ -858,6 +918,9 @@ class Game {
     this.projectiles = [];
     this.enemies = [];
     this.enemyProjectiles = [];
+    this.pickups = [];
+    this.comboCount = 0;
+    this.comboTimer = 0;
 
     this.player = new Player(this.width / 2 - 100, this.height / 2);
     this.gravityWell = new GravityWell(this.width / 2, this.height / 2);
@@ -922,6 +985,12 @@ class Game {
       return;
     }
 
+    if (this.state === 'DRAFT') {
+      this.upgradeManager.handleInput(this.input, this.width, this.height);
+      this.input.anyKeyOrClick = false;
+      return;
+    }
+
     if (this.input.keys['Escape']) {
       this.state = 'PAUSED';
       this.input.keys['Escape'] = false;
@@ -952,7 +1021,12 @@ class Game {
     }
 
     // Every 1000 points, wave increases
-    this.wave = Math.floor(this.score / 1000) + 1;
+    // Check for wave transition to trigger draft
+    const targetWave = Math.floor(this.score / 1000) + 1;
+    if (targetWave > this.wave && !this.boss && this.state === 'PLAYING') {
+      this.upgradeManager.startDraft();
+      return;
+    }
 
     // Check for boss trigger
     if (this.wave > this.lastBossWave && this.wave % 5 === 0 && !this.boss && this.bossWarningTimer <= 0) {
@@ -969,6 +1043,27 @@ class Game {
     }
 
     this.worldManager.update(dt);
+
+    if (this.comboTimer > 0) {
+      this.comboTimer -= dt;
+      if (this.comboTimer <= 0) this.comboCount = 0;
+    }
+
+    for (let j = this.pickups.length - 1; j >= 0; j--) {
+      const p = this.pickups[j];
+      p.update(dt, this);
+      if (this.player && this.player.active && p.checkCollision(this.player)) {
+        p.active = false;
+        this.sound.playShoot();
+        if (p.type === 'health') {
+          this.player.health = Math.min(this.player.health + 1, this.player.maxHealth);
+        } else {
+          this.score += 50 * (1 + this.comboCount * 0.1);
+        }
+      }
+      if (!p.active) this.pickups.splice(j, 1);
+    }
+
 
     // Update collections
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -1076,6 +1171,7 @@ class Game {
 
     this.worldManager.drawHazards(this.ctx);
 
+    for (let p of this.pickups) p.draw(this.ctx);
     for (let p of this.particles) p.draw(this.ctx);
     for (let e of this.enemies) e.draw(this.ctx);
     for (let p of this.projectiles) p.draw(this.ctx);
