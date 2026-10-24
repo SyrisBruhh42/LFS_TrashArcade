@@ -135,7 +135,9 @@ class VFXManager {
     }
 
     emitExplosion(x, y, color, count = 20, speed = 200) {
-        for(let i=0; i<count; i++) {
+        let pd = (window.game && window.game.saveManager) ? window.game.saveManager.data.options.particleDensity : 1.0;
+        let actualCount = count * (pd || 1.0);
+        for(let i=0; i<actualCount; i++) {
             let angle = Math.random() * Math.PI * 2;
             let currentSpeed = speed * (0.2 + Math.random() * 0.8);
             this.addParticle(x, y, color, Math.cos(angle)*currentSpeed, Math.sin(angle)*currentSpeed);
@@ -143,8 +145,10 @@ class VFXManager {
     }
 
     emitDirectional(x, y, color, dirX, dirY, spread = 0.5, count = 10, speed = 300) {
+        let pd = (window.game && window.game.saveManager) ? window.game.saveManager.data.options.particleDensity : 1.0;
+        let actualCount = count * (pd || 1.0);
         let baseAngle = Math.atan2(dirY, dirX);
-        for(let i=0; i<count; i++) {
+        for(let i=0; i<actualCount; i++) {
             let angle = baseAngle + (Math.random() - 0.5) * spread;
             let currentSpeed = speed * (0.5 + Math.random() * 0.5);
             this.addParticle(x, y, color, Math.cos(angle)*currentSpeed, Math.sin(angle)*currentSpeed);
@@ -180,7 +184,9 @@ class VFXManager {
     applyShake(ctx) {
         if (this.shakeTimer > 0) {
             let decay = this.shakeTimer / 0.2;
-            let amt = this.shakeIntensity * decay;
+            let ss = (window.game && window.game.saveManager) ? window.game.saveManager.data.options.screenShake : 1.0;
+            let mult = (ss !== undefined) ? ss : 1.0;
+            let amt = this.shakeIntensity * decay * mult;
             let dx = (Math.random() - 0.5) * 2 * amt;
             let dy = (Math.random() - 0.5) * 2 * amt;
             if (this.shakeDirX !== 0 || this.shakeDirY !== 0) {
