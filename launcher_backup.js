@@ -2,6 +2,9 @@
 (function (root) {
   'use strict';
   const keyPattern = /^arcade_game_[A-Za-z0-9_-]{1,180}$/;
+  // The 6M-character payload can expand to 36M JSON bytes (escaped controls),
+  // then 48M Base64 characters. Include bounded JSON/key overhead as well.
+  const maxEncodedLength = 50000000;
   function validate(bundle) {
     if (!bundle || typeof bundle !== 'object' || Array.isArray(bundle)) throw new Error('Invalid save bundle.');
     const entries = Object.entries(bundle);
@@ -48,5 +51,23 @@
               unresolved: failed, recovery, originallyAbsent: Object.keys(before).filter(key => before[key] === null)};
     }
   }
-  root.ArcadeBackup = {snapshot, restore, validate};
+  function recover(storage, prior) {
+    // The caller retains the original receipt until every prior value is read back.
+    // Prior storage can predate today's import budgets. Recovery must retain
+    // exact original bytes rather than reject an older, larger save.
+    const entries = Object.entries(prior.recovery);
+    if (entries.some(([key, value]) => !keyPattern.test(key) || typeof value !== 'string')) throw new Error('Invalid recovery receipt.');
+    const absent = prior.originallyAbsent;
+    if (!Array.isArray(absent) || absent.some(key => !keyPattern.test(key))) throw new Error('Invalid recovery receipt.');
+    const unresolved = [];
+    for (const [key, value] of [...entries, ...absent.map(key => [key, null])]) {
+      try {
+        if (value === null) storage.removeItem(key);
+        else storage.setItem(key, value);
+        if (storage.getItem(key) !== value) throw new Error('Recovery readback failed.');
+      } catch (_) { unresolved.push(key); }
+    }
+    return {...prior, status: unresolved.length ? 'recovery_required' : 'recovered', unresolved};
+  }
+  root.ArcadeBackup = {snapshot, restore, recover, validate, maxEncodedLength};
 })(typeof window !== 'undefined' ? window : globalThis);

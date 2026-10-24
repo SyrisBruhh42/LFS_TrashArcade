@@ -48,3 +48,23 @@ test('export storage failure cannot return a partial bundle',()=>{
   s.getItem=k=>{if(k===b)throw Error('denied');return get(k);};
   assert.throws(()=>backup.snapshot(s));
 });
+test('repeated failed recovery preserves the first receipt until all prior bytes are verified',()=>{
+  let reject=true;
+  const s=storage({[a]:'original'},n=>reject && n>=2);
+  const receipt=backup.restore(s,{[a]:'changed',[b]:'new'});
+  assert.equal(receipt.status,'recovery_required');
+  const retry=backup.recover(s,receipt);
+  assert.equal(retry.status,'recovery_required');
+  assert.equal(retry.recovery[a],'original');
+  assert.deepEqual(retry.originallyAbsent,[b]);
+  reject=false;
+  assert.equal(backup.recover(s,retry).status,'recovered');
+  assert.deepEqual(Object.fromEntries(s.values),{[a]:'original'});
+});
+test('silent recovery failure remains unresolved and keeps original bytes',()=>{
+  const s=storage({[a]:'changed'});
+  s.setItem=()=>{};
+  const prior={recovery:{[a]:'original'},originallyAbsent:[],status:'recovery_required',unresolved:[a]};
+  assert.equal(backup.recover(s,prior).status,'recovery_required');
+  assert.equal(prior.recovery[a],'original');
+});

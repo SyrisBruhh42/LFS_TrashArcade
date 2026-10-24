@@ -1,4 +1,16 @@
 {
   "schema_version": 1,
-  "incidents": {}
+  "incidents": {
+    "ARCADE-085-TOUCH-DASH-20261024": {
+      "repository": "SyrisBruhh42/LFS_TrashArcade",
+      "assigned_folder": "games/085-scrap-heist-retrieval",
+      "game_id": "085",
+      "observed_sha": "4b4f395783dfa30af41fb8d0c04458cabac6ead5",
+      "scenario_id": "touch_secondary_action",
+      "protected_phase": "4",
+      "spec_hash": "a0512ee6c7c9314e63e8962ac205823118bd7aa1e13702dd39ca00cbdb61c141",
+      "expected_behavior_hash": "9cfc0d2c1887690ba16b0999f23d117ee1dd66d64246350e60cae4da00bc359b",
+      "status": "approved"
+    }
+  }
 }

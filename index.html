@@ -435,6 +435,7 @@
         <button class="btn" id="export-bundle-btn" type="button">Generate &amp; Copy Export</button>
         <button class="btn btn-primary" id="import-bundle-btn" type="button">Import Bundle</button>
         <button class="btn" id="recovery-bundle-btn" type="button" hidden>Show Prior Saves for Recovery</button>
+        <button class="btn" id="retry-recovery-btn" type="button" hidden>Retry Prior Save Recovery</button>
         <button class="btn" id="close-modal-btn" type="button">Close</button>
       </div>
     </div>
@@ -683,15 +684,27 @@
       const statusEl = document.getElementById('backup-status');
 
       const recoveryButton = document.getElementById('recovery-bundle-btn');
+      const retryRecoveryButton = document.getElementById('retry-recovery-btn');
+      const importButton = document.getElementById('import-bundle-btn');
+      const exportButton = document.getElementById('export-bundle-btn');
       let recoveryResult = null;
       let previousFocus = null;
       let statusEpoch = 0;
       const encodeBundle = bundle => btoa(unescape(encodeURIComponent(JSON.stringify(bundle))));
+      function showRecovery() {
+        statusEpoch++;
+        textarea.value = encodeBundle(recoveryResult.recovery);
+        textarea.focus(); textarea.select();
+        statusEl.textContent = 'Recovery is incomplete; further imports are blocked. Prior saves are shown for copying. Retry recovery or copy these bytes before leaving. Unresolved keys: ' + recoveryResult.unresolved.join(', ') +
+          (recoveryResult.originallyAbsent.length ? '. These keys were originally absent: ' + recoveryResult.originallyAbsent.join(', ') : '');
+      }
       async function exportGlobalBundle(copy = false) {
+        if (recoveryResult) { showRecovery(); return; }
         const epoch = ++statusEpoch;
         try {
           const bundle = ArcadeBackup.snapshot(localStorage);
           const encoded = encodeBundle(bundle);
+          if (encoded.length > ArcadeBackup.maxEncodedLength) throw new Error('Encoded backup exceeds supported size');
           textarea.value = encoded;
           statusEl.textContent = 'Exported ' + Object.keys(bundle).length + ' game save(s). Select the text to copy it.';
           if (copy && navigator.clipboard && navigator.clipboard.writeText) {
@@ -703,7 +716,7 @@
             }
           }
         } catch (_) {
-          statusEl.textContent = 'Storage could not be read. No complete backup was created.';
+          statusEl.textContent = 'A complete backup could not be generated. Storage may be unavailable or the bundle exceeds the supported size.';
         }
       }
       function closeBackup() {
@@ -717,7 +730,8 @@
         modal.classList.add('open');
         document.querySelectorAll('body > header, body > main, body > footer').forEach(el => { el.inert = true; });
         textarea.focus();
-        exportGlobalBundle();
+        if (recoveryResult) showRecovery();
+        else exportGlobalBundle();
       });
       document.getElementById('close-modal-btn').addEventListener('click', closeBackup);
       modal.addEventListener('keydown', function (event) {
@@ -728,20 +742,35 @@
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       });
-      document.getElementById('export-bundle-btn').addEventListener('click', () => exportGlobalBundle(true));
+      exportButton.addEventListener('click', () => exportGlobalBundle(true));
       recoveryButton.addEventListener('click', function () {
         if (!recoveryResult) return;
-        textarea.value = encodeBundle(recoveryResult.recovery);
-        textarea.focus(); textarea.select();
-        statusEl.textContent = 'Prior saves are shown for copying. Unresolved keys: ' + recoveryResult.unresolved.join(', ') +
-          (recoveryResult.originallyAbsent.length ? '. These keys were originally absent: ' + recoveryResult.originallyAbsent.join(', ') : '');
+        showRecovery();
       });
-      document.getElementById('import-bundle-btn').addEventListener('click', function () {
+      retryRecoveryButton.addEventListener('click', function () {
+        if (!recoveryResult) return;
+        statusEpoch++;
+        let result;
+        try { result = ArcadeBackup.recover(localStorage, recoveryResult); }
+        catch (_) { showRecovery(); return; }
+        if (result.status === 'recovered') {
+          recoveryResult = null;
+          recoveryButton.hidden = retryRecoveryButton.hidden = true;
+          importButton.disabled = exportButton.disabled = false;
+          statusEl.textContent = 'All prior saves and originally absent keys were restored and verified. Imports are available again.';
+          try { renderGames(); } catch (_) { statusEl.textContent += ' Cabinet statistics could not be refreshed.'; }
+        } else { recoveryResult = result; showRecovery(); }
+      });
+      window.addEventListener('beforeunload', function (event) {
+        if (recoveryResult) { event.preventDefault(); event.returnValue = ''; }
+      });
+      importButton.addEventListener('click', function () {
+        if (recoveryResult) { showRecovery(); return; }
         statusEpoch++;
         const raw = textarea.value.trim();
         if (!raw) { statusEl.textContent = 'Paste a Base64 save bundle first.'; return; }
         try {
-          if (raw.length > 8000000) throw new Error('Bundle too large');
+          if (raw.length > ArcadeBackup.maxEncodedLength) throw new Error('Bundle too large');
           const parsed = JSON.parse(decodeURIComponent(escape(atob(raw))));
           const result = ArcadeBackup.restore(localStorage, parsed);
           if (result.status === 'restored') {
@@ -749,7 +778,8 @@
           } else if (result.status === 'rolled_back') {
             statusEl.textContent = 'Restore failed. All attempted changes were rolled back; your prior saves are intact.';
           } else {
-            recoveryResult = result; recoveryButton.hidden = false;
+            recoveryResult = result; recoveryButton.hidden = retryRecoveryButton.hidden = false;
+            importButton.disabled = exportButton.disabled = true;
             statusEl.textContent = 'Restore and recovery were incomplete. Some saves may have changed. Use Show Prior Saves for Recovery before closing this page.';
           }
         } catch (_) {
