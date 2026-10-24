@@ -1317,6 +1317,9 @@ class Game {
     this.bossWarningTimer = 0;
     this.lastBossWave = 0;
 
+    this.waveBannerTimer = 3.0;
+    this.lastWave = 1;
+
     this.worldManager.init();
     this.vfxManager.init();
     this.sound.startMusic();
@@ -1344,12 +1347,29 @@ class Game {
     const x = this.width / 2 + Math.cos(angle) * dist;
     const y = this.height / 2 + Math.sin(angle) * dist;
 
+    let enemy = null;
     const r = Math.random();
-    if (r < 0.3) this.enemies.push(new SwarmerEnemy(x, y));
-    else if (r < 0.5) this.enemies.push(new SniperEnemy(x, y));
-    else if (r < 0.7) this.enemies.push(new ShieldedBruiserEnemy(x, y));
-    else if (r < 0.85) this.enemies.push(new SplitterEnemy(x, y));
-    else this.enemies.push(new HazardDeployerEnemy(x, y));
+
+    // Scale probability thresholds based on wave
+    const w = this.wave;
+    const tSwarmer = Math.max(0.1, 0.4 - (w * 0.02));
+    const tSniper = tSwarmer + Math.max(0.1, 0.3 - (w * 0.01));
+    const tBruiser = tSniper + Math.min(0.3, 0.1 + (w * 0.02));
+    const tSplitter = tBruiser + Math.min(0.2, 0.05 + (w * 0.015));
+
+    if (r < tSwarmer) enemy = new SwarmerEnemy(x, y);
+    else if (r < tSniper) enemy = new SniperEnemy(x, y);
+    else if (r < tBruiser) enemy = new ShieldedBruiserEnemy(x, y);
+    else if (r < tSplitter) enemy = new SplitterEnemy(x, y);
+    else enemy = new HazardDeployerEnemy(x, y);
+
+    // Apply wave scaling to basic stats
+    const scaling = 1 + (this.wave * 0.1);
+    enemy.health = Math.floor(enemy.health * scaling);
+    enemy.speed = enemy.speed * (1 + (this.wave * 0.05));
+    enemy.points = Math.floor(enemy.points * scaling);
+
+    this.enemies.push(enemy);
   }
 
   update(dt) {
@@ -1393,6 +1413,12 @@ class Game {
         const bx = this.width / 2;
         const by = -50; // spawn slightly offscreen
         this.boss = Math.random() < 0.5 ? new JunkGoliathBoss(bx, by) : new MagneticWarlordBoss(bx, by);
+
+        // Scale Boss HP based on wave
+        const hpMultiplier = 1 + (this.wave / 10);
+        this.boss.maxHealth = Math.floor(this.boss.maxHealth * hpMultiplier);
+        this.boss.health = this.boss.maxHealth;
+
         this.enemies.push(this.boss);
         this.sound.playBossSpawn();
       }
@@ -1407,7 +1433,7 @@ class Game {
       this.enemySpawnTimer -= dt;
       if (this.enemySpawnTimer <= 0) {
         this.spawnEnemy();
-        this.enemySpawnTimer = Math.max(0.5, 2.0 - (this.wave * 0.1));
+        this.enemySpawnTimer = Math.max(0.3, 2.5 - (this.wave * 0.15));
       }
     }
 
@@ -1416,12 +1442,21 @@ class Game {
       this.ui.checkMilestones();
     }
 
+    if (this.waveBannerTimer > 0) {
+      this.waveBannerTimer -= dt;
+    }
+
     // Every 1000 points, wave increases
     // Check for wave transition to trigger draft
     const targetWave = Math.floor(this.score / 1000) + 1;
     if (targetWave > this.wave && !this.boss && this.state === 'PLAYING') {
       this.upgradeManager.startDraft();
       return;
+    }
+
+    if (this.wave > this.lastWave) {
+       this.waveBannerTimer = 3.0;
+       this.lastWave = this.wave;
     }
 
     // Check for boss trigger
@@ -1516,6 +1551,13 @@ class Game {
         }
       }
     }
+
+    // Limit array sizes to prevent memory leaks in extreme scenarios
+    if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
+    if (this.projectiles.length > 200) this.projectiles.splice(0, this.projectiles.length - 200);
+    if (this.enemies.length > 150) this.enemies.splice(0, this.enemies.length - 150);
+    if (this.enemyProjectiles.length > 300) this.enemyProjectiles.splice(0, this.enemyProjectiles.length - 300);
+    if (this.pickups.length > 100) this.pickups.splice(0, this.pickups.length - 100);
   }
 
   draw() {
@@ -1615,6 +1657,22 @@ class Game {
       this.ctx.fillText("Score: " + this.score, 20, 40);
       this.ctx.fillText("Wave: " + this.wave, 20, 70);
 
+      if (this.waveBannerTimer > 0) {
+        this.ctx.save();
+        this.ctx.globalAlpha = Math.min(1, this.waveBannerTimer);
+        this.ctx.fillStyle = '#b48ff0';
+        this.ctx.textAlign = 'center';
+        this.ctx.font = '50px sans-serif';
+        this.ctx.fillText("WAVE " + this.wave, this.width / 2, this.height / 2 - 50);
+
+        if (this.wave === 1) {
+          this.ctx.fillStyle = '#fff';
+          this.ctx.font = '20px sans-serif';
+          this.ctx.fillText("Tutorial: Shoot to propel yourself backward via RECOIL!", this.width / 2, this.height / 2 + 20);
+        }
+        this.ctx.restore();
+      }
+
       if (this.player) {
         this.ctx.fillText("HP: ", 20, 100);
         for(let i=0; i<this.player.maxHealth; i++) {
@@ -1666,6 +1724,31 @@ class Game {
     if (this.ui) this.ui.draw(this.ctx);
   }
 
+
+
+  // Auxiliary formatting logic to scale up particle generation per wave dynamically
+  generateWaveBonusParticles(x, y, waveCount) {
+    if (waveCount <= 1) return;
+    const bonusCount = Math.min(20, Math.floor(waveCount / 2));
+    for (let i = 0; i < bonusCount; i++) {
+      if (this.particles.length < 500) {
+        this.spawnParticles(x, y, 1, '#ffffff');
+      }
+    }
+  }
+
+  // Helper method to clear all on-screen entities in case of a board wipe
+  triggerBoardWipeEffect() {
+    this.enemies.forEach(e => e.active = false);
+    this.enemyProjectiles.forEach(ep => ep.active = false);
+    for(let i=0; i<30; i++) {
+       const rx = Math.random() * this.width;
+       const ry = Math.random() * this.height;
+       this.spawnParticles(rx, ry, 5, '#ffff00');
+    }
+    this.vfxManager.triggerScreenShake(0.5, 20);
+    this.sound.playExplosion();
+  }
   loop(now) {
     requestAnimationFrame(this.loop);
     this.frames++;
