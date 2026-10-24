@@ -914,6 +914,11 @@ class Game {
             this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50 + Math.random() * 300));
         }
 
+        this.nextBossScore = 500;
+        this.bossActive = false;
+        this.bossWarningTimer = 0;
+        this.bossCount = 0;
+
         this.state = 'PLAYING';
         this.saveManager.incrementGamesPlayed();
     }
@@ -937,6 +942,33 @@ class Game {
 
             this.player.update(effectiveDt, this.input, this.platforms, this.sound);
 
+            // Boss Spawning Logic
+            if (!this.bossActive && this.score >= this.nextBossScore) {
+                this.bossWarningTimer = 3.0; // 3 seconds warning
+                this.bossActive = true;
+                this.nextBossScore += 1000 + (this.bossCount * 500); // Scale up next boss requirement
+
+                // Clear regular enemies when boss approaches
+                for (let i = this.enemies.length - 1; i >= 0; i--) {
+                    for (let k = 0; k < 5; k++) {
+                        this.particles.push(new Particle(this.enemies[i].x, this.enemies[i].y, this.enemies[i].color));
+                    }
+                }
+                this.enemies = [];
+            }
+
+            if (this.bossWarningTimer > 0) {
+                this.bossWarningTimer -= effectiveDt;
+                if (this.bossWarningTimer <= 0) {
+                    this.bossCount++;
+                    if (this.bossCount % 2 === 1) {
+                        this.enemies.push(new CryoWardenBoss(400, 100));
+                    } else {
+                        this.enemies.push(new FrostMechanicBoss(400, 100));
+                    }
+                }
+            }
+
             for (let i = this.enemies.length - 1; i >= 0; i--) {
                 let e = this.enemies[i];
                 e.update(effectiveDt, this.platforms, this.player, this);
@@ -947,7 +979,36 @@ class Game {
                     if (this.player.dashActive || (this.player.vy > 0 && this.player.y < e.y)) {
                         // Kill enemy if dashing or falling on top
 
-                        if (e.type === 'bruiser' && e.shielded) {
+                        if (e.isBoss) {
+                            if (this.player.invulnTime <= 0) {
+                                e.takeDamage(100);
+                                this.player.invulnTime = 0.5; // IFrames after hitting boss
+                                if (!this.player.dashActive) {
+                                    this.player.vy = this.player.jumpForce * 1.2; // Higher bounce on boss
+                                }
+                                for (let k = 0; k < 15; k++) {
+                                    this.particles.push(new Particle(e.x, e.y, '#ffffff'));
+                                }
+                                this.sound.playEnemyHit();
+
+                                if (e.hp <= 0) {
+                                    e.active = false;
+                                    this.score += 500;
+                                    this.sound.playScore();
+                                    this.enemies.splice(i, 1);
+                                    this.bossActive = false;
+
+                                    for (let k = 0; k < 30; k++) {
+                                        this.particles.push(new Particle(e.x, e.y, e.color));
+                                    }
+
+                                    // Resume normal waves
+                                    for(let j = 0; j < 5; j++) {
+                                        this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50));
+                                    }
+                                }
+                            }
+                        } else if (e.type === 'bruiser' && e.shielded) {
                             e.shielded = false; // Break shield first
                             if (!this.player.dashActive) {
                                 this.player.vy = this.player.jumpForce * 0.8;
@@ -976,8 +1037,10 @@ class Game {
                                 this.enemies.push(new SwarmerEnemy(e.x + 20, e.y));
                             }
 
-                            // Spawn new enemy to keep game going
-                            this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50));
+                            // Spawn new enemy to keep game going if not boss mode
+                            if (!this.bossActive) {
+                                this.enemies.push(createRandomEnemy(100 + Math.random() * 600, 50));
+                            }
                         }
                     } else if (this.player.invulnTime <= 0) {
                         for (let k = 0; k < 20; k++) {
@@ -1084,6 +1147,38 @@ class Game {
                 p.draw(this.ctx);
             }
 
+            // Draw Boss Warning
+            if (this.bossWarningTimer > 0) {
+                if (Math.floor(this.bossWarningTimer * 10) % 2 === 0) {
+                    this.ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                    this.ctx.fillRect(0, this.logicalHeight / 2 - 40, this.logicalWidth, 80);
+                    this.ctx.fillStyle = '#ff0000';
+                    this.ctx.font = '36px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('WARNING: BOSS APPROACHING', this.logicalWidth / 2, this.logicalHeight / 2 + 10);
+                }
+            }
+
+            // Draw Boss HP Bar
+            let activeBoss = this.enemies.find(e => e.isBoss);
+            if (activeBoss && activeBoss.hp > 0) {
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                this.ctx.fillRect(this.logicalWidth / 2 - 200, 20, 400, 20);
+
+                let hpPct = Math.max(0, activeBoss.hp / activeBoss.maxHp);
+                if (hpPct > 0.5) {
+                    this.ctx.fillStyle = '#00ff00';
+                } else {
+                    this.ctx.fillStyle = '#ff8800'; // Phase 2 color
+                }
+                this.ctx.fillRect(this.logicalWidth / 2 - 200, 20, 400 * hpPct, 20);
+
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '16px sans-serif';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(activeBoss.bossName, this.logicalWidth / 2, 15);
+            }
+
             this.ctx.fillStyle = '#fff';
             this.ctx.font = '20px sans-serif';
             this.ctx.textAlign = 'left';
@@ -1149,3 +1244,153 @@ window.onload = () => {
     const game = new Game(canvas);
     window.game = game; // For debugging and playtesting script
 };
+
+class CryoWardenBoss extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y);
+        this.type = 'cryo_warden';
+        this.bossName = 'CRYO WARDEN';
+        this.isBoss = true;
+        this.color = '#00aaaa';
+        this.radius = 40;
+        this.maxHp = 500;
+        this.hp = this.maxHp;
+        this.phase2 = false;
+
+        this.moveTimer = 0;
+        this.attackTimer = 0;
+        this.targetX = x;
+    }
+
+    takeDamage(amount) {
+        this.hp -= amount;
+        if (this.hp <= this.maxHp / 2 && !this.phase2) {
+            this.phase2 = true;
+            this.color = '#ff8800'; // Change color for phase 2
+        }
+    }
+
+    update(dt, platforms, player, game) {
+        // Floating movement logic (doesn't use standard gravity)
+        this.moveTimer += dt;
+        this.attackTimer += dt;
+
+        // Horizontal movement - slower in phase 1, faster in phase 2
+        let speed = this.phase2 ? 150 : 80;
+        let diffX = this.targetX - this.x;
+        if (Math.abs(diffX) > 10) {
+            this.vx = Math.sign(diffX) * speed;
+        } else {
+            this.vx = 0;
+            if (this.moveTimer > 2.0) {
+                this.targetX = 100 + Math.random() * 600;
+                this.moveTimer = 0;
+            }
+        }
+
+        this.x += this.vx * dt;
+
+        // Hover vertically
+        let hoverTarget = 100 + Math.sin(Date.now() / 500) * 30;
+        this.y += (hoverTarget - this.y) * 2 * dt;
+
+        // Attack logic
+        let attackRate = this.phase2 ? 1.5 : 3.0;
+        if (this.attackTimer > attackRate) {
+            this.attackTimer = 0;
+
+            // Pattern 1: Drop falling hazards
+            if (Math.random() > 0.5) {
+                game.enemies.push(new SniperProjectile(this.x, this.y, -100, 200));
+                game.enemies.push(new SniperProjectile(this.x, this.y, 0, 200));
+                game.enemies.push(new SniperProjectile(this.x, this.y, 100, 200));
+            }
+            // Pattern 2: Spawn swarmers (phase 2 only)
+            else if (this.phase2) {
+                game.enemies.push(new SwarmerEnemy(this.x - 30, this.y));
+                game.enemies.push(new SwarmerEnemy(this.x + 30, this.y));
+            }
+        }
+
+        return false; // Not grounded
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+    }
+}
+
+class FrostMechanicBoss extends BaseEnemy {
+    constructor(x, y) {
+        super(x, y);
+        this.type = 'frost_mechanic';
+        this.bossName = 'FROST MECHANIC';
+        this.isBoss = true;
+        this.color = '#8800ff';
+        this.radius = 35;
+        this.maxHp = 600;
+        this.hp = this.maxHp;
+        this.phase2 = false;
+
+        this.attackTimer = 0;
+        this.vx = 100;
+    }
+
+    takeDamage(amount) {
+        this.hp -= amount;
+        if (this.hp <= this.maxHp / 2 && !this.phase2) {
+            this.phase2 = true;
+            this.color = '#ff4400';
+            this.vx = Math.sign(this.vx) * 200; // Speed up
+        }
+    }
+
+    update(dt, platforms, player, game) {
+        let grounded = super.update(dt, platforms, player, game);
+        this.attackTimer += dt;
+
+        // Bounce off walls
+        if (this.x - this.radius < 0) {
+            this.x = this.radius;
+            this.vx *= -1;
+        } else if (this.x + this.radius > 800) {
+            this.x = 800 - this.radius;
+            this.vx *= -1;
+        }
+
+        // Jump occasionally
+        if (grounded && Math.random() < 0.02) {
+            this.vy = this.phase2 ? -500 : -350;
+        }
+
+        // Attacks
+        let attackRate = this.phase2 ? 2.0 : 4.0;
+        if (this.attackTimer > attackRate) {
+            this.attackTimer = 0;
+            // Throw hazards
+            let h = new HazardEnemy(this.x, this.y);
+            h.vy = -300;
+            game.enemies.push(h);
+        }
+
+        return grounded;
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.beginPath();
+        ctx.rect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+    }
+}
