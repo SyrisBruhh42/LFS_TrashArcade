@@ -12,6 +12,8 @@ class VFXManager {
         this.shockwaves.push(new Shockwave(x, y, color));
     }
     addParticle(x, y, color, speed, angle, life, size=3) {
+        const set = window.game && window.game.saveManager && window.game.saveManager.data ? window.game.saveManager.data.settings : {particleDensity: 'High'};
+        if (set && set.particleDensity === 'Low' && Math.random() < 0.5) return;
         this.particles.push({
             x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
             color, life, maxLife: life, size
@@ -61,8 +63,10 @@ class VFXManager {
     }
     applyShake(ctx) {
         if (this.shakeTime > 0) {
-            const dx = (Math.random() - 0.5) * this.shakeIntensity;
-            const dy = (Math.random() - 0.5) * this.shakeIntensity;
+            const set = window.game && window.game.saveManager && window.game.saveManager.data ? window.game.saveManager.data.settings : {screenShake: 1.0};
+            const shakeMult = set ? set.screenShake : 1.0;
+            const dx = (Math.random() - 0.5) * this.shakeIntensity * shakeMult;
+            const dy = (Math.random() - 0.5) * this.shakeIntensity * shakeMult;
             ctx.translate(dx, dy);
         }
     }
