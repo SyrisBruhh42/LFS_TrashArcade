@@ -432,11 +432,19 @@ class Game {
         if(this.sound) this.sound.bossMode = true;
         this.sound.playBossSpawn();
         this.guards = [];
+
+        let hpMultiplier = 1 + (this.bossCount * 0.5);
+
         if (this.bossCount % 2 === 0) {
             this.currentBoss = new OrigamiDragon(this.baseWidth/2, 100);
         } else {
             this.currentBoss = new ShiftingShogun(this.baseWidth/2, 100);
         }
+
+        this.currentBoss.maxHp = Math.floor(this.currentBoss.maxHp * hpMultiplier);
+        this.currentBoss.hp = this.currentBoss.maxHp;
+        this.currentBoss.displayHp = this.currentBoss.maxHp;
+
         this.bossCount++;
     }
 
@@ -504,16 +512,39 @@ class Game {
             const dy = this.player.y - this.baseHeight/2;
             const dist = Math.hypot(dx, dy);
             if (dist + this.player.radius > this.arenaRadius) {
-                const angle = Math.atan2(dy, dx);
-                this.player.x = this.baseWidth/2 + Math.cos(angle) * (this.arenaRadius - this.player.radius);
-                this.player.y = this.baseHeight/2 + Math.sin(angle) * (this.arenaRadius - this.player.radius);
+            let angleTemp = Math.atan2(dy, dx);
+            this.player.x = this.baseWidth/2 + Math.cos(angleTemp) * (this.arenaRadius - this.player.radius);
+            this.player.y = this.baseHeight/2 + Math.sin(angleTemp) * (this.arenaRadius - this.player.radius);
                 // Kill outward velocity when hitting wall
-                const nx = Math.cos(angle);
-                const ny = Math.sin(angle);
+            const nx = Math.cos(angleTemp);
+            const ny = Math.sin(angleTemp);
                 const dot = this.player.vx * nx + this.player.vy * ny;
                 if (dot > 0) {
                     this.player.vx -= dot * nx;
                     this.player.vy -= dot * ny;
+                }
+                if (Math.abs(this.player.vx) < 1) {
+                    this.player.vx = 0;
+                }
+                if (Math.abs(this.player.vy) < 1) {
+                    this.player.vy = 0;
+                }
+                let collisionVfxIntensity = Math.abs(dot) * 0.1;
+                if (collisionVfxIntensity > 50) {
+                    if (this.vfx) {
+                        this.vfx.shake(5, 100);
+                        let emitX = this.player.x + (Math.random() - 0.5) * 10;
+                        let emitY = this.player.y + (Math.random() - 0.5) * 10;
+                    this.vfx.addParticle(emitX, emitY, '#ccc', 20, angleTemp + Math.PI, 0.2);
+                        emitX = this.player.x + (Math.random() - 0.5) * 10;
+                        emitY = this.player.y + (Math.random() - 0.5) * 10;
+                    this.vfx.addParticle(emitX, emitY, '#ddd', 25, angleTemp + Math.PI + 0.2, 0.3);
+                    }
+                }
+
+                if (this.player.isDashing && dot > 0) {
+                     this.player.isDashing = false;
+                     this.player.dashTime = 0;
                 }
             }
 
@@ -545,10 +576,30 @@ class Game {
                     this.upgradeManager.generateChoices();
                     this.state = STATES.UPGRADE_DRAFT;
 
-                    this.guards = [
-                        new StandardGuard(200, 200, [{x: 200, y: 200}, {x: 600, y: 200}, {x: 600, y: 400}, {x: 200, y: 400}]),
-                        new Spawner(400, 400)
-                    ];
+                    this.guards = [];
+
+                    let numGuards = Math.min(10, 2 + this.bossCount);
+                    for (let i = 0; i < numGuards; i++) {
+                        let type = Math.random();
+                        let gx = 100 + Math.random() * (this.baseWidth - 200);
+                        let gy = 100 + Math.random() * (this.baseHeight - 200);
+
+                        if (type < 0.4) {
+                            this.guards.push(new StandardGuard(gx, gy, [
+                                {x: gx, y: gy}, {x: gx + 100, y: gy},
+                                {x: gx + 100, y: gy + 100}, {x: gx, y: gy + 100}
+                            ]));
+                        } else if (type < 0.7) {
+                            this.guards.push(new Sniper(gx, gy, Math.random() * Math.PI * 2));
+                        } else if (type < 0.9) {
+                            this.guards.push(new Bruiser(gx, gy, [
+                                {x: gx, y: gy}, {x: gx, y: gy + 200},
+                                {x: gx - 100, y: gy + 200}, {x: gx - 100, y: gy}
+                            ]));
+                        } else {
+                            this.guards.push(new Spawner(gx, gy));
+                        }
+                    }
                 }
             } else {
                 this.guards.forEach(g => {
@@ -632,6 +683,12 @@ class Game {
 
         if (this.state === STATES.PLAYING) {
             this.comboManager.update(dt, this);
+
+            if (this.comboManager.combo >= 2.0 && Math.random() < 0.01) {
+                if (this.vfx) {
+                    this.vfx.addParticle(this.player.x, this.player.y, '#ffd700', 10, Math.random() * Math.PI * 2, 0.5);
+                }
+            }
         }
     }
 
@@ -735,6 +792,26 @@ class Game {
             this.ctx.fillStyle = '#fff';
             this.ctx.font = '12px sans-serif';
             this.ctx.fillText('DASH (SHIFT/CLICK)', 20, 85);
+
+            // Tutorial / Hint Overlay on Wave 1
+            if (this.bossCount === 0 && this.score < 50 && this.state === STATES.PLAYING) {
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                this.ctx.fillRect(this.baseWidth / 2 - 200, this.baseHeight - 120, 400, 100);
+                this.ctx.strokeStyle = '#8a7d65';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(this.baseWidth / 2 - 200, this.baseHeight - 120, 400, 100);
+
+                this.ctx.fillStyle = '#fff';
+                this.ctx.textAlign = 'center';
+                this.ctx.font = '18px sans-serif';
+                let hasMoved = this.player.vx !== 0 || this.player.vy !== 0;
+                let text1 = hasMoved ? 'Great! Now collect treasures to score points.' : 'Use WASD/Arrows to move.';
+                this.ctx.fillText(text1, this.baseWidth / 2, this.baseHeight - 90);
+                let text2 = 'Shift or Click to Dash!';
+                this.ctx.fillText(text2, this.baseWidth / 2, this.baseHeight - 65);
+                this.ctx.fillText('Avoid enemy sight cones! Arena shrinks!', this.baseWidth / 2, this.baseHeight - 40);
+                this.ctx.textAlign = 'left';
+            }
         }
 
         if (this.state === STATES.TITLE) {
