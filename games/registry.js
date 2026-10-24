@@ -1067,5 +1067,19 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#769a87",
     "phase": "1",
     "path": "./games/080-frozen-tether/index.html"
+  },
+  {
+    "id": "081",
+    "slug": "081-scrap-orbital-recoil",
+    "title": "Scrap Orbital Recoil",
+    "genre": "Gravity/Orbital Physics Action",
+    "coreMechanic": "Recoil-as-Movement",
+    "setting": "Junkyard Robot Scrapheap",
+    "description": "Navigate a junkyard orbit by firing your blaster for recoil. Survive the scrap heap!",
+    "controls": "WASD/Arrows to aim, Space to fire (or tap/drag and release to shoot). Recoil propels you backward.",
+    "createdAt": "2023-10-24",
+    "accentColor": "#b48ff0",
+    "phase": "1",
+    "path": "./games/081-scrap-orbital-recoil/index.html"
   }
 ];
