@@ -1121,7 +1121,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD to move, Space/Click to blast.",
     "createdAt": "2023-10-27",
     "accentColor": "#e857ce",
-    "phase": "4",
+    "phase": "5",
     "path": "./games/084-echo-forge-fusion/index.html"
   },
   {
