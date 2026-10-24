@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bazaar Bullet Retrieval</title>
+    <style>
+        html, body {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background-color: #1a1515;
+            color: #e2fc7a;
+            font-family: monospace;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+        }
+        #back-link {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 10;
+            pointer-events: auto;
+        }
+        a { color: #e2fc7a; text-decoration: none; border: 1px solid #e2fc7a; padding: 5px; }
+        a:hover { background-color: #e2fc7a; color: #1a1515; }
+    </style>
+    <script defer src="game.js"></script>
+</head>
+<body>
+    <div id="back-link">
+        <a href="../../index.html" id="back-to-arcade">Back to Arcade</a>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui-layer"></div>
+</body>
+</html>
