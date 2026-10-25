@@ -1019,6 +1019,7 @@ class Game {
         this.sound = new SoundEngine();
 
         this.state = 'TITLE';
+        if (window.VFXManager) this.vfx = new VFXManager(this);
         const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none';
         this.lastTime = performance.now();
         this.score = 0;
@@ -1065,8 +1066,23 @@ class Game {
             this.sound.resume();
 
             if (e.code === 'Escape' && !e.repeat) {
-                if (this.state === 'PLAYING') this.pauseGame();
-                else if (this.state === 'PAUSED') this.resumeGame();
+                if (this.state === 'PLAYING') {
+                    this.pauseGame();
+                } else if (this.state === 'PAUSED') {
+                    this.resumeGame();
+                } else if (this.state === 'OPTIONS') {
+                    this.state = this.prevState || 'TITLE';
+                    const modal = document.getElementById('options-modal');
+                    if (modal) modal.remove();
+                }
+            }
+            if ((e.code === 'KeyO' || e.code === 'KeyP') && !e.repeat) {
+                if (this.state === 'TITLE' || this.state === 'PAUSED') {
+                    this.prevState = this.state;
+                    this.state = 'OPTIONS';
+                    if (window.UI) window.UI.showOptions();
+                    this.input.clear();
+                }
             }
             if (!e.repeat && (e.code === 'Space' || e.code === 'Enter')) {
                 if (this.state === 'TITLE') this.startGame();
@@ -1201,6 +1217,7 @@ class Game {
         if (this.state !== 'PLAYING') return;
 
         this.parallax.update(dt);
+        if (this.vfx) this.vfx.update(dt);
 
         this.shootCooldown = Math.max(0, this.shootCooldown - dt);
 
@@ -1244,6 +1261,7 @@ class Game {
                 this.collectibles.splice(i, 1);
                 this.score += 100;
                 this.sound.playScore();
+                if (this.vfx) { this.vfx.burst(c.x, c.y, '#4ad5c0', 12); this.vfx.addFloatingText(c.x, c.y, '+100', '#ffca28'); this.vfx.addShake(4); }
             }
         }
 
@@ -1256,9 +1274,19 @@ class Game {
     }
 
     draw() {
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        this.ctx.save();
+        if (this.vfx && (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER')) {
+            this.vfx.applyCamera(this.ctx);
+        }
+        
         this.parallax.draw(this.ctx);
 
         if (this.state === 'TITLE') {
+            this.ctx.restore();
+            this.drawTitle();
+        } else if (this.state === 'OPTIONS') {
+            this.ctx.restore();
             this.drawTitle();
         } else if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
             for (let c of this.collectibles) c.draw(this.ctx);
@@ -1269,6 +1297,9 @@ class Game {
             for (let part of this.particles) part.draw(this.ctx);
             if (this.player) this.player.draw(this.ctx);
 
+            if (this.vfx) this.vfx.draw(this.ctx);
+
+            this.ctx.restore();
             this.drawHUD();
 
             if (this.state === 'PAUSED') {
@@ -1354,6 +1385,10 @@ class Game {
     }
 
     drawTitle() {
+        if(window.UI) {
+            window.UI.drawLoreAndHowTo(this.ctx, this.width, this.height);
+            return;
+        }
         this.ctx.fillStyle = '#4ad5c0';
         this.ctx.font = '50px monospace';
         this.ctx.textAlign = 'center';
@@ -1371,6 +1406,11 @@ class Game {
 }
 
 window.onload = () => {
+    window.ARCADE_CARTRIDGE_META = {
+        title: "Scrap Heist Retrieval",
+        lore: "Sneak through the scrapheap and collect scrap.",
+        winObjective: "Retrieve scrap and survive."
+    };
     window.game = new Game();
 };
 
