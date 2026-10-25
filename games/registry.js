@@ -1121,7 +1121,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Space/Click/Tap to start. WASD/Arrows or hold/drag to move and aim. Blasts fire on the beat. Shift/Dash to dash. Esc or Pause/Resume to pause and resume.",
     "createdAt": "2023-10-27",
     "accentColor": "#e857ce",
-    "phase": "7",
+    "phase": "8",
     "path": "./games/084-echo-forge-fusion/index.html"
   },
   {

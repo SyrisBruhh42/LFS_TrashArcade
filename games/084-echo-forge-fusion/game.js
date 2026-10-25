@@ -757,7 +757,8 @@ class Game {
         this.ctx = canvas.getContext('2d');
         this.input = new InputManager(canvas);
         this.saves = new SaveManager();
-        this.sounds = new SoundEngine();
+        this.sounds = new ProceduralSynthEngine();
+        this.ui = new ArcadeUI(this);
         this.vfx = new VFXManager(this);
 
         this.width = canvas.width;
@@ -984,6 +985,13 @@ class Game {
             this.pauseGame();
             return;
         }
+
+        if (this.input.keys['KeyO']) {
+            this.input.keys['KeyO'] = false;
+            this.ui.toggle();
+        }
+
+        this.sounds.updateLoop(this.bpm, this.bossActive);
 
         this.vfx.update(dt);
         if (this.vfx.hitStopTimer > 0) {
@@ -1316,9 +1324,17 @@ class Game {
                     this.startGame();
                 }
             }
+            if (this.input.keys['KeyO']) {
+                this.input.keys['KeyO'] = false;
+                this.ui.toggle();
+            }
+            this.ui.update(dt);
+            this.ui.draw(this.ctx);
         } else if (this.state === 'PLAYING') {
             this.update(dt);
             this.draw();
+            this.ui.update(dt);
+            this.ui.draw(this.ctx);
         } else if (this.state === 'PAUSED') {
             this.draw();
             this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -1337,6 +1353,12 @@ class Game {
             if (this.input.mouse.clicked && this.input.mouse.y > this.height - 60) {
                 window.location.href = '../../index.html';
             }
+            if (this.input.keys['KeyO']) {
+                this.input.keys['KeyO'] = false;
+                this.ui.toggle();
+            }
+            this.ui.update(dt);
+            this.ui.draw(this.ctx);
         } else if (this.state === 'GAME_OVER') {
             this.vfx.update(dt);
             this.draw();
