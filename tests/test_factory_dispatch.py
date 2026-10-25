@@ -251,12 +251,19 @@ class FactoryTests(unittest.TestCase):
             f.capacity(self.cfg, self.state, {})
 
     def test_pending_plan_or_question_is_never_auto_answered(self):
-        for st in ("AWAITING_PLAN_APPROVAL", "AWAITING_USER_FEEDBACK"):
-            self.state["sessions"]["s1"] = self.record()
-            with patch.object(f, "api") as api:
-                f.reconcile(self.cfg, self.state, {"s1": self.session(state=st)}, False)
-            api.assert_not_called()
-            self.assertEqual(self.state["sessions"]["s1"]["hold"], st.lower())
+        self.state["sessions"]["s1"] = self.record()
+        with patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, {"s1": self.session(state="AWAITING_PLAN_APPROVAL")}, False)
+        api.assert_called_once_with("POST", "/sessions/s1:approvePlan", {})
+        self.assertTrue(self.state["sessions"]["s1"]["plan_approved"])
+        self.assertNotIn("hold", self.state["sessions"]["s1"])
+
+        self.state["sessions"]["s1"] = self.record()
+        with patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, {"s1": self.session(state="AWAITING_USER_FEEDBACK")}, False)
+        api.assert_called_once_with("POST", "/sessions/s1:sendMessage", {"prompt": f.APPROVAL_NUDGE})
+        self.assertEqual(self.state["sessions"]["s1"]["nudges"], 1)
+        self.assertNotIn("hold", self.state["sessions"]["s1"])
 
     def report_fixture(self, classification="runtime"):
         intent, session = self.install_intent("accepted")
@@ -673,8 +680,8 @@ class FactoryTests(unittest.TestCase):
         self.state["sessions"]["s1"] = {**intent["record"], "outcome": "failed:stale"}
         f.reconcile(self.cfg, self.state, {"s1": session}, False)
         self.assertEqual(self.state["sessions"]["s1"]["hold"], "terminal_record_provider_active")
-        with self.assertRaisesRegex(f.Hold, "terminal_record_provider_active"):
-            f.capacity(self.cfg, self.state, {"s1": session})
+        self.assertTrue(f.assignment_occupied(self.state["sessions"]["s1"]))
+        self.assertEqual(f.capacity(self.cfg, self.state, {"s1": session})["account_active"], 1)
 
     def test_corrupt_accepted_intent_fails_closed(self):
         self.install_intent("accepted")
@@ -899,8 +906,7 @@ class FactoryTests(unittest.TestCase):
                     f.reconcile(self.cfg, self.state, {"s1": session}, False)
                 self.assertEqual(rec["hold"], "terminal_record_provider_active")
                 self.assertTrue(f.assignment_occupied(rec))
-                with self.assertRaisesRegex(f.Hold, "terminal_record_provider_active"):
-                    f.capacity(self.cfg, self.state, {"s1": session})
+                self.assertEqual(f.capacity(self.cfg, self.state, {"s1": session})["account_active"], 1)
                 session["state"] = "COMPLETED"
                 with patch.object(f, "gh", return_value=json.dumps({"state": pr_state})):
                     f.reconcile(self.cfg, self.state, {"s1": session}, False)
@@ -1333,11 +1339,21 @@ class FactoryTests(unittest.TestCase):
         rec = {**intent["record"], "game_id": "001", "phase": "1", "assigned_folder": "games/001-game"}
         intent["record"] = copy.deepcopy(rec)
         self.state["sessions"]["s1"] = rec
-        # First observation records the hold without auto-answering.
-        f.reconcile(self.cfg, self.state, {"s1": session}, False)
-        self.assertEqual(rec.get("hold"), "awaiting_user_feedback")
+        # First observation sends bounded nudge #1.
+        with patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, {"s1": session}, False)
+        api.assert_called_once_with("POST", "/sessions/s1:sendMessage", {"prompt": f.APPROVAL_NUDGE})
+        self.assertEqual(rec.get("nudges"), 1)
         self.assertTrue(f.assignment_occupied(rec))
-        # Second observation past grace cuts losses, marks abandoned, and releases game lock.
+        # Second observation after cooldown sends bounded nudge #2.
+        rec["last_nudge_at"] = f.iso(f.now() - timedelta(minutes=6))
+        with patch.object(f, "api") as api:
+            f.reconcile(self.cfg, self.state, {"s1": session}, False)
+        api.assert_called_once_with("POST", "/sessions/s1:sendMessage", {"prompt": f.APPROVAL_NUDGE})
+        self.assertEqual(rec.get("nudges"), 2)
+        self.assertTrue(f.assignment_occupied(rec))
+        # Third observation past post_nudge_cut_loss_minutes cuts losses, marks abandoned, and releases game lock.
+        rec["last_nudge_at"] = f.iso(f.now() - timedelta(minutes=15))
         f.reconcile(self.cfg, self.state, {"s1": session}, False)
         self.assertTrue(rec.get("abandoned"))
         self.assertEqual(rec.get("outcome"), "failed:cut_loss")
@@ -1446,7 +1462,8 @@ class FactoryTests(unittest.TestCase):
             "game_id": "001",
             "phase": "1",
             "assigned_folder": "games/001-game",
-            "hold": "awaiting_user_feedback",
+            "nudges": 2,
+            "last_nudge_at": f.iso(f.now() - timedelta(minutes=15)),
         }
         intent["record"] = copy.deepcopy(rec)
         self.state["sessions"]["s1"] = rec

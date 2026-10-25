@@ -274,7 +274,7 @@
     },
     "7": {
       "title": "Phase 7/10 — High-Impact Tactile Juice, Particle Emitters & Expressive Feedback",
-      "focus": "Add high-signal visual feedback (`vfx.js` or juice subsystem): implement directional particle bursts/sparkles on actions, satisfying reveal/hit transitions, screen-shake or camera pulse respecting reduced-motion settings, and floating score/affection/tip/style popups. Set `\"phase\": \"7\"` in `game.json`."
+      "focus": "Add high-signal visual feedback (`vfx.js` or juice subsystem): implement directional particle bursts/sparkles on actions, satisfying reveal/hit transitions, screen-shake or camera pulse respecting reduced-motion settings, and floating score/affection/tip/style popups. Set `\"phase\": \"7\"` in `game.json`. CRITICAL: In addition to defining `addShake`, `burst`, and `addFloatingText` in `vfx.js` and calling `this.vfx.update(dt)` / `this.vfx.draw(ctx)` in `game.js`, you MUST invoke `this.vfx.addShake(...)`, `this.vfx.burst(...)`, and `this.vfx.addFloatingText(...)` at actual gameplay event call-sites inside `game.js` (scoring, collisions, phase transitions, game over), or internal code review will fail."
     },
     "8": {
       "title": "Phase 8/10 — Multi-Voice Web Audio Synthesizer & Genre-Authentic Adaptive Soundtrack",
