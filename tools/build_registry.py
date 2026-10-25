@@ -18,7 +18,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 GAMES = ROOT / "games"
 OUT = GAMES / "registry.js"
-FIELDS = ("id", "slug", "title", "genre", "coreMechanic", "setting", "description", "controls", "createdAt", "accentColor", "phase")
+FIELDS = ("id", "slug", "title", "genre", "coreMechanic", "setting", "description", "controls", "createdAt", "accentColor", "phase", "lore", "inspiration", "objective", "howItWorks", "sessionLength", "targetAudience", "palette")
 
 
 def build() -> str:

@@ -36,7 +36,7 @@ class LocalIntegrationTests(unittest.TestCase):
                      "inventory": {"complete": True, "observed_at": m.stamp(NOW)}}
         self.remote = {SID: {"state": "COMPLETED", "prompt": prompt, "title": title,
                             "sourceContext": {"source": self.cfg["source"], "githubRepoContext": {"startingBranch": "main"}},
-                            "outputs": [{"pullRequest": {"url": rec["pr"]}}]}}
+                            "outputs": [{"changeSet": {"gitPatch": {}}}, {"pullRequest": {"url": rec["pr"]}}]}}
         self.pr = {"number": 1, "state": "open", "draft": False, "merged": False, "mergeable": True,
                    "head": {"sha": HEAD, "repo": {"full_name": REPO}}, "base": {"sha": BASE, "ref": "main"}, "labels": []}
         self.policy = {"required_status_checks": {"strict": True, "checks": [{"context": "Arcade gate", "app_id": 1}]},
@@ -204,7 +204,8 @@ class LocalIntegrationTests(unittest.TestCase):
             self.state["sessions"][SID] = {**rec, **changes}
             self.assertEqual(self.invoke()["status"], "no_candidate")
         self.state["sessions"][SID] = rec
-        for changes in ({"state": "PAUSED"}, {"state": "FAILED"}, {"prompt": "edited"}, {"outputs": []}):
+        for changes in ({"state": "PAUSED"}, {"state": "FAILED"}, {"prompt": "edited"}, {"outputs": []},
+                        {"outputs": [{"changeSet": {}}]}, {"outputs": [{"pullRequest": {}}]}):
             self.remote[SID] = {**session, **changes}
             self.assertEqual(self.invoke()["status"], "no_candidate")
         self.assertTrue(all(x[0] == "GET" for x in self.calls))
