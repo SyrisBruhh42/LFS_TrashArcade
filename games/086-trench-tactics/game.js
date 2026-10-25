@@ -73,8 +73,8 @@ class InputManager {
     constructor() {
         this.keys = {};
         this.justPressed = {};
-        this.mouse = { x: 0, y: 0, down: false, justDown: false };
-        this.touch = { active: false, x: 0, y: 0, justDown: false, id: null, dx: 0, dy: 0 };
+        this.mouse = { x: 0, y: 0, down: false, justDown: false, rightDown: false, justRightDown: false };
+        this.touch = { active: false, x: 0, y: 0, justDown: false, id: null, dx: 0, dy: 0, dashDown: false };
         this.suppressedTouch = null;
         this.boundKeydown = this.keydown.bind(this);
         this.boundKeyup = this.keyup.bind(this);
@@ -96,6 +96,15 @@ class InputManager {
             this.clear();
             this.touch.id = this.suppressedTouch = null;
         });
+        window.addEventListener('contextmenu', e => e.preventDefault());
+
+        const dashBtn = document.getElementById('dash-button');
+        if (dashBtn) {
+            dashBtn.addEventListener('mousedown', (e) => { e.preventDefault(); this.touch.dashDown = true; });
+            dashBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.touch.dashDown = true; });
+            dashBtn.addEventListener('mouseup', () => { this.touch.dashDown = false; });
+            dashBtn.addEventListener('touchend', () => { this.touch.dashDown = false; });
+        }
     }
     keydown(e) {
         if (e.repeat || (e.code !== 'Escape' && e.target?.closest?.('a, button, input, textarea'))) return;
@@ -106,13 +115,21 @@ class InputManager {
     }
     keyup(e) { this.keys[e.code] = false; }
     mousedown(e) {
-        if (e.button !== 0 || e.target?.closest?.('a, button, input, textarea')) return;
+        if (e.target?.closest?.('a, button, input, textarea') && e.target.id !== 'dash-button') return;
         this.wakeAudio();
-        this.mouse.down = true;
-        this.mouse.justDown = true;
+        if (e.button === 0) {
+            this.mouse.down = true;
+            this.mouse.justDown = true;
+        } else if (e.button === 2) {
+            this.mouse.rightDown = true;
+            this.mouse.justRightDown = true;
+        }
         this.updateMousePos(e);
     }
-    mouseup(e) { this.mouse.down = false; }
+    mouseup(e) {
+        if (e.button === 0) this.mouse.down = false;
+        else if (e.button === 2) this.mouse.rightDown = false;
+    }
     mousemove(e) { this.updateMousePos(e); }
     wakeAudio() {
         const sound = window.game?.soundEngine;
@@ -153,8 +170,10 @@ class InputManager {
         this.keys = {};
         this.justPressed = {};
         this.mouse.down = this.mouse.justDown = false;
+        this.mouse.rightDown = this.mouse.justRightDown = false;
         this.suppressedTouch = this.touch.id;
         this.touch.active = this.touch.justDown = false;
+        this.touch.dashDown = false;
         this.touch.dx = this.touch.dy = 0;
     }
     updateMousePos(e) {
@@ -179,7 +198,9 @@ class InputManager {
     update() {
         this.justPressed = {};
         this.mouse.justDown = false;
+        this.mouse.justRightDown = false;
         this.touch.justDown = false;
+        this.touch.dashDown = false;
     }
 }
 
@@ -227,67 +248,6 @@ class Entity {
     draw(ctx) {
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.size, this.size);
-    }
-}
-
-class Player extends Entity {
-    constructor(x, y, size) {
-        super(x, y, size, '#4a90e2');
-        this.targetX = x;
-        this.targetY = y;
-        this.isMoving = false;
-        this.moveSpeed = 400;
-        this.attackCooldown = 0;
-    }
-    update(dt, grid, input, sound, game) {
-        if (this.attackCooldown > 0) this.attackCooldown -= dt;
-
-        let dx = 0;
-        let dy = 0;
-        if (!this.isMoving) {
-            if (input.keys['KeyW'] || input.keys['ArrowUp']) dy = -1;
-            else if (input.keys['KeyS'] || input.keys['ArrowDown']) dy = 1;
-            else if (input.keys['KeyA'] || input.keys['ArrowLeft']) dx = -1;
-            else if (input.keys['KeyD'] || input.keys['ArrowRight']) dx = 1;
-            else if (input.touch.active) { dx = input.touch.dx; dy = input.touch.dy; }
-
-            if (dx !== 0 || dy !== 0) {
-                let nextX = this.x + dx * grid.cellSize;
-                let nextY = this.y + dy * grid.cellSize;
-                if (nextX >= 0 && nextX < grid.width && nextY >= 0 && nextY < grid.height) {
-                    this.targetX = nextX;
-                    this.targetY = nextY;
-                    this.isMoving = true;
-                }
-            }
-        }
-
-        if (this.isMoving) {
-            let tx = this.targetX - this.x;
-            let ty = this.targetY - this.y;
-            let dist = Math.sqrt(tx*tx + ty*ty);
-            if (dist < this.moveSpeed * dt) {
-                this.x = this.targetX;
-                this.y = this.targetY;
-                this.isMoving = false;
-            } else {
-                this.x += (tx/dist) * this.moveSpeed * dt;
-                this.y += (ty/dist) * this.moveSpeed * dt;
-            }
-        }
-
-        if (input.justPressed['Space'] || input.mouse.justDown || input.touch.justDown) {
-            if (this.attackCooldown <= 0 && !this.isMoving) {
-                game.spawnProjectile(this.x + this.size/2, this.y + this.size/2, game.lastAimDir.x, game.lastAimDir.y);
-                sound.playShoot();
-                this.attackCooldown = 0.5;
-            }
-        }
-    }
-    draw(ctx) {
-        super.draw(ctx);
-        ctx.fillStyle = '#cdc3b9';
-        ctx.fillRect(this.x + 4, this.y + 4, this.size - 8, this.size - 8);
     }
 }
 
@@ -382,6 +342,8 @@ class Game {
     syncControls() {
         this.pauseButton.hidden = !['PLAYING', 'PAUSED'].includes(this.state);
         this.pauseButton.textContent = this.state === 'PAUSED' ? 'Resume' : 'Pause';
+        const dashBtn = document.getElementById('dash-button');
+        if (dashBtn) dashBtn.hidden = this.state !== 'PLAYING';
     }
     start() {
         this.inputManager.clear();
@@ -478,7 +440,7 @@ class Game {
             for (let i = this.enemies.length - 1; i >= 0; i--) {
                 let e = this.enemies[i];
                 e.update(effectiveDt, this.player);
-                if (this.checkCollision(this.player, e)) {
+                if (this.checkCollision(this.player, e) && this.player.invulnerable <= 0) {
                     this.soundEngine.playHit();
                     this.state = 'GAME_OVER';
                     if (this.score > this.saveManager.data.highScore) {
@@ -517,16 +479,7 @@ class Game {
             this.grid.draw(this.ctx);
             for (let e of this.enemies) e.draw(this.ctx);
             for (let p of this.projectiles) p.draw(this.ctx);
-            if (this.player) this.player.draw(this.ctx);
-
-            // Draw aim indicator
-            if (this.player) {
-                this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-                this.ctx.beginPath();
-                this.ctx.moveTo(this.player.x + this.player.size/2, this.player.y + this.player.size/2);
-                this.ctx.lineTo(this.player.x + this.player.size/2 + this.lastAimDir.x * 50, this.player.y + this.player.size/2 + this.lastAimDir.y * 50);
-                this.ctx.stroke();
-            }
+            if (this.player) this.player.draw(this.ctx, this);
 
             this.ctx.fillStyle = '#cdc3b9';
             this.ctx.font = '20px monospace';

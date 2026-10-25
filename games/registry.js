@@ -1149,7 +1149,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Enter/Space/Tap to start. WASD/Arrows or drag to move. Space/Click/Tap to attack. Esc or Pause/Resume for pause.",
     "createdAt": "2024-03-20",
     "accentColor": "#cdc3b9",
-    "phase": "1",
+    "phase": "2",
     "path": "./games/086-trench-tactics/index.html"
   }
 ];
