@@ -360,7 +360,7 @@ class Player extends Entity {
         super(x, y, 12);
         this.speed = 150;
         this.hasAmmo = true;
-        this.color = '#4ad5c0';
+        this.color = '#ff7043';
         this.facing = { x: 1, y: 0 };
 
         // Phase 2: Dash ability
@@ -391,7 +391,7 @@ class Player extends Entity {
             } else {
                 this.vx = this.facing.x * this.dashSpeed;
                 this.vy = this.facing.y * this.dashSpeed;
-                game.particles.push(new Particle(this.x, this.y, '#4ad5c0', 3, 0.2));
+                game.particles.push(new Particle(this.x, this.y, '#ff7043', 3, 0.2));
             }
         } else {
             if (input.isSecondaryPressed() && this.dashCooldown <= 0) {
@@ -589,6 +589,8 @@ class Enemy extends Entity {
             if (this.stunTimer <= 0) {
                 this.state = 'PATROL';
             }
+            this.vx = 0;
+            this.vy = 0;
             return;
         }
 
@@ -656,6 +658,15 @@ class Enemy extends Entity {
                 game.gameOver();
             }
         }
+    }
+
+    takeDamage(game) {
+        if (this.state === 'STUNNED') return false;
+        this.state = 'STUNNED';
+        this.stunTimer = 1.0 + (game.progression.getLevel('stunTime') * 0.5);
+        this.vx = 0;
+        this.vy = 0;
+        return true;
     }
 
     checkVision(game) {
@@ -1016,6 +1027,8 @@ class Game {
 
         this.input = new InputManager();
         this.saveManager = new SaveManager();
+        this.progression = new ProgressionSystem(this.saveManager);
+        window.game = this;
         this.sound = new SoundEngine();
 
         this.state = 'TITLE';
@@ -1030,6 +1043,12 @@ class Game {
         this.collectibles = [];
         this.hazards = [];
         this.particles = [];
+        this.bonuses = [];
+        this.vfx = {
+            addShake: (intensity, duration) => {},
+            burst: (x, y, color, count) => {},
+            addFloatingText: (text, x, y, color) => {}
+        };
 
         this.shootCooldown = 0;
         this.wave = 1;
@@ -1071,6 +1090,26 @@ class Game {
             if (!e.repeat && (e.code === 'Space' || e.code === 'Enter')) {
                 if (this.state === 'TITLE') this.startGame();
                 else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none'; }
+            }
+            if (e.code === 'KeyU' && !e.repeat) {
+                if (this.state === 'TITLE') {
+                    this.state = 'UPGRADE';
+                } else if (this.state === 'UPGRADE') {
+                    this.state = 'TITLE';
+                }
+            }
+            if (e.code === 'KeyO' && !e.repeat) {
+                if (this.state === 'TITLE' || this.state === 'PLAYING') {
+                    this.pauseGame();
+                    document.getElementById('options-modal').style.display = 'block';
+                    document.getElementById('opt-mute').checked = this.saveManager.data.options.mute;
+                }
+            }
+            if (this.state === 'UPGRADE' && !e.repeat) {
+                if (e.code === 'Digit1') this.progression.buyUpgrade('moveSpeed');
+                if (e.code === 'Digit2') this.progression.buyUpgrade('ammoRange');
+                if (e.code === 'Digit3') this.progression.buyUpgrade('stunTime');
+                if (e.code === 'Digit4') this.progression.buyUpgrade('comboTime');
             }
         });
 
@@ -1132,6 +1171,12 @@ class Game {
         this.collectibles = [];
         this.hazards = [];
         this.particles = [];
+        this.bonuses = [];
+        this.vfx = {
+            addShake: (intensity, duration) => {},
+            burst: (x, y, color, count) => {},
+            addFloatingText: (text, x, y, color) => {}
+        };
 
         // Hazards
         this.hazards.push(new HazardConveyor(200, 200, 400, 50, 100, 0));
@@ -1201,6 +1246,7 @@ class Game {
         if (this.state !== 'PLAYING') return;
 
         this.parallax.update(dt);
+        this.progression.update(dt);
 
         this.shootCooldown = Math.max(0, this.shootCooldown - dt);
 
@@ -1227,7 +1273,7 @@ class Game {
                 const p = this.projectiles[i];
                 if (p.state === 'GROUNDED') {
                     const dist = Math.hypot(this.player.x - p.x, this.player.y - p.y);
-                    if (dist < this.player.radius + p.radius + 10) {
+                    if (dist < this.player.radius + p.radius + 10 + (this.progression.getLevel('ammoRange') * 10)) {
                         this.player.hasAmmo = true;
                         this.projectiles.splice(i, 1);
                         this.sound.playScore();
@@ -1242,15 +1288,30 @@ class Game {
             const dist = Math.hypot(this.player.x - c.x, this.player.y - c.y);
             if (dist < this.player.radius + c.radius) {
                 this.collectibles.splice(i, 1);
-                this.score += 100;
+                this.score += this.progression.addScrap(100);
                 this.sound.playScore();
+                this.vfx.addFloatingText('+100', c.x, c.y, '#ff7043');
+            }
+        }
+
+        for (let i = this.bonuses.length - 1; i >= 0; i--) {
+            const b = this.bonuses[i];
+            const dist = Math.hypot(this.player.x - b.x, this.player.y - b.y);
+            if (dist < this.player.radius + b.radius) {
+                this.bonuses.splice(i, 1);
+                this.progression.comboTimer = this.progression.getComboGrace(); // Full refresh combo
+                const gained = this.progression.addScrap(500);
+                this.score += gained; // Big score
+                this.sound.playAlert();
+                this.vfx.burst(b.x, b.y, '#ffca28', 20);
+                this.vfx.addFloatingText('+' + gained, b.x, b.y, '#ffca28');
             }
         }
 
         const bossActive = this.enemies.some(e => typeof e.bossName !== 'undefined' && e.active);
         if (this.collectibles.length === 0 && !bossActive) {
             this.wave++;
-            this.score += 500;
+            this.score += this.progression.addScrap(500);
             this.loadWave();
         }
     }
@@ -1260,8 +1321,11 @@ class Game {
 
         if (this.state === 'TITLE') {
             this.drawTitle();
+        } else if (this.state === 'UPGRADE') {
+            this.drawUpgradeShop();
         } else if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
             for (let c of this.collectibles) c.draw(this.ctx);
+            for (let b of this.bonuses) b.draw(this.ctx);
             for (let o of this.obstacles) o.draw(this.ctx);
             for (let h of this.hazards) h.draw(this.ctx);
             for (let p of this.projectiles) p.draw(this.ctx);
@@ -1304,6 +1368,23 @@ class Game {
 
         this.ctx.textAlign = 'right';
         this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width - 20, 30);
+        this.ctx.fillText(`Scrap (Bank): ${this.saveManager.data.scrapAccumulated}`, this.width - 20, 60);
+
+        if (this.progression.comboCount > 0) {
+            this.ctx.fillStyle = '#ff7043';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`Combo x${this.progression.comboCount}!`, this.width/2, 80);
+
+            // Draw combo timer bar
+            const barW = 200;
+            const barH = 10;
+            const barX = (this.width - barW) / 2;
+            const barY = 90;
+            this.ctx.fillStyle = '#555';
+            this.ctx.fillRect(barX, barY, barW, barH);
+            this.ctx.fillStyle = '#ff7043';
+            this.ctx.fillRect(barX, barY, barW * (this.progression.comboTimer / this.progression.getComboGrace()), barH);
+        }
 
         if (!this.player.hasAmmo) {
             this.ctx.fillStyle = '#ff4444';
@@ -1344,7 +1425,7 @@ class Game {
         this.ctx.fillRect(60, this.height - 30, 100, 10);
 
         if (this.player.dashCooldown <= 0) {
-            this.ctx.fillStyle = '#4ad5c0';
+            this.ctx.fillStyle = '#ff7043';
             this.ctx.fillRect(60, this.height - 30, 100, 10);
         } else {
             const ratio = 1 - (this.player.dashCooldown / this.player.maxDashCooldown);
@@ -1354,21 +1435,109 @@ class Game {
     }
 
     drawTitle() {
-        this.ctx.fillStyle = '#4ad5c0';
+        this.ctx.fillStyle = '#ff7043';
         this.ctx.font = '50px monospace';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText('Scrap Heist Retrieval', this.width/2, this.height/3);
+        this.ctx.fillText('Scrap Heist Retrieval', this.width/2, this.height/5);
+
+        this.ctx.fillStyle = '#ffca28';
+        this.ctx.font = '16px monospace';
+        this.ctx.fillText('Sneak through the scrapheap. Collect scrap and stun bots.', this.width/2, this.height/5 + 30);
 
         this.ctx.fillStyle = '#ccc';
-        this.ctx.font = '20px monospace';
-        this.ctx.fillText('Collect green scrap.', this.width/2, this.height/2 - 30);
-        this.ctx.fillText('Avoid red patrol bots.', this.width/2, this.height/2);
-        this.ctx.fillText('Shoot to stun, but you must retrieve your ammo!', this.width/2, this.height/2 + 30);
+        this.ctx.font = '16px monospace';
+
+        const textY = this.height/3;
+        // Panel 1
+        this.ctx.fillStyle = '#ffca28';
+        this.ctx.fillText('1. The Goal & Lore', this.width/2, textY);
+        this.ctx.fillStyle = '#fff';
+        this.ctx.fillText('Collect all scrap in a wave while avoiding guards.', this.width/2, textY + 25);
+
+        // Panel 2
+        this.ctx.fillStyle = '#ffca28';
+        this.ctx.fillText('2. How It Works & Why', this.width/2, textY + 70);
+        this.ctx.fillStyle = '#fff';
+        this.ctx.fillText('Shoot to stun enemies. You only have ONE ammo, and', this.width/2, textY + 95);
+        this.ctx.fillText('must physically retrieve it after shooting.', this.width/2, textY + 115);
+
+        // Panel 3
+        this.ctx.fillStyle = '#ffca28';
+        this.ctx.fillText('3. Desktop & Touch Controls', this.width/2, textY + 160);
+        this.ctx.fillStyle = '#fff';
+        this.ctx.fillText('WASD/Arrows to move, Space/Click to shoot.', this.width/2, textY + 185);
 
         this.ctx.fillStyle = '#fff';
         this.ctx.fillText('Press SPACE or Click to Start', this.width/2, this.height * 0.7);
+
+        this.ctx.font = '16px monospace';
+        this.ctx.fillStyle = '#ff7043';
+        this.ctx.fillText('Press U to open Upgrade Shop', this.width/2, this.height * 0.8);
+        this.ctx.fillText('Press O for Options', this.width/2, this.height * 0.85);
+    }
+
+    drawUpgradeShop() {
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        this.ctx.fillStyle = '#ff7043';
+        this.ctx.font = '40px monospace';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Workshop', this.width/2, 80);
+
+        this.ctx.fillStyle = '#ffca28';
+        this.ctx.font = '24px monospace';
+        this.ctx.fillText(`Scrap Bank: ${this.saveManager.data.scrapAccumulated}`, this.width/2, 130);
+
+        let y = 200;
+        this.ctx.textAlign = 'left';
+        for (let i = 0; i < this.progression.upgrades.length; i++) {
+            const u = this.progression.upgrades[i];
+            const level = this.progression.getLevel(u.id);
+            const cost = this.progression.getCost(u.id);
+
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '20px monospace';
+            this.ctx.fillText(`${i+1}. ${u.name} (Lv ${level}/${u.max}) - ${u.desc}`, 100, y);
+
+            if (level < u.max) {
+                this.ctx.fillStyle = this.saveManager.data.scrapAccumulated >= cost ? '#ff7043' : '#ff4444';
+                this.ctx.fillText(`Cost: ${cost} Scrap (Press ${i+1} to buy)`, 100, y + 25);
+            } else {
+                this.ctx.fillStyle = '#ffca28';
+                this.ctx.fillText(`MAX LEVEL`, 100, y + 25);
+            }
+
+            y += 80;
+        }
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Press U to return', this.width/2, this.height - 50);
+    }
+
+}
+class BonusPickup extends Entity {
+    constructor(x, y) {
+        super(x, y, 12);
+        this.angle = 0;
+    }
+    draw(ctx) {
+        this.angle += 0.05;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        ctx.fillStyle = '#ffca28';
+        ctx.beginPath();
+        ctx.moveTo(0, -this.radius);
+        ctx.lineTo(this.radius, 0);
+        ctx.lineTo(0, this.radius);
+        ctx.lineTo(-this.radius, 0);
+        ctx.fill();
+        ctx.restore();
     }
 }
+
 
 window.onload = () => {
     window.game = new Game();

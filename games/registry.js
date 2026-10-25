@@ -1134,8 +1134,8 @@ window.ARCADE_REGISTRY = [
     "description": "Sneak through the scrapheap, collect scrap, and stun enemies. Don't forget to pick up your only ammo!",
     "controls": "WASD/Arrows to move, Space/Click to shoot. Touch joystick and tap.",
     "createdAt": "2023-10-24",
-    "accentColor": "#4ad5c0",
-    "phase": "5",
+    "accentColor": "#ff7043",
+    "phase": "6",
     "path": "./games/085-scrap-heist-retrieval/index.html"
   },
   {

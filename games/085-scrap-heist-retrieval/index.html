@@ -5,12 +5,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Scrap Heist Retrieval</title>
     <link rel="stylesheet" href="style.css">
+
+    <script>
+        window.ARCADE_CARTRIDGE_META = {
+            palette: {
+                primaryBg: '#362a23',
+                primaryAccent: '#ff7043',
+                secondaryAccent: '#ffca28'
+            },
+            lore: "Sneak through the scrapheap. Collect scrap and stun bots. Don't forget your ammo!",
+            instructions: {
+                panel1: "The Goal & Lore: Collect all scrap in a wave while avoiding guards.",
+                panel2: "How It Works & Why: Shoot to stun enemies. You only have ONE ammo, and must physically retrieve it after shooting.",
+                panel3: "Controls: WASD/Arrows to move, Space/Click to shoot."
+            }
+        };
+    </script>
 </head>
 <body>
     <div style="position: absolute; top: 10px; left: 10px; z-index: 100;"><a href="../../index.html" style="color: white; font-family: monospace; text-decoration: none;">Back to Arcade</a></div>
+
+    <div id="options-modal" style="display: none; position: absolute; top: 10%; left: 50%; transform: translateX(-50%); width: 600px; max-width: 90vw; max-height: 80vh; overflow-y: auto; background: #362a23; border: 4px solid #ff7043; border-radius: 8px; z-index: 1000; padding: 20px; color: #fff; font-family: monospace;">
+        <h2 style="color: #ffca28; margin-top: 0; text-align: center;">OPTIONS</h2>
+        <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ffca28; padding-bottom: 10px;">
+            <button onclick="document.getElementById('opt-audio').style.display='block'; document.getElementById('opt-controls').style.display='none';">Audio & Comfort</button>
+            <button onclick="document.getElementById('opt-audio').style.display='none'; document.getElementById('opt-controls').style.display='block';">Controls & Save</button>
+        </div>
+
+        <div id="opt-audio" style="display: block;">
+            <h3>Audio</h3>
+            <label><input type="checkbox" id="opt-mute" onchange="window.game.saveManager.data.options.mute = this.checked; window.game.saveManager.save();"> Mute All Sound</label>
+        </div>
+
+        <div id="opt-controls" style="display: none;">
+            <h3>Controls</h3>
+            <p>WASD / Arrows to move. Space / Click to shoot.</p>
+
+            <details style="margin-top: 20px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px;">
+                <summary style="color: #ff7043; cursor: pointer;">Manage Save Data</summary>
+                <textarea id="save-export" rows="4" style="width: 100%; margin-top: 10px; background: #000; color: #ffca28; border: 1px solid #555;" readonly></textarea>
+                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                    <button onclick="document.getElementById('save-export').value = btoa(JSON.stringify(window.game.saveManager.data));">Export Save</button>
+                    <button onclick="if(confirm('Reset all progress?')) { localStorage.removeItem('arcade_game_085_085-scrap-heist-retrieval_v1'); location.reload(); }" style="color: red;">Wipe Save</button>
+                </div>
+            </details>
+        </div>
+
+        <button onclick="document.getElementById('options-modal').style.display='none'; if(window.game.state === 'PAUSED') window.game.resumeGame();" style="margin-top: 20px; width: 100%; padding: 10px; background: #ff7043; color: #fff; border: none; font-size: 1.2rem; font-weight: bold; cursor: pointer;">CLOSE</button>
+    </div>
+
     <canvas id="gameCanvas" width="800" height="600"></canvas>
         <button id="dash-button" tabindex="0" style="position: absolute; bottom: 30px; right: 30px; z-index: 100; font-family: monospace; font-size: 1.2rem; padding: 15px; background: rgba(0,0,0,0.5); color: white; border: 2px solid white; border-radius: 8px; touch-action: none; outline: none; display: none;">Dash</button>
 <script defer src="game.js"></script>
+<script defer src="progression.js"></script>
 <script defer src="bosses.js"></script>
 </body>
 </html>

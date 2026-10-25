@@ -11,7 +11,7 @@ class Boss extends Enemy {
         if (this.state === 'STUNNED') return false; // Invuln while stunned
         this.hp--;
         this.state = 'STUNNED';
-        this.stunTimer = 1.0; // Brief stun
+        this.stunTimer = 1.0 + (game.progression.getLevel('stunTime') * 0.5);
         if (this.hp <= this.maxHp / 2 && !this.phase2) {
             this.phase2 = true;
             this.color = '#ff0000'; // Enrage color
