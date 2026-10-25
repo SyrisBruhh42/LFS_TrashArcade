@@ -1,3 +1,9 @@
+window.ARCADE_CARTRIDGE_META = {
+  title: "Echo Forge Fusion",
+  author: "LFS",
+  controls: "Keyboard/Mouse/Touch"
+};
+
 const SAVE_KEY = 'arcade_game_084_084-echo-forge-fusion_v1';
 
 class SaveManager {
@@ -145,64 +151,6 @@ class InputManager {
     }
 }
 
-class SoundEngine {
-    constructor() {
-        this.ctx = null;
-        this.masterGain = null;
-        this.ready = false;
-    }
-
-    init() {
-        if (this.ready) return;
-        try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.ctx = new AudioContext();
-            this.masterGain = this.ctx.createGain();
-            this.masterGain.gain.value = 0.3;
-            this.masterGain.connect(this.ctx.destination);
-            this.ready = true;
-        } catch (e) {
-            console.warn('AudioContext not supported');
-        }
-    }
-
-    resume() {
-        if (this.ctx && this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
-    }
-
-    playSynth(freq, type, duration, vol = 1) {
-        if (!this.ready || !this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(this.masterGain);
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
-    }
-
-    playShoot() {
-        this.playSynth(400, 'square', 0.1, 0.3);
-        setTimeout(() => this.playSynth(200, 'square', 0.1, 0.2), 50);
-    }
-
-    playHit() {
-        this.playSynth(150, 'sawtooth', 0.2, 0.4);
-    }
-
-    playBeat() {
-        this.playSynth(100, 'sine', 0.1, 0.5);
-    }
-
-    playEcho() {
-        this.playSynth(600, 'sine', 0.2, 0.2);
-    }
-}
 
 class Entity {
     constructor(x, y, radius, color) {
@@ -540,6 +488,37 @@ class Enemy extends Entity {
             this.hp = 3;
             this.maxHp = 3;
             this.pulse = 0;
+        } else if (type === 'quarter_sweeper') {
+            this.speed = 80;
+            this.radius = 16;
+            this.color = '#1de9b6';
+            this.hp = 2;
+            this.maxHp = 2;
+            this.dir = Math.random() < 0.5 ? 1 : -1;
+        } else if (type === 'offbeat_sniper') {
+            this.speed = 50;
+            this.radius = 12;
+            this.color = '#ff4081';
+            this.hp = 2;
+            this.maxHp = 2;
+        } else if (type === 'bass_shockwave') {
+            this.speed = 40;
+            this.radius = 24;
+            this.color = '#0b2624';
+            this.hp = 4;
+            this.maxHp = 4;
+        } else if (type === 'syncopated_splitter') {
+            this.speed = 100;
+            this.radius = 14;
+            this.color = '#fff';
+            this.hp = 2;
+            this.maxHp = 2;
+        } else if (type === 'tempo_jammer') {
+            this.speed = 70;
+            this.radius = 20;
+            this.color = '#ff0000';
+            this.hp = 3;
+            this.maxHp = 3;
         }
     }
     update(dt, player, game) {
@@ -645,6 +624,69 @@ class Enemy extends Entity {
                     game.enemies.push(new Enemy(this.x, this.y, 'swarmer'));
                     game.spawnParticles(this.x, this.y, 5, this.color);
                 }
+            }
+        } else if (this.type === 'quarter_sweeper') {
+            // Sweeps in zigzag using beatTimer
+            const beatProg = game.beatTimer / game.beatInterval;
+            const sweep = Math.sin(beatProg * Math.PI * 2) * 200;
+            if (dist > 0) {
+                const nx = (dx / dist);
+                const ny = (dy / dist);
+                this.vx = nx * this.speed + ny * sweep * this.dir;
+                this.vy = ny * this.speed - nx * sweep * this.dir;
+            }
+        } else if (this.type === 'offbeat_sniper') {
+            const beatProg = game.beatTimer / game.beatInterval;
+            if (beatProg > 0.4 && beatProg < 0.6) {
+                this.vx = 0;
+                this.vy = 0;
+                if (!this.firedThisBeat) {
+                    this.firedThisBeat = true;
+                    if (game.enemyProjectiles && dist > 0) {
+                        game.enemyProjectiles.push(new EnemyProjectile(
+                            this.x, this.y, (dx/dist)*250, (dy/dist)*250, this.color
+                        ));
+                    }
+                }
+            } else {
+                this.firedThisBeat = false;
+                if (dist > 150) {
+                    this.vx = (dx / dist) * this.speed * 2;
+                    this.vy = (dy / dist) * this.speed * 2;
+                } else if (dist > 0) {
+                    this.vx = -(dx / dist) * this.speed;
+                    this.vy = -(dy / dist) * this.speed;
+                }
+            }
+        } else if (this.type === 'bass_shockwave') {
+            if (dist > 0) {
+                this.vx = (dx / dist) * this.speed;
+                this.vy = (dy / dist) * this.speed;
+            }
+            const beatProg = game.beatTimer / game.beatInterval;
+            if (beatProg < 0.1) {
+                this.radius = 30;
+                if (!this.pulsed) {
+                    this.pulsed = true;
+                    if (game.spawnParticles) game.spawnParticles(this.x, this.y, 10, this.color);
+                }
+            } else {
+                this.pulsed = false;
+                this.radius = 24 + (1-beatProg)*6;
+            }
+        } else if (this.type === 'syncopated_splitter') {
+            if (dist > 0) {
+                this.vx = (dx / dist) * this.speed;
+                this.vy = (dy / dist) * this.speed;
+            }
+        } else if (this.type === 'tempo_jammer') {
+            if (dist > 0) {
+                this.vx = (dx / dist) * this.speed;
+                this.vy = (dy / dist) * this.speed;
+            }
+            if (this.timer > 2.0) {
+                this.timer = 0;
+                if (game.vfx && game.vfx.shakeScreen) game.vfx.shakeScreen(5, 0.2);
             }
         }
 
@@ -929,6 +971,11 @@ class Game {
         }
         if (this.wave > 3) {
             if (roll >= 0.5 && roll < 0.6) type = 'spawner';
+            if (roll >= 0.6 && roll < 0.65) type = 'quarter_sweeper';
+            if (roll >= 0.65 && roll < 0.7) type = 'offbeat_sniper';
+            if (roll >= 0.7 && roll < 0.75) type = 'bass_shockwave';
+            if (roll >= 0.75 && roll < 0.8) type = 'syncopated_splitter';
+            if (roll >= 0.8 && roll < 0.85) type = 'tempo_jammer';
         }
 
         this.enemies.push(new Enemy(x, y, type));
@@ -1097,6 +1144,11 @@ class Game {
                                 this.enemies.push(new Enemy(enemy.x + (Math.random()-0.5)*20, enemy.y + (Math.random()-0.5)*20, 'swarmer'));
                             }
                         }
+                        if (enemy.type === 'syncopated_splitter') {
+                            for(let s=0; s<2; s++) {
+                                this.enemies.push(new Enemy(enemy.x + (Math.random()-0.5)*20, enemy.y + (Math.random()-0.5)*20, 'swarmer'));
+                            }
+                        }
 
                         let points = 10;
                         if (enemy.type === 'bruiser') points = 50;
@@ -1142,8 +1194,17 @@ class Game {
             if (this.wave % 5 === 0) {
                 this.spawnBossWave();
             } else {
-                this.bpm = Math.min(180, this.bpm + 5);
+                // Double-Time Resonance
+                if (this.wave % 2 === 0 && this.bpm < 180) {
+                    this.bpm += 10;
+                } else {
+                    this.bpm = Math.min(200, this.bpm + 5);
+                }
+                if (this.sounds && this.sounds.setBPM) this.sounds.setBPM(this.bpm);
                 this.beatInterval = 60 / this.bpm;
+                // Bass-Drop Nova on wave clear
+                this.spawnParticles(this.player.x, this.player.y, 50, '#1de9b6');
+                this.sounds.playHit();
             }
         }
     }
@@ -1295,21 +1356,71 @@ class Game {
 
         if (this.state === 'TITLE') {
             this.drawBackground();
-            this.ctx.fillStyle = '#fff';
+
+            // Lore Anchor
+            this.ctx.fillStyle = '#1de9b6';
             this.ctx.textAlign = 'center';
-            this.ctx.font = '40px monospace';
-            this.ctx.fillText('ECHO FORGE FUSION', this.width/2, this.height/2 - 40, this.width - 24);
+            this.ctx.font = 'bold 36px monospace';
+            this.ctx.fillText('ECHO FORGE FUSION', this.width/2, 60, this.width - 24);
+
+            // 3-Panel Guide
+            const panelW = Math.min(250, (this.width - 60) / 3);
+            const panelH = 160;
+            const startX = this.width/2 - (panelW * 1.5) - 10;
+
+            this.ctx.font = '14px monospace';
+            this.ctx.textAlign = 'left';
+
+            // Panel 1
+            this.ctx.fillStyle = 'rgba(11, 38, 36, 0.8)';
+            this.ctx.fillRect(startX, 100, panelW, panelH);
+            this.ctx.strokeStyle = '#1de9b6';
+            this.ctx.strokeRect(startX, 100, panelW, panelH);
+            this.ctx.fillStyle = '#ff4081';
+            this.ctx.fillText('1. Goal & Lore', startX + 10, 120);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText('Cooperate with your', startX + 10, 140);
+            this.ctx.fillText('rhythmic echoes inside', startX + 10, 160);
+            this.ctx.fillText('a microscopic cell to', startX + 10, 180);
+            this.ctx.fillText('purge the virus.', startX + 10, 200);
+            this.ctx.fillText('Survive and adapt!', startX + 10, 220);
+
+            // Panel 2
+            this.ctx.fillStyle = 'rgba(11, 38, 36, 0.8)';
+            this.ctx.fillRect(startX + panelW + 10, 100, panelW, panelH);
+            this.ctx.strokeRect(startX + panelW + 10, 100, panelW, panelH);
+            this.ctx.fillStyle = '#ff4081';
+            this.ctx.fillText('2. How it Works', startX + panelW + 20, 120);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText('Move to aim your', startX + panelW + 20, 140);
+            this.ctx.fillText('echoes. Weapons fire', startX + panelW + 20, 160);
+            this.ctx.fillText('automatically on beat.', startX + panelW + 20, 180);
+            this.ctx.fillText('Defeat bosses to shift', startX + panelW + 20, 200);
+            this.ctx.fillText('the stage BPM.', startX + panelW + 20, 220);
+
+            // Panel 3
+            this.ctx.fillStyle = 'rgba(11, 38, 36, 0.8)';
+            this.ctx.fillRect(startX + panelW * 2 + 20, 100, panelW, panelH);
+            this.ctx.strokeRect(startX + panelW * 2 + 20, 100, panelW, panelH);
+            this.ctx.fillStyle = '#ff4081';
+            this.ctx.fillText('3. Controls', startX + panelW * 2 + 30, 120);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText('WASD/Arrows to Move', startX + panelW * 2 + 30, 140);
+            this.ctx.fillText('Mouse/Touch to Aim', startX + panelW * 2 + 30, 160);
+            this.ctx.fillText('Shift to Dash', startX + panelW * 2 + 30, 180);
+            this.ctx.fillText('Esc to Pause', startX + panelW * 2 + 30, 200);
+
+            this.ctx.textAlign = 'center';
             this.ctx.font = '20px monospace';
-            this.ctx.fillText('Tap / Click / Space to Start', this.width/2, this.height/2 + 20, this.width - 24);
-            this.ctx.fillText('Move: WASD/Arrows or Hold/Drag', this.width/2, this.height/2 + 50, this.width - 24);
-            this.ctx.fillText('Blasts fire on the beat. Shift / Dash to dash.', this.width/2, this.height/2 + 75, this.width - 24);
+            this.ctx.fillStyle = '#1de9b6';
+            this.ctx.fillText('Tap / Click / Space to Start', this.width/2, 320, this.width - 24);
+
             this.ctx.font = '16px monospace';
             this.ctx.fillStyle = '#aaa';
-            this.ctx.fillText(`High Score: ${this.saves.data.highScore}`, this.width/2, this.height/2 + 105);
+            this.ctx.fillText(`High Score: ${this.saves.data.highScore}`, this.width/2, 350);
             this.ctx.fillText('<- Back to Arcade', this.width/2, this.height - 30); // requirement
 
             if (this.input.keys['Space'] || this.input.mouse.clicked) {
-                // simple hack for back to arcade area check
                 if (this.input.mouse.clicked && this.input.mouse.y > this.height - 60) {
                     window.location.href = '../../index.html';
                 } else {
@@ -1398,6 +1509,11 @@ class Boss extends Enemy {
             this.speed *= 1.5;
             this.color = '#ffffff';
             this.timer = 0; // reset attack timer
+            if (this.type === 'boss_rhythm_core' && game.sounds && game.sounds.setBPM) {
+                game.sounds.setBPM(180);
+                game.bpm = 180;
+                game.beatInterval = 60 / 180;
+            }
         }
 
         if (game.vfx) game.vfx.addTrail(this.x, this.y, this.radius * 0.9, this.color, 0.1, 0.4);
