@@ -39,6 +39,7 @@ def build() -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Rebuild games/registry.js from game manifests.")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--write", action="store_true")
     args = ap.parse_args()
     text = build()
     current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
