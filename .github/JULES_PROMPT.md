@@ -15,4 +15,4 @@ Execute the **2-Item Self-Mix Budget** on every phase advance:
 
 Prioritize complete observable behavior and UI clarity over code volume. Reuse existing systems, remove redundant code when safe, and avoid speculative features. No line-count target applies.
 
-Run `python3 tools/build_registry.py`, include the exact generated `games/registry.js` with the game change, then run `python3 tools/preflight.py`, inspect its actual result, and verify the brief's behavioral checks. Open one PR and retain/repair that PR if bounded gate feedback arrives.
+Run `python3 tools/build_registry.py`, include the exact generated `games/registry.js` with the game change, then run `python3 tools/preflight.py`, inspect its actual result, and verify the brief's behavioral checks. Immediately after `PREFLIGHT OK`, call the `submit` / publish Pull Request tool to open one PR (never stop in `AWAITING_USER_FEEDBACK` with an unsubmitted branch) and retain/repair that PR if bounded gate feedback arrives.

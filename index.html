@@ -1907,10 +1907,10 @@
         return promise;
       }
 
-      window.ArcadeAssetBridge = {
+      window.ArcadeAssetBridge = Object.assign(window.ArcadeAssetBridge || {}, {
         inspect: inspectGameAssets,
         resolveProfile: resolveGameProfile
-      };
+      });
 
       function readInstalledMap() {
         try {

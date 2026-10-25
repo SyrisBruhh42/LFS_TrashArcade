@@ -11,7 +11,7 @@ This repository contains offline HTML5 games and their autonomous Jules controll
 5. Check the actual feature: state transitions, input, resize, pause/resume, restart, options and persistence as applicable. A title/start smoke alone does not validate combat, touch ergonomics, audio mix, long sessions or release readiness. Report failed and unrun checks honestly.
 6. Preserve local edits before updating your branch. Fetch current main explicitly, reconcile it without force-pushing, then run `python3 tools/build_registry.py`. Include its exact generated `games/registry.js` output in the same commit as manifest changes. Do not edit the registry by hand. Do not change other games, root launcher, controller, workflow or this contract from a game session.
 7. Commit the intended change. Run `python3 tools/preflight.py --base origin/main --head HEAD`. It requires a clean committed checkout and a real browser; static-only validation is insufficient. Fix reported defects, commit, and recheck. Rebase and regenerate the registry when main advances.
-8. Open a PR describing the behavior, checks and remaining limitations. Stop on ambiguous requirements outside the authorized game scope. Never approve your own infrastructure change, modify CI to pass, or claim release/device proof from local tests.
+8. Immediately after `PREFLIGHT OK`, invoke the `submit` / publish Pull Request tool to open one PR describing the behavior, checks and remaining limitations; never stop in `AWAITING_USER_FEEDBACK` with an unsubmitted branch. Stop only on ambiguous requirements outside the authorized game scope. Never approve your own infrastructure change, modify CI to pass, or claim release/device proof from local tests.
 
 ## Maintenance and infrastructure
 

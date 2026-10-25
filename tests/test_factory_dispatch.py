@@ -1393,6 +1393,77 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(rec.get("hold"), "needs_rebase:branch_updated")
         self.assertTrue(any("update-branch" in " ".join(c) for c in calls))
 
+    def test_open_green_pr_in_awaiting_user_feedback_is_never_cut_lossed(self):
+        intent, session = self.install_intent("accepted")
+        pr_url = f"https://github.com/{self.cfg['repo']}/pull/401"
+        session["state"] = "AWAITING_USER_FEEDBACK"
+        session["updateTime"] = f.iso(f.now() - timedelta(minutes=45))
+        session["outputs"] = [{"pullRequest": {"url": pr_url}}]
+        rec = {
+            **intent["record"],
+            "created": f.iso(f.now() - timedelta(hours=8)),
+            "hold": "awaiting_user_feedback",
+        }
+        intent["record"] = copy.deepcopy(rec)
+        self.state["sessions"]["s1"] = rec
+        pr_payload = {
+            "state": "OPEN",
+            "headRefOid": SHA,
+            "baseRefOid": "d" * 40,
+            "mergeable": "MERGEABLE",
+            "mergeStateStatus": "CLEAN",
+            "statusCheckRollup": [
+                {
+                    "context": self.cfg["gate_check_name"],
+                    "state": "SUCCESS",
+                    "targetUrl": f"https://github.com/{self.cfg['repo']}/actions/runs/99",
+                    "createdAt": f.iso(f.now()),
+                }
+            ],
+        }
+        calls = []
+        def fake_gh(*gh_args):
+            calls.append(gh_args)
+            if gh_args[:2] == ("pr", "view"):
+                return json.dumps(pr_payload)
+            return "{}"
+        with patch.object(f, "gh", side_effect=fake_gh):
+            f.reconcile(self.cfg, self.state, {"s1": session}, False)
+        self.assertEqual(rec.get("pr"), pr_url)
+        self.assertEqual(rec.get("gate_status"), "passed_waiting_merge")
+        self.assertNotIn("hold", rec)
+        self.assertNotIn("outcome", rec)
+        self.assertFalse(rec.get("abandoned", False))
+        self.assertFalse(any(c[:2] == ("pr", "close") for c in calls))
+
+    def test_cut_loss_harvests_changeset_diagnostics_for_second_pass(self):
+        intent, session = self.install_intent("accepted")
+        session["state"] = "AWAITING_USER_FEEDBACK"
+        session["updateTime"] = f.iso(f.now() - timedelta(minutes=35))
+        session["outputs"] = [{"changeSet": {"gitPatch": {"unidiffPatch": "diff --git a/games/001-game/game.js b/games/001-game/game.js\n"}}}]
+        rec = {
+            **intent["record"],
+            "game_id": "001",
+            "phase": "1",
+            "assigned_folder": "games/001-game",
+            "hold": "awaiting_user_feedback",
+        }
+        intent["record"] = copy.deepcopy(rec)
+        self.state["sessions"]["s1"] = rec
+        diag_line = "ERROR: [<assigned game folder>] RUNTIME: behavioral regression suite failed: ReferenceError: SoundEngine is not defined"
+        with patch.object(f, "validate_or_salvage_changeset", return_value=(False, None, [diag_line])) as val_mock:
+            f.reconcile(self.cfg, self.state, {"s1": session}, False)
+            val_mock.assert_called_once()
+        self.assertTrue(rec.get("abandoned"))
+        self.assertEqual(rec.get("outcome"), "failed:cut_loss")
+        self.assertEqual(self.state["cut_loss_lessons"]["001:1"]["diagnostics"], [diag_line])
+        self.dispatch_fixture()
+        with patch.object(f, "api", return_value=self.session("s2")) as api:
+            f.dispatch(self.cfg, self.state, False, SHA)
+        prompt = api.call_args.args[2]["prompt"]
+        self.assertIn("Second-Pass Failure Lesson", prompt)
+        self.assertIn("SoundEngine is not defined", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

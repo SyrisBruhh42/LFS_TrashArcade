@@ -154,13 +154,14 @@ def owned(cfg, state, sid, rec, session):
     return bool(intent.get("status") == "accepted" and intent.get("session_id") == sid and
                 rec.get("mode") in {"advance", "new"} and not rec.get("incident_id") and
                 not rec.get("hold") and not rec.get("outcome") and rec.get("gate_status") == "passed_waiting_merge" and
-                session.get("state") in {"IN_PROGRESS", "COMPLETED"} and
+                session.get("state") in {"IN_PROGRESS", "COMPLETED", "AWAITING_USER_FEEDBACK"} and
                 context.get("source") == cfg["source"] and context.get("githubRepoContext", {}).get("startingBranch") == "main" and
                 session.get("title") == intent.get("title") and digest(session.get("prompt", "")) == intent.get("prompt_hash") and
                 f"Factory correlation: {rec.get('correlation')}" in session.get("prompt", "") and
                 all(rec.get(k) == original.get(k) for k in fields) and
                 re.fullmatch(r"games/\d{3}-[a-z0-9-]+", rec.get("assigned_folder", "")) and
-                re.fullmatch(re.escape(url) + r"[1-9][0-9]*", rec.get("pr", "")) and outputs == {rec["pr"]})
+                re.fullmatch(re.escape(url) + r"[1-9][0-9]*", rec.get("pr", "")) and
+                (outputs == {rec["pr"]} or (rec.get("salvaged_by_controller") is True and outputs == set())))
 
 
 def scope(repo, rec, head, base):

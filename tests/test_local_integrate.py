@@ -367,6 +367,13 @@ class LocalIntegrationTests(unittest.TestCase):
         self.state["integration"] = {"schema_version": 1, "intents": {"bad": {"status": "pending"}}}
         with self.assertRaises(m.Hold): m.blocked(self.state)
 
+    def test_owned_accepts_repaired_pr_in_awaiting_user_feedback(self):
+        self.remote[SID]["state"] = "AWAITING_USER_FEEDBACK"
+        self.assertEqual(self.invoke(read_only=True)["status"], "ready_read_only")
+        self.remote[SID]["outputs"] = []
+        self.state["sessions"][SID]["salvaged_by_controller"] = True
+        self.assertEqual(self.invoke(read_only=True)["status"], "ready_read_only")
+
 
 # Reuse reviewed incident construction; all source/catalog/evidence files are in
 # TemporaryDirectory and all provider/GitHub transport remains mocked.

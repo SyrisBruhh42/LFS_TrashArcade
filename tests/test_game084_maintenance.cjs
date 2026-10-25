@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const test = require('node:test');
+const { loadGameScripts } = require('./_load_game_scripts.cjs');
 
 function harness() {
     let now = 0;
@@ -47,11 +48,7 @@ function harness() {
         requestAnimationFrame() {}, setTimeout() {}, console: { warn() {} },
         ResizeObserver: class { observe() {} }
     });
-    const optionalVfx = fs.existsSync(path.join(__dirname, '..', 'games', '084-echo-forge-fusion', 'vfx.js')) ? ['vfx.js'] : [];
-    for (const file of ['world.js', ...optionalVfx, 'game.js']) {
-        const filename = path.join(__dirname, '..', 'games', '084-echo-forge-fusion', file);
-        vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
-    }
+    loadGameScripts(path.join(__dirname, '..', 'games', '084-echo-forge-fusion'), context);
     const evaluate = source => vm.runInContext(source, context);
     const game = evaluate('globalThis.game = new Game(document.getElementById("gameCanvas")); game');
     return { game, window, document, canvas, pause, dash, evaluate,
