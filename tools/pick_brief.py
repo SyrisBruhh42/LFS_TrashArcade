@@ -28,8 +28,41 @@ sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
 AXES = json.loads((ROOT / "factory" / "axes.json").read_text(encoding="utf-8"))
+CATALOG_PATH = ROOT / "factory" / "flash_inspiration_catalog.json"
+CATALOG = json.loads(CATALOG_PATH.read_text(encoding="utf-8")) if CATALOG_PATH.is_file() else {}
 V1_MAX_ID = 51
 TOTAL_PHASES = 10
+
+
+def archetype_guidance(genre: str, setting: str) -> dict:
+    arch = (CATALOG.get("archetypes") or {}).get(genre, {})
+    set_pal = (CATALOG.get("settingPalettes") or {}).get(setting, {})
+    pal = arch.get("palette") or {}
+    bg_pair = set_pal.get("bg") or [pal.get("bgPrimary", "#f5f7fa"), pal.get("bgSecondary", "#e4e7eb")]
+    accent = set_pal.get("accent") or pal.get("accent", "#00b4d8")
+    secondary = set_pal.get("secondary") or pal.get("secondaryAccent", "#ff6b6b")
+    exemplars = ", ".join(arch.get("exemplars", [])[:4]) or "Golden-Era Flash Portal Classics (Armor Games, Newgrounds, Nitrome, GirlsGoGames, Kongregate)"
+    how_steps = " | ".join(arch.get("howItWorks", [])) or "1. Read the stage goal & telegraphs | 2. Execute the Genre x Twist action loop | 3. Spend rewards on upgrades & master milestones"
+    phase_adapt = arch.get("phaseAdaptation") or {}
+    return {
+        "exemplars": exemplars,
+        "targetAudience": arch.get("targetAudience", "Flash Portal Players Seeking Crisp Mechanics & Expressive Style"),
+        "audienceDesire": arch.get("audienceDesire", "Immediate tactile satisfaction, clear goals, and meaningful progression."),
+        "sessionLength": arch.get("sessionLength", "3-6 Min Winnable Session"),
+        "styleName": pal.get("styleName", "Expressive Golden-Era Flash Vector & Layered Diorama"),
+        "bgPrimary": bg_pair[0],
+        "bgSecondary": bg_pair[1] if len(bg_pair) > 1 else bg_pair[0],
+        "accent": accent,
+        "secondary": secondary,
+        "loreTemplate": arch.get("loreTemplate", f"Set in {setting}, you step into a high-stakes {genre} challenge where mastering {setting}'s hazards and your signature mechanic is the only path to victory."),
+        "objective": arch.get("objective", f"Complete the {genre} objective and master the signature mechanic to unlock all milestones."),
+        "howSteps": how_steps,
+        "phaseAdaptation": (
+            f"Roster/Challenges: {phase_adapt.get('enemies', '5 genre-authentic challenge/client/enemy archetypes')}; "
+            f"Milestone Showdowns: {phase_adapt.get('bosses', '2 multi-phase milestone showdowns/finals')}; "
+            f"Progression: {phase_adapt.get('upgrades', 'Genre-authentic shop, wardrobe, venue, or perk upgrades')}."
+        ),
+    }
 
 
 def existing_games(source_root: Path | None = None) -> list[tuple[Path, dict]]:
@@ -62,6 +95,7 @@ def build_advance_brief(folder: Path, meta: dict, baseline_sha: str = "") -> dic
     genre = meta["genre"]
     twist = meta["coreMechanic"]
     setting = meta["setting"]
+    g_info = archetype_guidance(genre, setting)
     label = f"[Phase {target_phase}/{TOTAL_PHASES}] {slug} ({p_spec['title'].split('—')[-1].strip()})"
 
     md = "\n".join([
@@ -72,11 +106,14 @@ def build_advance_brief(folder: Path, meta: dict, baseline_sha: str = "") -> dic
         f"- **Axis A sub-genre** (`genre`): {genre}",
         f"- **Axis B mechanical twist** (`coreMechanic`): {twist}",
         f"- **Axis C setting / visual theme** (`setting`): {setting}",
+        f"- **Flash Portal Inspiration & Audience Goal:** Inspired by *{g_info['exemplars']}*. Target audience: {g_info['targetAudience']} ({g_info['audienceDesire']}). Target session pacing: **{g_info['sessionLength']}**.",
+        f"- **Art Direction & Palette (`{g_info['styleName']}`):** Primary bg `{g_info['bgPrimary']}` -> `{g_info['bgSecondary']}`, primary accent `{g_info['accent']}`, secondary accent `{g_info['secondary']}`. Avoid generic black-background neon circles unless the setting is specifically CRT Vector.",
+        f"- **Lore, Instructions & Smooth Options UI Contract:** Ensure the game provides a clear Lore Prologue on the Title screen, a logical 3-Panel `How to Play` guide (`1. Goal & Lore` | `2. How It Works & Why` | `3. Desktop & Touch Controls`), a smooth tabbed Options modal (`Audio & Comfort` | `Controls & Handedness` | collapsible `<details>` `Manage Save Data` so raw Base64 textareas never clutter the screen), and exposes `window.ARCADE_CARTRIDGE_META` for Arcade Home Cabinet synergy.",
         f"- **Save key:** `arcade_game_{gid}_{slug}_v1` (preserve existing save compatibility).",
         f"- **Current files in `games/{slug}/`:** {files_summary}",
-        f"- **Self-Mix Step 1 (Prior-Phase Health & Backfill):** Audit `games/{slug}/` across Phases 1..{cur_phase}; if any prior-phase mechanic (such as Phase 6 upgrade draft/pickups/combos or touch controls) was skipped or stubbed, backfill a compact working implementation before adding Phase {target_phase}.",
+        f"- **Self-Mix Step 1 (Prior-Phase Health & Backfill):** Audit `games/{slug}/` across Phases 1..{cur_phase}; if any prior-phase mechanic (such as Phase 6 progression/shop/draft, Lore/How-To-Play/Options polish, or touch controls) was skipped or stubbed, backfill a compact working implementation before adding Phase {target_phase}.",
         f"- **Self-Mix Step 2 — Phase {target_phase} Deliverable ({p_spec['title']}):** {p_spec['focus']}",
-        f"- **Autonomous Genre Adaptation:** Adapt all Phase {target_phase} mechanics autonomously to `{genre}` x `{twist}` (never pause for user input if the game uses 1-hit stealth, echo, or turn-based rules instead of generic HP/waves).",
+        f"- **Autonomous Genre Adaptation:** Adapt all Phase {target_phase} mechanics autonomously to `{genre}` x `{twist}` ({g_info['phaseAdaptation']}). Never pause for user input.",
         f"- **Observed baseline commit:** `{baseline_sha or 'not supplied; local preview only'}`. Verify the assigned folder against this baseline.",
         "- **Generated registry:** Run `python3 tools/build_registry.py`; include only its exact `games/registry.js` output, then run `python3 tools/preflight.py`. Never hand-edit registry content.",
         "- **Acceptance:** Demonstrate the assigned behavior, keyboard and touch start/restart, one complete core action loop, save/load/reset compatibility, and audio controls where present. Report exact checks and unverified behavior.",
@@ -134,7 +171,9 @@ def pick_new_game(gid: str, games: list[tuple[Path, dict]], exclude_triples: lis
     slug = gid + "-" + re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:44].rstrip("-")
     if title.casefold() in {str(g.get("title", "")).strip().casefold() for _, g in games}:
         raise ValueError("Assigned title already exists; reconcile game ID allocation")
-    accent = "#%02x%02x%02x" % tuple(rng.randint(64, 255) for _ in range(3))
+    fallback_accent = "#%02x%02x%02x" % tuple(rng.randint(64, 255) for _ in range(3))
+    g_info = archetype_guidance(genre, setting)
+    accent = g_info["accent"] if g_info.get("accent") else fallback_accent
     p_spec = AXES["phases"]["1"]
     label = f"[Phase 1/{TOTAL_PHASES}] {genre} x {twist} in {setting}"
     md = "\n".join([
@@ -145,8 +184,14 @@ def pick_new_game(gid: str, games: list[tuple[Path, dict]], exclude_triples: lis
         f"- **Axis A sub-genre** (`genre`): {genre}",
         f"- **Axis B mechanical twist** (`coreMechanic`): {twist}",
         f"- **Axis C setting / visual theme** (`setting`): {setting}",
+        f"- **Flash Portal Inspiration Exemplars:** *{g_info['exemplars']}*.",
+        f"- **Target Audience & Session Pacing:** {g_info['targetAudience']} — {g_info['audienceDesire']} (**Target Session: {g_info['sessionLength']}**).",
+        f"- **Curated Art Direction & Palette (`{g_info['styleName']}`):** Background `{g_info['bgPrimary']}` -> `{g_info['bgSecondary']}`, Primary Accent `{accent}`, Secondary Accent `{g_info['secondary']}`. Do NOT render a generic dark-background neon-circle arena; render layered, setting-authentic visuals.",
+        f"- **Lore Prologue & Objective Anchor:** {g_info['loreTemplate']} **Objective:** {g_info['objective']}",
+        f"- **Mandatory 3-Panel Instructions (`How to Play` Modal):** {g_info['howSteps']}. Present `1. The Goal & Lore`, `2. How the Loop Works & Why`, and `3. Desktop & Touch Controls` clearly.",
+        "- **Mandatory Smooth Options Menu & Cabinet Synergy (`window.ARCADE_CARTRIDGE_META`):** Build a clean Options Modal (`Audio & Comfort` | `Controls & Handedness` | collapsible `<details>` `Manage Save Data` for Base64 Export/Import/Reset) and expose `window.ARCADE_CARTRIDGE_META` (with `lore`, `objective`, `inspiration`, `sessionLength`, `howItWorks`, `palette`) so the Arcade Home Cabinet synergizes directly with the game's assets.",
         f"- **Save key:** `arcade_game_{gid}_{slug}_v1` (exactly this pattern).",
-        f"- **Suggested accentColor:** `{accent}` (change it if it clashes with your palette).",
+        f"- **Suggested accentColor:** `{accent}` (include optional `lore`, `inspiration`, `objective`, `sessionLength` in `game.json` if helpful).",
         f"- **Phase 1 Deliverable ({p_spec['title']}):** {p_spec['focus']}",
         f"- **Observed baseline commit:** `{baseline_sha or 'not supplied; local preview only'}`. The provider checks out a branch, not a pinned commit. If the assigned ID or folder already exists, stop and report.",
         "- **Generated registry:** Run `python3 tools/build_registry.py`; include only its exact `games/registry.js` output, then run `python3 tools/preflight.py`. Never hand-edit registry content.",
