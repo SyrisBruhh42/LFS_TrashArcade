@@ -1,0 +1,1125 @@
+{
+  "schema_version": 1,
+  "title": "Golden-Era Flash Portal Inspiration & UI Synergy Catalog (420+ Iconic Games Across All Demographics)",
+  "channels": [
+    {
+      "id": "ALL",
+      "label": "All Channels"
+    },
+    {
+      "id": "STYLE_LIFE",
+      "label": "Style, Dress-Up, Romance & Nightlife"
+    },
+    {
+      "id": "COZY_SIM",
+      "label": "Cooking, Diners, Pets & Toyboxes"
+    },
+    {
+      "id": "LAUNCH_SIEGE",
+      "label": "Launchers, Siege, TD & Artillery"
+    },
+    {
+      "id": "ACTION_RPG",
+      "label": "Action, Shooters, Platformers & RPGs"
+    },
+    {
+      "id": "PUZZLE_PARLOR",
+      "label": "Puzzles, Escape, Casino & Party Sports"
+    }
+  ],
+  "archetypes": {
+    "Dress-Up, Doll Maker & Fashion Runway": {
+      "channel": "STYLE_LIFE",
+      "targetAudience": "Creative Stylists, Fashion & Character Design Fans (All Ages & Teens/YA)",
+      "audienceDesire": "Aesthetic self-expression, character fantasy curation, fabric/color harmony, and runway judge validation.",
+      "sessionLength": "3-8 Min Studio Styling + Runway Evaluation",
+      "pacingType": "Creative Studio & Themed Runway Challenge",
+      "palette": {
+        "bgPrimary": "#fff5f8",
+        "bgSecondary": "#fce4ec",
+        "surface": "#ffffff",
+        "ink": "#2d192b",
+        "accent": "#e91e63",
+        "secondaryAccent": "#9c27b0",
+        "highlight": "#ffd54f",
+        "styleName": "Warm Pastel Atelier & Satin Editorial"
+      },
+      "exemplars": [
+        "Rinmaru Games: Mega Anime Avatar Creator & Ascension",
+        "Doll Divine & Azalea's Dolls (Tudor, Goddess, Lord of the Rings, Sci-Fi Doll Makers)",
+        "Roiworld & Stardoll Couture Runway Suites",
+        "Shopaholic: Paris, Tokyo, Hollywood & New York",
+        "GirlsGoGames & StarSue Fashion Studio Classics",
+        "Elouai Candybar Doll Maker & MyScene / Bratz Styling Suites"
+      ],
+      "loreTemplate": "You are the rising lead stylist at an elite international fashion atelier. High-profile clients arrive with urgent event briefs—from Velvet Gothic Galas to Cyber-Idol Debuts—and only your eye for silhouette, fabric texture, and color harmony can win the Gold Crown on the main runway.",
+      "objective": "Curate a cohesive multi-layer look across hair, tops, bottoms/gowns, shoes, and accessories that matches the client's theme brief, hits the required Style Synergy score, and unlocks rare couture swatches in your Lookbook.",
+      "howItWorks": [
+        "1. Read the Client Brief & Theme Tags: Check the target dress code (e.g., Romantic Baroque, Streetwear Pop, Royal Gala) and bonus color harmony goals.",
+        "2. Layer & Customize Garments: Select categories (Hair Back/Bangs, Dress/Top/Bottom, Hosiery, Footwear, Jewelry, Props) and apply live color/pattern swatches.",
+        "3. Walk the Runway & Save to Lookbook: Trigger the Runway Evaluation to receive itemized scores on Theme Match, Color Harmony, and Accessory Balance, unlocking new boutique tiers."
+      ],
+      "phaseAdaptation": {
+        "enemies": "Rival Stylist Trends, Theme Constraints & Critiques from 5 Distinct Runway Judges",
+        "bosses": "Grand Finale Fashion Week Showdowns (Met Gala, Paris Couture Finale) with Multi-Stage Theme Twists",
+        "upgrades": "Boutique Fabric Unlocks, Rare Couture Accessories & Lookbook Prestige Multipliers"
+      }
+    },
+    "Makeover Salon, Hair Physics & Room Decorator": {
+      "channel": "STYLE_LIFE",
+      "targetAudience": "Tactile Transformation, Cozy Interior Design & ASMR Makeover Fans",
+      "audienceDesire": "Satisfying before-and-after transformation, tactile tool mastery (cutting, curling, dyeing, painting), and spatial room personalization.",
+      "sessionLength": "4-7 Min Multi-Stage Transformation & Reveal",
+      "pacingType": "Tactile Tool Pipeline + Isometric Studio Sandbox",
+      "palette": {
+        "bgPrimary": "#f3faf8",
+        "bgSecondary": "#e0f2f1",
+        "surface": "#ffffff",
+        "ink": "#1b3633",
+        "accent": "#00bfa5",
+        "secondaryAccent": "#ff7043",
+        "highlight": "#ffe082",
+        "styleName": "Mint Spa & Sunlit Isometric Loft"
+      },
+      "exemplars": [
+        "Avie: My Pretty Avatar (Spa, Lab, Halloween & Christmas Editions)",
+        "Real Haircuts & Toca-Style Verlet Hair Physics Salons",
+        "My New Room 1, 2 & 3 (Isometric Room & Furniture Decorator)",
+        "Habbo / Cozy Pixel Apartment Decorators",
+        "Snip & Dye Boutique Hair Studio",
+        "Princess Makeover, Nail Art & Tattoo Parlor Classics"
+      ],
+      "loreTemplate": "You run the neighborhood's most sought-after Transformation Studio & Interior Loft. Clients walk in frazzled before life-changing milestones—and trust your scissors, dye brushes, spa treatments, and decorator blueprint to reinvent their look and living space.",
+      "objective": "Complete the tactile treatment steps (wash, precision cut/curl, multi-tone dye, skincare/glam, or isometric furniture placement) with high precision before the Before/After photo reveal.",
+      "howItWorks": [
+        "1. Prep & Cleanse Station: Use tactile drag tools (shower sprayer, foaming cleanser, steam towel) with live progress rings.",
+        "2. Precision Styling / Room Layout: Cut, curl, grow, and dye physics-reactive hair strands OR snap furniture, rugs, lighting, and wall art onto the isometric grid.",
+        "3. Before-and-After Photo Reveal: Compare the starting state against your finished masterpiece to earn 3-Star Studio Reputation and unlock deluxe tools."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Challenging Client Profiles & Tangled/Damaged Makeover Emergencies",
+        "bosses": "VIP Celebrity Red-Carpet Makeovers & Penthouse Renovations with Strict Style Demands",
+        "upgrades": "Master Stylist Scissors, Holographic Dye Palettes & Designer Furniture Catalogs"
+      }
+    },
+    "Dating Sim, Romance Visual Novel & Idol Life Sim": {
+      "channel": "STYLE_LIFE",
+      "targetAudience": "Narrative Romance, Visual Novel, Anime/Idol & Social Sim Players",
+      "audienceDesire": "Emotional connection, branching romantic/social intrigue, strategic calendar stat-raising, and unlocking secret endings/CG scenes.",
+      "sessionLength": "10-15 Min 30-Day Calendar Campaign (Quick-Save Any Day)",
+      "pacingType": "Day/Night Schedule + Stat Raising + Branching Dialogue",
+      "palette": {
+        "bgPrimary": "#fff8f6",
+        "bgSecondary": "#ffe4ec",
+        "surface": "#ffffff",
+        "ink": "#2b1e28",
+        "accent": "#ff4081",
+        "secondaryAccent": "#7c4dff",
+        "highlight": "#ffd740",
+        "styleName": "Sakura Visual Novel & Sunset Boulevard"
+      },
+      "exemplars": [
+        "Pacthesis Dating Sims (Chrono Days, Number Days, Star Days, Lunar Days, Idol Days, Kingdom Days)",
+        "Love Hina Sim Date RPG",
+        "SimGirl & Date Ariane",
+        "Cute Knight & Magical Diary Flash",
+        "Ganguro Girl & High School Romance Sims",
+        "Princess Maker / Idol Debut Stat-Raising Classics"
+      ],
+      "loreTemplate": "You have 30 days before the Grand Starlight Festival to balance your daily schedule, build your personal stats (Charm, Wit, Talent, Cash), navigate rival drama, and win the heart of one of 5 distinct romanceable leads—or claim solo superstardom.",
+      "objective": "Manage your Stamina and Cash across Morning/Afternoon/Evening slots, raise the stats required for your chosen character route, choose perceptive dialogue responses, and unlock a True Ending CG before Day 30.",
+      "howItWorks": [
+        "1. Plan Your Daily Schedule: Spend Stamina on Work, Study, Studio Practice, or Shopping to boost Charm, Wit, Talent, and Cash.",
+        "2. Explore Locations & Converse: Visit the Cafe, Rooftop, Arcade, or VIP Lounge to trigger branching dialogue and give favorite gifts.",
+        "3. Trigger Milestone Dates & Endings: Cross Affection thresholds at Day 10, 20, and 30 to unlock Festival confessions and persistent Album endings."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Distinct Romanceable Leads / Social Rivals with Unique Personality Schedules & Preferences",
+        "bosses": "High-Stakes Heart-to-Heart Confession Events & Festival Showdowns at Days 15 and 30",
+        "upgrades": "Charisma Perks, Boutique Gift Catalogs & Time-Management Schedule Boosters"
+      }
+    },
+    "Adult/Mature Newgrounds Life Sim & Edgy Satire": {
+      "channel": "STYLE_LIFE",
+      "targetAudience": "18+ / Mature Newgrounds Fans, Urban Life-Sim & Irreverent Satire Players",
+      "audienceDesire": "Uncensored creative edge, rags-to-riches urban hustle, dark comedy, karma/reputation freedom, and high-stakes nightlife mini-games.",
+      "sessionLength": "8-15 Min Open-City Hustle & Nightlife Progression",
+      "pacingType": "Top-Down / Side-View City Sandbox + Stat Hustle + Nightlife Mini-Games",
+      "palette": {
+        "bgPrimary": "#16111f",
+        "bgSecondary": "#261938",
+        "surface": "#2f2046",
+        "ink": "#fdf6ff",
+        "accent": "#ff2a85",
+        "secondaryAccent": "#ffb300",
+        "highlight": "#00e676",
+        "styleName": "Gritty Newgrounds Thick-Ink Comic & Velvet Neon Lounge"
+      },
+      "exemplars": [
+        "Stick RPG Complete & Stick RPG 2 (XGen Studios)",
+        "Frank's Adventure 1-4 & Adult Comedy Quest Classics",
+        "Ray Part 1 & 2 (Branching Crime Satire)",
+        "Sift Heads 1-5 & Sift Heads World",
+        "Whack Your Boss / Douchebag Life / Nightlife Hustle Sims",
+        "Pico's School & Hobo Brawl Classics"
+      ],
+      "loreTemplate": "You step off the bus into Neon Syndicate City with $100 in crumpled bills, a tiny studio apartment, and zero clout. Whether you climb the corporate ladder, run the velvet-rope VIP lounges, hustle high-stakes blackjack, or become a street legend before rent is due is entirely up to you.",
+      "objective": "Build your Street Cred, Intellect, Strength, and Bankroll before the 20-Day Syndicate Reckoning—upgrading your penthouse, mastering district mini-games, and toppling the city's corrupt kingpins.",
+      "howItWorks": [
+        "1. Work the City Districts: Move between the Gym, University, Corporate Tower, Underground Bar, VIP Casino, and Pawn Shop before the daily clock runs out.",
+        "2. Balance Karma, Heat & Cash: Take legitimate promotions or risky after-hours contracts while managing Syndicate Heat and energy drinks.",
+        "3. Own the Nightlife & Penthouse: Invest earnings into penthouse upgrades, vehicle/gear loadouts, and district boss takeovers."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 District Factions (Bouncers, Loan Sharks, Corrupt Execs, Rival Hustlers, Syndicate Enforcers)",
+        "bosses": "District Kingpin Showdowns & High-Stakes VIP Penthouse Takeovers",
+        "upgrades": "Penthouse Luxury Tiers, Black-Market Contraband Perks & VIP Lounge Access Passes"
+      }
+    },
+    "Culinary Prep, Mixology & Kitchen Station Sim": {
+      "channel": "COZY_SIM",
+      "targetAudience": "Foodies, Precision Timing Fans & Cozy Kitchen Creators",
+      "audienceDesire": "Tactile recipe craftsmanship, multi-station ticket juggling, custom garnish artistry, and hilarious customer/bartender reactions.",
+      "sessionLength": "3-6 Min Service Shift or Recipe Mastery",
+      "pacingType": "4-Station Order -> Prep -> Cook/Shake -> Garnish Pipeline",
+      "palette": {
+        "bgPrimary": "#fffaf0",
+        "bgSecondary": "#ffe8cc",
+        "surface": "#ffffff",
+        "ink": "#2c1b12",
+        "accent": "#ff5722",
+        "secondaryAccent": "#2ec4b6",
+        "highlight": "#ffca28",
+        "styleName": "Warm Bistro Tile, Copper Kitchen & Citrus Garnish"
+      },
+      "exemplars": [
+        "Papa's Freezeria, Pizzeria, Burgeria, Taco Mia & Pancakeria (Flipline Studios)",
+        "Bartender: The Right Mix (Mixology & Reaction Comedy)",
+        "Sara's Cooking Class (Step-by-Step Culinary Prep)",
+        "Sushi Go Round & Youda Sushi Chef",
+        "Cake Mania & Burger Restaurant 1-4",
+        "Hot Dog Bush & Cooking Show Classics"
+      ],
+      "loreTemplate": "The head chef just walked out five minutes before the festival rush, leaving you in charge of the boardwalk's flagship Kitchen & Mixology Bar. Ticket orders are clipping onto the rail, the grill is sizzling, and the town's toughest food critics are walking through the door.",
+      "objective": "Execute each customer ticket across the Order, Prep/Pour, Cook/Shake, and Build/Garnish stations to earn 90%+ Critic Ratings, huge tips, and Golden Recipe badges.",
+      "howItWorks": [
+        "1. Take & Read the Ticket: Pin the customer's exact order ratios, doneness target, and garnish placement to the ticket rail.",
+        "2. Precision Prep & Cook/Mix: Slice/pour to the fill lines, flip or shake when the thermal/mix meter hits the sweet spot, and avoid burning or over-pouring.",
+        "3. Artful Plating & Critic Reveal: Layer toppings symmetrically and serve to watch the customer's expressive reaction and score breakdown."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Picky Customer & Food Critic Archetypes (Impatient VIPs, Mystery Closers, Group Orders)",
+        "bosses": "Friday Night Critic Rush & Celebrity Master-Mixologist Challenges",
+        "upgrades": "Auto-Timers, Golden Espressos, Heat Lamps & Tip Jar Multipliers"
+      }
+    },
+    "Cozy Diner, Boutique & Resort Time-Management": {
+      "channel": "COZY_SIM",
+      "targetAudience": "Time-Management Strategists, Plate-Spinning & Cozy Tycoon Fans",
+      "audienceDesire": "Flow-state multitasking, color-combo chaining, visible venue upgrades (roller skates, plush booths, espresso bars), and customer happiness.",
+      "sessionLength": "3-5 Min Daily Shift (7-Shift Venue Campaign)",
+      "pacingType": "Seat -> Order -> Serve -> Bus Action Queue + Venue Shop",
+      "palette": {
+        "bgPrimary": "#f4faff",
+        "bgSecondary": "#d9f0ff",
+        "surface": "#ffffff",
+        "ink": "#1a2b42",
+        "accent": "#ff6b6b",
+        "secondaryAccent": "#4ecdc4",
+        "highlight": "#ffe66d",
+        "styleName": "Checkered Retro Diner & Sunlit Resort Terrace"
+      },
+      "exemplars": [
+        "Penguin Diner 1 & 2 (2DPlay)",
+        "Diner Dash (Flo's Action-Queue Classic)",
+        "Fabulous: Angela's Fashion Fever",
+        "Goodgame Cafe, Goodgame Disco & Amelie's Cafe",
+        "Hotel Mogul & Youda Marina",
+        "Shopping Mall Tycoon & Lemonade World"
+      ],
+      "loreTemplate": "To save your family's beloved waterfront venue from a greedy developer buyout, you must turn a sleepy two-table cafe into a five-star culinary landmark—chaining service combos, keeping every guest smiling, and reinvesting tips into dazzling upgrades.",
+      "objective": "Hit the daily Cash Target before closing time by seating guests on matching color-bonus booths, chaining consecutive actions (Order -> Serve -> Check -> Clean), and upgrading your venue between shifts.",
+      "howItWorks": [
+        "1. Seat & Color-Match Guests: Drag arriving party groups to matching-color tables to stack Seat Color Multipliers.",
+        "2. Queue Chained Actions: Click tables in sequence so your host performs 3-4 consecutive Orders or Deliveries in a single sprint for Combo bonuses.",
+        "3. Upgrade Your Venue: Spend daily tips on faster Roller Skates, Jukeboxes (patience boosters), Chef Speed, and Plush VIP Booths."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Guest Party Types (Food Critics, Rowdy Groups, Impatient VIPs, Cozy Couples, Tour Buses)",
+        "bosses": "Holiday Banquet Rushes & Inspector Health/Speed Audits",
+        "upgrades": "Turbo Skates, Jukebox Entertainment, Auto-Busser & Deluxe Booth Seating"
+      }
+    },
+    "Virtual Pet Care, Genetics Breeding & Evolution": {
+      "channel": "COZY_SIM",
+      "targetAudience": "Pet Lovers, Creature Collectors, Genetics Tinkers & Training Mini-Game Fans",
+      "audienceDesire": "Nurturing bond, watching a humble hatchling evolve into a champion, discovering rare cross-breed traits, and dressing pets in cute hats.",
+      "sessionLength": "4-8 Min Training & Championship Cycle",
+      "pacingType": "Sanctuary Care + Skill Training Mini-Games + Championship Races",
+      "palette": {
+        "bgPrimary": "#f3fbe8",
+        "bgSecondary": "#dcf2c4",
+        "surface": "#ffffff",
+        "ink": "#1e3318",
+        "accent": "#4caf50",
+        "secondaryAccent": "#29b6f6",
+        "highlight": "#ffb74d",
+        "styleName": "Sunlit Meadow Sanctuary & Pastel Terrarium"
+      },
+      "exemplars": [
+        "Duck Life 1, 2, 3: Evolution & 4 (Wix Games)",
+        "Neopets Flash Classics (Meerca Chase, Turmac Roll, Hasee Bounce, Kass Basher)",
+        "Fish Tycoon & Plant Tycoon (Last Day of Work Genetics Sims)",
+        "Pou Flash & My Lil Bastard",
+        "Monster Evolution & Vulpin Adventure",
+        "Chibi Knight & Creature Breeder Classics"
+      ],
+      "loreTemplate": "After a storm sweeps away your sanctuary trophy, you rescue a spirited rare hatchling with championship potential. By nurturing its energy, training its Running, Flying, Swimming, and Climbing instincts, and unlocking genetic evolutions, you can reclaim the Grand Sanctuary Crown.",
+      "objective": "Feed, groom, and train your companion across 4 skill disciplines to raise its stats, evolve its plumage/traits, and defeat rival champions in the Regional and World Tournaments.",
+      "howItWorks": [
+        "1. Care & Feed in the Sanctuary: Keep Energy and Happiness high with gourmet seeds, grooming brushes, and unlocked hats/accessories.",
+        "2. Play Skill Training Drills: Dodge obstacles in reflex drills to level up Run, Fly, Swim, and Climb stats.",
+        "3. Enter Tournaments & Evolve: Win multi-terrain relays to earn prize coins, unlock genetic evolutions, and expand your habitat."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Rival Tournament Champions & Training Hazard Courses",
+        "bosses": "Grand Regional & World Tri-Terrain Championship Relays",
+        "upgrades": "Genetic Evolution Traits, Deluxe Energy Seeds & Champion Accessory Hats"
+      }
+    },
+    "Music Sequencer, Band Stage & Falling-Sand Toybox": {
+      "channel": "COZY_SIM",
+      "targetAudience": "Music Makers, Beatboxers, Physics Sandbox Tinkerers & Creative Experimenters",
+      "audienceDesire": "Playful, punishment-free experimentation, composing infectious grooves or chain-reaction elemental simulations, and unlocking secret combos.",
+      "sessionLength": "3-10 Min Creative Sandbox + Stage Jam Challenges",
+      "pacingType": "Interactive Loop/Element Matrix + Live Stage / Physics Simulation",
+      "palette": {
+        "bgPrimary": "#1b162a",
+        "bgSecondary": "#2c2247",
+        "surface": "#372b59",
+        "ink": "#f7f4ff",
+        "accent": "#00e5ff",
+        "secondaryAccent": "#ff4081",
+        "highlight": "#b2ff59",
+        "styleName": "Studio Beat-Pad & Elemental Alchemy Sandbox"
+      },
+      "exemplars": [
+        "Incredibox (Animated Vocal/Beatbox Loop Crew)",
+        "Punk-o-Matic 1 & 2 (Riff Grid Sequencer + Stage Performance)",
+        "Super Crazy Guitar Maniac Deluxe 1-4",
+        "Dan-Ball Powder Game (Falling-Sand Elemental Physics Toybox)",
+        "Auditorium & Line Rider",
+        "Doodle God / Little Alchemy Discovery Classics"
+      ],
+      "loreTemplate": "Welcome to the Resonance Soundstage & Elemental Lab—where every beat loop, guitar riff, and reactive particle obeys your creative direction. Mix custom arrangements, trigger pyrotechnic stage reactions, and hit crowd-hype milestones to unlock legendary instruments and secret chorus animations.",
+      "objective": "Arrange synchronized rhythm/melody loops or elemental chain reactions to hit the Stage Hype & Harmony targets, unlocking secret Chorus Breakdowns and Master Producer badges.",
+      "howItWorks": [
+        "1. Drag Loops / Elements onto the Stage: Assign Beats, Basslines, Melodies, and Leads (or reactive elements) to active performers/nodes.",
+        "2. Trigger Live Solos & Chain Reactions: Mute, solo, or ignite combos on the downbeat to build the Crowd Hype multiplier.",
+        "3. Unlock Secret Chorus Bonuses: Discover compatible 4-part combinations to trigger animated stage finales and record your mix."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Stage Acoustics Challenges, Crowd Mood Shifts & Tempo Sync Trials",
+        "bosses": "Battle-of-the-Bands Headline Encore & Master Mix Showdowns",
+        "upgrades": "Synthesizer Voice Packs, Stage Pyrotechnics & Harmonic Auto-Quantize Perks"
+      }
+    },
+    "Distance Launcher & Upgrade Shop": {
+      "channel": "LAUNCH_SIEGE",
+      "targetAudience": "Incremental Progression Lovers, Physics Launch & 'One More Run' Addicts",
+      "audienceDesire": "Starting hilariously weak (crashing after 15 feet) and upgrading through a deep workshop until you shatter sound barriers and reach orbit.",
+      "sessionLength": "5-12 Min Multi-Launch Upgrade Campaign",
+      "pacingType": "Angle/Power Launch -> Mid-Air Boosts & Bounces -> Workshop Shop -> Milestone Breakthrough",
+      "palette": {
+        "bgPrimary": "#e3f4ff",
+        "bgSecondary": "#b3e5fc",
+        "surface": "#ffffff",
+        "ink": "#0d2538",
+        "accent": "#ff6d00",
+        "secondaryAccent": "#0288d1",
+        "highlight": "#ffd600",
+        "styleName": "Crisp Sky Horizon, Stratosphere & Blueprint Workshop"
+      },
+      "exemplars": [
+        "Learn to Fly 1, 2 & 3 (Light Bringer Games)",
+        "Burrito Bison & Burrito Bison Revenge (Juicy Beast)",
+        "Toss the Turtle (Foreverkul / GonzoSSM)",
+        "Shopping Cart Hero 1-3 & Potty Racers",
+        "Hedgehog Launch 1 & 2 (Armor Games / jmtb02)",
+        "Flight, Nanaca Crash & Kitten Cannon"
+      ],
+      "loreTemplate": "Mocked by the Academy for claiming your makeshift contraption could cross the Great Continental Divide, you have built a ramp, strapped on a prototype booster, and opened your blueprint workshop. Every meter flown funds stronger hulls, bouncier ground-slams, and orbital rockets.",
+      "objective": "Launch from the ramp, chain mid-air boosts and ground-slam bounces to maintain momentum, spend cash in the 5-tier Workshop between flights, and smash through the Final Barrier Wall.",
+      "howItWorks": [
+        "1. Lock Launch Angle & Power: Time the oscillating launch gauge for maximum initial velocity off the ramp.",
+        "2. Control Pitch, Glide & Slam: Tilt in mid-air for aerodynamic lift, fire rocket fuel at apexes, and trigger ground-slams on springy targets to regain speed.",
+        "3. Upgrade in the Workshop: Spend flight cash after every run on Ramp Height, Glider Aerodynamics, Rocket Thrusters, and Bouncer Multipliers."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Ground/Air Target Types (Spring Bouncers, Speed Boost Rings, Wind Shear, Armored Walls, Sky Mines)",
+        "bosses": "Reinforced Milestone Barrier Walls at 500m, 2,000m, and 10,000m Requiring Kinetic Breakthrough",
+        "upgrades": "5-Tier Workshop Tree (Ramp, Glider, Rocket Fuel, Slam Hydraulics, Magnet Radar)"
+      }
+    },
+    "Lane Siege & Tug-of-War Generals": {
+      "channel": "LAUNCH_SIEGE",
+      "targetAudience": "Strategy Commanders, Historical/Fantasy Evolution & Army Clash Fans",
+      "audienceDesire": "Commanding a clash of armies across a scrolling battlefield, timing unit counters, and evolving your civilization from stone clubs to plasma mechs.",
+      "sessionLength": "5-10 Min Base-to-Base Siege Match",
+      "pacingType": "Economy / Mana Generation -> Unit Counter Spawning -> Tech/Era Evolution -> Enemy Base Destruction",
+      "palette": {
+        "bgPrimary": "#fff3e0",
+        "bgSecondary": "#ffe0b2",
+        "surface": "#2d221b",
+        "ink": "#fdf8f2",
+        "accent": "#d84315",
+        "secondaryAccent": "#1976d2",
+        "highlight": "#fbc02d",
+        "styleName": "Sunlit Scroll Battlefield & Banner Heraldry"
+      },
+      "exemplars": [
+        "Age of War 1 & 2 (Louissi)",
+        "Stick War 1 & 2: Order Empire",
+        "Miragine War & Warlords: Call to Arms",
+        "Epic War 1-5 & Prince of War",
+        "Swords and Soldiers & Cartoon Wars",
+        "Feudalism & Shadez: The Black Operations"
+      ],
+      "loreTemplate": "Two rival citadels stand at opposite ends of the Sundering Valley. As Supreme Marshal, you must balance gold harvesting, frontline infantry, ranged support, and era-advancing research—calling down cataclysmic commander abilities to shatter the enemy stronghold.",
+      "objective": "Reduce the enemy Citadel's HP from 100% to 0% by spawning counter-unit waves, upgrading base turrets, and advancing through Technological Eras before the rival general overwhelms your gates.",
+      "howItWorks": [
+        "1. Balance Economy & Spawns: Spend Gold/Mana to queue Melee Vanguards, Ranged Archers/Gunners, and Heavy Siege Engines down the lane.",
+        "2. Counter the Enemy Formation: Read incoming enemy unit compositions (Armored vs. Anti-Armor, Swarm vs. Splash) and time your deployments.",
+        "3. Evolve Eras & Unleash Specials: Spend XP to evolve your Citadel into the next Era and trigger screen-shaking Commander Ultimates."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Rival Unit Classes (Swarm Militia, Piercing Marksmen, Shielded Knights, Siege Walkers, War Mages)",
+        "bosses": "Enemy Warlord Champions & Fortified Citadel Phase Transitions",
+        "upgrades": "Era Evolution Tiers, Citadel Turret Slots & Commander Ultimate Cooldowns"
+      }
+    },
+    "Wave-Defense Tower Micro-Strategy": {
+      "channel": "LAUNCH_SIEGE",
+      "targetAudience": "Tactical Planners, Maze Builders & Synergistic Defense Architects",
+      "audienceDesire": "Constructing an impenetrable kill-zone where slow fields, splash artillery, and beam amplifiers melt hundreds of invaders.",
+      "sessionLength": "5-10 Min 15-Wave Tactical Defense",
+      "pacingType": "Build/Upgrade Towers -> Call Wave Early for Interest -> Micro-Manage Hero/Spells",
+      "palette": {
+        "bgPrimary": "#eef5e6",
+        "bgSecondary": "#cfe3bc",
+        "surface": "#1f2d1b",
+        "ink": "#f4f9f1",
+        "accent": "#ff8f00",
+        "secondaryAccent": "#00acc1",
+        "highlight": "#ffd54f",
+        "styleName": "Hand-Crafted Tactical Map & Arcane Gem Turrets"
+      },
+      "exemplars": [
+        "Kingdom Rush & Kingdom Rush Frontiers (Ironhide Game Studio)",
+        "Bloons Tower Defense 3, 4 & 5 (Ninja Kiwi)",
+        "GemCraft: Labyrinth & Chasing Shadows",
+        "Cursed Treasure: Don't Touch My Gems!",
+        "Desktop Tower Defense & Vector TD",
+        "Plants vs. Zombies Flash & Creeper World Evermore"
+      ],
+      "loreTemplate": "Raiders are marching along the winding pass toward your Sanctuary Core. As Master Engineer, you command the tactical defense grid—placing specialized towers on strategic choke points, routing power polarities, and calling waves early to earn bonus interest.",
+      "objective": "Prevent invaders from breaching your Sanctuary Core across all waves by placing, upgrading, and cross-synergizing towers while timing active tactical skills.",
+      "howItWorks": [
+        "1. Place Chokepoint Towers: Build Kinetic, Splash, Slow/Tether, and Amplifier towers along path bends for maximum coverage.",
+        "2. Trigger Twist Synergies: Switch tower polarity or link tethers between pylons to multiply damage against armored formations.",
+        "3. Call Waves Early & Upgrade: Send the next wave early for bonus gold interest and specialize towers into Tier-3 branches."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Invader Columns (Scout Runners, Shielded Phalanx, Flying Harriers, Regenerating Swarmers, Siege Golems)",
+        "bosses": "Colossal Juggernaut Boss Waves with Lane-Shifting Aura",
+        "upgrades": "Branching Tower Specializations, Interest Perks & Tactical Orbital Strikes"
+      }
+    },
+    "Physics Destruction & Artillery Siege": {
+      "channel": "LAUNCH_SIEGE",
+      "targetAudience": "Physics Demolition Lovers, Trajectory Snipers & Chain-Reaction Fans",
+      "audienceDesire": "Finding the single structural keystone in a towering fortress and watching timber, stone, and TNT collapse in a glorious chain reaction.",
+      "sessionLength": "3-6 Min 10-Fortress Demolition Pack",
+      "pacingType": "Survey Structure -> Aim Trajectory & Ammo Type -> Detonate Mid-Flight -> Watch Collapse",
+      "palette": {
+        "bgPrimary": "#fce8d5",
+        "bgSecondary": "#f5cba7",
+        "surface": "#2b1d14",
+        "ink": "#fff8f0",
+        "accent": "#e64a19",
+        "secondaryAccent": "#5d4037",
+        "highlight": "#ffeb3b",
+        "styleName": "Sunset Siege Diorama, Timber Beams & Masonry Stone"
+      },
+      "exemplars": [
+        "Crush the Castle 1 & 2 (Armor Games)",
+        "Raft Wars 1 & 2 (Martijn Kunst)",
+        "Bowmaster Prelude & Bowmaster Winter Storm",
+        "Sieger & Roly-Poly Cannon",
+        "Ricochet Kills & Fragger",
+        "Territory War & Tanks"
+      ],
+      "loreTemplate": "Across the disputed borderlands, rival barons have erected timber, iron, and stone fortifications thinking they are untouchable. With a calibrated siege launcher and a limited quiver of specialized payloads, you must bring every fortress crashing down in as few shots as possible.",
+      "objective": "Eliminate all garrisoned targets in each fortress within your Par Shot budget by striking load-bearing pillars, TNT crates, and ricochet angles for Gold Medal mastery.",
+      "howItWorks": [
+        "1. Inspect the Structure: Identify fragile timber joints, heavy stone slabs, explosive barrels, and load-bearing keystones.",
+        "2. Set Trajectory & Payload: Drag or double-tap to set launch angle/power and select Triple-Cluster, Piercing Iron, or Delayed Bomb ammo.",
+        "3. Trigger Mid-Air Secondary Action: Tap mid-flight to split projectiles or detonate shockwaves right at the structural weak point."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Garrisoned Fortress Layouts & Structural Material Types (Wood, Stone, Iron, Magnet Shields, TNT Vaults)",
+        "bosses": "Multi-Tower Royal Citadels with Moving Drawbridges & Counter-Battery Fire",
+        "upgrades": "Cluster Payloads, Seismic Shockwave Shells & Trajectory Laser Sight"
+      }
+    },
+    "Momentum/Grapple Platformer": {
+      "channel": "ACTION_RPG",
+      "targetAudience": "Flow-State Speedrunners, Expressive Parkour & Precision Platforming Fans",
+      "audienceDesire": "Silky-smooth momentum conservation—wall-jumping, sliding down slopes, grappling across chasms, and chaining acrobatic arcs without touching the ground.",
+      "sessionLength": "2-5 Min Stage Speedrun / 10-Stage Course",
+      "pacingType": "Sprint -> Slide/Wall-Jump -> Grapple Swing -> Portal Goal + Time Medals",
+      "palette": {
+        "bgPrimary": "#fffdf7",
+        "bgSecondary": "#f0ead6",
+        "surface": "#1c222b",
+        "ink": "#1a1a1a",
+        "accent": "#ff9100",
+        "secondaryAccent": "#00b0ff",
+        "highlight": "#00e676",
+        "styleName": "Hand-Drawn Sketchbook Ink & Expressive Scarf Trails"
+      },
+      "exemplars": [
+        "Fancy Pants Adventures: World 1, 2 & 3 (Brad Borne)",
+        "N: The Way of the Ninja (Metanet Software)",
+        "Super Meat Boy (Meat Boy Flash Prototype)",
+        "Shift 1-4 (Antony Lavelle Perspective Inversion)",
+        "Vex 1-3, Run 1-3 & Canabalt",
+        "Fireboy and Watergirl & Nitrome Platformers (Skywire, Twin Shot)"
+      ],
+      "loreTemplate": "Armed with nothing but acrobatic momentum, a kinetic grapple rig, and a flowing trail, you must sprint through shifting obstacle courses to recover the stolen Ink Cores and beat the Gold Time Trial par.",
+      "objective": "Chain wall-jumps, slope slides, and grapple swings to collect the Stage Cores and reach the Exit Portal under the Gold Medal par time.",
+      "howItWorks": [
+        "1. Build Slope & Run Momentum: Sprint down curved ramps and crouch-slide through low tunnels without losing horizontal velocity.",
+        "2. Fire Grapple / Recoil Dash: Latch onto anchor points or fire directional recoil bursts to vault across lethal hazard gaps.",
+        "3. Hit the Exit Portal for Medal Times: Collect optional speed-rings to shave seconds off your personal best."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Kinetic Course Hazards & Patrol Drones (Laser Gates, Crumbling Ledges, Homing Seekers, Wind Tunnels, Saw Tracks)",
+        "bosses": "Chasing Wall-of-Doom & Giant Clockwork Guardian Pursuit Stages",
+        "upgrades": "Double-Grapple Reel, Air-Dash Thrusters & Speed-Trail Magnet"
+      }
+    },
+    "Subterranean Drilling/Mining Roguelite": {
+      "channel": "ACTION_RPG",
+      "targetAudience": "Deep-Core Explorers, Resource Prospectors & Rig-Upgrade Fans",
+      "audienceDesire": "Drilling deeper into uncharted geological strata, filling a cargo bay with rare gems before fuel runs out, and returning to the surface to build an unstoppable rig.",
+      "sessionLength": "8-15 Min Deep-Core Expedition",
+      "pacingType": "Drill Down & Collect Ores -> Watch Fuel/Hull/Cargo -> Return to Surface Shop -> Reach Core",
+      "palette": {
+        "bgPrimary": "#2b1b12",
+        "bgSecondary": "#4a2c18",
+        "surface": "#1a110b",
+        "ink": "#fff3e0",
+        "accent": "#ffb300",
+        "secondaryAccent": "#00e5ff",
+        "highlight": "#ff5252",
+        "styleName": "Geological Strata Cross-Section, Magma Veins & Crystalline Ore"
+      },
+      "exemplars": [
+        "Motherload (XGen Studios)",
+        "Mega Miner & Reach the Core",
+        "Diggy & California Gold Rush",
+        "Jacksmith (Flipline Ore-Smelting & Weapon Crafting)",
+        "Gem Miner & SteamWorld-Style Drillers",
+        "Corporation Inc. & Underground Prospecting Classics"
+      ],
+      "loreTemplate": "Dropped onto a mineral-rich frontier planet by the DeepCore Prospecting Guild, you pilot a customizable subterranean drill pod. Beneath the topsoil lie veins of Titanium, Emerald, Void-Quartz—and strange seismic anomalies waiting at 5,000 feet.",
+      "objective": "Drill through destructible soil and rock strata, haul high-value minerals back to the Surface Outpost before your Fuel or Hull hits zero, upgrade your rig, and breach the Ancient Core.",
+      "howItWorks": [
+        "1. Drill & Navigate Strata: Steer your rig downward or laterally through dirt and ore veins while watching your Fuel Tank and Cargo Weight.",
+        "2. Manage Depth Pressure & Hazards: Avoid magma pockets, gas explosions, and subterranean creatures—or use emergency teleporters/thrusters to ascend.",
+        "3. Sell Ore & Upgrade at Surface: Cash in your haul at the Surface Outpost to upgrade Drill Bit, Fuel Tank, Cargo Bay, Radiator, and Hull."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Subterranean Hazards & Burrowers (Gas Pockets, Magma Worms, Crystal Golems, Cave-In Tremors, Core Sentinels)",
+        "bosses": "Tectonic Leviathan & The Ancient Core Guardian at Maximum Depth",
+        "upgrades": "Diamond/Plasma Drill Bits, Aux Fuel Tanks, Cargo Compressors & Hull Plating"
+      }
+    },
+    "Turn-Based Gladiator & Party RPG": {
+      "channel": "ACTION_RPG",
+      "targetAudience": "Tactical RPG Thinkers, Gladiator Character Builders & Loot/Skill Synergists",
+      "audienceDesire": "Theorycrafting a custom fighter or party build, choosing between aggressive High-Risk strikes and clutch Stance/Buff setups, and conquering the Colosseum.",
+      "sessionLength": "6-12 Min Arena Tournament Campaign",
+      "pacingType": "Customize Build/Loadout -> Turn-Based Stance/Skill Duel -> Loot & Skill Tree Shop",
+      "palette": {
+        "bgPrimary": "#f9f1e2",
+        "bgSecondary": "#e8d5b5",
+        "surface": "#261b14",
+        "ink": "#fdf8f0",
+        "accent": "#c62828",
+        "secondaryAccent": "#f9a825",
+        "highlight": "#2e7d32",
+        "styleName": "Sun-Baked Colosseum Sand, Bronze Armor & Arcane Parchment"
+      },
+      "exemplars": [
+        "Swords and Sandals 1, 2, 3 & 4 (Whiskeybarrel Studios)",
+        "Sonny 1 & 2 (Krin Juangbhanich Tactical Skill Wheel)",
+        "Epic Battle Fantasy 1-4 (Matt Roszak)",
+        "AdventureQuest & DragonFable (Artix Entertainment)",
+        "Monster's Den: Book of Dread & Sinjid",
+        "MARDEK RPG & Telepath RPG"
+      ],
+      "loreTemplate": "Cast into the Grand Imperial Colosseum with rusted iron greaves and a defiant battle cry, you must fight your way up the Champion Ladder—mastering distance, stamina, and tactical skill synergies to overthrow the Emperor's undefeated Titans.",
+      "objective": "Defeat rival gladiators and arena beasts across the Tournament Ladder by managing Stamina/Focus, timing Heavy/Quick/Taunt/Parry skills, and investing prize gold into armor and skill trees.",
+      "howItWorks": [
+        "1. Read Opponent Stance & Telegraph: Inspect the enemy's armor, buffs, and queued attack telegraph before committing your turn.",
+        "2. Choose Distance & Tactical Action: Advance/Retreat and select Quick Strike, Armor-Breaker, Crowd Taunt, Shield Guard, or Overdrive Skill.",
+        "3. Visit the Armory & Skill Trainer: Spend victory gold on visible armor/weapon upgrades and unlock passive combo traits."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Arena Challenger Archetypes (Dual-Blade Duelist, Shield Phalanx, Crowd-Roar Berserker, Alchemist Hexer, Imperial Lancer)",
+        "bosses": "Grand Colosseum Champions with Phase-2 Enrage & Armor-Break Mechanics",
+        "upgrades": "Forged Weapons, Visible Armor Sets & Stance Mastery Perks"
+      }
+    },
+    "Side-Scrolling Tactical Shooter & Ragdoll Arena": {
+      "channel": "ACTION_RPG",
+      "targetAudience": "Run-and-Gun Action Fans, Class Loadout Customizers & Ragdoll Combat Players",
+      "audienceDesire": "High-octane side-scrolling platform gunplay with jetpacks, weapon pickups, class perks, and punchy physics knockback.",
+      "sessionLength": "3-6 Min Match / Mission Squad Campaign",
+      "pacingType": "Select Class/Loadout -> Multi-Tier Platform Gunfight -> Capture/Eliminate Objective -> Unlock Arsenal",
+      "palette": {
+        "bgPrimary": "#dce7f0",
+        "bgSecondary": "#b0bec5",
+        "surface": "#182026",
+        "ink": "#f5f9fc",
+        "accent": "#ff3d00",
+        "secondaryAccent": "#00b0ff",
+        "highlight": "#ffd600",
+        "styleName": "Industrial Sky-Rig, Tactical Visor & Ballistic Tracers"
+      },
+      "exemplars": [
+        "Strike Force Heroes 1 & 2 (Sky9 Games)",
+        "Raze 1 & 2 (AddisonR)",
+        "Plazma Burst 2 (Eric Gurt)",
+        "Thing-Thing Arena & Madness Project Nexus",
+        "Heli Attack 2 & 3 (Miniclip)",
+        "Intrusion 2, Commando 2 & Chaos Faction"
+      ],
+      "loreTemplate": "An orbital research facility has been seized by rogue mercenaries. Dropping in as Alpha Squad's lead specialist, you must fight across multi-tier jump-pad platforms, swap tactical weapons on the fly, and trigger Killstreak Overdrives to reclaim the station.",
+      "objective": "Complete the tactical mission objective (Squad Elimination, Data Core Capture, or Boss Chopper Takedown) using platform mobility, cover, and weapon pickups.",
+      "howItWorks": [
+        "1. Traverse Multi-Tier Platforms: Use jump pads, drop-through ledges, and recoil/jetpack dashes to control high ground.",
+        "2. Aim & Swap Weapons: Fire primary ballistic/energy weapons, physically retrieve dropped ammo/crates, and time reloads behind cover.",
+        "3. Trigger Killstreak Overdrive: Fill your Tactical Meter to unleash a class ability (Airstrike, Slow-Mo Reflex, or Shield Dome)."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Mercenary Classes (Assault Trooper, Recon Sniper, Heavy Juggernaut, Jetpack Flanker, Riot Engineer)",
+        "bosses": "Armored Gunship Helicopter & Experimental Mech Commander",
+        "upgrades": "Weapon Mod Attachments, Class Killstreak Perks & Tactical Armor Rigs"
+      }
+    },
+    "Spatial Brain-Teaser & Logic Contraption": {
+      "channel": "PUZZLE_PARLOR",
+      "targetAudience": "CoolMathGames Puzzle Masters, Spatial Geometry & Logic Contraption Thinkers",
+      "audienceDesire": "That crisp 'Aha!' moment when you figure out the exact sequence of flips, switches, or physics vectors that solves an impossible-looking stage in Par moves.",
+      "sessionLength": "60-120 Sec Per Puzzle / 15-Level Logic Pack",
+      "pacingType": "Inspect Board -> Test Spatial/Physics Move -> Instant Undo/Reset -> Par Move Mastery",
+      "palette": {
+        "bgPrimary": "#f5f7fa",
+        "bgSecondary": "#e4e7eb",
+        "surface": "#1f2933",
+        "ink": "#102a43",
+        "accent": "#2563eb",
+        "secondaryAccent": "#f59e0b",
+        "highlight": "#10b981",
+        "styleName": "Clean Architectural Isometric Tile & Tactile Brass Switches"
+      },
+      "exemplars": [
+        "Bloxorz (DX Interactive)",
+        "The World's Hardest Game (Snubby Land)",
+        "Cursor*10 (Nekogames Self-Cooperation)",
+        "Fantastic Contraption & Red Remover",
+        "Civiballs, Snail Bob & Continuity",
+        "Super Stacker 2 & Boomshine"
+      ],
+      "loreTemplate": "Deep inside the Clockwork Architect's Vault, each chamber is a precision spatial lock. Only by rotating your prism block, toggling bridge switches, and cooperating with your recorded time-echoes can you drop cleanly into the golden receptor.",
+      "objective": "Solve each puzzle chamber within the Par Move / Time target without falling off fragile tiles or triggering lockouts.",
+      "howItWorks": [
+        "1. Survey the Tile Grid & Switches: Trace which X/O pressure plates toggle bridges, splitters, or polarity gates.",
+        "2. Execute Precision Moves (with Instant Undo): Roll, slide, or trigger chain reactions step-by-step; press R or Undo anytime for zero-friction experimentation.",
+        "3. Beat the Par Move Target: Reach the Goal Receptor in minimum moves to earn 3-Star Architect Mastery."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Puzzle Tile & Contraption Mechanics (Fragile Glass Tiles, Bridge Toggles, Teleport Splitters, Laser Gates, Patrol Pistons)",
+        "bosses": "Master Vault Multi-Stage Logic Chambers at Levels 5, 10, and 15",
+        "upgrades": "Move-Preview Ghost Line, Undo Charges & Hint Blueprint Scanner"
+      }
+    },
+    "Point-and-Click Escape & Branching Comedy": {
+      "channel": "PUZZLE_PARLOR",
+      "targetAudience": "Escape Room Detectives, Narrative Mystery & Henry Stickmin Comedy Fans",
+      "audienceDesire": "Inspecting clever room clues, combining inventory gadgets, or picking hilarious branching choices where even the 'Fails' are laugh-out-loud animations.",
+      "sessionLength": "4-8 Min Escape / Heist Episode (With Collectible Fail/Ending Map)",
+      "pacingType": "Inspect Scene & Clues -> Combine Gadgets / Choose Branch -> Solve Lock or Discover Hilarious Fail -> Unlock All Endings",
+      "palette": {
+        "bgPrimary": "#f4efe6",
+        "bgSecondary": "#dfd3c3",
+        "surface": "#25201b",
+        "ink": "#2b2520",
+        "accent": "#d97706",
+        "secondaryAccent": "#0284c7",
+        "highlight": "#16a34a",
+        "styleName": "Atmospheric Escape Diorama & Expressive Heist Storyboard"
+      },
+      "exemplars": [
+        "Henry Stickmin Series: Breaking the Bank, Escaping the Prison, Stealing the Diamond, Infiltrating the Airship (PuffballsUnited)",
+        "Submachine 1-10 (Mateusz Skutnik)",
+        "Riddle School 1-5 (JonBro)",
+        "Grow Cube & Grow Island (Eyemaze)",
+        "Crimson Room & Neutral Escape Classics",
+        "The Visitor & Murphy's Law"
+      ],
+      "loreTemplate": "Locked inside a high-security vault wing with alarms armed and guards patrolling the corridor, you have a pocket full of questionable gadgets and three possible escape routes: Stealthy Ghost, Brilliant Gadgeteer, or Chaotic Improviser.",
+      "objective": "Inspect interactive hotspots, combine inventory tools, and choose the right tactical gadgets at branching decision points to unlock all 3 Escape Endings and collect every Fail medal.",
+      "howItWorks": [
+        "1. Scan Interactive Hotspots: Click/tap room clues, keypads, vents, and guard schedules to gather codes and tools into your Inventory Bar.",
+        "2. Choose Branching Gadgets & Actions: At high-stakes moments, pick from distinct tools or routes—each with bespoke animated outcomes.",
+        "3. Complete the Ending & Fail Map: Use the instant Scene Map to replay any node and collect 100% of the endings and comedy fails."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Security Systems & Vault Puzzles (Laser Grids, Biometric Locks, Patrol Wardens, Pressure Vaults, Drone Cameras)",
+        "bosses": "Final Vault Escape Sequence & Chief Warden Showdown",
+        "upgrades": "Master Keycard Decoder, X-Ray Hotspot Lens & Instant Node Rewind"
+      }
+    },
+    "High-Roller Casino Parlor, Poker Tour & Gold Miner": {
+      "channel": "PUZZLE_PARLOR",
+      "targetAudience": "High-Stakes Risk/Reward Players, Lounge Card Sharks & Precision Claw/Parlor Fans",
+      "audienceDesire": "The thrill of timing a golden claw grab or pushing all-in on a calculated bluff to buy out the whole town saloon.",
+      "sessionLength": "3-8 Min Parlor Table / Prospector Quota Tour",
+      "pacingType": "Read Odds / Swinging Claw -> Commit Stake or Grab -> Cash In at Parlor Shop -> Buy District Deeds",
+      "palette": {
+        "bgPrimary": "#0d2e22",
+        "bgSecondary": "#144533",
+        "surface": "#1c1613",
+        "ink": "#fcf8ee",
+        "accent": "#ffd700",
+        "secondaryAccent": "#e53935",
+        "highlight": "#00e676",
+        "styleName": "Emerald Casino Felt, Brass Chip Rack & Mahogany Saloon"
+      },
+      "exemplars": [
+        "Governor of Poker 1 & 2 (Youda Games)",
+        "Gold Miner & Gold Miner Vegas",
+        "Peggle Nights Flash & Zuma Deluxe",
+        "Bookworm Adventures & Mahjongg Alchemy",
+        "High-Stakes Blackjack & Texas Saloon Parlor Classics",
+        "Bejeweled Twist & Luxor"
+      ],
+      "loreTemplate": "Starting at the dusty border saloon with a modest chip stack and a brass grappling reel, you are on a tour to outplay every high-roller parlor in the territory and buy the deed to the Grand Vegas Starlight Lounge.",
+      "objective": "Beat each parlor table's Gold Quota by timing precision grabs/shots, pressing calculated multipliers, and spending winnings on saloon deeds and luck charms.",
+      "howItWorks": [
+        "1. Read the Table & Multiplier Odds: Survey high-value gold nuggets, diamond jackpots, and hazard barrels on the felt/minefield.",
+        "2. Time Your Release / Stake: Trigger your action at the exact angle or odds window to bank massive payouts and chain streak multipliers.",
+        "3. Buy Parlor Upgrades & Town Deeds: Between rounds, purchase Dynamite Clears, Reel Speed, Lucky Clover Multipliers, and Saloon Deeds."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Parlor Obstacles & Rival High-Rollers (Fool's Gold Rocks, TNT Barrels, Shark Bluffers, Shifting Bumpers, Vault Locks)",
+        "bosses": "High-Roller Championship Table & Grand Vault Jackpot Finale",
+        "upgrades": "Diamond Polish, Turbo Winch, Dynamite Satchel & VIP Chip Multiplier"
+      }
+    },
+    "Quirky Ragdoll Party Sports & Physics Duels": {
+      "channel": "PUZZLE_PARLOR",
+      "targetAudience": "2-Player / Bot Arcade Rivals, Physics Comedy & Quick-Match Sports Fans",
+      "audienceDesire": "Laugh-out-loud physics chaos, clutch last-second goals/smashes, and wild arena powerups in fast 90-second matches.",
+      "sessionLength": "90-180 Sec Championship Match (Best of 5 Cup)",
+      "pacingType": "Kickoff -> Physics Jump/Kick/Smash + Arena Powerups -> Score 7 Goals / Win Cup",
+      "palette": {
+        "bgPrimary": "#e8f5e9",
+        "bgSecondary": "#c8e6c9",
+        "surface": "#1b263b",
+        "ink": "#0f172a",
+        "accent": "#ff5722",
+        "secondaryAccent": "#2979ff",
+        "highlight": "#ffea00",
+        "styleName": "Bright Stadium Turf, Floodlight Scoreboard & Cartoon Physics"
+      },
+      "exemplars": [
+        "Sports Heads: Football, Tennis & Volleyball Championship (Mousebreaker)",
+        "Slime Volleyball & Slime Soccer",
+        "QWOP, Girp & Get On Top (Bennett Foddy)",
+        "Ragdoll Masters & Achilles",
+        "Bomb It 1-6 & Bad Ice-Cream (Nitrome)",
+        "Curveball & Tug the Table"
+      ],
+      "loreTemplate": "The Grand Stadium Cup is underway! Step onto the floodlit pitch against a roster of eccentric rival champions where bouncy physics, trick-shot geometry, and floating stadium powerups turn every point into a highlight-reel duel.",
+      "objective": "Outscore your rival before the 90-second match clock expires (or reach 7 points first) by timing jumps, directional kicks/smashes, and powerup shots to advance through the Championship Bracket.",
+      "howItWorks": [
+        "1. Control Positioning & Jump Arc: Move across the court and time your jump to intercept high lobs or block low line-drives.",
+        "2. Angle Your Kick / Smash: Strike the ball/target with directional spin or recoil to curve shots past the rival keeper.",
+        "3. Hit Floating Arena Powerups: Strike mid-air icons to trigger Giant Goal, Speed Boots, Low Gravity, or Super Shot."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Rival Cup Champions with Distinct AI Playstyles (Lob Specialist, Rush Striker, Iron Wall Keeper, Trick-Spin Ace, Grand Champion)",
+        "bosses": "Championship Cup Finalists with Weather/Court Modifiers",
+        "upgrades": "Spring Cleats, Curve-Spin Glove, Power-Kick Gauge & Mascot Buffs"
+      }
+    },
+    "Twin-Stick Arena": {
+      "channel": "ACTION_RPG",
+      "targetAudience": "360-Degree Arcade Shooters & High-Score Crowd-Control Fans",
+      "audienceDesire": "Tight dual-vector movement and aiming, weaving through closing swarms, and triggering screen-clearing overdrive chains.",
+      "sessionLength": "3-6 Min High-Intensity Survival & Boss Run",
+      "pacingType": "Move & Aim 360 -> Trigger Twist Synergy -> Draft Perks -> Defeat Sector Boss",
+      "palette": {
+        "bgPrimary": "#101828",
+        "bgSecondary": "#1d2939",
+        "surface": "#0c111d",
+        "ink": "#f8fafc",
+        "accent": "#00f0ff",
+        "secondaryAccent": "#ff4d8d",
+        "highlight": "#ffd166",
+        "styleName": "Crisp Arcade Vector & High-Contrast Telemetry"
+      },
+      "exemplars": [
+        "Geometry Wars / Grid16 Flash",
+        "Bubble Tanks 1, 2 & 3 (Hero Interactive)",
+        "Boxhead: 2Play Rooms (Sean Cooper)",
+        "Zombocalypse & SAS: Zombie Assault",
+        "Robot Wants Kitty / Arena Shooters",
+        "Thing-Thing Arena Classic"
+      ],
+      "loreTemplate": "Deployed into a sealed containment sector overrun by rogue autonomous constructs, you pilot an experimental omni-directional interceptor designed to turn enemy momentum and field geometry into weaponized overdrive.",
+      "objective": "Survive escalating sector waves, master your rig's signature mechanical twist to multiply combo scores, draft between-wave upgrades, and destroy the Sector Command Boss.",
+      "howItWorks": [
+        "1. Independent Move & Aim: Strafe with WASD / Left Thumb while aiming 360 degrees with Mouse / Right Thumb.",
+        "2. Exploit the Signature Twist: Use recoil, tether lines, ammo retrieval, or overdrive sacrifice to wipe out high-priority threats.",
+        "3. Draft Upgrades & Crush Bosses: Choose 1 of 3 build perks after milestone waves to prepare for multi-phase Boss encounters."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Distinct Construct Archetypes (Swarmer, Sniper, Shielded Bruiser, Splitter, Area Hazard)",
+        "bosses": "Multi-Phase Sector Command Bosses every 5th Wave",
+        "upgrades": "3-Card Between-Wave Tactical Perk Draft"
+      }
+    },
+    "Gravity/Orbital Physics Action": {
+      "channel": "PUZZLE_PARLOR",
+      "targetAudience": "Orbital Slingshot, Magnetic Polarity & Physics Trajectory Fans",
+      "audienceDesire": "Curving shots and ships around gravitational wells, flipping magnetic polarity at the last millisecond, and whipping enemies into black holes.",
+      "sessionLength": "3-5 Min Orbital Sector Run",
+      "pacingType": "Slingshot Orbit -> Flip Polarity / Gravity -> Chain Orbital Hits -> Stabilize Core",
+      "palette": {
+        "bgPrimary": "#0f172a",
+        "bgSecondary": "#1e1b4b",
+        "surface": "#111827",
+        "ink": "#f1f5f9",
+        "accent": "#38bdf8",
+        "secondaryAccent": "#f472b6",
+        "highlight": "#facc15",
+        "styleName": "Celestial Brass Orrery & Luminous Gravity Wells"
+      },
+      "exemplars": [
+        "Orbit & Gravitee 1 & 2",
+        "Boombot & Ragdoll Cannon",
+        "Solarmax & Galcon Flash",
+        "Aether (Edmund McMillen & Tyler Glaiel)",
+        "Magnetic Pull & Polarity Physics Classics"
+      ],
+      "loreTemplate": "At the edge of a collapsing planetary orrery, gravity wells and magnetic anomalies bend every trajectory. You command a polarity-shifting probe tasked with slingshotting around unstable cores and neutralizing rogue satellites.",
+      "objective": "Use gravitational slingshots and magnetic polarity switches to clear each orbital sector and defeat the Singularity Core.",
+      "howItWorks": [
+        "1. Ride Orbital Trajectories: Use gravity wells to curve your movement and accelerate projectiles without burning fuel.",
+        "2. Flip Attract / Repel Polarity: Toggle magnetic states to pull pickups inward or violently repel incoming hazards.",
+        "3. Chain Slingshot Multipliers: Bank multi-orbit hits to charge your Singularity Overdrive."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Orbital Threat Types (Satellite Snipers, Polarity Mines, Comet Swarmers, Gravity Anchors, Eclipse Cruisers)",
+        "bosses": "Binary Star & Singularity Core Bosses",
+        "upgrades": "Orbital Thrusters, Well Amplifiers & Polarity Shockwaves"
+      }
+    },
+    "Tactical Grid/Turn-Based Blitz": {
+      "channel": "ACTION_RPG",
+      "targetAudience": "Chess-Speed Tacticians, Grid Positioning & Turn-Based Puzzle Combat Fans",
+      "audienceDesire": "Outsmarting enemy telegraphs on a crisp tactical board where every tile step, push, or echo clone sets up a multi-kill combo.",
+      "sessionLength": "3-6 Min Tactical Sector Blitz",
+      "pacingType": "Read Tile Telegraphs -> Step / Dash / Clone -> Resolve Simultaneous Turn -> Draft Grid Perk",
+      "palette": {
+        "bgPrimary": "#132a38",
+        "bgSecondary": "#1b3b4f",
+        "surface": "#0d1f29",
+        "ink": "#ecfeff",
+        "accent": "#06b6d4",
+        "secondaryAccent": "#f97316",
+        "highlight": "#fde047",
+        "styleName": "Illuminated Tactical Sonar Grid & Precision Holograms"
+      },
+      "exemplars": [
+        "Telepath RPG & Tactical Assassin",
+        "Monster's Den: Chronicles",
+        "Hoplites / Grid Blitz Flash Prototypes",
+        "Pawn Tactics & Chess-Blitz Action Classics",
+        "Nitrome Turn-Based Puzzle Action (Rustyard / Bump Battle)"
+      ],
+      "loreTemplate": "On a high-stakes tactical command grid, enemy units telegraph their strike zones one beat ahead. Only precision tile positioning, time-dilation pauses, and ghost-clone coordination can turn a surrounded board into a flawless sweep.",
+      "objective": "Clear tactical grid encounters by reading danger tiles, positioning out of enemy line-of-fire, and chaining turn-based or time-dilated counterstrikes.",
+      "howItWorks": [
+        "1. Read Tile Danger Telegraphs:Highlighted grid cells show where enemy strikes, lasers, or hazards will land next.",
+        "2. Reposition & Trigger Twist: Move across grid cells, freeze time on stillness, or coordinate with your echo clone to flank shielded foes.",
+        "3. Chain Board Clears: Eliminate multiple threats in a single turn window to multiply tactical score."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Grid Unit Archetypes (Rook Charger, Bishop Laser, Shield Phalanx, Tile Spawner, Zone Bomber)",
+        "bosses": "Command Dreadnoughts Occupying Multi-Tile Footprints",
+        "upgrades": "Diagonal Dash, Extra Echo Clone & Tile-Trap Modules"
+      }
+    },
+    "Rhythm/Beat-Synced Reflex": {
+      "channel": "COZY_SIM",
+      "targetAudience": "Rhythm Action, Beat-Matcher & Synesthetic Arcade Fans",
+      "audienceDesire": "Locking into a pulsing synthesizer groove where every on-beat dash, parry, or polarity flip multiplies your resonance score.",
+      "sessionLength": "2-4 Min Track / Beat Run",
+      "pacingType": "Watch Beat Pulse Ring -> Act on Downbeat -> Maintain Rhythm Multiplier -> Survive Tempo Drop",
+      "palette": {
+        "bgPrimary": "#181028",
+        "bgSecondary": "#2d1b4e",
+        "surface": "#110b1d",
+        "ink": "#faf5ff",
+        "accent": "#e879f9",
+        "secondaryAccent": "#22d3ee",
+        "highlight": "#facc15",
+        "styleName": "Synesthetic Equalizer Stage & Neon Vinyl Pulse"
+      },
+      "exemplars": [
+        "Super Crazy Guitar Maniac Deluxe 2 & 3",
+        "Soundodger+ Flash (Bean)",
+        "FlashFlashRevolution (FFR)",
+        "Auditorium & Everyday Shooter Flash",
+        "Rhythm Blaster & Beat-Synced Reflex Classics"
+      ],
+      "loreTemplate": "Inside the Harmonic Core, every platform, hazard, and weapon fires in lockstep with the master BPM clock. Move and strike on the beat to amplify your resonance shield and silence dissonant corruptors.",
+      "objective": "Time your dashes, polarity switches, and strikes to the visual/audio beat indicator to sustain a Perfect Rhythm streak and clear the track.",
+      "howItWorks": [
+        "1. Watch the Beat Ring & Audio Pulse: Both the HUD beat bar and stage geometry pulse on every quarter-note.",
+        "2. Strike on the Downbeat: Performing actions within the beat window triggers critical damage and builds your Groove Multiplier.",
+        "3. Survive the Tempo Drop: Adapt when Boss phases shift the drum pattern and hazard cadence."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Beat-Synced Threat Patterns (Quarter-Note Sweepers, Off-Beat Snipers, Bass Shockwaves, Syncopated Splitters, Tempo Jammers)",
+        "bosses": "Conductor Bosses that Shift BPM & Stage Equalizer Lanes",
+        "upgrades": "Wider Beat Window, Double-Time Resonance & Bass-Drop Nova"
+      }
+    },
+    "Pinball/Ricochet Dungeon": {
+      "channel": "PUZZLE_PARLOR",
+      "targetAudience": "Pinball Wizards, Ricochet Angle Masters & Bumper Combo Addicts",
+      "audienceDesire": "Launching a high-velocity shot that bounces 12 times between bumpers, flippers, and dungeon monsters for a screen-shaking jackpot.",
+      "sessionLength": "3-6 Min Dungeon Table Run",
+      "pacingType": "Aim Plunger/Flipper -> Bank Multi-Wall Ricochets -> Light Jackpot Targets -> Open Boss Vault",
+      "palette": {
+        "bgPrimary": "#1f162b",
+        "bgSecondary": "#352449",
+        "surface": "#140e1c",
+        "ink": "#fdf4ff",
+        "accent": "#fbbf24",
+        "secondaryAccent": "#ec4899",
+        "highlight": "#34d399",
+        "styleName": "Illuminated Pinball Playfield, Brass Bumpers & Dungeon Flippers"
+      },
+      "exemplars": [
+        "Peggle Nights / Pegleg Flash",
+        "Ricochet Kills 1-3 & Fragger",
+        "Pinball Dungeon & Nitrome Flipper Classics",
+        "Bubble Spinner & Zuma",
+        "Rollers of the Realm / Arcade Bumper Crawl"
+      ],
+      "loreTemplate": "Every chamber of the Ricochet Vault is a kinetic pinball gauntlet lined with arcane bumpers, drop-targets, and armored guardians. Bank multi-wall shots and flip magnetic polarities to crack the vault.",
+      "objective": "Bank multi-bounce ricochets off walls, bumpers, and shields to light all chamber targets and shatter the Vault Boss.",
+      "howItWorks": [
+        "1. Aim Your Ricochet Vector: Line up bank shots that bounce through narrow corridors for escalating per-bounce multipliers.",
+        "2. Trigger Flippers & Polarity Magnets: Nudge, flip, or magnet-curve the ball/orb in mid-flight to extend combos.",
+        "3. Light the Multiball Jackpot: Hit all bumper switches to unleash Overdrive Multiball."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Bumper & Dungeon Guardians (Shielded Pegs, Spinner Sentries, Gravity Drain Wells, Splitter Orbs, Armored Gates)",
+        "bosses": "Mechanical Pinball Gargoyle & Grand Vault Core",
+        "upgrades": "Multiball Splitter, Bumper Shockwaves & Magnetic Ball-Saver"
+      }
+    },
+    "Bullet-Hell Boss Rush": {
+      "channel": "ACTION_RPG",
+      "targetAudience": "Precision Pattern-Dodgers, Graze-Score Chasers & Boss-Fight Enthusiasts",
+      "audienceDesire": "Threading the needle through hypnotic geometric projectile curtains, grazing shots for meter, and dismantling towering multi-phase bosses.",
+      "sessionLength": "3-5 Min Boss Gauntlet",
+      "pacingType": "Read Boss Telegraph -> Micro-Dodge / Time-Dilate -> Punish Vulnerable Core -> Phase Transition",
+      "palette": {
+        "bgPrimary": "#140c1c",
+        "bgSecondary": "#281538",
+        "surface": "#0d0712",
+        "ink": "#fdf2f8",
+        "accent": "#ff2a85",
+        "secondaryAccent": "#00f5d4",
+        "highlight": "#fee440",
+        "styleName": "High-Contrast Danmaku Curtain & Radiant Core Bosses"
+      },
+      "exemplars": [
+        "Bullet Heaven 1 & 2 (Matt Roszak)",
+        "Frantic 1, 2 & 3 (polymerrabbit)",
+        "upgrade Complete & Boss Rush Classics",
+        "Realm of the Mad God (Flash Prototype)",
+        "Noitu Love / Boss Gauntlet Arcade"
+      ],
+      "loreTemplate": "No filler corridors—only the Apex Guardians stand between you and the core. Read their attack telegraphs, weave through interlocking spiral curtains, and turn time-dilation or polarity shields into lethal counter-barrages.",
+      "objective": "Defeat a gauntlet of multi-phase Bosses and elite lieutenants by grazing projectile patterns, managing overdrive shields, and striking exposed weak points.",
+      "howItWorks": [
+        "1. Watch Pre-Attack Telegraphs: Bosses flash directional warning lines and stance shifts before unleashing spiral or beam patterns.",
+        "2. Micro-Dodge & Trigger Twist: Use stillness time-dilation, polarity absorption, or sacrifice overdrive to survive dense curtains.",
+        "3. Break Phases at 50% HP: Adapt to transformed attack patterns and draft survival/DPS perks between bosses."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Elite Escort Drone & Turret Archetypes",
+        "bosses": "Multi-Phase Colossal Guardians with Signature Danmaku Patterns",
+        "upgrades": "Graze Shield Charger, Focus Laser & Bomb Clearing Pulse"
+      }
+    },
+    "Alchemy/Chain-Reaction Puzzle Action": {
+      "channel": "PUZZLE_PARLOR",
+      "targetAudience": "Chain-Reaction Strategists, Element Combiners & Arcade Puzzle Fans",
+      "audienceDesire": "Setting off one carefully placed catalyst that triggers a cascading 25-node chain reaction across the entire board.",
+      "sessionLength": "2-4 Min Chain-Reaction Stage",
+      "pacingType": "Align / Polarize Elements -> Trigger Catalyst -> Watch Cascade -> Unlock New Compounds",
+      "palette": {
+        "bgPrimary": "#fdf8f0",
+        "bgSecondary": "#f3e5ce",
+        "surface": "#261c14",
+        "ink": "#231911",
+        "accent": "#f59e0b",
+        "secondaryAccent": "#8b5cf6",
+        "highlight": "#10b981",
+        "styleName": "Alchemist's Illuminated Parchment & Glowing Elixir Flasks"
+      },
+      "exemplars": [
+        "Boomshine (Danny Miller)",
+        "Doodle God & Little Alchemy",
+        "Bubble Spinner & Collapse! Flash",
+        "Sushi Cat 1 & 2 (Armor Games)",
+        "Potion Panic & Chain-Reaction Lab Classics"
+      ],
+      "loreTemplate": "In the Grand Alchemical Conservatory, unstable elemental motes drift across the reaction basin. By aligning magnetic polarities and timing your catalyst spark, you can transmute entire clusters into pure philosopher's gold.",
+      "objective": "Reach each stage's Chain-Reaction Quota by clustering compatible elements and triggering cascading transmutations.",
+      "howItWorks": [
+        "1. Herd & Align Elements: Use magnetic polarity or tether links to pull matching elemental orbs into dense clusters.",
+        "2. Detonate the Catalyst: Trigger a reaction that expands outward, igniting every adjacent compatible orb in a chain.",
+        "3. Discover Higher-Tier Compounds: Longer chains synthesize rare elixirs and multiplier runes."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Volatile Element & Inhibitor Types (Inert Lead, Volatile Fire, Magnetic Void, Split-Mercury, Crystalline Lock)",
+        "bosses": "The Philosopher's Furnace & Unstable Homunculus Core",
+        "upgrades": "Larger Blast Radius, Longer Reaction Duration & Catalyst Charges"
+      }
+    },
+    "Directional Parry/Slash Arcade": {
+      "channel": "ACTION_RPG",
+      "targetAudience": "Reflex Duelists, Samurai Parry Masters & High-Speed Slash Fans",
+      "audienceDesire": "Waiting for the exact glint of an incoming blade or projectile and executing a frame-tight directional parry or dash-slash that cleaves the screen.",
+      "sessionLength": "2-5 Min Dojo / Gauntlet Duel",
+      "pacingType": "Read Directional Telegraph -> Parry / Dash-Slash -> Fill Focus Gauge -> Execute Iaijutsu Finisher",
+      "palette": {
+        "bgPrimary": "#f7f3eb",
+        "bgSecondary": "#e5dec9",
+        "surface": "#1c1917",
+        "ink": "#1c1917",
+        "accent": "#dc2626",
+        "secondaryAccent": "#0284c7",
+        "highlight": "#f59e0b",
+        "styleName": "Sumi-e Brush Ink, Crimson Maple & Steel Blade Flash"
+      },
+      "exemplars": [
+        "Straw Hat Samurai 1 & 2 (Explosive Barrel)",
+        "Electricman 2 HS (DX Interactive)",
+        "Armed With Wings 1-3 (Sun Studios)",
+        "Nitrome Slash & Parry Classics (Dirk Valentine / Ninja)",
+        "Samurai Asshole & Bushido Reflex Duels"
+      ],
+      "loreTemplate": "Surrounded in the courtyard by rival blade-masters, you rely on razor-sharp observation and the art of the directional counter-slash. Every deflected strike builds Focus toward an unstoppable lightning draw.",
+      "objective": "Read directional attack glints, execute precision parries and dash-slashes to shatter enemy guard gauges, and defeat the Dojo Grandmasters.",
+      "howItWorks": [
+        "1. Watch the Directional Glint: Attackers telegraph High, Low, Left, Right, or Piercing strikes with clear color/angle cues.",
+        "2. Slash or Parry in Direction: Swipe, click, or press the matching direction to deflect projectiles and cleave through attackers.",
+        "3. Unleash Focus Overdrive: Chain consecutive parries without taking a hit to trigger a screen-wide Iaijutsu finisher."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Duelist & Ronin Archetypes (Swift Ninja, Shielded Spearman, Kusarigama Spinner, Crossbow Marksman, Oni Brute)",
+        "bosses": "Rival Sword Saints with Multi-Beat Feint & Parry Exchanges",
+        "upgrades": "Deflect Shockwave, Extended Dash-Slash & Focus Leech"
+      }
+    },
+    "Stealth/Line-of-Sight Heist": {
+      "channel": "PUZZLE_PARLOR",
+      "targetAudience": "Tactical Infiltrators, Heist Planners & Vision-Cone Ghost Players",
+      "audienceDesire": "Slipping silently behind sweeping spotlight cones, using decoys or time-echoes to hold two security switches at once, and escaping with the vault prize undetected.",
+      "sessionLength": "3-6 Min Floor Heist",
+      "pacingType": "Observe Patrol Cones -> Slip / Distract / Echo-Switch -> Grab Loot -> Reach Extraction",
+      "palette": {
+        "bgPrimary": "#0f172a",
+        "bgSecondary": "#1e293b",
+        "surface": "#090d16",
+        "ink": "#f8fafc",
+        "accent": "#10b981",
+        "secondaryAccent": "#f59e0b",
+        "highlight": "#38bdf8",
+        "styleName": "Blueprint Heist Floorplan & Amber Security Cones"
+      },
+      "exemplars": [
+        "The Heist 1 & 2",
+        "Stealth Hunter 1 & 2",
+        "Trilby: The Art of Theft / Monaco-Style Flash Heists",
+        "Bob the Robber 1 & 2",
+        "Bowja the Ninja & Wink: The Game"
+      ],
+      "loreTemplate": "You are the syndicate's master ghost thief infiltrating a multi-wing vault complex. Every guard, laser sweep, and security camera broadcasts its vision cone on your tactical blueprint—one clean run takes the prize.",
+      "objective": "Bypass sweeping vision cones, disable security locks, collect the target Loot Vaults, and reach the Extraction Lift without triggering lockdown.",
+      "howItWorks": [
+        "1. Read Guard Vision Cones: Green/Amber/Red cones show exact sightlines, hearing radii, and camera rotation arcs.",
+        "2. Use Cover & Twist Gadgets: Freeze time when still, retrieve thrown stun darts, or record an Echo Ghost to trigger dual security pads.",
+        "3. Extract with the Vault Prize: Grab the primary objective and bonus loot before sprinting to the exit elevator."
+      ],
+      "phaseAdaptation": {
+        "enemies": "5 Security Threats (Patrol Guards, Sweeping Spotlights, Laser Tripwires, Audio Drones, Armored Wardens)",
+        "bosses": "High-Security Master Vault Wing with Adaptive Lockdown Director",
+        "upgrades": "Cloak Dampeners, Decoy Lures & Security Camera Hack Modules"
+      }
+    }
+  },
+  "settingPalettes": {
+    "Parisian Haute Couture Runway": { "bg": ["#fff5f8", "#fce4ec"], "accent": "#e91e63", "secondary": "#9c27b0", "motif": "runway" },
+    "Sunlit Medieval Siege Courtyard": { "bg": ["#fce8d5", "#f5cba7"], "accent": "#d84315", "secondary": "#5d4037", "motif": "castle" },
+    "Cozy Pastel Waterfront Diner": { "bg": ["#f4faff", "#d9f0ff"], "accent": "#ff6b6b", "secondary": "#4ecdc4", "motif": "diner" },
+    "Sunset Neon Nightlife Strip": { "bg": ["#181124", "#2e1a47"], "accent": "#ff2a85", "secondary": "#ffb300", "motif": "nightlife" },
+    "Tokyo High-School Rooftop & Sakura Courtyard": { "bg": ["#fff8f6", "#ffe4ec"], "accent": "#ff4081", "secondary": "#7c4dff", "motif": "sakura" },
+    "Boutique Hair & Makeover Studio": { "bg": ["#f3faf8", "#e0f2f1"], "accent": "#00bfa5", "secondary": "#ff7043", "motif": "salon" },
+    "Texas Saloon & High-Roller Parlor": { "bg": ["#0d2e22", "#144533"], "accent": "#ffd700", "secondary": "#e53935", "motif": "casino" },
+    "Tropical Duck Training Island": { "bg": ["#e8f8f5", "#b2ebf2"], "accent": "#4caf50", "secondary": "#0288d1", "motif": "island" },
+    "Garage Punk Soundstage": { "bg": ["#1b162a", "#2c2247"], "accent": "#00e5ff", "secondary": "#ff4081", "motif": "soundstage" },
+    "Alchemist's Warm Candlelit Workshop": { "bg": ["#fdf8f0", "#f3e5ce"], "accent": "#f59e0b", "secondary": "#8b5cf6", "motif": "alchemy" },
+    "Junkyard Robot Scrapheap": { "bg": ["#1f1916", "#362a23"], "accent": "#ff7043", "secondary": "#ffca28", "motif": "scrap" },
+    "Neon Synthwave City": { "bg": ["#120b29", "#2a1454"], "accent": "#00f0ff", "secondary": "#ff2a85", "motif": "synthwave" },
+    "Deep Ocean Trench": { "bg": ["#061a2b", "#0d3554"], "accent": "#00e5ff", "secondary": "#00e676", "motif": "ocean" },
+    "Clockwork Steampunk Foundry": { "bg": ["#241a14", "#3d2b20"], "accent": "#ffb300", "secondary": "#ff7043", "motif": "clockwork" },
+    "Overgrown Jungle Ruins": { "bg": ["#0f2419", "#1c402c"], "accent": "#69f0ae", "secondary": "#ffd54f", "motif": "jungle" },
+    "Frozen Arctic Research Base": { "bg": ["#e3f2fd", "#bbdefb"], "accent": "#0288d1", "secondary": "#00bcd4", "motif": "arctic" },
+    "Volcanic Forge World": { "bg": ["#240e0b", "#451912"], "accent": "#ff5722", "secondary": "#ffca28", "motif": "volcano" },
+    "Haunted Victorian Manor": { "bg": ["#1a1423", "#2d223b"], "accent": "#b388ff", "secondary": "#ffd54f", "motif": "manor" },
+    "Orbital Space Station": { "bg": ["#09111e", "#14243d"], "accent": "#38bdf8", "secondary": "#f472b6", "motif": "orbital" },
+    "Desert Sandstorm Bazaar": { "bg": ["#fff3e0", "#ffe0b2"], "accent": "#e65100", "secondary": "#00897b", "motif": "desert" },
+    "Microscopic Cell Interior": { "bg": ["#0b2624", "#154743"], "accent": "#1de9b6", "secondary": "#ff4081", "motif": "cell" },
+    "Paper Craft Diorama": { "bg": ["#fdfbf7", "#f2ece1"], "accent": "#e53935", "secondary": "#1e88e5", "motif": "papercraft" },
+    "Retro CRT Vector Grid": { "bg": ["#070b14", "#101a2e"], "accent": "#00f0ff", "secondary": "#06d6a0", "motif": "crt" },
+    "Candy Factory Conveyor Line": { "bg": ["#fff0f6", "#ffd6e7"], "accent": "#ff4d8d", "secondary": "#00bfa5", "motif": "candy" },
+    "Cyber Samurai Dojo": { "bg": ["#f7f3eb", "#e5dec9"], "accent": "#dc2626", "secondary": "#0284c7", "motif": "dojo" },
+    "Floating Sky Islands": { "bg": ["#e1f5fe", "#b3e5fc"], "accent": "#0288d1", "secondary": "#ff9100", "motif": "sky" }
+  }
+}
