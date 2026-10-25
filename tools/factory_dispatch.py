@@ -687,6 +687,118 @@ def repair_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, 
         save_state(state)
 
 
+def extract_latest_changeset(cfg: dict, sid: str, session: dict) -> str | None:
+    """Extract the newest unidiffPatch from session outputs or activities."""
+    for output in reversed(session.get("outputs", []) or []):
+        if not isinstance(output, dict):
+            continue
+        cs = output.get("changeSet")
+        if isinstance(cs, dict):
+            gp = cs.get("gitPatch") if isinstance(cs.get("gitPatch"), dict) else cs
+            patch_txt = gp.get("unidiffPatch") if isinstance(gp, dict) else None
+            if isinstance(patch_txt, str) and patch_txt.strip():
+                return patch_txt
+    if not cfg.get("salvage_changesets_enabled", False) or READ_ONLY:
+        return None
+    try:
+        page = api_retry("GET", f"/sessions/{sid}/activities?pageSize=50")
+    except Exception:
+        return None
+    for act in reversed(page.get("activities", []) or []):
+        if not isinstance(act, dict):
+            continue
+        items = list(act.get("artifacts", []) or []) + list(act.get("outputs", []) or []) + [act]
+        for item in reversed(items):
+            if not isinstance(item, dict):
+                continue
+            cs = item.get("changeSet")
+            if isinstance(cs, dict):
+                gp = cs.get("gitPatch") if isinstance(cs.get("gitPatch"), dict) else cs
+                patch_txt = gp.get("unidiffPatch") if isinstance(gp, dict) else None
+                if isinstance(patch_txt, str) and patch_txt.strip():
+                    return patch_txt
+    return None
+
+
+def validate_or_salvage_changeset(cfg: dict, sid: str, rec: dict, unidiff: str) -> tuple[bool, str | None, list[str]]:
+    """Validate an unsubmitted unidiffPatch in a detached git worktree; optionally salvage or harvest diagnostics."""
+    diagnostics: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="trasharcade-salvage-") as tmp:
+        wt = Path(tmp) / "wt"
+        try:
+            add_res = subprocess.run(["git", "-C", str(ROOT), "worktree", "add", "--detach", str(wt), "HEAD"],
+                                     capture_output=True, text=True, timeout=60)
+            if add_res.returncode != 0:
+                return False, None, [normalize_error("ERROR: [worktree] failed to create validation worktree")]
+            apply_res = subprocess.run(["git", "-C", str(wt), "apply", "--whitespace=nowarn", "-"],
+                                       input=unidiff, capture_output=True, text=True, timeout=60)
+            if apply_res.returncode != 0:
+                first_err = next((ln.strip() for ln in (apply_res.stderr or "").splitlines() if ln.strip()), "patch failed to apply")
+                return False, None, [normalize_error(f"ERROR: [git-apply] {first_err}")]
+            subprocess.run([sys.executable, str(wt / "tools" / "build_registry.py")],
+                           cwd=wt, capture_output=True, text=True, timeout=60)
+            subprocess.run(["git", "-C", str(wt), "add", "-A"], capture_output=True, text=True, timeout=60, check=True)
+            commit_res = subprocess.run(
+                ["git", "-C", str(wt), "-c", "user.name=LFS Factory Controller", "-c", "user.email=factory@lfs.local",
+                 "commit", "-qm", f"salvage({rec.get('game_id', 'game')}): phase {rec.get('phase', '')}"],
+                capture_output=True, text=True, timeout=60
+            )
+            if commit_res.returncode != 0:
+                return False, None, [normalize_error("ERROR: [git-commit] changeset produced no committable diff")]
+            mode = "maintenance" if rec.get("mode") == "maintenance" else "phase"
+            pg_res = subprocess.run(
+                [sys.executable, str(wt / "tools" / "path_guard.py"), "--base", "HEAD~1", "--head", "HEAD",
+                 "--mode", mode, "--output", str(wt / "targets.json")],
+                cwd=wt, capture_output=True, text=True, timeout=60
+            )
+            for line in ((pg_res.stdout or "") + "\n" + (pg_res.stderr or "")).splitlines():
+                if line.strip().startswith(("ERROR:", "PATH GUARD:", "FAILED:")):
+                    diagnostics.append(normalize_error(line.strip()))
+            if pg_res.returncode == 0:
+                cg_res = subprocess.run(
+                    [sys.executable, str(wt / "tools" / "check_games.py"), "--strict", "--check-registry",
+                     "--targets-file", str(wt / "targets.json"), "--report", str(wt / "gate-evidence.json")],
+                    cwd=wt, capture_output=True, text=True, timeout=180
+                )
+                for line in ((cg_res.stdout or "") + "\n" + (cg_res.stderr or "")).splitlines():
+                    if line.strip().startswith(("ERROR:", "RUNTIME:", "FAILED:")):
+                        diagnostics.append(normalize_error(line.strip()))
+                test_files = sorted(str(p) for p in (wt / "tests").glob("*.cjs") if p.is_file() and not p.name.startswith("_"))
+                node_rc = 0
+                if test_files:
+                    node_res = subprocess.run(["node", "--test", *test_files], cwd=wt, capture_output=True, text=True, timeout=180)
+                    node_rc = node_res.returncode
+                    if node_rc != 0:
+                        for line in ((node_res.stdout or "") + "\n" + (node_res.stderr or "")).splitlines():
+                            if line.strip().startswith(("not ok ", "Error:", "AssertionError", "ReferenceError", "TypeError")):
+                                diagnostics.append(normalize_error("ERROR: [tests] " + line.strip()))
+                if cg_res.returncode == 0 and node_rc == 0 and not diagnostics:
+                    if cfg.get("salvage_changesets_enabled", False) and not READ_ONLY:
+                        branch = f"salvage/jules-{sid}"
+                        push_res = subprocess.run(
+                            ["git", "-C", str(wt), "push", "-f", f"https://github.com/{cfg['repo']}.git", f"HEAD:refs/heads/{branch}"],
+                            capture_output=True, text=True, timeout=120
+                        )
+                        if push_res.returncode == 0:
+                            try:
+                                out = gh("pr", "create", "-R", cfg["repo"], "--head", branch,
+                                         "--base", cfg.get("starting_branch", "main"),
+                                         "--title", rec.get("title", f"[salvage:{sid}]"),
+                                         "--body", f"Automated controller salvage for session `{sid}`.\n\nFactory correlation: {rec.get('correlation')}").strip()
+                                prefix = f"https://github.com/{cfg['repo']}/pull/"
+                                if re.fullmatch(re.escape(prefix) + r"\d+", out):
+                                    return True, out, []
+                            except Hold:
+                                pass
+                    return True, None, []
+            return False, None, diagnostics[:5] or [normalize_error("ERROR: [gate] changeset validation failed")]
+        except Exception as exc:
+            return False, None, diagnostics[:5] or [normalize_error(f"ERROR: [salvage] {type(exc).__name__}")]
+        finally:
+            subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(wt)],
+                           capture_output=True, text=True, timeout=60)
+
+
 def cut_loss_session(cfg: dict, state: dict, sid: str, rec: dict, session: dict, reason: str,
                      dry: bool, pr: dict | None = None) -> bool:
     """Gracefully cut losses on a stalled or unrecoverable session, close any broken PR, and release the game lock."""
@@ -704,6 +816,20 @@ def cut_loss_session(cfg: dict, state: dict, sid: str, rec: dict, session: dict,
         report = gate_feedback(cfg, pr)
         if report and report.get("errors"):
             diagnostics = list(report["errors"])[:5]
+    elif not rec.get("pr"):
+        unidiff = extract_latest_changeset(cfg, sid, session)
+        if unidiff:
+            valid, salvaged_pr, cs_diags = validate_or_salvage_changeset(cfg, sid, rec, unidiff)
+            if valid and salvaged_pr:
+                rec["pr"] = salvaged_pr
+                rec["salvaged_by_controller"] = True
+                rec.setdefault("pr_seen", iso(now()))
+                rec.pop("hold", None)
+                save_state(state)
+                log("session_changeset_salvaged", session=sid, game_id=rec.get("game_id"), pr=salvaged_pr)
+                return False
+            if cs_diags:
+                diagnostics = list(cs_diags)[:5]
     if rec.get("pr") and (pr is None or pr.get("state") == "OPEN"):
         try:
             gh("pr", "close", rec["pr"], "--comment",
@@ -777,18 +903,18 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
                 continue
             state["terminal_pr_cursor"] = sid
         rec["state"] = st
-        age_h = (now() - parse_ts(rec["created"])).total_seconds() / 3600
-        if st not in TERMINAL and age_h > cfg["stale_session_hours"]:
-            rec["hold"] = "stale_provider_session"
-        elif st in {"AWAITING_PLAN_APPROVAL", "AWAITING_USER_FEEDBACK"}:
-            rec["hold"] = st.lower()  # No automatic plan approval or generic answers.
-        if rec.get("hold") in {"stale_provider_session", "awaiting_plan_approval", "awaiting_user_feedback"} and previous_hold == rec.get("hold"):
-            if cut_loss_session(cfg, state, sid, rec, session, rec["hold"], dry):
-                continue
         pr_url = first_pr_url(session, cfg)
         if pr_url:
             rec["pr"] = pr_url
             rec.setdefault("pr_seen", iso(now()))
+        age_h = (now() - parse_ts(rec["created"])).total_seconds() / 3600
+        if st not in TERMINAL and age_h > cfg["stale_session_hours"] and not rec.get("pr"):
+            rec["hold"] = "stale_provider_session"
+        elif st in {"AWAITING_PLAN_APPROVAL", "AWAITING_USER_FEEDBACK"} and not rec.get("pr"):
+            rec["hold"] = st.lower()  # No automatic plan approval or generic answers.
+        if rec.get("hold") in {"stale_provider_session", "awaiting_plan_approval", "awaiting_user_feedback"} and previous_hold == rec.get("hold") and not rec.get("pr"):
+            if cut_loss_session(cfg, state, sid, rec, session, rec["hold"], dry):
+                continue
         if not rec.get("pr"):
             if st == "FAILED":
                 set_outcome(rec, "failed:session_failed")
@@ -1212,7 +1338,7 @@ def status(state: dict) -> None:
 
 def validate_config(cfg: dict) -> None:
     for key, default in (("generation_enabled", False), ("maintenance_enabled", True), ("local_integration_enabled", False),
-                         ("controller_native_repairs_disabled", False)):
+                         ("controller_native_repairs_disabled", False), ("salvage_changesets_enabled", False)):
         if type(cfg.setdefault(key, default)) is not bool:
             raise StateError("Invalid policy boolean: " + key)
     if cfg.setdefault("repair_owner", "native") not in {"native", "controller"}:

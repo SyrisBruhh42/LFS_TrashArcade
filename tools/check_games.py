@@ -254,6 +254,24 @@ def run_js_syntax(js_files: list[tuple[str, str]], rep: Report) -> None:
             Path(p).unlink(missing_ok=True)
 
 
+def run_behavioral_test_suite(rep: Report) -> None:
+    tests_dir = ROOT / "tests"
+    test_files = sorted(str(p) for p in tests_dir.glob("*.cjs") if p.is_file() and not p.name.startswith("_")) if tests_dir.is_dir() else []
+    if not test_files:
+        return
+    try:
+        res = subprocess.run(["node", "--test", *test_files], cwd=ROOT, capture_output=True, text=True, timeout=180)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        rep.err("tests", "INFRASTRUCTURE: node is unavailable or timed out during behavioral regression suite.")
+        return
+    if res.returncode != 0:
+        combined = (res.stdout or "") + "\n" + (res.stderr or "")
+        not_ok = [line.strip() for line in combined.splitlines() if line.strip().startswith("not ok ")]
+        summary = not_ok[0] if not_ok else (next((line.strip() for line in combined.splitlines() if line.strip()), f"exit {res.returncode}"))
+        summary = re.sub(r"[\x00-\x1f\x7f]", " ", summary)[:180]
+        rep.err("tests", f"RUNTIME: behavioral regression suite failed: {summary}")
+
+
 def runtime_targets(args, folders: list[Path]) -> tuple[list[Path], dict]:
     """No implicit git diff and no newest-game fallback."""
     if args.targets_file:
@@ -313,6 +331,7 @@ def main() -> int:
     runtime = []
     provenance = {"scope":"static-only", "base_sha":None, "head_sha":None}
     if not args.static_only:
+        run_behavioral_test_suite(rep)
         try:
             targets, provenance = runtime_targets(args, folders)
             from runtime_gate import audit
@@ -349,6 +368,7 @@ def main() -> int:
     if any(not any(f"{c.upper()}:" in e for c in ("infrastructure", "coverage", "runtime")) for e in rep.errors):
         categories.add("content")
     if any("INFRASTRUCTURE:" in e for e in rep.errors): categories.add("infrastructure")
+    if any("RUNTIME:" in e for e in rep.errors): categories.add("runtime")
     classification = next((c for c in ("infrastructure", "coverage", "content", "runtime") if c in categories), "content")
     failed = bool(rep.errors) or (args.strict and bool(rep.warnings))
     evidence = {"schema_version":1, **provenance, "status":"FAIL" if failed else "STATIC_ONLY" if args.static_only else "PASS",
