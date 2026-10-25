@@ -34,5 +34,9 @@
   "healthy_ticks_required": 2,
   "inventory_max_age_seconds": 180,
   "max_repairs_per_tick": 1,
-  "main_gate_job_name": "Main guard"
+  "main_gate_job_name": "Main guard",
+  "salvage_changesets_enabled": true,
+  "max_feedback_nudges": 2,
+  "nudge_cooldown_minutes": 5,
+  "post_nudge_cut_loss_minutes": 10
 }

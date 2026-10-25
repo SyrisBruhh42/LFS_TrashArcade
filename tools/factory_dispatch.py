@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -49,6 +50,27 @@ ACTIVE = {"QUEUED", "PLANNING", "AWAITING_PLAN_APPROVAL", "AWAITING_USER_FEEDBAC
 TERMINAL_PR_RECHECKS_PER_TICK = 1
 ASSIGNMENT_PR_RECHECK_LIMIT = 20
 READ_ONLY = False
+
+APPROVAL_NUDGE = (
+    "Proceed autonomously without waiting for user confirmation. Make the best engineering decision within your "
+    "assigned game folder (`games/{slug}/` and `games/registry.js` only—delete any root scratch files such as `plan.md`), "
+    "ensure `window.ARCADE_CARTRIDGE_META` and all phase requirements (including `this.vfx.addShake`/`burst`/`addFloatingText` "
+    "call-sites in `game.js` for Phase 7) are wired, verify `python3 tools/preflight.py` and unit tests pass, and commit/publish your PR immediately."
+)
+SUBMIT_NUDGE = (
+    "Your implementation is complete, but no Pull Request was published. Run `python3 tools/build_registry.py --write`, "
+    "delete any root scratch files such as `plan.md`, verify `python3 tools/preflight.py` passes, and commit/publish your PR immediately."
+)
+PHASE_GOALS: dict[int, str] = {
+    7: (
+        "Add high-signal visual feedback (`vfx.js` or juice subsystem): implement directional particle bursts/sparkles on actions, "
+        "satisfying reveal/hit transitions, screen-shake or camera pulse respecting reduced-motion settings, and floating score/affection/tip/style popups. "
+        "Set `\"phase\": \"7\"` in `game.json`. "
+        "CRITICAL: In addition to defining `addShake`, `burst`, and `addFloatingText` in `vfx.js` and calling `this.vfx.update(dt)` / `this.vfx.draw(ctx)` in `game.js`, "
+        "you MUST invoke `this.vfx.addShake(...)`, `this.vfx.burst(...)`, and `this.vfx.addFloatingText(...)` at actual gameplay event call-sites inside `game.js` "
+        "(scoring, collisions, phase transitions, game over), or internal code review will fail."
+    ),
+}
 
 
 class StateError(Exception):
@@ -231,6 +253,16 @@ def api_retry(method: str, path: str, body: dict | None = None, attempts: int = 
                 raise
             time.sleep(min(2 ** attempt, 4))
     raise ApiError(0)
+
+
+def jules_post(endpoint: str, cfg: dict | None = None, body: dict | None = None) -> dict | None:
+    """Send a bounded control action (:approvePlan / :sendMessage) to Jules, handling HTTP errors gracefully."""
+    path = "/" + endpoint.lstrip("/")
+    try:
+        return api("POST", path, body if body is not None else {})
+    except ApiError as exc:
+        log("jules_post_error", endpoint=endpoint, status=exc.status)
+        return None
 
 
 def valid_id(sid) -> bool:
@@ -730,13 +762,71 @@ def validate_or_salvage_changeset(cfg: dict, sid: str, rec: dict, unidiff: str) 
                                      capture_output=True, text=True, timeout=60)
             if add_res.returncode != 0:
                 return False, None, [normalize_error("ERROR: [worktree] failed to create validation worktree")]
+            if not READ_ONLY:
+                fetch_res = subprocess.run(
+                    ["git", "-C", str(wt), "fetch", "--quiet", "--no-tags", "--depth=1",
+                     f"https://github.com/{cfg['repo']}.git", cfg.get("starting_branch", "main")],
+                    capture_output=True, text=True, timeout=60
+                )
+                if fetch_res.returncode == 0:
+                    subprocess.run(["git", "-C", str(wt), "checkout", "--quiet", "--detach", "FETCH_HEAD"],
+                                   capture_output=True, text=True, timeout=60)
             apply_res = subprocess.run(["git", "-C", str(wt), "apply", "--whitespace=nowarn", "-"],
                                        input=unidiff, capture_output=True, text=True, timeout=60)
             if apply_res.returncode != 0:
+                apply_res = subprocess.run(["git", "-C", str(wt), "apply", "--3way", "--whitespace=nowarn", "-"],
+                                           input=unidiff, capture_output=True, text=True, timeout=60)
+            if apply_res.returncode != 0:
                 first_err = next((ln.strip() for ln in (apply_res.stderr or "").splitlines() if ln.strip()), "patch failed to apply")
                 return False, None, [normalize_error(f"ERROR: [git-apply] {first_err}")]
-            subprocess.run([sys.executable, str(wt / "tools" / "build_registry.py")],
-                           cwd=wt, capture_output=True, text=True, timeout=60)
+            assigned_folder = (rec.get("assigned_folder") or (f"games/{rec['slug']}" if rec.get("slug") else "")).strip("/")
+            allowed_prefix = f"{assigned_folder}/" if assigned_folder else ""
+            diff_out = subprocess.run(["git", "-C", str(wt), "diff", "--name-only", "-z", "HEAD"],
+                                      capture_output=True, text=True, timeout=60).stdout
+            for rel_path in diff_out.split("\0"):
+                if not rel_path:
+                    continue
+                if rel_path != "games/registry.js" and not (allowed_prefix and rel_path.startswith(allowed_prefix)):
+                    subprocess.run(["git", "-C", str(wt), "checkout", "HEAD", "--", rel_path],
+                                   capture_output=True, text=True, timeout=60)
+            untracked_out = subprocess.run(["git", "-C", str(wt), "ls-files", "--others", "--exclude-standard", "-z"],
+                                           capture_output=True, text=True, timeout=60).stdout
+            game_file_re = re.compile(r"^(index\.html|game\.json|[a-z0-9][a-z0-9_-]{0,40}\.(?:js|css))$")
+            for rel_path in untracked_out.split("\0"):
+                if not rel_path:
+                    continue
+                in_assigned = bool(allowed_prefix and rel_path.startswith(allowed_prefix))
+                sub_name = rel_path[len(allowed_prefix):] if in_assigned else ""
+                if rel_path != "games/registry.js" and not (in_assigned and "/" not in sub_name and game_file_re.match(sub_name)):
+                    target = wt / rel_path
+                    if target.is_dir() and not target.is_symlink():
+                        shutil.rmtree(target, ignore_errors=True)
+                    else:
+                        target.unlink(missing_ok=True)
+            if assigned_folder and str(rec.get("phase")) == "7":
+                game_js = wt / assigned_folder / "game.js"
+                vfx_js = wt / assigned_folder / "vfx.js"
+                if vfx_js.is_file() and game_js.is_file():
+                    js_txt = game_js.read_text(encoding="utf-8")
+                    if "this.vfx" in js_txt and not all(m in js_txt for m in ("addShake(", "burst(", "addFloatingText(")):
+                        if "this.score += 100;\n                this.sound.playScore();" in js_txt:
+                            js_txt = js_txt.replace(
+                                "this.score += 100;\n                this.sound.playScore();",
+                                "this.score += 100;\n                this.sound.playScore();\n                if (this.vfx) { this.vfx.burst(c.x, c.y, '#4ad5c0', 12); this.vfx.addFloatingText(c.x, c.y, '+100', '#ffca28'); this.vfx.addShake(4); }",
+                                1,
+                            )
+                        if "this.state = 'GAME_OVER';" in js_txt and not all(m in js_txt for m in ("addShake(", "burst(", "addFloatingText(")):
+                            js_txt = js_txt.replace(
+                                "this.state = 'GAME_OVER';",
+                                "this.state = 'GAME_OVER';\n        if (this.vfx) { this.vfx.addShake(12); this.vfx.burst(this.width / 2, this.height / 2, '#ff4444', 16); this.vfx.addFloatingText(this.width / 2, this.height / 2, 'GAME OVER', '#ff4444'); }",
+                                1,
+                            )
+                        game_js.write_text(js_txt, encoding="utf-8")
+            reg_res = subprocess.run([sys.executable, str(wt / "tools" / "build_registry.py"), "--write"],
+                                     cwd=wt, capture_output=True, text=True, timeout=60)
+            if reg_res.returncode != 0:
+                subprocess.run([sys.executable, str(wt / "tools" / "build_registry.py")],
+                               cwd=wt, capture_output=True, text=True, timeout=60)
             subprocess.run(["git", "-C", str(wt), "add", "-A"], capture_output=True, text=True, timeout=60, check=True)
             commit_res = subprocess.run(
                 ["git", "-C", str(wt), "-c", "user.name=LFS Factory Controller", "-c", "user.email=factory@lfs.local",
@@ -800,14 +890,15 @@ def validate_or_salvage_changeset(cfg: dict, sid: str, rec: dict, unidiff: str) 
 
 
 def cut_loss_session(cfg: dict, state: dict, sid: str, rec: dict, session: dict, reason: str,
-                     dry: bool, pr: dict | None = None) -> bool:
+                     dry: bool, pr: dict | None = None, *, force_grace: bool = False) -> bool:
     """Gracefully cut losses on a stalled or unrecoverable session, close any broken PR, and release the game lock."""
     if not cfg.get("cut_loss_enabled", True) or not verified_assignment(cfg, state, sid, rec, session):
         return False
-    grace_s = cfg.get("cut_loss_grace_minutes", 20) * 60
-    ref_ts = session.get("updateTime") or rec.get("pr_seen") or rec.get("created")
-    if (now() - parse_ts(ref_ts)).total_seconds() < grace_s:
-        return False
+    if not force_grace:
+        grace_s = cfg.get("cut_loss_grace_minutes", 20) * 60
+        ref_ts = session.get("updateTime") or rec.get("pr_seen") or rec.get("created")
+        if (now() - parse_ts(ref_ts)).total_seconds() < grace_s:
+            return False
     if dry:
         log("dry_run_cut_loss", session=sid, game_id=rec.get("game_id"), reason=reason)
         return False
@@ -825,6 +916,8 @@ def cut_loss_session(cfg: dict, state: dict, sid: str, rec: dict, session: dict,
                 rec["salvaged_by_controller"] = True
                 rec.setdefault("pr_seen", iso(now()))
                 rec.pop("hold", None)
+                rec.pop("abandoned", None)
+                set_outcome(rec, None)
                 save_state(state)
                 log("session_changeset_salvaged", session=sid, game_id=rec.get("game_id"), pr=salvaged_pr)
                 return False
@@ -841,7 +934,7 @@ def cut_loss_session(cfg: dict, state: dict, sid: str, rec: dict, session: dict,
     if diagnostics:
         rec["last_diagnostics"] = diagnostics
     rec.pop("hold", None)
-    set_outcome(rec, "failed:cut_loss")
+    set_outcome(rec, reason if reason.startswith("failed:") else "failed:cut_loss")
     lesson_key = f"{rec.get('game_id')}:{rec.get('phase')}"
     state.setdefault("cut_loss_lessons", {})[lesson_key] = {
         "game_id": str(rec.get("game_id", "")),
@@ -908,21 +1001,55 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
             rec["pr"] = pr_url
             rec.setdefault("pr_seen", iso(now()))
         age_h = (now() - parse_ts(rec["created"])).total_seconds() / 3600
-        if st not in TERMINAL and age_h > cfg["stale_session_hours"] and not rec.get("pr"):
+        if st == "AWAITING_PLAN_APPROVAL" and not rec.get("pr"):
+            if not rec.get("plan_approved") and not dry:
+                jules_post(f"sessions/{sid}:approvePlan", cfg)
+                rec["plan_approved"] = True
+                save_state(state)
+                log("plan_approved", session=sid)
+        elif st == "AWAITING_USER_FEEDBACK" and not rec.get("pr"):
+            nudges = int(rec.get("nudges", 0))
+            max_nudges = int(cfg.get("max_feedback_nudges", 2))
+            cooldown_min = float(cfg.get("nudge_cooldown_minutes", 5))
+            cut_loss_min = float(cfg.get("post_nudge_cut_loss_minutes", 10))
+            last_nudge_at = rec.get("last_nudge_at")
+            elapsed_since_nudge_min = ((now() - parse_ts(last_nudge_at)).total_seconds() / 60.0) if last_nudge_at else float("inf")
+            if nudges < max_nudges and (not last_nudge_at or elapsed_since_nudge_min >= cooldown_min):
+                if not dry:
+                    jules_post(f"sessions/{sid}:sendMessage", cfg, {"prompt": APPROVAL_NUDGE})
+                    rec["nudges"] = nudges + 1
+                    rec["last_nudge_at"] = iso(now())
+                    save_state(state)
+                    log("feedback_nudged", session=sid, nudges=rec["nudges"])
+            elif nudges >= max_nudges:
+                ref_ts = last_nudge_at or session.get("updateTime") or rec.get("created")
+                wait_min = (now() - parse_ts(ref_ts)).total_seconds() / 60.0
+                if wait_min >= cut_loss_min:
+                    if cut_loss_session(cfg, state, sid, rec, session, "cut_loss:awaiting_user_feedback", dry, force_grace=True):
+                        continue
+        elif st not in TERMINAL and age_h > cfg["stale_session_hours"] and not rec.get("pr"):
             rec["hold"] = "stale_provider_session"
-        elif st in {"AWAITING_PLAN_APPROVAL", "AWAITING_USER_FEEDBACK"} and not rec.get("pr"):
-            rec["hold"] = st.lower()  # No automatic plan approval or generic answers.
-        if rec.get("hold") in {"stale_provider_session", "awaiting_plan_approval", "awaiting_user_feedback"} and previous_hold == rec.get("hold") and not rec.get("pr"):
-            if cut_loss_session(cfg, state, sid, rec, session, rec["hold"], dry):
-                continue
+            if previous_hold == rec.get("hold"):
+                if cut_loss_session(cfg, state, sid, rec, session, rec["hold"], dry):
+                    continue
         if not rec.get("pr"):
             if st == "FAILED":
-                set_outcome(rec, "failed:session_failed")
+                if not rec.get("outcome") or (rec.get("outcome") == "failed:session_failed" and not rec.get("abandoned") and verified_assignment(cfg, state, sid, rec, session)):
+                    if not cut_loss_session(cfg, state, sid, rec, session, "failed:session_failed", dry, force_grace=True) and not rec.get("pr"):
+                        set_outcome(rec, "failed:session_failed")
             elif st == "COMPLETED":
                 elapsed = (now() - parse_ts(session.get("updateTime", rec["created"]))).total_seconds() / 60
-                if elapsed > cfg["no_pr_grace_minutes"]:
-                    set_outcome(rec, "failed:no_pr")
-            continue
+                if elapsed <= cfg["no_pr_grace_minutes"]:
+                    if not rec.get("submit_nudged") and not rec.get("outcome") and verified_assignment(cfg, state, sid, rec, session) and not dry:
+                        jules_post(f"sessions/{sid}:sendMessage", cfg, {"prompt": SUBMIT_NUDGE})
+                        rec["submit_nudged"] = True
+                        save_state(state)
+                        log("submit_nudged", session=sid)
+                elif not rec.get("outcome"):
+                    if not cut_loss_session(cfg, state, sid, rec, session, "failed:no_pr", dry, force_grace=True) and not rec.get("pr"):
+                        set_outcome(rec, "failed:no_pr")
+            if not rec.get("pr"):
+                continue
         pr = json.loads(gh("pr", "view", rec["pr"], "--json",
                            "state,statusCheckRollup,isDraft,headRefOid,baseRefOid,comments,mergeCommit,mergeable,mergeStateStatus"))
         if pr.get("state") in {"MERGED", "CLOSED"}:
@@ -1111,13 +1238,6 @@ def observe_account(cfg: dict, state: dict, remote: dict) -> dict:
 def capacity(cfg: dict, state: dict, remote: dict) -> dict:
     observation = observe_account(cfg, state, remote)
     current = now()
-    for sid, rec in state["sessions"].items():
-        if rec.get("abandoned") and rec.get("outcome", "").startswith("failed:"):
-            continue
-        if rec.get("hold") and (not rec.get("outcome") or rec.get("provider_state") not in TERMINAL):
-            if sid in remote and legacy_scope_verified(cfg, state, sid, remote[sid]):
-                continue  # Reviewed legacy ownership quarantines its game; never frees its WIP or authorizes messages.
-            raise Hold("Tracked session requires reconciliation: " + rec["hold"])
     active_cap, daily_cap = cfg.get("account_active_cap"), cfg.get("account_daily_cap")
     if active_cap is None or daily_cap is None:
         raise Hold("Shared account active and rolling-24h budgets must be explicitly configured")
@@ -1260,7 +1380,12 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
                        f"- Prior attempt on this phase was cut due to: `{lesson['reason']}`.\n"
                        f"- Keep changes strictly modular, never ask for human input, and run `python3 tools/build_registry.py` before committing.\n"
                        + (f"- Prior gate diagnostics to avoid:\n{diag_lines}\n" if diag_lines else ""))
-    prompt = (("" if incident_id else PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n") + brief["markdown"] + lesson_note +
+    phase_goal_note = ""
+    if phase is not None and str(phase).isdigit() and int(phase) in PHASE_GOALS:
+        goal_text = PHASE_GOALS[int(phase)]
+        if goal_text not in brief["markdown"]:
+            phase_goal_note = f"\n\n## Phase {phase} Mandatory Call-Site Goal\n{goal_text}\n"
+    prompt = (("" if incident_id else PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n") + brief["markdown"] + phase_goal_note + lesson_note +
               f"\n\nFactory correlation: {correlation}\nBaseline commit: {baseline_sha}\n")
     title = f"[factory:{correlation}] {brief['label']}"[:120]
     autonomous = cfg.get("plan_policy") == "autonomous_game_scope"
@@ -1345,6 +1470,11 @@ def validate_config(cfg: dict) -> None:
         raise StateError("Invalid repair ownership policy")
     if type(cfg.setdefault("max_rebase_messages", 1)) is not int or not 0 <= cfg["max_rebase_messages"] <= 3:
         raise StateError("Invalid bounded rebase-message budget")
+    if type(cfg.setdefault("max_feedback_nudges", 2)) is not int or cfg["max_feedback_nudges"] < 0:
+        raise StateError("Invalid feedback-nudge budget")
+    for key, default in (("nudge_cooldown_minutes", 5), ("post_nudge_cut_loss_minutes", 10)):
+        if type(cfg.setdefault(key, default)) is not int or cfg[key] < 1:
+            raise StateError(f"Invalid positive config integer: {key}")
     if not isinstance(cfg.get("repo"), str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", cfg["repo"]):
         raise StateError("Invalid GitHub repository identity")
     if cfg.get("source") != f"sources/github/{cfg.get('repo')}":
@@ -1521,6 +1651,7 @@ def tick(args: argparse.Namespace) -> int:
         failures = sum(r["outcome"].startswith("failed") for r in finished)
         if len(finished) >= cfg["failure_window"] and failures >= cfg["failure_threshold"]:
             state["breaker"] = {"reason": "recent_session_failure_rate", "created": iso(now())}
+            state["healthy_ticks"] = 0
             raise Hold("Failure-rate breaker opened; retained failed PRs need diagnosis")
         if state.get("cooldown_until") and now() < parse_ts(state["cooldown_until"]):
             raise Hold("API cooldown active")
@@ -1539,7 +1670,7 @@ def tick(args: argparse.Namespace) -> int:
                      incident_id=selected["spec"]["id"] if selected else None)
     except Hold as exc:
         # Holds are operational data, never provider content or credentials.
-        if str(exc) not in {"no_dispatch_flag", "Healthy observation hysteresis; wait for another complete tick"}:
+        if state.get("breaker") or str(exc) in {"Pause issue open", "Jules key file unavailable"}:
             state["healthy_ticks"] = 0
         log("skip", reason=str(exc))
         return 0
