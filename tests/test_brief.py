@@ -83,6 +83,29 @@ class BriefTests(unittest.TestCase):
             self.assertIn("Acceptance", brief["markdown"])
             self.assertIn("touch", brief["markdown"])
             self.assertIn("reset", brief["markdown"])
+            self.assertIn("Flash Portal Inspiration", brief["markdown"])
+            self.assertIn("How to Play", brief["markdown"])
+            self.assertIn("ARCADE_CARTRIDGE_META", brief["markdown"])
+
+    def test_flash_inspiration_catalog_covers_full_demographic_spectrum(self):
+        genres = set(b.AXES["genres"])
+        for required_genre in (
+            "Dress-Up, Doll Maker & Fashion Runway",
+            "Makeover Salon, Hair Physics & Room Decorator",
+            "Dating Sim, Romance Visual Novel & Idol Life Sim",
+            "Adult/Mature Newgrounds Life Sim & Edgy Satire",
+            "Culinary Prep, Mixology & Kitchen Station Sim",
+            "Cozy Diner, Boutique & Resort Time-Management",
+            "Virtual Pet Care, Genetics Breeding & Evolution",
+            "Distance Launcher & Upgrade Shop",
+            "Lane Siege & Tug-of-War Generals",
+            "Physics Destruction & Artillery Siege",
+        ):
+            self.assertIn(required_genre, genres)
+            info = b.archetype_guidance(required_genre, "Parisian Haute Couture Runway")
+            self.assertTrue(info["exemplars"])
+            self.assertTrue(info["loreTemplate"])
+            self.assertTrue(info["howSteps"])
 
     def test_completed_game_cannot_advance(self):
         folder, meta = self.game("052", "10")

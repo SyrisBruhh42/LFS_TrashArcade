@@ -148,7 +148,8 @@ def owned(cfg, state, sid, rec, session):
     original = intent.get("record", {})
     context = session.get("sourceContext", {})
     url = f"https://github.com/{cfg['repo']}/pull/"
-    outputs = {o.get("pullRequest", {}).get("url") for o in session.get("outputs", []) or []}
+    outputs = {o.get("pullRequest", {}).get("url") if isinstance(o.get("pullRequest"), dict) else None
+               for o in session.get("outputs", []) or [] if isinstance(o, dict) and "pullRequest" in o}
     fields = ("assigned_folder", "game_id", "phase", "baseline_sha", "title", "mode", "incident_id", "repair_owner")
     return bool(intent.get("status") == "accepted" and intent.get("session_id") == sid and
                 rec.get("mode") in {"advance", "new"} and not rec.get("incident_id") and

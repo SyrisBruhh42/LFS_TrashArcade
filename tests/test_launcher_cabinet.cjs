@@ -35,7 +35,7 @@ function createHarness() {
 
   function makeNode(id) {
     const classes = new Set();
-    const attrs = new Map([['data-handed', 'right']]);
+    const attrs = new Map([['data-handed', 'right'], ['data-contrast', 'standard']]);
     const handlers = new Map();
     return {
       id,
@@ -46,7 +46,7 @@ function createHarness() {
       hidden: false,
       disabled: false,
       width: 640,
-      height: 320,
+      height: 360,
       isConnected: true,
       children: [],
       handlers,
@@ -58,6 +58,7 @@ function createHarness() {
       },
       setAttribute(k, v) { attrs.set(k, String(v)); },
       getAttribute(k) { return attrs.get(k) || null; },
+      removeAttribute(k) { attrs.delete(k); },
       addEventListener(type, fn) { handlers.set(type, fn); },
       appendChild(child) { this.children.push(child); return child; },
       getContext() { return ctx2d; },
@@ -102,7 +103,12 @@ function createHarness() {
 
   const fetch = async url => ({
     ok: true,
-    async text() { return '<!doctype html><script defer src="game.js"></script><link rel="stylesheet" href="style.css">'; },
+    async text() {
+      if (String(url).endsWith('game.js')) {
+        return 'const a = new AudioContext(); new ResizeObserver(()=>{}); localStorage.getItem("k"); window.addEventListener("touchstart", ()=>{}); const st = "PAUSED"; const upg = { title: "Magnetic Grapple" }; const col = "#ff8844";';
+      }
+      return '<!doctype html><script defer src="game.js"></script><link rel="stylesheet" href="style.css">';
+    },
     clone() { return this; },
     async arrayBuffer() { return new ArrayBuffer(12000); }
   });
@@ -212,4 +218,39 @@ test('handedness toggle, reduced-motion comfort sync, and Aegis deck return brid
 
   h.el('back-to-aegis-btn').handlers.get('click')();
   assert.equal(h.aegisReturned, true);
+});
+
+test('ArcadeAssetBridge introspects generated game assets, 4-scene switcher, and 4-tab UI synergy', async () => {
+  const h = createHarness();
+  const game = h.context.ARCADE_REGISTRY[1];
+  const inspected = await h.context.ArcadeAssetBridge.inspect(game);
+  assert.equal(inspected.synergized, true);
+  assert.ok(inspected.files.includes('game.js'));
+  assert.ok(inspected.colors.includes('#ff8844'));
+  assert.ok(inspected.subsystems.includes('Web Audio Synth'));
+  assert.ok(inspected.entities.includes('Magnetic Grapple'));
+
+  // Verify Lore & Objective populated in Tab 1
+  assert.match(h.el('cabinet-lore-text').textContent, /Junkyard Robot Scrapheap/);
+  assert.match(h.el('cabinet-objective-text').textContent, /Inspired by:/);
+
+  // Verify 4-Scene Switcher & Live Engine Bezel Mount
+  h.el('scene-btn-gameplay').handlers.get('click')();
+  assert.match(h.el('cabinet-demo-badge').textContent, /SCENE 2\/3/);
+  h.el('scene-btn-progression').handlers.get('click')();
+  assert.match(h.el('cabinet-demo-badge').textContent, /SCENE 3\/3/);
+  h.el('scene-btn-live').handlers.get('click')();
+  assert.equal(h.el('cabinet-live-frame').hidden, false);
+  assert.equal(h.el('cabinet-live-frame').getAttribute('src'), './games/085-scrap-heist-retrieval/index.html');
+
+  // Verify 4-Tab navigation & Options sync into game save
+  h.el('tab-btn-howto').handlers.get('click')();
+  assert.equal(h.el('tab-panel-howto').hidden, false);
+  assert.equal(h.el('tab-panel-overview').hidden, true);
+
+  h.el('tab-btn-options').handlers.get('click')();
+  h.el('cabinet-opt-mute-btn').handlers.get('click')();
+  const savedAfterMute = JSON.parse(h.storageValues.get('arcade_game_085_085-scrap-heist-retrieval_v1'));
+  assert.equal(savedAfterMute.muted, true);
+  assert.equal(savedAfterMute.highScore, 1450, 'syncing comfort options must preserve existing high score');
 });
