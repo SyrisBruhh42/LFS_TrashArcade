@@ -47,7 +47,7 @@ Screenshots were visually inspected for 083 Options and 084 portrait pause contr
 - The first rich Chromium run failed 083's movement direction assertion while 084/085 passed. That failure was retained, the direction conflict repaired, and the combined journeys rerun successfully.
 - A restricted-browser attempt failed at localhost binding (`EPERM`) before Chrome launched. A scoped escalation subsequently allowed the bounded local tests. The denial was a sandbox limitation, not a product failure or automatic approval rejection.
 
-Evidence directory: `/home/joe/Documents/Codex/2026-10-24/LFS-TrashArcade-Adversarial-Audit/`. `qualification.json` names source, commands, counts, changed paths and log hashes; `browser-journeys.json` contains the richer input results; `browser-journeys-first-failed.json` preserves the failing run; baseline sources, TAP logs and controller reproductions remain alongside them. Earlier evidence remains in the adjacent Review/Repair folders.
+Evidence directory: `$HOME/Documents/Codex/2026-10-24/LFS-TrashArcade-Adversarial-Audit/`. `qualification.json` names source, commands, counts, changed paths and log hashes; `browser-journeys.json` contains the richer input results; `browser-journeys-first-failed.json` preserves the failing run; baseline sources, TAP logs and controller reproductions remain alongside them. Earlier evidence remains in the adjacent Review/Repair folders.
 
 ## Remaining holds
 
