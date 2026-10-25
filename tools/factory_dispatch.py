@@ -817,6 +817,7 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
         if rec.get("hold") == "terminal_record_provider_active":
             rec.pop("hold", None)
         if pr.get("mergeable") == "CONFLICTING" or pr.get("mergeStateStatus") in {"DIRTY", "BEHIND"}:
+            rec.pop("gate_status", None)
             if repairs_sent >= cfg.get("max_repairs_per_tick", 1):
                 rec["hold"] = "needs_rebase:tick_budget"
                 continue
@@ -834,6 +835,8 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
         # The separate trusted reporter publishes StatusContext on the exact PR head.
         current = [check for check in checks if check["kind"] == "status"] or checks
         conclusion = current[-1]["conclusion"] if current else ""
+        if conclusion != "SUCCESS":
+            rec.pop("gate_status", None)
         if conclusion in {"FAILURE", "TIMED_OUT", "STARTUP_FAILURE", "CANCELLED", "ERROR"}:
             if repairs_sent >= cfg.get("max_repairs_per_tick", 1):
                 rec["hold"] = "repair_tick_budget"
@@ -1342,7 +1345,16 @@ def tick(args: argparse.Namespace) -> int:
             decision = {"status": "scoped_postmerge_maintenance"}
             log("postmerge_maintenance_routed", incident=postmerge_incident, acceptance_hold=str(exc))
         except (integration.Hold, integration.GitHubError) as exc:
-            raise Hold("Local integration: " + str(exc)) from None
+            if not integrate_only and str(exc) in {
+                "main moved; require fresh validation",
+                "PR must contain tested main; update branch and revalidate",
+                "Trusted report does not bind current PR revisions and phase lane",
+                "No trusted PR report",
+            }:
+                decision = {"status": "stale_candidate_deferred_to_reconcile", "reason": str(exc)}
+                log("integration_candidate_deferred", **decision)
+            else:
+                raise Hold("Local integration: " + str(exc)) from None
         except (ValueError, TypeError, KeyError, AttributeError):
             raise Hold("Local integration evidence malformed; no further mutations") from None
         if integrate_only:
