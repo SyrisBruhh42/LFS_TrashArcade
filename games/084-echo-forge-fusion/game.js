@@ -36,6 +36,20 @@ class SaveManager {
             console.warn('LocalStorage error:', e);
         }
     }
+
+    exportBase64() {
+        return btoa(JSON.stringify(this.data));
+    }
+
+    importBase64(b64) {
+        try {
+            const parsed = JSON.parse(atob(b64));
+            this.data = { ...this.data, ...parsed };
+            this.save();
+        } catch(e) {
+            console.warn('Invalid save data');
+        }
+    }
 }
 
 class InputManager {
@@ -815,6 +829,62 @@ class Game {
 
         this.resetGame();
 
+        if (this.saves.data.options.mute === undefined) this.saves.data.options.mute = false;
+        if (this.saves.data.options.noShake === undefined) this.saves.data.options.noShake = false;
+        if (this.saves.data.options.leftHanded === undefined) this.saves.data.options.leftHanded = false;
+        if (this.saves.data.options.highContrast === undefined) this.saves.data.options.highContrast = false;
+
+        const optAudio = document.getElementById('opt-audio');
+        const optShake = document.getElementById('opt-shake');
+        const optHandedness = document.getElementById('opt-handedness');
+        const optHc = document.getElementById('opt-hc');
+
+        if (optAudio) {
+            optAudio.checked = !this.saves.data.options.mute;
+            optAudio.addEventListener('change', (e) => {
+                this.saves.data.options.mute = !e.target.checked;
+                this.saves.save();
+                if (this.sounds && this.sounds.masterGain) {
+                    this.sounds.masterGain.gain.value = this.saves.data.options.mute ? 0 : 0.3;
+                }
+            });
+        }
+        if (optShake) {
+            optShake.checked = !this.saves.data.options.noShake;
+            optShake.addEventListener('change', (e) => {
+                this.saves.data.options.noShake = !e.target.checked;
+                this.saves.save();
+            });
+        }
+        if (optHandedness) {
+            optHandedness.checked = this.saves.data.options.leftHanded;
+            if (this.saves.data.options.leftHanded) document.body.classList.add('left-handed');
+            optHandedness.addEventListener('change', (e) => {
+                this.saves.data.options.leftHanded = e.target.checked;
+                if (e.target.checked) document.body.classList.add('left-handed');
+                else document.body.classList.remove('left-handed');
+                this.saves.save();
+            });
+        }
+        if (optHc) {
+            optHc.checked = this.saves.data.options.highContrast;
+            optHc.addEventListener('change', (e) => {
+                this.saves.data.options.highContrast = e.target.checked;
+                this.saves.save();
+            });
+        }
+
+        const exportEl = document.getElementById('save-export');
+        if (exportEl) exportEl.value = this.saves.exportBase64();
+
+        const ml = document.getElementById('milestones-list');
+        if (ml) {
+            const m = this.saves.data.unlockedMilestones || [];
+            if (m.length > 0) {
+                ml.innerHTML = m.map(mil => `<li>${mil.replace(/_/g, ' ')}</li>`).join('');
+            }
+        }
+
         this.pauseButton = document.getElementById('pause-button');
         this.dashButton = document.getElementById('dash-button');
         this.pauseButton.addEventListener('click', () => {
@@ -1221,16 +1291,38 @@ class Game {
         if (this.wave > this.saves.data.bestWaveOrCombo) {
             this.saves.data.bestWaveOrCombo = this.wave;
         }
+
+        const m = this.saves.data.unlockedMilestones;
+        if (this.score >= 500 && !m.includes('Novice_Echo')) m.push('Novice_Echo');
+        if (this.score >= 2000 && !m.includes('Adept_Echo')) m.push('Adept_Echo');
+        if (this.wave >= 2 && !m.includes('Wave_2_Reached')) m.push('Wave_2_Reached');
+        if (this.wave >= 5 && !m.includes('Boss_Fighter')) m.push('Boss_Fighter');
         this.saves.save();
+
+        const exportEl = document.getElementById('save-export');
+        if (exportEl) exportEl.value = this.saves.exportBase64();
+
+        const ml = document.getElementById('milestones-list');
+        if (ml) {
+            if (m.length > 0) {
+                ml.innerHTML = m.map(mil => `<li>${mil.replace(/_/g, ' ')}</li>`).join('');
+            }
+        }
     }
 
     drawBackground() {
         // Microscopic Cell Interior
-        const g = this.ctx.createRadialGradient(this.width/2, this.height/2, 0, this.width/2, this.height/2, this.width);
-        g.addColorStop(0, '#1a0515');
-        g.addColorStop(1, '#050005');
-        this.ctx.fillStyle = g;
-        this.ctx.fillRect(0, 0, this.width, this.height);
+        const hc = this.saves.data.options.highContrast;
+        if (hc) {
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        } else {
+            const g = this.ctx.createRadialGradient(this.width/2, this.height/2, 0, this.width/2, this.height/2, this.width);
+            g.addColorStop(0, '#1a0515');
+            g.addColorStop(1, '#050005');
+            this.ctx.fillStyle = g;
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        }
 
         if (this.world) {
             // Collidable hazards and currents must share the entity transform.
