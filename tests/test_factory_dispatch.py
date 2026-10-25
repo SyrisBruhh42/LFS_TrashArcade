@@ -1352,6 +1352,48 @@ class FactoryTests(unittest.TestCase):
         self.assertIn("Second-Pass Failure Lesson", prompt)
         self.assertIn("awaiting_user_feedback", prompt)
 
+    def test_stale_base_integration_candidate_defers_to_reconcile_branch_update(self):
+        self.cfg["local_integration_enabled"] = True
+        self.cfg["repair_owner"] = "native"
+        intent, session = self.install_intent("accepted")
+        session["state"] = "COMPLETED"
+        rec = {
+            **intent["record"],
+            "repair_owner": "native",
+            "pr": f"https://github.com/{self.cfg['repo']}/pull/401",
+            "gate_status": "passed_waiting_merge",
+        }
+        intent["record"] = copy.deepcopy(rec)
+        self.state["sessions"]["s1"] = rec
+        args = self.tick_fixture()
+        args.no_dispatch = True
+        pr = {
+            "state": "OPEN",
+            "headRefOid": SHA,
+            "baseRefOid": "d" * 40,
+            "mergeable": "MERGEABLE",
+            "mergeStateStatus": "BEHIND",
+        }
+        with patch.object(f, "inventory", return_value={"s1": session}), \
+             patch.object(f.integration, "run_tick", side_effect=f.integration.Hold("main moved; require fresh validation")), \
+             patch.object(f, "main_acceptance", return_value=SHA), \
+             patch.object(f, "reconcile") as reconcile:
+            self.assertEqual(f.tick(args), 0)
+            reconcile.assert_called_once()
+        # Verify reconcile clears stale gate_status and invokes native update-branch when not dry.
+        calls = []
+        def fake_gh(*gh_args):
+            calls.append(gh_args)
+            if gh_args[0] == "pr":
+                return json.dumps(pr)
+            return "{}"
+        with patch.object(f, "gh", side_effect=fake_gh):
+            f.reconcile(self.cfg, self.state, {"s1": session}, False)
+        self.assertNotIn("gate_status", rec)
+        self.assertEqual(rec.get("hold"), "needs_rebase:branch_updated")
+        self.assertTrue(any("update-branch" in " ".join(c) for c in calls))
+
 
 if __name__ == "__main__":
     unittest.main()
+
