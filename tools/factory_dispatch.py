@@ -539,6 +539,31 @@ def rebase_feedback(cfg: dict, state: dict, sid: str, rec: dict, session: dict, 
     if not verified_assignment(cfg, state, sid, rec, session):
         rec["hold"] = "needs_owner:rebase_scope_unverified"
         return
+    if pr.get("mergeable") == "MERGEABLE" and pr.get("mergeStateStatus") == "BEHIND" and rec.get("repair_owner", cfg.get("repair_owner", "native")) == "native":
+        if not all(re.fullmatch(r"[0-9a-f]{40}", pr.get(k, "")) for k in ("headRefOid", "baseRefOid")):
+            rec["hold"] = "needs_owner:rebase_revision_unverified"
+            return
+        key = digest({"head": pr["headRefOid"], "base": pr["baseRefOid"]})
+        seen = rec.setdefault("rebases", {})
+        if key in seen and seen[key].get("status") != "not_sent":
+            rec["hold"] = "needs_rebase:" + seen[key]["status"]
+            return
+        if sum(item.get("status") == "branch_updated" for item in seen.values()) >= 4:
+            rec["hold"] = "needs_owner:rebase_budget_exhausted"
+            return
+        if dry:
+            return
+        pr_num = str(rec.get("pr", "")).rsplit("/", 1)[-1]
+        if pr_num.isdigit():
+            try:
+                gh("api", "--method", "PUT", f"repos/{cfg['repo']}/pulls/{pr_num}/update-branch",
+                   "-f", f"expected_head_sha={pr['headRefOid']}")
+                seen[key] = {"status": "branch_updated", "created": iso(now())}
+                rec["hold"] = "needs_rebase:branch_updated"
+                save_state(state)
+                return
+            except Hold:
+                pass
     if session.get("state") not in {"IN_PROGRESS", "AWAITING_USER_FEEDBACK"}:
         rec["hold"] = "needs_owner:rebase_session_not_message_eligible"
         return
@@ -798,7 +823,7 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
             before = sum(item.get("status") != "not_sent" for item in rec.get("rebases", {}).values())
             rebase_feedback(cfg, state, sid, rec, session, pr, dry)
             repairs_sent += sum(item.get("status") != "not_sent" for item in rec.get("rebases", {}).values()) - before
-            if rec.get("hold") == "needs_owner:rebase_budget_exhausted" and previous_hold == rec.get("hold"):
+            if rec.get("hold") in {"needs_owner:rebase_budget_exhausted", "needs_owner:rebase_session_not_message_eligible", "needs_rebase:native_observation"} and previous_hold == rec.get("hold"):
                 cut_loss_session(cfg, state, sid, rec, session, rec["hold"], dry, pr=pr)
             continue
         if rec.get("hold", "").startswith(("needs_rebase", "needs_owner:rebase")):
