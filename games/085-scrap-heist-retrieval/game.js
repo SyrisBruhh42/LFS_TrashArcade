@@ -360,7 +360,8 @@ class Player extends Entity {
         super(x, y, 12);
         this.speed = 150;
         this.hasAmmo = true;
-        this.color = '#4ad5c0';
+        this.collectRadius = 12;
+        this.color = '#ffca28';
         this.facing = { x: 1, y: 0 };
 
         // Phase 2: Dash ability
@@ -1019,6 +1020,8 @@ class Game {
         this.sound = new SoundEngine();
 
         this.state = 'TITLE';
+        this.ui = new GoldenUI(this);
+        this.ui.initDOM();
         const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none';
         this.lastTime = performance.now();
         this.score = 0;
@@ -1068,8 +1071,15 @@ class Game {
                 if (this.state === 'PLAYING') this.pauseGame();
                 else if (this.state === 'PAUSED') this.resumeGame();
             }
+            if (this.state === 'DRAFT') {
+                if (this.draft) this.draft.handleInput(e);
+                return;
+            }
+            if (!e.repeat && (e.code === 'KeyO')) {
+                if (this.state === 'TITLE') this.ui.toggleOptions();
+            }
             if (!e.repeat && (e.code === 'Space' || e.code === 'Enter')) {
-                if (this.state === 'TITLE') this.startGame();
+                if (this.state === 'TITLE' && !this.ui.showOptions) this.startGame();
                 else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none'; }
             }
         });
@@ -1078,7 +1088,7 @@ class Game {
             if (e.target?.closest?.('a, button, input, textarea')) return;
             this.sound.init();
             this.sound.resume();
-            if (this.state === 'TITLE') this.startGame();
+            if (this.state === 'TITLE' && !this.ui.showOptions) this.startGame();
             else if (this.state === 'PAUSED') this.resumeGame();
             else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none'; }
         });
@@ -1087,7 +1097,7 @@ class Game {
             if (e.target?.closest?.('a, button, input, textarea')) return;
             this.sound.init();
             this.sound.resume();
-            if (this.state === 'TITLE') this.startGame();
+            if (this.state === 'TITLE' && !this.ui.showOptions) this.startGame();
             else if (this.state === 'PAUSED') this.resumeGame();
             else if (this.state === 'GAME_OVER') { this.state = 'TITLE'; const btn = document.getElementById?.('dash-button'); if(btn) btn.style.display = 'none'; }
         });
@@ -1240,7 +1250,7 @@ class Game {
         for (let i = this.collectibles.length - 1; i >= 0; i--) {
             const c = this.collectibles[i];
             const dist = Math.hypot(this.player.x - c.x, this.player.y - c.y);
-            if (dist < this.player.radius + c.radius) {
+            if (dist < this.player.collectRadius + c.radius) {
                 this.collectibles.splice(i, 1);
                 this.score += 100;
                 this.sound.playScore();
@@ -1249,14 +1259,25 @@ class Game {
 
         const bossActive = this.enemies.some(e => typeof e.bossName !== 'undefined' && e.active);
         if (this.collectibles.length === 0 && !bossActive) {
-            this.wave++;
+            this.state = 'DRAFT';
+            if (!this.draft) this.draft = new PerkDraft(this);
             this.score += 500;
-            this.loadWave();
         }
+    }
+
+    endDraft() {
+        this.wave++;
+        this.state = 'PLAYING';
+        this.loadWave();
     }
 
     draw() {
         this.parallax.draw(this.ctx);
+
+        if (this.state === 'DRAFT') {
+            this.draft.draw(this.ctx);
+            return;
+        }
 
         if (this.state === 'TITLE') {
             this.drawTitle();
@@ -1354,19 +1375,7 @@ class Game {
     }
 
     drawTitle() {
-        this.ctx.fillStyle = '#4ad5c0';
-        this.ctx.font = '50px monospace';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('Scrap Heist Retrieval', this.width/2, this.height/3);
-
-        this.ctx.fillStyle = '#ccc';
-        this.ctx.font = '20px monospace';
-        this.ctx.fillText('Collect green scrap.', this.width/2, this.height/2 - 30);
-        this.ctx.fillText('Avoid red patrol bots.', this.width/2, this.height/2);
-        this.ctx.fillText('Shoot to stun, but you must retrieve your ammo!', this.width/2, this.height/2 + 30);
-
-        this.ctx.fillStyle = '#fff';
-        this.ctx.fillText('Press SPACE or Click to Start', this.width/2, this.height * 0.7);
+        this.ui.draw(this.ctx);
     }
 }
 
