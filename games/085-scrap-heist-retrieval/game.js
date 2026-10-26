@@ -251,6 +251,25 @@ class Entity {
         this.active = true;
     }
 
+
+    checkMilestones() {
+        if (!this.saveManager) return;
+        const sm = this.saveManager;
+        let changed = false;
+        const check = (id) => {
+            if (!sm.data.unlockedMilestones.includes(id)) {
+                sm.data.unlockedMilestones.push(id);
+                changed = true;
+            }
+        };
+        if (this.stats.totalScrap >= 10) check('first_scrap');
+        if (this.wave >= 5 && !this.stats.detectedThisRun) check('stealth_master');
+        if (this.stats.enemiesStunned >= 20) check('stunner');
+        if (this.score >= 1000) check('rich');
+        if (this.stats.bossesDefeated >= 1) check('boss_killer');
+        if (changed) sm.save();
+    }
+
     update(dt) {
         this.x += this.vx * dt;
         this.y += this.vy * dt;
@@ -267,6 +286,25 @@ class Particle extends Entity {
         this.maxLife = lifetime;
         this.vx = (Math.random() - 0.5) * 60;
         this.vy = (Math.random() - 0.5) * 60;
+    }
+
+
+    checkMilestones() {
+        if (!this.saveManager) return;
+        const sm = this.saveManager;
+        let changed = false;
+        const check = (id) => {
+            if (!sm.data.unlockedMilestones.includes(id)) {
+                sm.data.unlockedMilestones.push(id);
+                changed = true;
+            }
+        };
+        if (this.stats.totalScrap >= 10) check('first_scrap');
+        if (this.wave >= 5 && !this.stats.detectedThisRun) check('stealth_master');
+        if (this.stats.enemiesStunned >= 20) check('stunner');
+        if (this.score >= 1000) check('rich');
+        if (this.stats.bossesDefeated >= 1) check('boss_killer');
+        if (changed) sm.save();
     }
 
     update(dt) {
@@ -912,6 +950,25 @@ class ParallaxBackground {
         }
         return items;
     }
+
+    checkMilestones() {
+        if (!this.saveManager) return;
+        const sm = this.saveManager;
+        let changed = false;
+        const check = (id) => {
+            if (!sm.data.unlockedMilestones.includes(id)) {
+                sm.data.unlockedMilestones.push(id);
+                changed = true;
+            }
+        };
+        if (this.stats.totalScrap >= 10) check('first_scrap');
+        if (this.wave >= 5 && !this.stats.detectedThisRun) check('stealth_master');
+        if (this.stats.enemiesStunned >= 20) check('stunner');
+        if (this.score >= 1000) check('rich');
+        if (this.stats.bossesDefeated >= 1) check('boss_killer');
+        if (changed) sm.save();
+    }
+
     update(dt) {
         for (let layer of this.layers) {
             for (let item of layer.items) {
@@ -943,8 +1000,10 @@ class Game {
         this.width = 800;
         this.height = 600;
 
+
         this.input = new InputManager();
         this.saveManager = new SaveManager();
+        this.stats = { totalScrap: 0, detectedThisRun: false, enemiesStunned: 0, bossesDefeated: 0 };
         this.sound = typeof SoundEngine !== 'undefined' ? new SoundEngine() : null;
 
         this.state = 'TITLE';
@@ -1003,7 +1062,12 @@ class Game {
                     this.state = this.prevState || 'TITLE';
                     const modal = document.getElementById('options-modal');
                     if (modal) modal.remove();
+                } else if (this.state === 'TITLE') {
+                    this.prevState = this.state;
+                    this.state = 'OPTIONS';
+                    if (window.UI) window.UI.showOptions();
                 }
+                this.input.keys['Escape'] = false;
             }
             if ((e.code === 'KeyO' || e.code === 'KeyP') && !e.repeat) {
                 if (this.state === 'TITLE' || this.state === 'PAUSED') {
@@ -1142,6 +1206,25 @@ class Game {
         requestAnimationFrame(t => this.loop(t));
     }
 
+
+    checkMilestones() {
+        if (!this.saveManager) return;
+        const sm = this.saveManager;
+        let changed = false;
+        const check = (id) => {
+            if (!sm.data.unlockedMilestones.includes(id)) {
+                sm.data.unlockedMilestones.push(id);
+                changed = true;
+            }
+        };
+        if (this.stats.totalScrap >= 10) check('first_scrap');
+        if (this.wave >= 5 && !this.stats.detectedThisRun) check('stealth_master');
+        if (this.stats.enemiesStunned >= 20) check('stunner');
+        if (this.score >= 1000) check('rich');
+        if (this.stats.bossesDefeated >= 1) check('boss_killer');
+        if (changed) sm.save();
+    }
+
     update(dt) {
         if (this.state !== 'PLAYING') return;
 
@@ -1202,6 +1285,7 @@ class Game {
             if (dist < this.player.radius + c.radius) {
                 this.collectibles.splice(i, 1);
                 this.score += 100;
+                this.stats.totalScrap += 1;
                 if (this.sound) this.sound.playScore();
                 if (this.vfx) { this.vfx.burst(c.x, c.y, '#4ad5c0', 12); this.vfx.addFloatingText(c.x, c.y, '+100', '#ffca28'); this.vfx.addShake(4); }
             }
@@ -1348,11 +1432,21 @@ class Game {
 }
 
 window.onload = () => {
-    window.ARCADE_CARTRIDGE_META = {
+        window.ARCADE_CARTRIDGE_META = {
         title: "Scrap Heist Retrieval",
+        genre: "Stealth/Line-of-Sight Heist",
+        coreMechanic: "Limited Ammo Must Be Physically Retrieved",
+        setting: "Junkyard Robot Scrapheap",
         lore: "Sneak through the scrapheap and collect scrap.",
-        winObjective: "Retrieve scrap and survive."
+        instructions: "WASD/Arrows to move, Space/Click to shoot. Touch joystick and tap.",
+        winObjective: "Retrieve scrap and survive.",
+        colors: {
+            primary: "#1f1916",
+            accent: "#ff7043",
+            secondary: "#ffca28"
+        }
     };
+
     window.game = new Game();
 };
 

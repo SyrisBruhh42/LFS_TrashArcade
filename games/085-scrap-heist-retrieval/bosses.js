@@ -19,6 +19,7 @@ class Boss extends Enemy {
         }
         if (this.hp <= 0) {
             this.active = false; // Dead
+            if (game.stats) game.stats.bossesDefeated += 1;
             // Drop a ton of scrap
             for (let i = 0; i < 10; i++) {
                 game.collectibles.push(new Collectible(this.x - 50 + Math.random() * 100, this.y - 50 + Math.random() * 100));
