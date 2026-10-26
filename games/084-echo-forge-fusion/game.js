@@ -1,7 +1,17 @@
 window.ARCADE_CARTRIDGE_META = {
   title: "Echo Forge Fusion",
   author: "LFS",
-  controls: "Keyboard/Mouse/Touch"
+  controls: "Keyboard/Mouse/Touch",
+  genre: "Rhythm/Beat-Synced Reflex",
+  coreMechanic: "Echo/Ghost Self-Cooperation",
+  setting: "Microscopic Cell Interior",
+  lore: "Cooperate with your rhythmic echoes inside a microscopic cell.",
+  instructions: "Space/Click/Tap to start. WASD/Arrows or hold/drag to move and aim. Blasts fire on the beat. Shift/Dash to dash. Esc or Pause/Resume to pause and resume.",
+  colors: {
+    primaryBg: "#154743",
+    primaryAccent: "#1de9b6",
+    secondaryAccent: "#ff4081"
+  }
 };
 
 const SAVE_KEY = 'arcade_game_084_084-echo-forge-fusion_v1';
@@ -1345,6 +1355,18 @@ class Game {
         this.ctx.fillText(`Score: ${this.score}`, 20, 30);
         this.ctx.fillText(`Wave: ${this.wave}`, 20, 60);
         this.ctx.fillText(`BPM: ${this.bpm}`, 20, 90);
+
+        if (this.wave === 1 && this.score < 200 && !this.bossActive) {
+            this.ctx.fillStyle = 'rgba(11, 38, 36, 0.8)';
+            const txt = "Survive the Cell! Move to dodge, blast on the beat.";
+            this.ctx.fillRect(this.width/2 - 250, 20, 500, 30);
+            this.ctx.fillStyle = '#1de9b6';
+            this.ctx.textAlign = 'center';
+            this.ctx.font = '16px monospace';
+            this.ctx.fillText(txt, this.width/2, 40);
+        }
+        this.ctx.textAlign = 'left'; // reset
+
 
         // Progress to next beat
         const progress = this.beatTimer / this.beatInterval;
