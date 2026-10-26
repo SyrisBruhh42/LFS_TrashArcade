@@ -292,6 +292,7 @@ class Game {
         this.width = canvas.width;
         this.height = canvas.height;
         this.grid = new Grid(this.width, this.height, 40);
+        this.world = new World(this.width, this.height);
 
         this.player = null;
         this.enemies = [];
@@ -321,6 +322,7 @@ class Game {
                 this.width = this.canvas.width;
                 this.height = this.canvas.height;
                 this.grid = new Grid(this.width, this.height, 40);
+                this.world = new World(this.width, this.height);
             }
         });
         this.resizeObserver.observe(this.canvas.parentElement);
@@ -375,10 +377,24 @@ class Game {
     }
 
     update(dt) {
+        if (this.world) this.world.update(dt);
         if (this.state === 'TITLE') {
             document.getElementById('back-button').classList.remove('hidden');
             if (this.inputManager.justPressed['Enter'] || this.inputManager.justPressed['Space'] || this.inputManager.mouse.justDown || this.inputManager.touch.justDown) {
                 this.start();
+            } else if (this.inputManager.justPressed['KeyO']) {
+                this.state = 'OPTIONS';
+            }
+        } else if (this.state === 'OPTIONS') {
+            if (this.inputManager.justPressed['Escape']) {
+                this.state = 'TITLE';
+                this.inputManager.keys['Escape'] = false;
+            } else if (this.inputManager.justPressed['KeyM']) {
+                this.saveManager.data.options.soundVolume = this.saveManager.data.options.soundVolume > 0 ? 0 : 1;
+                if (this.soundEngine.masterGain) {
+                    this.soundEngine.masterGain.gain.value = this.saveManager.data.options.soundVolume;
+                }
+                this.saveManager.save();
             }
         } else if (this.state === 'PLAYING') {
             document.getElementById('back-button').classList.add('hidden');
@@ -474,6 +490,7 @@ class Game {
     draw() {
         this.ctx.fillStyle = '#050a12';
         this.ctx.fillRect(0, 0, this.width, this.height);
+        if (this.world) this.world.draw(this.ctx);
 
         if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
             this.grid.draw(this.ctx);
@@ -493,15 +510,52 @@ class Game {
 
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '40px monospace';
+            this.ctx.font = 'bold 40px monospace';
             this.ctx.textAlign = 'center';
-            this.ctx.fillText('TRENCH TACTICS', this.width/2, this.height/2 - 40);
-            this.ctx.font = '20px monospace';
-            this.ctx.fillText('Enter / Space / Tap to Start', this.width/2, this.height/2 + 20);
+            this.ctx.fillText('TRENCH TACTICS', this.width/2, 80);
+
+            this.ctx.font = '14px monospace';
+            this.ctx.fillText('LORE: Navigate the deep ocean trench in tactical turn-based blitz combat.', this.width/2, 110, this.width - 40);
+
+            this.ctx.fillStyle = 'rgba(13, 53, 84, 0.8)';
+            this.ctx.fillRect(50, 140, 220, 120);
+            this.ctx.fillRect(290, 140, 220, 120);
+            this.ctx.fillRect(530, 140, 220, 120);
+
+            this.ctx.fillStyle = '#00e5ff';
+            this.ctx.font = 'bold 16px monospace';
+            this.ctx.fillText('1. The Goal', 160, 165);
+            this.ctx.fillText('2. The Loop', 400, 165);
+            this.ctx.fillText('3. Controls', 640, 165);
+
+            this.ctx.fillStyle = '#cdc3b9';
+            this.ctx.font = '13px monospace';
+            this.ctx.fillText('Survive and destroy', 160, 195);
+            this.ctx.fillText('enemies for points.', 160, 215);
+            this.ctx.fillText('Stillness slows time.', 400, 195);
+            this.ctx.fillText('Movement speeds it up.', 400, 215);
+            this.ctx.fillText('WASD/Drag: Move', 640, 195);
+            this.ctx.fillText('Space/Tap: Attack', 640, 215);
+
+            this.ctx.font = '24px monospace';
+            this.ctx.fillStyle = '#00e676';
+            this.ctx.fillText('Enter / Space / Tap to Start', this.width/2, 320);
+            this.ctx.fillStyle = '#cdc3b9';
+            this.ctx.font = '18px monospace';
+            this.ctx.fillText('Press [O] for Options', this.width/2, 360);
+
             this.ctx.font = '16px monospace';
-            this.ctx.fillText('WASD/Arrows or drag to move', this.width/2, this.height/2 + 45, this.width - 40);
-            this.ctx.fillText('Tap/Click/Space to attack', this.width/2, this.height/2 + 68, this.width - 40);
-            this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, this.height/2 + 96);
+            this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, 400);
+        } else if (this.state === 'OPTIONS') {
+            this.ctx.fillStyle = 'rgba(5, 10, 18, 0.9)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            this.ctx.fillStyle = '#cdc3b9';
+            this.ctx.font = '30px monospace';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('OPTIONS', this.width/2, 80);
+            this.ctx.font = '16px monospace';
+            this.ctx.fillText('Volume (M to Mute): ' + (this.saveManager.data.options.soundVolume * 100).toFixed(0) + '%', this.width/2, 140);
+            this.ctx.fillText('Press [Esc] to Return', this.width/2, 300);
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(5, 10, 18, 0.7)';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -709,3 +763,12 @@ class ParticleSystem {
 // 106
 // 107
 // 108
+
+window.ARCADE_CARTRIDGE_META = {
+    genre: "Tactical Grid/Turn-Based Blitz",
+    coreMechanic: "Time-Dilation on Stillness",
+    setting: "Deep Ocean Trench",
+    lore: "Navigate the deep ocean trench in tactical turn-based blitz combat. Time slows down when you are still.",
+    instructions: "WASD/Arrows to move, Space/Click to attack. Dodge enemy fire and score high.",
+    colors: { primary: "#061a2b", secondary: "#0d3554", accent: "#00e5ff", text: "#cdc3b9" }
+};
