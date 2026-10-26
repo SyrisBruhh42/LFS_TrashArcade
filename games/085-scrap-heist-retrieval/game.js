@@ -34,77 +34,6 @@ class SaveManager {
     }
 }
 
-class SoundEngine {
-    constructor() {
-        this.ctx = null;
-        this.masterGain = null;
-        this.sfxGain = null;
-        this.musicGain = null;
-        this.initialized = false;
-    }
-
-    init() {
-        if (this.initialized) return;
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContext) return;
-
-        this.ctx = new AudioContext();
-        this.masterGain = this.ctx.createGain();
-        this.sfxGain = this.ctx.createGain();
-        this.musicGain = this.ctx.createGain();
-
-        this.sfxGain.connect(this.masterGain);
-        this.musicGain.connect(this.masterGain);
-        this.masterGain.connect(this.ctx.destination);
-
-        this.masterGain.gain.value = 1.0;
-        this.sfxGain.gain.value = 1.0;
-        this.musicGain.gain.value = 1.0;
-
-        this.initialized = true;
-    }
-
-    resume() {
-        if (this.ctx && this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
-    }
-
-    playTone(freq, type, duration, vol) {
-        if (!this.initialized || !this.ctx) return;
-        this.resume();
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-
-        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-
-        osc.connect(gain);
-        gain.connect(this.sfxGain);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
-    }
-
-    playShoot() {
-        this.playTone(400, 'square', 0.1, 0.5);
-    }
-
-    playHit() {
-        this.playTone(150, 'sawtooth', 0.2, 0.7);
-    }
-
-    playScore() {
-        this.playTone(800, 'sine', 0.1, 0.4);
-    }
-
-    playAlert() {
-        this.playTone(600, 'square', 0.3, 0.6);
-    }
-}
 
 class InputManager {
     constructor() {
@@ -485,7 +414,7 @@ class Player extends Entity {
             this.hasAmmo = false;
             game.shootCooldown = 0.5;
             this.recoilTimer = 0.1;
-            game.sound.playShoot();
+            if (game.sound) game.sound.playShoot();
             game.projectiles.push(new Projectile(this.x, this.y, this.facing.x, this.facing.y));
         }
     }
@@ -1016,7 +945,7 @@ class Game {
 
         this.input = new InputManager();
         this.saveManager = new SaveManager();
-        this.sound = new SoundEngine();
+        this.sound = typeof SoundEngine !== 'undefined' ? new SoundEngine() : null;
 
         this.state = 'TITLE';
         if (window.VFXManager) this.vfx = new VFXManager(this);
@@ -1225,10 +1154,17 @@ class Game {
         for (const particle of this.particles) particle.update(dt);
         this.particles = this.particles.filter(particle => particle.active);
 
+        let anyAlert = false;
         for (let e of this.enemies) {
             e.update(dt, this);
+            if (e.state === 'ALERT') anyAlert = true;
         }
         this.enemies = this.enemies.filter(e => e.active !== false);
+
+        if (this.sound) {
+            if (this.sound.setMode) this.sound.setMode(anyAlert ? 'alert' : 'stealth');
+            if (this.sound.update) this.sound.update();
+        }
 
         for (let h of this.hazards) {
             h.update(dt, this);
@@ -1247,7 +1183,13 @@ class Game {
                     if (dist < this.player.radius + p.radius + 10) {
                         this.player.hasAmmo = true;
                         this.projectiles.splice(i, 1);
-                        this.sound.playScore();
+                        if (this.sound) {
+                            if (this.sound.playRetrieval) {
+                                this.sound.playRetrieval();
+                            } else {
+                                this.sound.playScore();
+                            }
+                        }
                     }
                 }
             }
@@ -1260,7 +1202,7 @@ class Game {
             if (dist < this.player.radius + c.radius) {
                 this.collectibles.splice(i, 1);
                 this.score += 100;
-                this.sound.playScore();
+                if (this.sound) this.sound.playScore();
                 if (this.vfx) { this.vfx.burst(c.x, c.y, '#4ad5c0', 12); this.vfx.addFloatingText(c.x, c.y, '+100', '#ffca28'); this.vfx.addShake(4); }
             }
         }
