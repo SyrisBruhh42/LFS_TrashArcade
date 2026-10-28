@@ -19,3 +19,12 @@ python3 tools/check_games.py --strict --all-runtime --check-registry --report /t
 ```
 
 For a committed one-game phase PR, use `python3 tools/preflight.py --base origin/main --head HEAD`. Same-phase repairs require `--mode maintenance --incident-id ID --incident-spec HASH` and a matching reviewed incident catalog entry; see the operations guide. Infrastructure changes need review and full checks. Generation and local automatic integration default to disabled during release qualification.
+
+---
+
+## Legal, Licensing, Credits & Security
+
+* **License**: [`LICENSE`](./LICENSE) — Copyright (c) 2026 SyrisBruhh42. All Rights Reserved.
+* **Legal & IP Notice**: [`LEGAL.md`](./LEGAL.md) & [`NOTICE`](./NOTICE) — Intellectual property reservation, warranty disclaimer, and compliance terms.
+* **Open-Source & Font Attributions**: [`CREDITS.md`](./CREDITS.md) — Third-party engine, runtime, and SIL Open Font License 1.1 typography credits.
+* **Security Policy**: [`SECURITY.md`](./SECURITY.md) — Zero-Trust security invariants and private vulnerability disclosure policy.
