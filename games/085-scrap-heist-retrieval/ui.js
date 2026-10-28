@@ -1,4 +1,16 @@
 class UI {
+    static drawRound1Banner(ctx, width, height) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, height / 2 - 50, width, 100);
+        ctx.fillStyle = '#ff7043';
+        ctx.font = 'bold 30px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('HEIST FLOOR 1: GATHER SCRAP', width / 2, height / 2);
+        ctx.fillStyle = '#ffca28';
+        ctx.font = '16px monospace';
+        ctx.fillText('Avoid cones. Retrieve ammo after firing.', width / 2, height / 2 + 30);
+    }
+
     static drawLoreAndHowTo(ctx, width, height) {
         ctx.fillStyle = '#1f1916';
         ctx.fillRect(0, 0, width, height);

@@ -1368,6 +1368,10 @@ class Game {
             this.ctx.fillText('RETRIEVE AMMO!', this.width/2, 40);
         }
 
+        if (this.wave === 1 && window.UI && typeof window.UI.drawRound1Banner === 'function') {
+            window.UI.drawRound1Banner(this.ctx, this.width, this.height);
+        }
+
         // Boss HUD
         const boss = this.enemies.find(e => typeof e.bossName !== 'undefined' && e.active);
         if (boss) {
