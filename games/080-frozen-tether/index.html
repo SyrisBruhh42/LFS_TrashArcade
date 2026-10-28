@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frozen Tether</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+            touch-action: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+        #gameContainer {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            outline: none;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-family: sans-serif;
+            pointer-events: none;
+        }
+        a {
+            color: #769a87;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .hidden-link {
+            display: none;
+        }
+        #settings-button { position:fixed; right:12px; top:12px; }
+        button, input, a { font:inherit; }
+        button { min-height:44px; padding:8px 14px; cursor:pointer; }
+        button:focus-visible, input:focus-visible, a:focus-visible { outline:3px solid #769a87; outline-offset:3px; }
+        dialog { width:min(90vw,520px); max-height:85vh; box-sizing:border-box; overflow:auto; touch-action:pan-y; color:#fff; background:#17251f; border:2px solid #769a87; font:16px sans-serif; }
+        dialog::backdrop { background:#000b; }
+        #settings-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+        #settings-fields label { display:flex; flex-direction:column; gap:8px; }
+        #settings-fields input { min-height:44px; width:100%; }
+    </style>
+    <script defer src="./world.js"></script>
+    <script defer src="./progression.js"></script>
+    <script defer src="./vfx.js"></script>
+    <script defer src="./audio.js"></script>
+    <script defer src="./ui.js"></script>
+    <script defer src="./game.js"></script>
+</head>
+<body>
+    <!-- Hidden link for preflight requirement if not drawn on canvas -->
+    <a href="../../index.html" class="hidden-link">Back to Arcade</a>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600" tabindex="0"></canvas>
+    </div>
+    <button id="settings-button" type="button">Settings / Pause</button>
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+        <h2 id="settings-title">Settings — game paused</h2>
+        <div id="settings-fields"></div>
+        <p id="settings-status" role="status" aria-live="polite"></p>
+        <button id="settings-close" type="button">Back to game</button>
+        <a href="../../index.html">Back to Arcade</a>
+    </dialog>
+</body>
+</html>

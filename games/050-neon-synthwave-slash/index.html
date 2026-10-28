@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Neon Synthwave Slash</title>
+  <style>
+    :root {
+      --bg: #05050f;
+      --fg: #e0e0ff;
+      --accent: #c29d7e;
+      --accent-dim: #7a5e45;
+      --panel-bg: rgba(10, 10, 25, 0.85);
+      --font: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      overflow: hidden;
+      touch-action: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #game-container {
+      position: relative;
+      width: 1280px;
+      height: 720px;
+      transform-origin: center center;
+      background: var(--bg);
+      box-shadow: 0 0 40px rgba(194, 157, 126, 0.2);
+      overflow: hidden;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* UI Layers */
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: none;
+      flex-direction: column;
+    }
+
+    .ui-layer.active {
+      display: flex;
+    }
+
+    /* Modals & Menus */
+    .modal {
+      pointer-events: auto;
+      background: var(--panel-bg);
+      backdrop-filter: blur(8px);
+      border: 2px solid var(--accent);
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: 0 0 30px rgba(194, 157, 126, 0.4);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin: auto;
+      max-width: 80%;
+      max-height: 90%;
+      overflow-y: auto;
+    }
+
+    /* Titles & Text */
+    h1 {
+      font-size: 5rem;
+      margin: 0 0 1rem 0;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      text-shadow: 0 0 20px var(--accent-dim), 2px 2px 0px rgba(255,255,255,0.2);
+    }
+
+    h2 {
+      font-size: 3rem;
+      margin: 0 0 1.5rem 0;
+      color: var(--fg);
+    }
+
+    h3 {
+      font-size: 2rem;
+      margin: 1rem 0;
+      color: var(--accent);
+    }
+
+    p {
+      font-size: 1.2rem;
+      line-height: 1.6;
+      margin: 0.5rem 0;
+    }
+
+    /* Buttons */
+    .btn {
+      pointer-events: auto;
+      background: transparent;
+      color: var(--fg);
+      border: 2px solid var(--accent);
+      padding: 1rem 2rem;
+      font-size: 1.5rem;
+      font-family: inherit;
+      font-weight: bold;
+      text-transform: uppercase;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 0.5rem;
+      transition: all 0.2s ease;
+      min-width: 250px;
+    }
+
+    .btn:hover, .btn:active {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 0 15px var(--accent);
+      transform: scale(1.05);
+    }
+
+    .btn-small {
+      font-size: 1rem;
+      padding: 0.5rem 1rem;
+      min-width: 150px;
+    }
+
+    .btn-icon {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 60px;
+      height: 60px;
+      border-radius: 30px;
+      padding: 0;
+      min-width: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 2rem;
+      z-index: 100;
+    }
+
+    /* Hub Link */
+    .hub-link {
+      pointer-events: auto;
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 1.2rem;
+      font-weight: bold;
+      border: 1px solid var(--accent);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.5);
+      transition: all 0.2s;
+    }
+
+    .hub-link:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    /* Options Specific */
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+      width: 100%;
+      text-align: left;
+    }
+
+    .option-row {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .option-row label {
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+      color: var(--accent);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      height: 8px;
+      border-radius: 4px;
+      outline: none;
+      -webkit-appearance: none;
+      background: var(--accent-dim);
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: 2px solid var(--fg);
+    }
+
+    select, button.toggle-btn {
+      background: var(--bg);
+      color: var(--fg);
+      border: 1px solid var(--accent);
+      padding: 0.5rem;
+      font-size: 1.1rem;
+      font-family: inherit;
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .save-data-box {
+      width: 100%;
+      height: 80px;
+      background: rgba(0,0,0,0.5);
+      color: var(--fg);
+      border: 1px solid var(--accent-dim);
+      padding: 0.5rem;
+      font-family: monospace;
+      margin: 0.5rem 0;
+      resize: none;
+    }
+
+    /* HUD */
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      font-size: 2rem;
+      font-weight: bold;
+      text-shadow: 2px 2px 4px #000;
+      z-index: 50;
+    }
+
+    .hud-stat {
+      color: var(--accent);
+    }
+
+    .hud-val {
+      color: var(--fg);
+    }
+
+    /* Touch Controls */
+    #touch-controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 50%;
+      pointer-events: none;
+      display: none;
+      z-index: 60;
+    }
+
+    #touch-controls.active {
+      display: block;
+    }
+
+    .touch-zone {
+      position: absolute;
+      bottom: 20px;
+      width: 160px;
+      height: 160px;
+      background: rgba(194, 157, 126, 0.1);
+      border: 2px solid rgba(194, 157, 126, 0.3);
+      border-radius: 50%;
+      pointer-events: auto;
+    }
+
+    #touch-move { left: 40px; }
+    #touch-action { right: 40px; }
+
+  </style>
+</head>
+<body>
+
+  <div id="game-container">
+    <canvas id="game-canvas" width="1280" height="720"></canvas>
+
+    <!-- TITLE SCREEN -->
+    <div id="ui-title" class="ui-layer active">
+      <div class="modal" style="background:transparent; border:none; box-shadow:none; margin-top:10%">
+        <h1>Neon Synthwave<br>Slash</h1>
+        <p style="color:var(--accent); font-size:1.5rem; margin-bottom:2rem;">High Score: <span id="title-highscore">0</span></p>
+        <button class="btn" id="btn-play">Play</button>
+        <button class="btn" id="btn-howto">How to Play</button>
+        <button class="btn" id="btn-options-title">Options</button>
+      </div>
+      <a href="../../index.html" class="hub-link">&larr; Back to Arcade</a>
+    </div>
+
+    <!-- HOW TO PLAY -->
+    <div id="ui-howto" class="ui-layer">
+      <div class="modal">
+        <h2>How to Play</h2>
+        <div style="text-align: left; max-width: 600px; margin-bottom: 2rem;">
+          <p><strong>Core Mechanic:</strong> Time slows to a crawl when you don't move or act. Use this to plan your moves!</p>
+          <p><strong>Movement:</strong> WASD / Arrow Keys / Left Touch Joystick</p>
+          <p><strong>Slash/Parry:</strong> Mouse Click+Drag / IJKL / Right Touch Joystick</p>
+          <p>Parry enemy projectiles back at them. Slash enemies to destroy them. Build up your combo to increase your score multiplier!</p>
+        </div>
+        <button class="btn" id="btn-howto-close">Back</button>
+      </div>
+    </div>
+
+    <!-- OPTIONS MODAL -->
+    <div id="ui-options" class="ui-layer">
+      <div class="modal">
+        <h2>Options</h2>
+        <div class="options-grid">
+          <div class="option-row">
+            <label>Master Volume: <span id="val-vol-master">100%</span></label>
+            <input type="range" id="opt-vol-master" min="0" max="100" value="100">
+          </div>
+          <div class="option-row">
+            <label>SFX Volume: <span id="val-vol-sfx">100%</span></label>
+            <input type="range" id="opt-vol-sfx" min="0" max="100" value="100">
+          </div>
+          <div class="option-row">
+            <label>Music Volume: <span id="val-vol-music">80%</span></label>
+            <input type="range" id="opt-vol-music" min="0" max="100" value="80">
+          </div>
+          <div class="option-row">
+            <label>Screen Shake</label>
+            <select id="opt-shake">
+              <option value="1">100%</option>
+              <option value="0.5">50%</option>
+              <option value="0">Off</option>
+            </select>
+          </div>
+          <div class="option-row">
+            <label>Particles</label>
+            <select id="opt-particles">
+              <option value="high">High</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div class="option-row">
+            <label>Touch Controls</label>
+            <select id="opt-touch">
+              <option value="auto">Auto</option>
+              <option value="always">Always</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="width:100%; border-top:1px solid var(--accent-dim); padding-top:1rem; margin-top:1rem;">
+          <h3>Save Data</h3>
+          <textarea id="save-data-area" class="save-data-box" spellcheck="false"></textarea>
+          <div style="display:flex; justify-content:center; gap:1rem; flex-wrap:wrap;">
+            <button class="btn btn-small" id="btn-export">Copy Export</button>
+            <button class="btn btn-small" id="btn-import">Import Save</button>
+            <button class="btn btn-small" id="btn-reset" style="border-color:#ff4444; color:#ff4444;">Reset Save</button>
+          </div>
+        </div>
+
+        <button class="btn" id="btn-options-close" style="margin-top:2rem;">Close</button>
+      </div>
+    </div>
+
+    <!-- PLAYING HUD -->
+    <div id="ui-playing" class="ui-layer">
+      <div id="hud">
+        <div><span class="hud-stat">SCORE:</span> <span class="hud-val" id="hud-score">0</span></div>
+        <div><span class="hud-stat">COMBO:</span> <span class="hud-val" id="hud-combo">x1</span></div>
+        <div><span class="hud-stat">HP:</span> <span class="hud-val" id="hud-hp">3</span></div>
+      </div>
+      <button class="btn btn-icon" id="btn-pause">II</button>
+
+      <div id="touch-controls">
+        <div class="touch-zone" id="touch-move"></div>
+        <div class="touch-zone" id="touch-action"></div>
+      </div>
+    </div>
+
+    <!-- PAUSED -->
+    <div id="ui-paused" class="ui-layer">
+      <div class="modal">
+        <h2>PAUSED</h2>
+        <button class="btn" id="btn-resume">Resume</button>
+        <button class="btn" id="btn-restart">Restart</button>
+        <button class="btn" id="btn-options-pause">Options</button>
+        <button class="btn" id="btn-quit">Quit to Title</button>
+      </div>
+    </div>
+
+    <!-- GAME OVER -->
+    <div id="ui-gameover" class="ui-layer">
+      <div class="modal">
+        <h2>GAME OVER</h2>
+        <h3 id="go-new-high" style="display:none; color:#ffeb3b; animation: pulse 1s infinite;">NEW HIGH SCORE!</h3>
+        <p class="hud-stat">Score: <span class="hud-val" id="go-score">0</span></p>
+        <p class="hud-stat">Max Combo: <span class="hud-val" id="go-combo">0</span></p>
+        <p class="hud-stat">Wave Reached: <span class="hud-val" id="go-wave">0</span></p>
+
+        <div id="go-milestones" style="margin: 1rem 0; color: #4caf50;"></div>
+
+        <button class="btn" id="btn-play-again">Play Again</button>
+        <button class="btn" id="btn-title-from-go">Title Screen</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script defer src="game.js"></script>
+</body>
+</html>

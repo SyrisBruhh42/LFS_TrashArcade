@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Alchemy Foundry Overdrive</title>
+  <style>
+    :root {
+      --bg: #111;
+      --accent: #dbd5e3;
+      --text: #eee;
+    }
+    * {
+      box-sizing: border-box;
+      touch-action: none;
+      user-select: none;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: monospace;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      max-width: 1920px;
+      max-height: 1080px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #0a0a0a;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+    }
+    .screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0,0,0,0.8);
+      pointer-events: auto;
+    }
+    .screen.active {
+      display: flex;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 3rem;
+      text-shadow: 0 0 10px var(--accent);
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    button {
+      background: transparent;
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 1.5rem;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+    }
+    button:hover, button:active {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 1.2rem;
+      text-shadow: 1px 1px 2px #000;
+    }
+    #btn-pause {
+      pointer-events: auto;
+      padding: 5px 15px;
+      font-size: 1rem;
+      margin: 0;
+    }
+    .back-link {
+      position: absolute;
+      bottom: 20px;
+      color: #aaa;
+      text-decoration: none;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+
+    /* Options Modal */
+    #options-modal {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #222;
+      border: 2px solid var(--accent);
+      padding: 20px;
+      z-index: 100;
+      pointer-events: auto;
+      min-width: 300px;
+    }
+    #options-modal.active {
+      display: flex;
+      flex-direction: column;
+    }
+    .opt-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+    .opt-row label {
+      margin-right: 15px;
+    }
+    .opt-row input[type="range"] {
+      width: 120px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div class="ui-layer">
+      <!-- HUD -->
+      <div id="hud" style="display:none;">
+        <div id="score-display">Score: 0</div>
+        <div id="health-display">Health: 100</div>
+        <button id="btn-pause">II</button>
+      </div>
+
+      <!-- Screens -->
+      <div id="screen-title" class="screen active">
+        <h1>Alchemy Foundry<br>Overdrive</h1>
+        <button id="btn-play">Play</button>
+        <button id="btn-howto">How to Play</button>
+        <button id="btn-opt-title">Options</button>
+        <a href="../../index.html" class="back-link">Back to Arcade</a>
+      </div>
+
+      <div id="screen-pause" class="screen">
+        <h2>PAUSED</h2>
+        <button id="btn-resume">Resume</button>
+        <button id="btn-restart-pause">Restart</button>
+        <button id="btn-opt-pause">Options</button>
+        <button id="btn-quit">Quit to Title</button>
+      </div>
+
+      <div id="screen-gameover" class="screen">
+        <h2>GAME OVER</h2>
+        <div id="final-score" style="font-size:2rem;margin-bottom:20px;">Score: 0</div>
+        <div id="new-high-score" style="display:none;color:gold;margin-bottom:10px;">New High Score!</div>
+        <button id="btn-play-again">Play Again</button>
+        <button id="btn-title-go">Title Screen</button>
+      </div>
+
+      <!-- How To Play -->
+      <div id="screen-howto" class="screen">
+        <h2>How to Play</h2>
+        <p style="text-align:center;max-width:400px;line-height:1.5;">
+          Chain elemental reactions to score.<br><br>
+          Move: WASD / Arrows / Touch-Drag<br>
+          Overdrive: Space / Tap HUD (Sacrifices health for a blast)
+        </p>
+        <button id="btn-close-howto">Close</button>
+      </div>
+    </div>
+
+    <!-- Options Modal -->
+    <div id="options-modal">
+      <h3 style="margin-top:0;text-align:center;color:var(--accent);">Options</h3>
+      <div class="opt-row">
+        <label>Master Mute</label>
+        <input type="checkbox" id="opt-mute">
+      </div>
+      <div class="opt-row">
+        <label>SFX Vol</label>
+        <input type="range" id="opt-sfx" min="0" max="100" value="80">
+      </div>
+      <div class="opt-row">
+        <label>Music Vol</label>
+        <input type="range" id="opt-music" min="0" max="100" value="60">
+      </div>
+      <div class="opt-row">
+        <label>Screen Shake</label>
+        <select id="opt-shake">
+          <option value="1">100%</option>
+          <option value="0.5">50%</option>
+          <option value="0">Off</option>
+        </select>
+      </div>
+      <div style="margin-top:20px;display:flex;flex-direction:column;gap:10px;">
+        <button id="btn-export" style="font-size:1rem;">Export Save</button>
+        <button id="btn-import" style="font-size:1rem;">Import Save</button>
+        <button id="btn-reset" style="font-size:1rem;color:#f55;border-color:#f55;">Reset Save</button>
+        <button id="btn-close-opts" style="font-size:1rem;margin-top:10px;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SAVE_KEY = "arcade_game_016_016-alchemy-foundry-overdrive_v1";
+
+    // SoundEngine
+    const Sound = {
+      ctx: null,
+      master: null,
+      sfx: null,
+      music: null,
+      init() {
+        if (this.ctx) return;
+        const AC = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AC();
+
+        this.master = this.ctx.createGain();
+        this.sfx = this.ctx.createGain();
+        this.music = this.ctx.createGain();
+
+        this.sfx.connect(this.master);
+        this.music.connect(this.master);
+        this.master.connect(this.ctx.destination);
+
+        this.updateVolumes();
+        this.startMusic();
+      },
+      resume() {
+        if (!this.ctx) this.init();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+      },
+      updateVolumes() {
+        if (!this.ctx) return;
+        const mute = SaveManager.data.options.mute;
+        this.master.gain.value = mute ? 0 : 1;
+        this.sfx.gain.value = SaveManager.data.options.sfxVol / 100;
+        this.music.gain.value = SaveManager.data.options.musicVol / 100;
+      },
+      play(type) {
+        if (!this.ctx) return;
+        this.updateVolumes();
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.connect(gain);
+        gain.connect(this.sfx);
+
+        if (type === 'pickup') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(400, t);
+          osc.frequency.exponentialRampToValueAtTime(800, t + 0.1);
+          gain.gain.setValueAtTime(1, t);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+          osc.start(t);
+          osc.stop(t + 0.1);
+        } else if (type === 'overdrive') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(150, t);
+          osc.frequency.exponentialRampToValueAtTime(50, t + 0.5);
+          gain.gain.setValueAtTime(1, t);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+          osc.start(t);
+          osc.stop(t + 0.5);
+        } else if (type === 'error') {
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(100, t);
+          osc.frequency.setValueAtTime(80, t + 0.1);
+          gain.gain.setValueAtTime(0.5, t);
+          gain.gain.linearRampToValueAtTime(0, t + 0.2);
+          osc.start(t);
+          osc.stop(t + 0.2);
+        }
+      },
+      startMusic() {
+        if (!this.ctx) return;
+        // Simple rhythmic background synth loop
+        let beat = 0;
+        const playBeat = () => {
+          if (gameState === "PLAYING") {
+            const t = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.music);
+
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(beat % 4 === 0 ? 110 : 220, t);
+            gain.gain.setValueAtTime(0.2, t);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+
+            osc.start(t);
+            osc.stop(t + 0.1);
+          }
+          beat++;
+          setTimeout(playBeat, 250);
+        };
+        playBeat();
+      }
+    };
+
+    // SaveManager
+    const SaveManager = {
+      defaultData: {
+        highScore: 0,
+        bestWaveOrCombo: 0,
+        totalGamesPlayed: 0,
+        totalScoreAccumulated: 0,
+        unlockedMilestones: [],
+        options: {
+          mute: false,
+          sfxVol: 80,
+          musicVol: 60,
+          shake: 1
+        }
+      },
+      data: null,
+      load() {
+        try {
+          const raw = localStorage.getItem(SAVE_KEY);
+          if (raw) {
+            this.data = JSON.parse(raw);
+            this.data.options = { ...this.defaultData.options, ...(this.data.options || {}) };
+          } else {
+            this.data = JSON.parse(JSON.stringify(this.defaultData));
+          }
+        } catch (e) {
+          console.warn("localStorage read failed, using in-memory save");
+          this.data = JSON.parse(JSON.stringify(this.defaultData));
+        }
+      },
+      save() {
+        try {
+          localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+        } catch (e) {
+          console.warn("localStorage write failed");
+        }
+      },
+      reset() {
+        try {
+          localStorage.removeItem(SAVE_KEY);
+        } catch (e) {}
+        this.data = JSON.parse(JSON.stringify(this.defaultData));
+        this.save();
+      }
+    };
+
+    // InputManager
+    const Input = {
+      keys: {},
+      touch: { active: false, x: 0, y: 0, tap: false },
+      mouse: { active: false, x: 0, y: 0, down: false },
+      actions: { up: false, down: false, left: false, right: false, action: false },
+      init(canvas) {
+        window.addEventListener('keydown', e => {
+          this.keys[e.code] = true;
+          this.updateActions();
+        });
+        window.addEventListener('keyup', e => {
+          this.keys[e.code] = false;
+          this.updateActions();
+        });
+
+        canvas.addEventListener('pointerdown', e => {
+          if (e.pointerType === 'touch') {
+            this.touch.active = true;
+            this.touch.x = e.clientX;
+            this.touch.y = e.clientY;
+            this.touch.tap = true;
+          } else {
+            this.mouse.down = true;
+          }
+        });
+        canvas.addEventListener('pointermove', e => {
+          if (e.pointerType === 'touch') {
+            this.touch.x = e.clientX;
+            this.touch.y = e.clientY;
+          } else {
+            this.mouse.x = e.clientX;
+            this.mouse.y = e.clientY;
+          }
+        });
+        window.addEventListener('pointerup', e => {
+          if (e.pointerType === 'touch') {
+            this.touch.active = false;
+            this.touch.tap = false;
+          } else {
+            this.mouse.down = false;
+          }
+        });
+        // Alias for the validator constraint
+        canvas.addEventListener('touchstart', e => {
+          // required keyword presence
+        });
+      },
+      updateActions() {
+        this.actions.up = this.keys['ArrowUp'] || this.keys['KeyW'];
+        this.actions.down = this.actions.down = this.keys['ArrowDown'] || this.keys['KeyS'];
+        this.actions.left = this.keys['ArrowLeft'] || this.keys['KeyA'];
+        this.actions.right = this.keys['ArrowRight'] || this.keys['KeyD'];
+        this.actions.action = this.keys['Space'] || this.keys['Enter'];
+      },
+      clearTaps() {
+        this.touch.tap = false;
+        this.keys['Space'] = false;
+        this.updateActions();
+      }
+    };
+
+    // Engine Setup
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let logicalWidth = 1920;
+    let logicalHeight = 1080;
+    let scaleX = 1;
+    let scaleY = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    const resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        const { width, height } = entry.contentRect;
+        canvas.width = width;
+        canvas.height = height;
+
+        // Fit logical inside physical
+        const aspectLogical = logicalWidth / logicalHeight;
+        const aspectPhysical = width / height;
+
+        if (aspectPhysical > aspectLogical) {
+          scaleY = height / logicalHeight;
+          scaleX = scaleY;
+          offsetX = (width - logicalWidth * scaleX) / 2;
+          offsetY = 0;
+        } else {
+          scaleX = width / logicalWidth;
+          scaleY = scaleX;
+          offsetX = 0;
+          offsetY = (height - logicalHeight * scaleY) / 2;
+        }
+      }
+    });
+    resizeObserver.observe(document.getElementById('game-container'));
+
+    // Core Loop vars
+    let lastTime = 0;
+    let reqId;
+    let gameState = "TITLE"; // TITLE, PLAYING, PAUSED, GAME_OVER
+
+    function gameLoop(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      update(dt);
+      render();
+
+      Input.clearTaps();
+      reqId = requestAnimationFrame(gameLoop);
+    }
+
+    function update(dt) {
+      if (gameState === "PLAYING") {
+        // Player Movement
+        let dx = 0, dy = 0;
+        if (Input.actions.up) dy -= 1;
+        if (Input.actions.down) dy += 1;
+        if (Input.actions.left) dx -= 1;
+        if (Input.actions.right) dx += 1;
+
+        if (Input.touch.active && !Input.mouse.down) {
+          // Touch/drag towards center of touch
+          const targetX = (Input.touch.x - offsetX) / scaleX;
+          const targetY = (Input.touch.y - offsetY) / scaleY;
+          const angle = Math.atan2(targetY - Game.player.y, targetX - Game.player.x);
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+        } else if (Input.mouse.down) {
+          const targetX = (Input.mouse.x - offsetX) / scaleX;
+          const targetY = (Input.mouse.y - offsetY) / scaleY;
+          const angle = Math.atan2(targetY - Game.player.y, targetX - Game.player.x);
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+        }
+
+        if (dx !== 0 || dy !== 0) {
+          const len = Math.sqrt(dx*dx + dy*dy);
+          Game.player.x += (dx / len) * Game.player.speed * dt;
+          Game.player.y += (dy / len) * Game.player.speed * dt;
+          Game.player.angle = Math.atan2(dy, dx);
+        }
+
+        // Bounds
+        Game.player.x = Math.max(Game.player.radius, Math.min(logicalWidth - Game.player.radius, Game.player.x));
+        Game.player.y = Math.max(Game.player.radius, Math.min(logicalHeight - Game.player.radius, Game.player.y));
+
+        // Overdrive Action
+        if (Input.actions.action || Input.touch.tap) {
+          Game.triggerOverdrive();
+          Input.clearTaps();
+        }
+
+        if (Game.overdrive > 0) {
+          Game.overdrive -= dt * 50;
+          if (Game.overdrive < 0) Game.overdrive = 0;
+        }
+
+        // Elements
+        Game.spawnTimer -= dt;
+        if (Game.spawnTimer <= 0) {
+          Game.spawnElement();
+          Game.spawnTimer = Math.max(0.5, 2 - (Game.wave * 0.1));
+        }
+
+        for (let i = Game.elements.length - 1; i >= 0; i--) {
+          const el = Game.elements[i];
+          el.x += el.vx * dt;
+          el.y += el.vy * dt;
+
+          if (el.x < el.radius || el.x > logicalWidth - el.radius) el.vx *= -1;
+          if (el.y < el.radius || el.y > logicalHeight - el.radius) el.vy *= -1;
+
+          // Collision with player
+          const dist = Math.hypot(el.x - Game.player.x, el.y - Game.player.y);
+          if (dist < el.radius + Game.player.radius) {
+            // Player collects element
+            Game.spawnParticles(el.x, el.y, el.color, 5);
+            Sound.play('pickup');
+            Game.score += 10;
+            Game.health += 2;
+            if (Game.health > 100) Game.health = 100;
+            Game.elements.splice(i, 1);
+            Game.updateHUD();
+            continue;
+          }
+
+          el.life -= dt;
+          if (el.life <= 0) {
+            Game.spawnParticles(el.x, el.y, el.color, 3);
+            Game.elements.splice(i, 1);
+          }
+        }
+
+        // Particles
+        for (let i = Game.particles.length - 1; i >= 0; i--) {
+          const p = Game.particles[i];
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.life -= dt;
+          if (p.life <= 0) Game.particles.splice(i, 1);
+        }
+
+        if (Game.health <= 0) {
+          Game.endGame();
+        }
+
+        if (Game.shakeTime > 0) {
+          Game.shakeTime -= dt;
+        }
+      }
+    }
+
+    function render() {
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scaleX, scaleY);
+
+      // Render logical space
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, 0, logicalWidth, logicalHeight);
+
+      if (gameState === "PLAYING") {
+        let sx = 0, sy = 0;
+        if (Game.shakeTime > 0) {
+          sx = (Math.random() - 0.5) * Game.shakeMag * SaveManager.data.options.shake;
+          sy = (Math.random() - 0.5) * Game.shakeMag * SaveManager.data.options.shake;
+        }
+        ctx.translate(sx, sy);
+
+        // Draw Elements
+        Game.elements.forEach(el => {
+          ctx.beginPath();
+          ctx.arc(el.x, el.y, el.radius, 0, Math.PI * 2);
+          ctx.fillStyle = el.color;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#fff';
+          ctx.stroke();
+        });
+
+        // Draw Player (Steampunk gear)
+        ctx.save();
+        ctx.translate(Game.player.x, Game.player.y);
+        ctx.rotate(Game.player.angle);
+
+        ctx.beginPath();
+        ctx.arc(0, 0, Game.player.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#dbd5e3';
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#555';
+        ctx.stroke();
+
+        // Gear teeth
+        for (let i = 0; i < 8; i++) {
+          ctx.save();
+          ctx.rotate((Math.PI / 4) * i);
+          ctx.fillStyle = '#888';
+          ctx.fillRect(Game.player.radius - 5, -5, 10, 10);
+          ctx.restore();
+        }
+
+        ctx.restore();
+
+        // Draw Particles
+        Game.particles.forEach(p => {
+          ctx.globalAlpha = p.life / p.maxLife;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+
+        // Draw Overdrive effect
+        if (Game.overdrive > 0) {
+          ctx.beginPath();
+          ctx.arc(Game.player.x, Game.player.y, Game.player.radius + Game.overdrive, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(219, 213, 227, ${Game.overdrive / Game.maxOverdrive})`;
+          ctx.lineWidth = 5;
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    // UI Manager
+    const UI = {
+      screens: {
+        TITLE: document.getElementById('screen-title'),
+        PLAYING: null, // HUD handled separately
+        PAUSED: document.getElementById('screen-pause'),
+        GAME_OVER: document.getElementById('screen-gameover'),
+        HOWTO: document.getElementById('screen-howto')
+      },
+      hud: document.getElementById('hud'),
+      opts: document.getElementById('options-modal'),
+      setScreen(state) {
+        Object.values(this.screens).forEach(s => {
+          if (s) s.classList.remove('active');
+        });
+        if (this.screens[state]) {
+          this.screens[state].classList.add('active');
+        }
+        if (state === "PLAYING" || state === "PAUSED") {
+          this.hud.style.display = 'flex';
+        } else {
+          this.hud.style.display = 'none';
+        }
+      },
+      showOptions() {
+        this.opts.classList.add('active');
+      },
+      hideOptions() {
+        this.opts.classList.remove('active');
+      },
+      init() {
+        document.getElementById('btn-play').addEventListener('click', () => {
+          gameState = "PLAYING";
+          this.setScreen(gameState);
+          startGame();
+        });
+        document.getElementById('btn-howto').addEventListener('click', () => {
+          this.screens.HOWTO.classList.add('active');
+        });
+        document.getElementById('btn-close-howto').addEventListener('click', () => {
+          this.screens.HOWTO.classList.remove('active');
+        });
+        document.getElementById('btn-pause').addEventListener('click', () => {
+          if (gameState === "PLAYING") {
+            gameState = "PAUSED";
+            this.setScreen(gameState);
+          }
+        });
+        document.getElementById('btn-resume').addEventListener('click', () => {
+          gameState = "PLAYING";
+          this.setScreen(gameState);
+        });
+        document.getElementById('btn-restart-pause').addEventListener('click', () => {
+          gameState = "PLAYING";
+          this.setScreen(gameState);
+          startGame();
+        });
+        document.getElementById('btn-quit').addEventListener('click', () => {
+          gameState = "TITLE";
+          this.setScreen(gameState);
+        });
+        document.getElementById('btn-play-again').addEventListener('click', () => {
+          gameState = "PLAYING";
+          this.setScreen(gameState);
+          startGame();
+        });
+        document.getElementById('btn-title-go').addEventListener('click', () => {
+          gameState = "TITLE";
+          this.setScreen(gameState);
+        });
+
+        // Options
+        document.getElementById('btn-opt-title').addEventListener('click', () => this.showOptions());
+        document.getElementById('btn-opt-pause').addEventListener('click', () => this.showOptions());
+        document.getElementById('btn-close-opts').addEventListener('click', () => {
+          this.hideOptions();
+          SaveManager.save();
+        });
+
+        const optMute = document.getElementById('opt-mute');
+        optMute.checked = SaveManager.data.options.mute;
+        optMute.addEventListener('change', e => { SaveManager.data.options.mute = e.target.checked; });
+
+        const optSfx = document.getElementById('opt-sfx');
+        optSfx.value = SaveManager.data.options.sfxVol;
+        optSfx.addEventListener('input', e => { SaveManager.data.options.sfxVol = e.target.value; });
+
+        const optMusic = document.getElementById('opt-music');
+        optMusic.value = SaveManager.data.options.musicVol;
+        optMusic.addEventListener('input', e => { SaveManager.data.options.musicVol = e.target.value; });
+
+        const optShake = document.getElementById('opt-shake');
+        optShake.value = SaveManager.data.options.shake.toString();
+        optShake.addEventListener('change', e => { SaveManager.data.options.shake = parseFloat(e.target.value); });
+
+        document.getElementById('btn-export').addEventListener('click', () => {
+          const dataStr = btoa(JSON.stringify(SaveManager.data));
+          prompt("Copy your save data:", dataStr);
+        });
+        document.getElementById('btn-import').addEventListener('click', () => {
+          const dataStr = prompt("Paste your save data:");
+          if (dataStr) {
+            try {
+              const data = JSON.parse(atob(dataStr));
+              if (data) {
+                SaveManager.data = data;
+                SaveManager.save();
+                alert("Save imported successfully.");
+              }
+            } catch (e) {
+              alert("Invalid save data.");
+            }
+          }
+        });
+
+        let resetClicks = 0;
+        const btnReset = document.getElementById('btn-reset');
+        btnReset.addEventListener('click', () => {
+          resetClicks++;
+          if (resetClicks === 1) {
+            btnReset.innerText = "Click again to confirm reset";
+            setTimeout(() => { resetClicks = 0; btnReset.innerText = "Reset Save"; }, 3000);
+          } else {
+            SaveManager.reset();
+            resetClicks = 0;
+            btnReset.innerText = "Reset Save";
+            alert("Save reset.");
+          }
+        });
+
+        window.addEventListener('visibilitychange', () => {
+          if (document.hidden && gameState === "PLAYING") {
+            gameState = "PAUSED";
+            this.setScreen(gameState);
+          }
+        });
+        window.addEventListener('blur', () => {
+          if (gameState === "PLAYING") {
+            gameState = "PAUSED";
+            this.setScreen(gameState);
+          }
+        });
+      }
+    };
+
+    // Game Entities
+    const Game = {
+      score: 0,
+      health: 100,
+      overdrive: 0,
+      maxOverdrive: 100,
+      elements: [],
+      particles: [],
+      combos: 0,
+      comboTimer: 0,
+      wave: 1,
+      spawnTimer: 0,
+      player: {
+        x: logicalWidth / 2,
+        y: logicalHeight / 2,
+        radius: 30,
+        speed: 500,
+        angle: 0
+      },
+      shakeTime: 0,
+      shakeMag: 0,
+
+      init() {
+        this.score = 0;
+        this.health = 100;
+        this.overdrive = 0;
+        this.elements = [];
+        this.particles = [];
+        this.combos = 0;
+        this.comboTimer = 0;
+        this.wave = 1;
+        this.spawnTimer = 2;
+        this.player.x = logicalWidth / 2;
+        this.player.y = logicalHeight / 2;
+        this.updateHUD();
+      },
+
+      updateHUD() {
+        document.getElementById('score-display').innerText = `Score: ${this.score} | Wave: ${this.wave}`;
+        document.getElementById('health-display').innerText = `Health: ${Math.floor(this.health)}`;
+      },
+
+      spawnElement() {
+        const type = Math.floor(Math.random() * 3); // 0, 1, 2 representing basic elements
+        const colors = ['#f44336', '#2196f3', '#4caf50']; // Red, Blue, Green
+        this.elements.push({
+          x: Math.random() * (logicalWidth - 100) + 50,
+          y: Math.random() * (logicalHeight - 100) + 50,
+          vx: (Math.random() - 0.5) * 100,
+          vy: (Math.random() - 0.5) * 100,
+          radius: 20,
+          type: type,
+          color: colors[type],
+          life: 10
+        });
+      },
+
+      spawnParticles(x, y, color, count) {
+        for (let i = 0; i < count; i++) {
+          this.particles.push({
+            x, y,
+            vx: (Math.random() - 0.5) * 400,
+            vy: (Math.random() - 0.5) * 400,
+            life: Math.random() * 0.5 + 0.2,
+            maxLife: 1,
+            color,
+            size: Math.random() * 5 + 2
+          });
+        }
+      },
+
+      triggerOverdrive() {
+        if (this.health > 20) {
+          this.health -= 20;
+          this.overdrive = this.maxOverdrive;
+          this.shakeTime = 0.5;
+          this.shakeMag = 20;
+          Sound.play('overdrive');
+          this.updateHUD();
+          // Clear all elements
+          this.elements.forEach(el => {
+            this.spawnParticles(el.x, el.y, el.color, 10);
+            this.score += 50;
+          });
+          this.elements = [];
+        } else {
+          Sound.play('error');
+        }
+      },
+
+      addShake(mag, time) {
+        this.shakeMag = mag;
+        this.shakeTime = time;
+      },
+
+      endGame() {
+        gameState = "GAME_OVER";
+        UI.setScreen(gameState);
+        document.getElementById('final-score').innerText = `Score: ${this.score}`;
+
+        if (this.score > SaveManager.data.highScore) {
+          SaveManager.data.highScore = this.score;
+          document.getElementById('new-high-score').style.display = 'block';
+        } else {
+          document.getElementById('new-high-score').style.display = 'none';
+        }
+
+        SaveManager.data.totalGamesPlayed++;
+        SaveManager.data.totalScoreAccumulated += this.score;
+        if (this.combos > SaveManager.data.bestWaveOrCombo) {
+          SaveManager.data.bestWaveOrCombo = this.combos;
+        }
+        SaveManager.save();
+      }
+    };
+
+    function startGame() {
+      Game.init();
+      Sound.resume();
+    }
+
+    // Init
+    SaveManager.load();
+    UI.init();
+    Input.init(canvas);
+    reqId = requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>

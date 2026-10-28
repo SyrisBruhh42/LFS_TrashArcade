@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sandstorm Grapple</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            color: #fff;
+            touch-action: none;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at center, #2a1508 0%, #000 100%);
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            pointer-events: auto;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        #ui-playing {
+            background-color: transparent;
+            pointer-events: none;
+            justify-content: space-between;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        .hud-stats {
+            font-size: 24px;
+            color: #5be95e;
+        }
+
+        .btn {
+            background: #5be95e;
+            color: #000;
+            border: 2px solid #fff;
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 4px 4px 0 #fff;
+            transition: transform 0.1s;
+            pointer-events: auto;
+        }
+
+        .btn:active {
+            transform: translate(4px, 4px);
+            box-shadow: 0 0 0 #fff;
+        }
+
+        .title-text {
+            font-size: 48px;
+            color: #5be95e;
+            text-shadow: 4px 4px 0 #fff;
+            margin-bottom: 30px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .panel {
+            background: rgba(0, 0, 0, 0.9);
+            border: 4px solid #5be95e;
+            padding: 20px;
+            max-width: 600px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #btn-pause {
+            background: rgba(0, 0, 0, 0.5);
+            color: #fff;
+            border: 2px solid #5be95e;
+            padding: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+
+        .back-link {
+            position: absolute;
+            bottom: 20px;
+            color: #ccc;
+            text-decoration: underline;
+            font-size: 16px;
+        }
+
+        .options-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 10px 0;
+            width: 100%;
+        }
+
+        .options-group label {
+            margin-bottom: 5px;
+            color: #5be95e;
+        }
+
+        .options-group input[type="range"] {
+            width: 80%;
+        }
+
+        .touch-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40%;
+            pointer-events: none;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .touch-controls {
+                display: flex;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="ui-layer">
+
+        <!-- TITLE SCREEN -->
+        <div id="screen-title" class="screen active">
+            <div class="title-text">Sandstorm Grapple</div>
+            <div class="panel">
+                <div id="title-high-score">High Score: 0</div>
+                <div id="title-stats">Games: 0 | Total Score: 0</div>
+            </div>
+            <button class="btn" id="btn-play">Play</button>
+            <button class="btn" id="btn-howto">How to Play</button>
+            <button class="btn" id="btn-options-title">Options</button>
+            <a href="../../index.html" class="back-link">Back to Arcade</a>
+        </div>
+
+        <!-- HOW TO PLAY SCREEN -->
+        <div id="screen-howto" class="screen">
+            <div class="panel">
+                <h2 style="color: #5be95e; margin-top:0;">How to Play</h2>
+                <p>Swing through the desert sandstorm using magnetic grapple points.</p>
+                <p><strong>Controls:</strong></p>
+                <p>Desktop: WASD/Arrows to swing, Space to jump.<br>
+                   Mouse Click to grapple, Right Click/Shift to toggle polarity.</p>
+                <p>Touch: On-screen joystick to swing. Tap right side to grapple/jump, double tap to toggle polarity.</p>
+                <p><strong>Mechanics:</strong></p>
+                <p>Blue nodes = North, Red nodes = South.<br>
+                   Opposite colors ATTRACT (pull in).<br>
+                   Same colors REPEL (push away).</p>
+                <button class="btn" id="btn-howto-back">Back</button>
+            </div>
+        </div>
+
+        <!-- OPTIONS SCREEN -->
+        <div id="screen-options" class="screen">
+            <div class="panel">
+                <h2 style="color: #5be95e; margin-top:0;">Options</h2>
+
+                <div class="options-group">
+                    <label>Master Volume: <span id="opt-val-master">100%</span></label>
+                    <input type="range" id="opt-master" min="0" max="100" value="100">
+                </div>
+
+                <div class="options-group">
+                    <label>SFX Volume: <span id="opt-val-sfx">100%</span></label>
+                    <input type="range" id="opt-sfx" min="0" max="100" value="100">
+                </div>
+
+                <div class="options-group">
+                    <label>Music Volume: <span id="opt-val-music">100%</span></label>
+                    <input type="range" id="opt-music" min="0" max="100" value="100">
+                </div>
+
+                <button class="btn" id="btn-export-save">Export Save</button>
+                <button class="btn" id="btn-import-save">Import Save</button>
+                <button class="btn" id="btn-reset-save" style="border-color: #ff4444; color: #ff4444;">Reset Save</button>
+
+                <br>
+                <button class="btn" id="btn-options-back">Back</button>
+            </div>
+        </div>
+
+        <!-- PLAYING HUD -->
+        <div id="ui-playing" class="screen">
+            <div class="hud-top">
+                <div class="hud-stats">
+                    Score: <span id="hud-score">0</span><br>
+                    Multiplier: <span id="hud-mult">x1</span>
+                </div>
+                <button id="btn-pause">II</button>
+            </div>
+
+            <div class="touch-controls" id="touch-controls-layer">
+                <!-- Virtual controls rendered in canvas / handled via touch events -->
+            </div>
+        </div>
+
+        <!-- PAUSED SCREEN -->
+        <div id="screen-paused" class="screen">
+            <div class="title-text">PAUSED</div>
+            <button class="btn" id="btn-resume">Resume</button>
+            <button class="btn" id="btn-restart">Restart</button>
+            <button class="btn" id="btn-options-pause">Options</button>
+            <button class="btn" id="btn-quit">Quit to Title</button>
+            <a href="../../index.html" class="back-link">Back to Arcade</a>
+        </div>
+
+        <!-- GAME OVER SCREEN -->
+        <div id="screen-gameover" class="screen">
+            <div class="title-text" style="color: #ff4444;">GAME OVER</div>
+            <div class="panel">
+                <h3 id="go-new-high" style="display:none; color: #ffff00; margin: 0;">NEW HIGH SCORE!</h3>
+                <p>Final Score: <span id="go-score">0</span></p>
+                <p>Max Combo: <span id="go-combo">x0</span></p>
+                <div id="go-milestones" style="color: #00ffff;"></div>
+            </div>
+            <button class="btn" id="btn-play-again">Play Again</button>
+            <button class="btn" id="btn-go-title">Title Screen</button>
+        </div>
+
+    </div>
+</div>
+
+<script defer src="./engine.js"></script>
+<script defer src="./input.js"></script>
+<script defer src="./game.js"></script>
+
+<script>
+    window.addEventListener('DOMContentLoaded', () => {
+        // Initialize game once scripts are loaded
+        if (typeof GameEngine !== 'undefined') {
+            const engine = new GameEngine();
+            engine.init();
+        } else {
+            console.error("GameEngine not found. Scripts may have failed to load.");
+        }
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "id": "083",
+  "slug": "083-haunted-tether-drill",
+  "title": "Haunted Tether Drill",
+  "genre": "Subterranean Drilling/Mining Roguelite",
+  "coreMechanic": "Risk/Reward Tether or Tail Growth",
+  "setting": "Haunted Victorian Manor",
+  "description": "Drill through the haunted manor, grow your tether with collected ectoplasm, and return it for points before enemies snap it.",
+  "controls": "WASD/Arrows to move and drill. Click or Space to dash. Touch to drag and steer. Options button, or O from title/pause; Tab or arrows navigate settings.",
+  "createdAt": "2024-10-24",
+  "accentColor": "#65bb98",
+  "phase": "10"
+}

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Scrapheap Echo Grapple</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ui-layer">
+      <!-- HUD -->
+      <div id="hud" class="hidden">
+        <div class="hud-top">
+          <div class="hud-left">Score: <span id="score-val">0</span></div>
+          <div class="hud-center">Wave: <span id="wave-val">1</span></div>
+          <div class="hud-right"><button id="btn-pause" class="icon-btn">II</button></div>
+        </div>
+        <div class="hud-bottom">
+          <div id="ghost-status">Ghost: <span id="ghost-state">IDLE</span></div>
+          <div id="touch-controls" class="hidden">
+            <div id="dpad">
+              <div class="dpad-row"><button id="btn-up">^</button></div>
+              <div class="dpad-row"><button id="btn-left">&lt;</button><button id="btn-down">v</button><button id="btn-right">&gt;</button></div>
+            </div>
+            <div id="action-btns">
+              <button id="btn-action">ECHO</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TITLE SCREEN -->
+      <div id="screen-title" class="screen">
+        <h1 class="title-text">Scrapheap Echo Grapple</h1>
+        <div class="stats-box">High Score: <span id="high-score">0</span></div>
+        <div class="btn-group">
+          <button id="btn-play" class="main-btn">Play</button>
+          <button id="btn-howto" class="main-btn">How to Play</button>
+          <button id="btn-options-title" class="main-btn">Options</button>
+        </div>
+        <a href="../../index.html" class="back-link">Back to Arcade</a>
+      </div>
+
+      <!-- HOW TO PLAY SCREEN -->
+      <div id="screen-howto" class="screen hidden">
+        <h2>How to Play</h2>
+        <div class="howto-content">
+          <p><strong>Move:</strong> WASD / Arrow Keys</p>
+          <p><strong>Grapple:</strong> Click and drag from your robot to a ceiling scrap point to swing.</p>
+          <p><strong>Echo Ghost:</strong> Press Space (or ECHO button) to record your movement. Press again to spawn a ghost that repeats it! Use the ghost to hit switches you can't reach.</p>
+          <p><strong>Goal:</strong> Reach the exit portal in each junkyard sector.</p>
+        </div>
+        <button id="btn-howto-back" class="main-btn">Back</button>
+      </div>
+
+      <!-- PAUSE SCREEN -->
+      <div id="screen-pause" class="screen hidden">
+        <h2>PAUSED</h2>
+        <div class="btn-group">
+          <button id="btn-resume" class="main-btn">Resume</button>
+          <button id="btn-restart" class="main-btn">Restart</button>
+          <button id="btn-options-pause" class="main-btn">Options</button>
+          <button id="btn-quit" class="main-btn">Quit to Title</button>
+        </div>
+      </div>
+
+      <!-- GAME OVER SCREEN -->
+      <div id="screen-gameover" class="screen hidden">
+        <h2>SCRAPPED</h2>
+        <div class="stats-box">
+          <p>Final Score: <span id="final-score">0</span></p>
+          <p id="new-high-score-msg" class="hidden">New High Score!</p>
+        </div>
+        <div id="milestones" class="milestones-box"></div>
+        <div class="btn-group">
+          <button id="btn-play-again" class="main-btn">Play Again</button>
+          <button id="btn-title-return" class="main-btn">Title Screen</button>
+        </div>
+      </div>
+
+      <!-- OPTIONS MODAL -->
+      <div id="modal-options" class="modal hidden">
+        <div class="modal-content">
+          <h2>Options</h2>
+          <div class="option-row">
+            <label>Master Mute</label>
+            <input type="checkbox" id="opt-mute">
+          </div>
+          <div class="option-row">
+            <label>SFX Volume</label>
+            <input type="range" id="opt-sfx" min="0" max="100" value="100">
+          </div>
+          <div class="option-row">
+            <label>Music Volume</label>
+            <input type="range" id="opt-music" min="0" max="100" value="100">
+          </div>
+          <div class="option-row">
+            <label>Screen Shake</label>
+            <select id="opt-shake">
+              <option value="100">100%</option>
+              <option value="50">50%</option>
+              <option value="0">Off</option>
+            </select>
+          </div>
+          <div class="option-row">
+            <label>Touch Controls</label>
+            <select id="opt-touch">
+              <option value="auto">Auto</option>
+              <option value="always">Always</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
+          <div class="save-actions">
+            <button id="btn-export-save">Export Save</button>
+            <button id="btn-import-save">Import Save</button>
+            <button id="btn-reset-save">Reset Save</button>
+          </div>
+          <textarea id="save-data-box" class="hidden"></textarea>
+          <button id="btn-close-options" class="main-btn">Close</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script defer src="audio.js"></script>
+  <script defer src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Echo Protocol</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b0b1a;
+            color: #ff62ac;
+            font-family: 'Courier New', Courier, monospace;
+            touch-action: none; /* Prevent pinch zoom and scroll on touch devices */
+        }
+        #gameContainer {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            display: block;
+            box-shadow: 0 0 20px rgba(255, 98, 172, 0.2);
+            /* Handle pixelated scaling nicely */
+            image-rendering: pixelated;
+        }
+    </style>
+    <script defer src="vfx.js"></script>
+    <script defer src="world.js"></script>
+    <script defer src="ui.js"></script>
+    <script defer src="game.js"></script>
+    <script defer src="bosses.js"></script>
+    <script defer src="progression.js"></script>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+</body>
+</html>

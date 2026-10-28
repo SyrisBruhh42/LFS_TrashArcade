@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Cyber Drill Dojo</title>
+  <style>
+    :root {
+      --bg: #0d0d12;
+      --accent: #42997b;
+      --accent-glow: #5be0b6;
+      --text: #e0e0e0;
+      --ui-bg: rgba(13, 13, 18, 0.9);
+      --danger: #d9455f;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: monospace;
+      overflow: hidden;
+      touch-action: none;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #000;
+      overflow: hidden;
+    }
+
+    canvas {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      image-rendering: pixelated;
+    }
+
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: var(--ui-bg);
+      z-index: 10;
+    }
+
+    .ui-layer.active {
+      display: flex;
+    }
+
+    h1 {
+      font-size: 3rem;
+      color: var(--accent);
+      text-shadow: 0 0 10px var(--accent-glow);
+      margin-bottom: 2rem;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    h2 {
+      font-size: 2rem;
+      color: var(--text);
+      margin-bottom: 1.5rem;
+    }
+
+    button {
+      background: transparent;
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 1.2rem;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+    }
+
+    button:hover, button:active {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+      display: none;
+    }
+
+    .hud.active {
+      display: block;
+    }
+
+    .hud-top {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 1.5rem;
+      text-shadow: 1px 1px 2px #000;
+    }
+
+    .score-container { color: var(--accent-glow); }
+    .depth-container { color: #fff; }
+
+    .btn-pause {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      pointer-events: auto;
+      background: var(--ui-bg);
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      width: 40px;
+      height: 40px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      border-radius: 5px;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .health-bar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 200px;
+      height: 20px;
+      border: 2px solid #fff;
+      background: rgba(0,0,0,0.5);
+    }
+
+    .health-fill {
+      width: 100%;
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.1s;
+    }
+
+    #options-modal, #howto-modal {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #1a1a24;
+      border: 2px solid var(--accent);
+      padding: 2rem;
+      z-index: 20;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      min-width: 300px;
+    }
+
+    #options-modal.active, #howto-modal.active {
+      display: flex;
+    }
+
+    .option-row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      margin: 10px 0;
+      align-items: center;
+    }
+
+    input[type=range] {
+      accent-color: var(--accent);
+    }
+
+    .stats {
+      margin-bottom: 20px;
+      text-align: center;
+      color: #aaa;
+    }
+
+    .arcade-link {
+      color: #aaa;
+      text-decoration: none;
+      margin-top: 20px;
+      border-bottom: 1px solid #aaa;
+    }
+
+    .arcade-link:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="hud" class="hud">
+      <div class="hud-top">
+        <div class="score-container">Score: <span id="hud-score">0</span></div>
+        <div class="depth-container">Depth: <span id="hud-depth">0</span>m</div>
+      </div>
+      <button class="btn-pause" id="btn-pause">II</button>
+      <div class="health-bar"><div class="health-fill" id="hud-health"></div></div>
+    </div>
+
+    <!-- TITLE SCREEN -->
+    <div id="screen-title" class="ui-layer active">
+      <h1>Cyber Drill Dojo</h1>
+      <div class="stats">
+        High Score: <span id="title-highscore">0</span><br>
+        Max Depth: <span id="title-maxdepth">0</span>m
+      </div>
+      <button id="btn-play">Play</button>
+      <button id="btn-howto">How to Play</button>
+      <button id="btn-options-title">Options</button>
+      <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+    </div>
+
+    <!-- PAUSE SCREEN -->
+    <div id="screen-paused" class="ui-layer">
+      <h2>PAUSED</h2>
+      <button id="btn-resume">Resume</button>
+      <button id="btn-restart-pause">Restart</button>
+      <button id="btn-options-pause">Options</button>
+      <button id="btn-quit">Quit to Title</button>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div id="screen-gameover" class="ui-layer">
+      <h2>GAME OVER</h2>
+      <div class="stats">
+        Score: <span id="go-score">0</span><br>
+        Depth: <span id="go-depth">0</span>m
+      </div>
+      <button id="btn-restart-go">Play Again</button>
+      <button id="btn-title-go">Title Screen</button>
+    </div>
+
+    <!-- OPTIONS MODAL -->
+    <div id="options-modal">
+      <h2>Options</h2>
+      <div class="option-row">
+        <label>Master Mute</label>
+        <input type="checkbox" id="opt-mute">
+      </div>
+      <div class="option-row">
+        <label>SFX Vol</label>
+        <input type="range" id="opt-sfx" min="0" max="100" value="100">
+      </div>
+      <div class="option-row">
+        <label>Music Vol</label>
+        <input type="range" id="opt-music" min="0" max="100" value="50">
+      </div>
+      <div class="option-row">
+        <button id="btn-export">Export Save</button>
+        <button id="btn-import">Import Save</button>
+      </div>
+      <button id="btn-reset-save">Reset Save</button>
+      <button id="btn-close-options">Close</button>
+    </div>
+
+    <!-- HOW TO PLAY MODAL -->
+    <div id="howto-modal">
+      <h2>How to Play</h2>
+      <p style="margin-bottom: 10px; text-align: center;">
+        WASD / Arrows / Touch-Drag<br>to move and drill.<br><br>
+        <span style="color: var(--accent);">Time-Dilation:</span> Release all controls<br>to slow down time and plan your move.<br><br>
+        Mine cyber-minerals (+Score)<br>Avoid indestructible terrain and lasers.
+      </p>
+      <button id="btn-close-howto">Close</button>
+    </div>
+
+  </div>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      // --- SaveManager ---
+      class SaveManager {
+        constructor() {
+          this.key = 'arcade_game_023_023-cyber-drill-dojo_v1';
+          this.data = this.load();
+        }
+
+        load() {
+          try {
+            const raw = localStorage.getItem(this.key);
+            if (raw) return JSON.parse(raw);
+          } catch (e) {
+            console.warn('localStorage error', e);
+          }
+          return {
+            highScore: 0,
+            maxDepth: 0,
+            options: {
+              mute: false,
+              sfx: 100,
+              music: 50
+            }
+          };
+        }
+
+        save() {
+          try {
+            localStorage.setItem(this.key, JSON.stringify(this.data));
+          } catch (e) {
+            console.warn('localStorage error', e);
+          }
+        }
+
+        reset() {
+          try {
+            localStorage.removeItem(this.key);
+          } catch (e) {
+            console.warn('localStorage error', e);
+          }
+          this.data = this.load();
+          this.save();
+        }
+      }
+
+      // --- InputManager ---
+      class InputManager {
+        constructor(canvas) {
+          this.keys = {};
+          this.touch = { active: false, x: 0, y: 0 };
+          this.isInputActive = false;
+
+          window.addEventListener('keydown', e => { this.keys[e.code] = true; this.updateInputActive(); });
+          window.addEventListener('keyup', e => { this.keys[e.code] = false; this.updateInputActive(); });
+
+          canvas.addEventListener('touchstart', e => {
+            // e.preventDefault(); // Don't aggressively prevent default to preserve mouse clicks
+            this.handleTouch(e.touches[0]);
+          }, {passive: false});
+
+          canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            this.handleTouch(e.touches[0]);
+          }, {passive: false});
+
+          canvas.addEventListener('touchend', () => {
+            this.touch.active = false;
+            this.updateInputActive();
+          });
+
+          canvas.addEventListener('pointerdown', e => {
+            if (e.pointerType === 'mouse') {
+              this.touch.active = true;
+              this.touch.x = e.clientX;
+              this.touch.y = e.clientY;
+              this.updateInputActive();
+            }
+          });
+
+          canvas.addEventListener('pointermove', e => {
+            if (this.touch.active && e.pointerType === 'mouse') {
+              this.touch.x = e.clientX;
+              this.touch.y = e.clientY;
+            }
+          });
+
+          canvas.addEventListener('pointerup', e => {
+            if (e.pointerType === 'mouse') {
+              this.touch.active = false;
+              this.updateInputActive();
+            }
+          });
+        }
+
+        handleTouch(t) {
+          this.touch.active = true;
+          this.touch.x = t.clientX;
+          this.touch.y = t.clientY;
+          this.updateInputActive();
+        }
+
+        updateInputActive() {
+          this.isInputActive = this.touch.active ||
+            this.keys['ArrowUp'] || this.keys['KeyW'] ||
+            this.keys['ArrowDown'] || this.keys['KeyS'] ||
+            this.keys['ArrowLeft'] || this.keys['KeyA'] ||
+            this.keys['ArrowRight'] || this.keys['KeyD'];
+        }
+
+        getDir(playerX, playerY, scale) {
+          let dx = 0; let dy = 0;
+          if (this.keys['ArrowUp'] || this.keys['KeyW']) dy -= 1;
+          if (this.keys['ArrowDown'] || this.keys['KeyS']) dy += 1;
+          if (this.keys['ArrowLeft'] || this.keys['KeyA']) dx -= 1;
+          if (this.keys['ArrowRight'] || this.keys['KeyD']) dx += 1;
+
+          if (this.touch.active && dx === 0 && dy === 0) {
+            // Touch relative to center screen
+            const tx = (this.touch.x - window.innerWidth/2) / scale;
+            const ty = (this.touch.y - window.innerHeight/2) / scale;
+
+            // Or touch relative to player position on screen
+            const mag = Math.hypot(tx, ty);
+            if (mag > 10) {
+              dx = tx / mag;
+              dy = ty / mag;
+            }
+          } else {
+            const mag = Math.hypot(dx, dy);
+            if (mag > 0) { dx /= mag; dy /= mag; }
+          }
+          return {x: dx, y: dy};
+        }
+      }
+
+      // --- Engine Setup ---
+      const canvas = document.getElementById('game-canvas');
+      const ctx = canvas.getContext('2d');
+      const GAME_W = 1280;
+      const GAME_H = 720;
+      let gameScale = 1;
+
+      // ResizeObserver
+      const resizeObserver = new ResizeObserver(entries => {
+        for (let entry of entries) {
+          const w = entry.contentRect.width;
+          const h = entry.contentRect.height;
+          const scale = Math.min(w / GAME_W, h / GAME_H);
+          canvas.width = GAME_W * scale;
+          canvas.height = GAME_H * scale;
+          ctx.scale(scale, scale);
+          gameScale = scale;
+        }
+      });
+      resizeObserver.observe(document.getElementById('game-container'));
+
+      // --- SoundEngine ---
+      class SoundEngine {
+        constructor(saveManager) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+          this.saveManager = saveManager;
+
+          this.masterGain = this.ctx.createGain();
+          this.sfxGain = this.ctx.createGain();
+          this.musicGain = this.ctx.createGain();
+
+          this.sfxGain.connect(this.masterGain);
+          this.musicGain.connect(this.masterGain);
+          this.masterGain.connect(this.ctx.destination);
+
+          this.updateVolumes();
+          this.synthLoopNode = null;
+          this.isPlayingMusic = false;
+
+          // Resume context on first user interaction
+          const resumeCtx = () => {
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+            window.removeEventListener('pointerdown', resumeCtx);
+            window.removeEventListener('keydown', resumeCtx);
+          };
+          window.addEventListener('pointerdown', resumeCtx);
+          window.addEventListener('keydown', resumeCtx);
+        }
+
+        updateVolumes() {
+          const opts = this.saveManager.data.options;
+          this.masterGain.gain.value = opts.mute ? 0 : 1;
+          this.sfxGain.gain.value = opts.sfx / 100;
+          this.musicGain.gain.value = opts.music / 100;
+        }
+
+        playSFX(type) {
+          if (this.saveManager.data.options.mute || this.saveManager.data.options.sfx === 0) return;
+          const t = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.connect(gain);
+          gain.connect(this.sfxGain);
+
+          if (type === 'mine') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(400, t);
+            osc.frequency.exponentialRampToValueAtTime(800, t + 0.1);
+            gain.gain.setValueAtTime(0.1, t);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+            osc.start(t);
+            osc.stop(t + 0.1);
+          } else if (type === 'hit') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(100, t);
+            osc.frequency.exponentialRampToValueAtTime(20, t + 0.3);
+            gain.gain.setValueAtTime(0.3, t);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+            osc.start(t);
+            osc.stop(t + 0.3);
+          } else if (type === 'drill') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(60, t);
+            osc.frequency.linearRampToValueAtTime(100, t + 0.1);
+            gain.gain.setValueAtTime(0.05, t);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+            osc.start(t);
+            osc.stop(t + 0.1);
+          } else if (type === 'ui') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, t);
+            gain.gain.setValueAtTime(0.1, t);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+            osc.start(t);
+            osc.stop(t + 0.05);
+          }
+        }
+
+        startMusic() {
+          if (this.isPlayingMusic) return;
+          this.isPlayingMusic = true;
+          this.playMusicNote();
+        }
+
+        stopMusic() {
+          this.isPlayingMusic = false;
+        }
+
+        playMusicNote() {
+          if (!this.isPlayingMusic) return;
+          const t = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          // Arpeggiator synth
+          const notes = [220, 261.63, 329.63, 440, 329.63, 261.63]; // A minor arp
+          const note = notes[Math.floor(Math.random() * notes.length)];
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(note, t);
+
+          gain.gain.setValueAtTime(0.1, t);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+
+          osc.connect(gain);
+          gain.connect(this.musicGain);
+
+          osc.start(t);
+          osc.stop(t + 0.2);
+
+          setTimeout(() => this.playMusicNote(), 250);
+        }
+      }
+
+      // Core classes
+      const saveManager = new SaveManager();
+      const soundEngine = new SoundEngine(saveManager);
+      const inputManager = new InputManager(canvas);
+
+      // --- Game Entities & Logic ---
+      let player = { x: GAME_W/2, y: 150, radius: 15, vx: 0, vy: 0, speed: 400, health: 100, maxHealth: 100, isDrilling: false, invincibleTimer: 0 };
+      let cameraY = 0;
+      let depth = 0;
+      let score = 0;
+      let particles = [];
+      let obstacles = [];
+      let minerals = [];
+      let timeDilationMultiplier = 1;
+      const CHUNK_H = 1000;
+      let nextChunkY = 0;
+
+      function spawnChunk(yStart) {
+        // Create obstacles
+        for (let i = 0; i < 15; i++) {
+          obstacles.push({
+            x: Math.random() * (GAME_W - 100) + 50,
+            y: yStart + Math.random() * CHUNK_H,
+            w: Math.random() * 100 + 50,
+            h: Math.random() * 40 + 20,
+            type: Math.random() > 0.8 ? 'laser' : 'rock'
+          });
+        }
+        // Create minerals
+        for (let i = 0; i < 20; i++) {
+          minerals.push({
+            x: Math.random() * (GAME_W - 40) + 20,
+            y: yStart + Math.random() * CHUNK_H,
+            radius: 8,
+            collected: false
+          });
+        }
+        nextChunkY = yStart + CHUNK_H;
+      }
+
+      function initGame() {
+        player = { x: GAME_W/2, y: 150, radius: 15, vx: 0, vy: 0, speed: 400, health: 100, maxHealth: 100, isDrilling: false, invincibleTimer: 0 };
+        cameraY = 0;
+        depth = 0;
+        score = 0;
+        particles = [];
+        obstacles = [];
+        minerals = [];
+        nextChunkY = GAME_H;
+        spawnChunk(GAME_H);
+        spawnChunk(GAME_H + CHUNK_H);
+        updateHUD();
+        soundEngine.startMusic();
+      }
+
+      function spawnParticles(x, y, count, color, speedScale) {
+        for(let i=0; i<count; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = Math.random() * speedScale;
+          particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1.0,
+            decay: Math.random() * 2 + 1,
+            color
+          });
+        }
+      }
+
+      function updateHUD() {
+        document.getElementById('hud-score').textContent = score;
+        document.getElementById('hud-depth').textContent = depth;
+        document.getElementById('hud-health').style.width = `${Math.max(0, (player.health / player.maxHealth) * 100)}%`;
+      }
+
+      function gameOver() {
+        soundEngine.stopMusic();
+        setUIState('GAME_OVER');
+        document.getElementById('go-score').textContent = score;
+        document.getElementById('go-depth').textContent = depth;
+
+        if (score > saveManager.data.highScore) {
+          saveManager.data.highScore = score;
+        }
+        if (depth > saveManager.data.maxDepth) {
+          saveManager.data.maxDepth = depth;
+        }
+        saveManager.save();
+        document.getElementById('title-highscore').textContent = saveManager.data.highScore;
+        document.getElementById('title-maxdepth').textContent = saveManager.data.maxDepth;
+      }
+
+      // --- Game State / Loop ---
+      let gameState = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+      let lastTime = performance.now();
+      let reqId;
+
+      function setUIState(state) {
+        gameState = state;
+        document.getElementById('screen-title').classList.toggle('active', state === 'TITLE');
+        document.getElementById('hud').classList.toggle('active', state === 'PLAYING');
+        document.getElementById('screen-paused').classList.toggle('active', state === 'PAUSED');
+        document.getElementById('screen-gameover').classList.toggle('active', state === 'GAME_OVER');
+        soundEngine.playSFX('ui');
+        if (state === 'PAUSED') soundEngine.stopMusic();
+        if (state === 'PLAYING') soundEngine.startMusic();
+      }
+
+      function update(dt) {
+        if (gameState !== 'PLAYING') return;
+
+        // Time dilation mechanic
+        const targetTimeScale = inputManager.isInputActive ? 1.0 : 0.15;
+        timeDilationMultiplier += (targetTimeScale - timeDilationMultiplier) * 10 * dt;
+        const scaledDt = dt * timeDilationMultiplier;
+
+        if (player.invincibleTimer > 0) {
+          player.invincibleTimer -= dt; // Real time, not scaled
+        }
+
+        // Input
+        const dir = inputManager.getDir(player.x, player.y, gameScale);
+
+        // Constant downward gravity/drill pull when no input, else follow input
+        if (inputManager.isInputActive) {
+          player.vx = dir.x * player.speed;
+          player.vy = dir.y * player.speed;
+          player.isDrilling = true;
+          if (Math.random() < 0.3) spawnParticles(player.x, player.y - player.radius, 1, '#5be0b6', 50);
+        } else {
+          // Drift slowly downwards
+          player.vx *= 0.9;
+          player.vy = 50;
+          player.isDrilling = false;
+        }
+
+        player.x += player.vx * scaledDt;
+        player.y += player.vy * scaledDt;
+
+        // Boundaries
+        if (player.x < player.radius) player.x = player.radius;
+        if (player.x > GAME_W - player.radius) player.x = GAME_W - player.radius;
+
+        // Camera follow
+        const targetCameraY = player.y - GAME_H / 3;
+        if (targetCameraY > cameraY) {
+          cameraY += (targetCameraY - cameraY) * 5 * scaledDt;
+        }
+
+        depth = Math.floor(cameraY / 10);
+
+        // Chunk generation
+        if (cameraY + GAME_H * 2 > nextChunkY) {
+          spawnChunk(nextChunkY);
+        }
+
+        // Collision: Minerals
+        for (let i = minerals.length - 1; i >= 0; i--) {
+          const m = minerals[i];
+          if (m.y < cameraY - 100) { minerals.splice(i, 1); continue; }
+          if (m.collected) continue;
+
+          const dist = Math.hypot(player.x - m.x, player.y - m.y);
+          if (dist < player.radius + m.radius) {
+            m.collected = true;
+            score += 10;
+            spawnParticles(m.x, m.y, 5, '#42997b', 100);
+            soundEngine.playSFX('mine');
+            updateHUD();
+          }
+        }
+
+        // Collision: Obstacles
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+          const ob = obstacles[i];
+          if (ob.y + ob.h < cameraY - 100) { obstacles.splice(i, 1); continue; }
+
+          // Simple AABB collision with circle
+          const testX = Math.max(ob.x, Math.min(player.x, ob.x + ob.w));
+          const testY = Math.max(ob.y, Math.min(player.y, ob.y + ob.h));
+          const dist = Math.hypot(player.x - testX, player.y - testY);
+
+          if (dist < player.radius) {
+            if (player.invincibleTimer <= 0) {
+              player.health -= ob.type === 'laser' ? 25 : 15;
+              player.invincibleTimer = 1.0;
+              spawnParticles(player.x, player.y, 10, '#d9455f', 200);
+              soundEngine.playSFX('hit');
+              updateHUD();
+
+              // Bounce
+              player.y -= 30;
+              player.vy = -200;
+
+              if (player.health <= 0) {
+                gameOver();
+                return;
+              }
+            }
+          }
+        }
+
+        // Update particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.x += p.vx * scaledDt;
+          p.y += p.vy * scaledDt;
+          p.life -= p.decay * scaledDt;
+          if (p.life <= 0) particles.splice(i, 1);
+        }
+
+        if (player.y < cameraY - 50) player.y = cameraY - 50; // Don't let player go too high above camera
+      }
+
+      function draw() {
+        // Draw background
+        ctx.fillStyle = '#0d0d12';
+        ctx.fillRect(0, 0, GAME_W, GAME_H);
+
+        // Grid pattern
+        ctx.save();
+        ctx.translate(0, -cameraY % 100);
+        ctx.strokeStyle = 'rgba(66, 153, 123, 0.1)';
+        ctx.lineWidth = 2;
+        for (let x = 0; x <= GAME_W; x += 100) { ctx.beginPath(); ctx.moveTo(x, -100); ctx.lineTo(x, GAME_H + 200); ctx.stroke(); }
+        for (let y = -100; y <= GAME_H + 100; y += 100) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GAME_W, y); ctx.stroke(); }
+        ctx.restore();
+
+        if (gameState !== 'PLAYING') {
+          // If not playing, still render the game state behind the UI layer
+          ctx.save();
+          ctx.translate(0, -cameraY);
+          drawEntities();
+          ctx.restore();
+
+          // Darken screen if paused
+          if (gameState === 'PAUSED' || gameState === 'GAME_OVER') {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0,0,GAME_W,GAME_H);
+          }
+          return;
+        }
+
+        ctx.save();
+        ctx.translate(0, -cameraY);
+        drawEntities();
+        ctx.restore();
+
+        // Time dilation vignette effect
+        if (timeDilationMultiplier < 0.9) {
+          const intensity = 1 - timeDilationMultiplier;
+          const gradient = ctx.createRadialGradient(GAME_W/2, GAME_H/2, GAME_H/4, GAME_W/2, GAME_H/2, GAME_H);
+          gradient.addColorStop(0, 'rgba(0,0,0,0)');
+          gradient.addColorStop(1, `rgba(66, 153, 123, ${intensity * 0.3})`);
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, GAME_W, GAME_H);
+
+          // Dilation text indicator
+          ctx.fillStyle = `rgba(91, 224, 182, ${intensity})`;
+          ctx.font = '24px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('TIME DILATION ACTIVE', GAME_W/2, GAME_H - 50);
+        }
+      }
+
+      function drawEntities() {
+        // Minerals
+        for (const m of minerals) {
+          if (m.collected) continue;
+          ctx.beginPath();
+          ctx.arc(m.x, m.y, m.radius, 0, Math.PI*2);
+          ctx.fillStyle = '#5be0b6';
+          ctx.fill();
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#5be0b6';
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+
+        // Obstacles
+        for (const ob of obstacles) {
+          ctx.fillStyle = ob.type === 'laser' ? '#d9455f' : '#222';
+          ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
+          if (ob.type === 'laser') {
+            ctx.strokeStyle = '#ff8899';
+            ctx.strokeRect(ob.x, ob.y, ob.w, ob.h);
+          } else {
+            ctx.strokeStyle = '#42997b';
+            ctx.strokeRect(ob.x, ob.y, ob.w, ob.h);
+          }
+        }
+
+        // Particles
+        for (const p of particles) {
+          ctx.globalAlpha = p.life;
+          ctx.fillStyle = p.color;
+          ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+        }
+        ctx.globalAlpha = 1.0;
+
+        // Player
+        if (player.invincibleTimer <= 0 || Math.floor(player.invincibleTimer * 10) % 2 === 0) {
+          ctx.beginPath();
+          ctx.moveTo(player.x, player.y + player.radius);
+          ctx.lineTo(player.x - player.radius, player.y - player.radius);
+          ctx.lineTo(player.x + player.radius, player.y - player.radius);
+          ctx.closePath();
+          ctx.fillStyle = player.isDrilling ? '#5be0b6' : '#fff';
+          ctx.fill();
+          ctx.strokeStyle = '#42997b';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+
+      function loop(now) {
+        const dt = Math.min((now - lastTime) / 1000, 0.1);
+        lastTime = now;
+
+        update(dt);
+        draw();
+
+        reqId = requestAnimationFrame(loop);
+      }
+
+      // --- UI Bindings ---
+      document.getElementById('btn-play').addEventListener('click', () => {
+        initGame();
+        setUIState('PLAYING');
+      });
+
+      document.getElementById('btn-pause').addEventListener('click', () => setUIState('PAUSED'));
+      document.getElementById('btn-resume').addEventListener('click', () => setUIState('PLAYING'));
+      document.getElementById('btn-restart-pause').addEventListener('click', () => {
+        initGame();
+        setUIState('PLAYING');
+      });
+      document.getElementById('btn-quit').addEventListener('click', () => setUIState('TITLE'));
+      document.getElementById('btn-restart-go').addEventListener('click', () => {
+        initGame();
+        setUIState('PLAYING');
+      });
+      document.getElementById('btn-title-go').addEventListener('click', () => setUIState('TITLE'));
+
+      // Auto pause
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden && gameState === 'PLAYING') setUIState('PAUSED');
+      });
+      window.addEventListener('blur', () => {
+        if (gameState === 'PLAYING') setUIState('PAUSED');
+      });
+
+      // Modals
+      const optionsModal = document.getElementById('options-modal');
+      const howtoModal = document.getElementById('howto-modal');
+
+      document.getElementById('btn-options-title').addEventListener('click', () => { soundEngine.playSFX('ui'); optionsModal.classList.add('active'); });
+      document.getElementById('btn-options-pause').addEventListener('click', () => { soundEngine.playSFX('ui'); optionsModal.classList.add('active'); });
+      document.getElementById('btn-close-options').addEventListener('click', () => { soundEngine.playSFX('ui'); optionsModal.classList.remove('active'); });
+
+      document.getElementById('btn-howto').addEventListener('click', () => { soundEngine.playSFX('ui'); howtoModal.classList.add('active'); });
+      document.getElementById('btn-close-howto').addEventListener('click', () => { soundEngine.playSFX('ui'); howtoModal.classList.remove('active'); });
+
+      // Options Bindings
+      const optMute = document.getElementById('opt-mute');
+      const optSfx = document.getElementById('opt-sfx');
+      const optMusic = document.getElementById('opt-music');
+
+      optMute.checked = saveManager.data.options.mute;
+      optSfx.value = saveManager.data.options.sfx;
+      optMusic.value = saveManager.data.options.music;
+
+      function saveOptions() {
+        saveManager.data.options.mute = optMute.checked;
+        saveManager.data.options.sfx = parseInt(optSfx.value);
+        saveManager.data.options.music = parseInt(optMusic.value);
+        saveManager.save();
+        soundEngine.updateVolumes();
+      }
+
+      optMute.addEventListener('change', saveOptions);
+      optSfx.addEventListener('input', () => { saveOptions(); soundEngine.playSFX('ui'); });
+      optMusic.addEventListener('input', saveOptions);
+
+      // Save Import/Export/Reset placeholders
+      document.getElementById('btn-export').addEventListener('click', () => {
+        const str = btoa(JSON.stringify(saveManager.data));
+        navigator.clipboard.writeText(str).then(() => alert('Save exported to clipboard!'));
+      });
+      document.getElementById('btn-import').addEventListener('click', () => {
+        const str = prompt('Paste save data:');
+        if (str) {
+          try {
+            saveManager.data = JSON.parse(atob(str));
+            saveManager.save();
+            alert('Save imported successfully! Reloading...');
+            location.reload();
+          } catch(e) {
+            alert('Invalid save data.');
+          }
+        }
+      });
+      let resetClicks = 0;
+      document.getElementById('btn-reset-save').addEventListener('click', (e) => {
+        resetClicks++;
+        if (resetClicks === 1) {
+          e.target.textContent = 'Click again to confirm reset';
+          setTimeout(() => { resetClicks = 0; e.target.textContent = 'Reset Save'; }, 3000);
+        } else {
+          saveManager.reset();
+          location.reload();
+        }
+      });
+
+      // Initial stats
+      document.getElementById('title-highscore').textContent = saveManager.data.highScore;
+      document.getElementById('title-maxdepth').textContent = saveManager.data.maxDepth;
+
+      // Start loop
+      reqId = requestAnimationFrame(loop);
+    });
+  </script>
+</body>
+</html>

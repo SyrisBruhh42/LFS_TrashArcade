@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Cell Drill Polarity</title>
+  <style>
+    :root {
+      --bg-color: #0b0c10;
+      --accent-color: #b95b9d;
+      --text-main: #e0e0e0;
+      --text-muted: #888888;
+      --panel-bg: rgba(20, 10, 20, 0.9);
+      --font-family: 'Courier New', Courier, monospace, sans-serif;
+      --positive-color: #d13030;
+      --negative-color: #306bd1;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      max-width: 100vw;
+      max-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    canvas {
+      display: block;
+      background-color: #120914; /* Deep cell fluid color */
+    }
+
+    /* UI Overlays */
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: var(--panel-bg);
+      z-index: 10;
+    }
+
+    .ui-layer.active {
+      display: flex;
+    }
+
+    .hud-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+      display: none;
+    }
+
+    .hud-layer.active {
+      display: block;
+    }
+
+    .title {
+      font-size: 3rem;
+      color: var(--accent-color);
+      text-shadow: 0 0 10px var(--accent-color);
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    button {
+      background: #1e1e1e;
+      color: var(--text-main);
+      border: 2px solid var(--accent-color);
+      padding: 12px 24px;
+      margin: 8px;
+      font-size: 1.2rem;
+      font-family: var(--font-family);
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      pointer-events: auto;
+    }
+
+    button:hover {
+      background: var(--accent-color);
+      color: #000;
+    }
+
+    .arcade-link {
+      margin-top: 2rem;
+      color: var(--text-muted);
+      text-decoration: underline;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .arcade-link:hover {
+      color: var(--text-main);
+    }
+
+    #pause-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 40px;
+      height: 40px;
+      font-weight: bold;
+      pointer-events: auto;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Options Panel */
+    .options-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid var(--text-muted);
+      max-width: 90%;
+    }
+
+    .options-row {
+      display: flex;
+      justify-content: space-between;
+      width: 250px;
+      align-items: center;
+    }
+
+    input[type=range] {
+      width: 120px;
+    }
+
+    .stat-row {
+      font-size: 1rem;
+      margin: 4px 0;
+    }
+
+    /* Modals inside UI layers */
+    .modal {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* D-pad visualizer for touch */
+    #touch-dpad {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+      border: 2px solid rgba(255,255,255,0.3);
+      display: none;
+      pointer-events: none;
+    }
+    #touch-dpad-knob {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.5);
+      transform: translate(-50%, -50%);
+    }
+
+    #touch-btn-action {
+      position: absolute;
+      bottom: 30px;
+      right: 30px;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+      border: 2px solid rgba(255,255,255,0.3);
+      display: none;
+      pointer-events: none;
+      color: white;
+      text-align: center;
+      line-height: 80px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud-layer" class="hud-layer">
+      <button id="pause-btn">II</button>
+      <div id="touch-dpad"><div id="touch-dpad-knob"></div></div>
+      <div id="touch-btn-action">POLARITY</div>
+    </div>
+
+    <div id="ui-title" class="ui-layer active">
+      <div class="modal">
+        <h1 class="title">Cell Drill Polarity</h1>
+        <p class="subtitle">Microscopic Mining & Magnetism</p>
+        <div id="title-stats" style="margin-bottom: 20px; text-align: center;">
+          <div class="stat-row">High Score: <span id="stat-high-score">0</span></div>
+          <div class="stat-row">Max Depth: <span id="stat-max-depth">0</span></div>
+        </div>
+        <button id="btn-play">Play</button>
+        <button id="btn-how-to">How to Play</button>
+        <button id="btn-options">Options</button>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+
+    <div id="ui-paused" class="ui-layer">
+      <div class="modal">
+        <h1 class="title" style="font-size: 2rem;">PAUSED</h1>
+        <button id="btn-resume">Resume</button>
+        <button id="btn-restart-pause">Restart</button>
+        <button id="btn-options-pause">Options</button>
+        <button id="btn-quit">Quit to Title</button>
+      </div>
+    </div>
+
+    <div id="ui-gameover" class="ui-layer">
+      <div class="modal">
+        <h1 class="title">GAME OVER</h1>
+        <div id="gameover-stats" style="margin-bottom: 20px; text-align: center;">
+          <div class="stat-row" style="font-size:1.5rem; color:var(--accent-color);">Score: <span id="go-score">0</span></div>
+          <div class="stat-row">Depth Reached: <span id="go-depth">0</span></div>
+          <div id="go-new-high" style="color:#d13030; font-weight:bold; display:none; margin-top:10px;">NEW HIGH SCORE!</div>
+        </div>
+        <button id="btn-play-again">Play Again</button>
+        <button id="btn-title-go">Title Screen</button>
+      </div>
+    </div>
+
+    <div id="ui-options" class="ui-layer">
+      <div class="modal">
+        <h1 class="title" style="font-size: 2rem;">Options</h1>
+        <div class="options-panel">
+          <div class="options-row">
+            <label>Master Mute</label>
+            <input type="checkbox" id="opt-mute">
+          </div>
+          <div class="options-row">
+            <label>SFX Vol</label>
+            <input type="range" id="opt-sfx" min="0" max="100" value="80">
+          </div>
+          <div class="options-row">
+            <label>Music Vol</label>
+            <input type="range" id="opt-music" min="0" max="100" value="60">
+          </div>
+          <div class="options-row">
+            <label>Screen Shake</label>
+            <select id="opt-shake">
+              <option value="100">100%</option>
+              <option value="50">50%</option>
+              <option value="0">Off</option>
+            </select>
+          </div>
+          <div class="options-row">
+            <label>Particles</label>
+            <select id="opt-particles">
+              <option value="high">High</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div class="options-row">
+            <label>Touch Controls</label>
+            <select id="opt-touch">
+              <option value="auto">Auto</option>
+              <option value="always">Always</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex; gap: 10px; margin-bottom: 20px;">
+          <button id="btn-export-save" style="font-size:0.9rem;">Export Save</button>
+          <button id="btn-import-save" style="font-size:0.9rem;">Import Save</button>
+          <button id="btn-reset-save" style="font-size:0.9rem; border-color:var(--positive-color);">Reset Save</button>
+        </div>
+
+        <button id="btn-options-back">Back</button>
+      </div>
+    </div>
+
+    <div id="ui-howto" class="ui-layer">
+      <div class="modal" style="max-width: 600px; padding: 20px;">
+        <h1 class="title" style="font-size: 2rem;">How to Play</h1>
+        <div style="text-align: left; margin-bottom: 20px; line-height: 1.5;">
+          <p><b>Goal:</b> Drill as deep as possible into the microscopic cell while managing your polarity.</p>
+          <p><b>Controls:</b><br>- Keyboard: WASD / Arrows to move. Space / Enter to switch polarity.<br>- Touch: Drag left side to move. Tap right side to switch polarity.</p>
+          <p><b>Mechanics:</b><br>- <b>Polarity:</b> You are either Positive (Red) or Negative (Blue).<br>- Like polarities repel each other. Opposite polarities attract.<br>- Attract resource nodes of the opposite polarity to gain points and health.<br>- Repel hazards of the same polarity to avoid damage.</p>
+        </div>
+        <button id="btn-howto-back">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+const SAVE_KEY = "arcade_game_007_007-cell-drill-polarity_v1";
+
+class SaveManager {
+  constructor() {
+    this.memorySave = {
+      highScore: 0,
+      bestWaveOrCombo: 0,
+      totalGamesPlayed: 0,
+      totalScoreAccumulated: 0,
+      unlockedMilestones: [],
+      options: {
+        muted: false,
+        sfxVolume: 80,
+        musicVolume: 60,
+        screenShake: "100",
+        particles: "high",
+        touchControls: "auto"
+      }
+    };
+    this.load();
+  }
+
+  load() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        this.memorySave = Object.assign({}, this.memorySave, parsed);
+        this.memorySave.options = Object.assign({}, this.memorySave.options, parsed.options || {});
+      }
+    } catch (e) {
+      console.warn("localStorage load failed, using memory fallback", e);
+    }
+  }
+
+  save() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(this.memorySave));
+    } catch (e) {
+      console.warn("localStorage save failed", e);
+    }
+  }
+
+  get(key) {
+    return this.memorySave[key];
+  }
+
+  set(key, value) {
+    this.memorySave[key] = value;
+    this.save();
+  }
+
+  getOption(key) {
+    return this.memorySave.options[key];
+  }
+
+  setOption(key, value) {
+    this.memorySave.options[key] = value;
+    this.save();
+  }
+
+  reset() {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch (e) {}
+    this.memorySave.highScore = 0;
+    this.memorySave.bestWaveOrCombo = 0;
+    this.memorySave.totalGamesPlayed = 0;
+    this.memorySave.totalScoreAccumulated = 0;
+    this.memorySave.unlockedMilestones = [];
+    this.save();
+  }
+
+  unlockMilestone(milestone) {
+    if (!this.memorySave.unlockedMilestones.includes(milestone)) {
+      this.memorySave.unlockedMilestones.push(milestone);
+      this.save();
+      return true;
+    }
+    return false;
+  }
+}
+
+class SoundEngine {
+  constructor(saveManager) {
+    this.saveManager = saveManager;
+    this.ctx = null;
+    this.masterGain = null;
+    this.sfxGain = null;
+    this.musicGain = null;
+    this.musicOscillator = null;
+    this.musicTimer = null;
+    this.isPlayingMusic = false;
+    this.musicStep = 0;
+    this.musicNotes = [220, 261.63, 293.66, 329.63, 392.00, 440.00]; // Pentatonic
+  }
+
+  init() {
+    if (this.ctx) return;
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AudioContext();
+
+      this.masterGain = this.ctx.createGain();
+      this.sfxGain = this.ctx.createGain();
+      this.musicGain = this.ctx.createGain();
+
+      this.sfxGain.connect(this.masterGain);
+      this.musicGain.connect(this.masterGain);
+      this.masterGain.connect(this.ctx.destination);
+
+      this.updateVolumes();
+    } catch (e) {
+      console.warn("AudioContext not supported", e);
+    }
+  }
+
+  updateVolumes() {
+    if (!this.ctx) return;
+    const muted = this.saveManager.getOption("muted");
+    this.masterGain.gain.value = muted ? 0 : 1;
+    this.sfxGain.gain.value = this.saveManager.getOption("sfxVolume") / 100;
+    this.musicGain.gain.value = this.saveManager.getOption("musicVolume") / 100;
+  }
+
+  resume() {
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playSFX(type) {
+    if (!this.ctx) return;
+    this.resume();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    if (type === 'switch') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, t);
+      osc.frequency.exponentialRampToValueAtTime(1200, t + 0.1);
+      gain.gain.setValueAtTime(0.5, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+      osc.start(t);
+      osc.stop(t + 0.1);
+    } else if (type === 'hit') {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(100, t);
+      osc.frequency.exponentialRampToValueAtTime(50, t + 0.1);
+      gain.gain.setValueAtTime(0.8, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+      osc.start(t);
+      osc.stop(t + 0.2);
+    } else if (type === 'collect') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(400, t);
+      osc.frequency.linearRampToValueAtTime(800, t + 0.1);
+      gain.gain.setValueAtTime(0.4, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+      osc.start(t);
+      osc.stop(t + 0.15);
+    } else if (type === 'drill') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(80, t);
+      osc.frequency.linearRampToValueAtTime(40, t + 0.1);
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+      osc.start(t);
+      osc.stop(t + 0.1);
+    } else if (type === 'gameover') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(200, t);
+      osc.frequency.exponentialRampToValueAtTime(40, t + 1.0);
+      gain.gain.setValueAtTime(0.8, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 1.0);
+      osc.start(t);
+      osc.stop(t + 1.0);
+    }
+  }
+
+  startMusic() {
+    if (!this.ctx || this.isPlayingMusic) return;
+    this.resume();
+    this.isPlayingMusic = true;
+    this.musicStep = 0;
+    this.scheduleMusicNode();
+  }
+
+  stopMusic() {
+    this.isPlayingMusic = false;
+    if (this.musicTimer) {
+      clearTimeout(this.musicTimer);
+    }
+  }
+
+  scheduleMusicNode() {
+    if (!this.isPlayingMusic || !this.ctx) return;
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(this.musicGain);
+
+    // Simple pulsing sub-bass rhythm for drilling
+    osc.type = 'sine';
+    const noteFreq = (this.musicStep % 4 === 0) ? 65.41 : 73.42; // C2 / D2
+    osc.frequency.setValueAtTime(noteFreq, t);
+
+    gain.gain.setValueAtTime(0.3, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+
+    osc.start(t);
+    osc.stop(t + 0.25);
+
+    this.musicStep++;
+    this.musicTimer = setTimeout(() => this.scheduleMusicNode(), 250); // 120 BPM 8th notes
+  }
+}
+class InputManager {
+  constructor() {
+    this.keys = {};
+    this.touch = { active: false, startX: 0, startY: 0, x: 0, y: 0, tapped: false, isRightSide: false };
+    this.mouse = { active: false, x: 0, y: 0, clicked: false, isRightSide: false };
+    this.initListeners();
+  }
+
+  initListeners() {
+    window.addEventListener('keydown', (e) => {
+      this.keys[e.code] = true;
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      this.keys[e.code] = false;
+    });
+
+    const container = document.getElementById('game-container');
+
+    // Mouse
+    container.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') return; // Handled by touch events
+      this.mouse.active = true;
+      this.mouse.x = e.clientX;
+      this.mouse.y = e.clientY;
+      this.mouse.clicked = true;
+      this.mouse.isRightSide = (e.clientX > window.innerWidth / 2);
+    });
+
+    container.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch') return;
+      if (this.mouse.active) {
+        this.mouse.x = e.clientX;
+        this.mouse.y = e.clientY;
+      }
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch') return;
+      this.mouse.active = false;
+    });
+
+    // Touch
+    container.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      this.touch.active = true;
+      this.touch.startX = touch.clientX;
+      this.touch.startY = touch.clientY;
+      this.touch.x = touch.clientX;
+      this.touch.y = touch.clientY;
+      this.touch.tapped = true;
+      this.touch.isRightSide = (touch.clientX > window.innerWidth / 2);
+    }, { passive: false });
+
+    container.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      this.touch.x = touch.clientX;
+      this.touch.y = touch.clientY;
+    }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+      if (e.touches.length === 0) {
+        this.touch.active = false;
+      }
+    });
+  }
+
+  update() {
+    this.touch.tapped = false;
+    this.mouse.clicked = false;
+  }
+
+  isDown(code) {
+    return this.keys[code] === true;
+  }
+
+  getAxisX() {
+    let x = 0;
+    if (this.isDown('KeyA') || this.isDown('ArrowLeft')) x -= 1;
+    if (this.isDown('KeyD') || this.isDown('ArrowRight')) x += 1;
+
+    if (this.touch.active && !this.touch.isRightSide) {
+      const dx = this.touch.x - this.touch.startX;
+      if (dx < -10) x = -1;
+      if (dx > 10) x = 1;
+    }
+    return x;
+  }
+
+  getAxisY() {
+    let y = 0;
+    if (this.isDown('KeyW') || this.isDown('ArrowUp')) y -= 1;
+    if (this.isDown('KeyS') || this.isDown('ArrowDown')) y += 1;
+
+    if (this.touch.active && !this.touch.isRightSide) {
+      const dy = this.touch.y - this.touch.startY;
+      if (dy < -10) y = -1;
+      if (dy > 10) y = 1;
+    }
+    return y;
+  }
+
+  consumeAction() {
+    if (this.isDown('Space') || this.isDown('Enter')) {
+      this.keys['Space'] = false;
+      this.keys['Enter'] = false;
+      return true;
+    }
+    if (this.touch.tapped && this.touch.isRightSide) {
+      return true;
+    }
+    if (this.mouse.clicked && this.mouse.isRightSide) {
+      return true;
+    }
+    return false;
+  }
+}
+
+class LayoutManager {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d', { alpha: false });
+    this.logicalWidth = 800;
+    this.logicalHeight = 600;
+    this.scale = 1;
+
+    this.init();
+  }
+
+  init() {
+    const ro = new ResizeObserver(() => this.resize());
+    ro.observe(document.body);
+    this.resize();
+  }
+
+  resize() {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    // Attempt to maintain an aspect ratio close to 4:3 or 16:9, but responsive to screen
+    const targetAspect = 800 / 600;
+    const currentAspect = windowWidth / windowHeight;
+
+    if (currentAspect > targetAspect) {
+      this.logicalHeight = 600;
+      this.logicalWidth = 600 * currentAspect;
+    } else {
+      this.logicalWidth = 800;
+      this.logicalHeight = 800 / currentAspect;
+    }
+
+    this.canvas.width = this.logicalWidth;
+    this.canvas.height = this.logicalHeight;
+
+    // Center logic could go here if using CSS transform, but we draw natively to logical size
+  }
+
+  clear() {
+    this.ctx.fillStyle = '#120914';
+    this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
+  }
+}
+const GameState = {
+  TITLE: 'TITLE',
+  PLAYING: 'PLAYING',
+  PAUSED: 'PAUSED',
+  GAME_OVER: 'GAME_OVER',
+  OPTIONS: 'OPTIONS',
+  HOWTO: 'HOWTO'
+};
+
+class UIManager {
+  constructor(saveManager, soundEngine, mainGameObj) {
+    this.saveManager = saveManager;
+    this.soundEngine = soundEngine;
+    this.game = mainGameObj;
+    this.currentState = GameState.TITLE;
+    this.previousState = GameState.TITLE;
+
+    this.layers = {
+      TITLE: document.getElementById('ui-title'),
+      PLAYING: document.getElementById('hud-layer'),
+      PAUSED: document.getElementById('ui-paused'),
+      GAME_OVER: document.getElementById('ui-gameover'),
+      OPTIONS: document.getElementById('ui-options'),
+      HOWTO: document.getElementById('ui-howto')
+    };
+
+    this.initDOM();
+  }
+
+  initDOM() {
+    // Title
+    document.getElementById('btn-play').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.game.startPlay(); });
+    document.getElementById('btn-how-to').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.setState(GameState.HOWTO); });
+    document.getElementById('btn-options').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.setState(GameState.OPTIONS); });
+
+    // HUD
+    document.getElementById('pause-btn').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.setState(GameState.PAUSED); });
+
+    // Paused
+    document.getElementById('btn-resume').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.setState(GameState.PLAYING); });
+    document.getElementById('btn-restart-pause').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.game.startPlay(); });
+    document.getElementById('btn-options-pause').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.setState(GameState.OPTIONS); });
+    document.getElementById('btn-quit').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.setState(GameState.TITLE); });
+
+    // Game Over
+    document.getElementById('btn-play-again').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.game.startPlay(); });
+    document.getElementById('btn-title-go').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.setState(GameState.TITLE); });
+
+    // Options / HowTo Back
+    document.getElementById('btn-options-back').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.setState(this.previousState); });
+    document.getElementById('btn-howto-back').addEventListener('click', () => { this.soundEngine.playSFX('select'); this.setState(this.previousState); });
+
+    // Options Logic
+    const optMute = document.getElementById('opt-mute');
+    optMute.checked = this.saveManager.getOption('muted');
+    optMute.addEventListener('change', (e) => {
+      this.saveManager.setOption('muted', e.target.checked);
+      this.soundEngine.updateVolumes();
+    });
+
+    const optSfx = document.getElementById('opt-sfx');
+    optSfx.value = this.saveManager.getOption('sfxVolume');
+    optSfx.addEventListener('input', (e) => {
+      this.saveManager.setOption('sfxVolume', e.target.value);
+      this.soundEngine.updateVolumes();
+    });
+
+    const optMusic = document.getElementById('opt-music');
+    optMusic.value = this.saveManager.getOption('musicVolume');
+    optMusic.addEventListener('input', (e) => {
+      this.saveManager.setOption('musicVolume', e.target.value);
+      this.soundEngine.updateVolumes();
+    });
+
+    const optShake = document.getElementById('opt-shake');
+    optShake.value = this.saveManager.getOption('screenShake');
+    optShake.addEventListener('change', (e) => {
+      this.saveManager.setOption('screenShake', e.target.value);
+    });
+
+    const optParticles = document.getElementById('opt-particles');
+    optParticles.value = this.saveManager.getOption('particles');
+    optParticles.addEventListener('change', (e) => {
+      this.saveManager.setOption('particles', e.target.value);
+    });
+
+    const optTouch = document.getElementById('opt-touch');
+    optTouch.value = this.saveManager.getOption('touchControls');
+    optTouch.addEventListener('change', (e) => {
+      this.saveManager.setOption('touchControls', e.target.value);
+    });
+
+    // Options Data Managment
+    document.getElementById('btn-export-save').addEventListener('click', () => {
+      this.soundEngine.playSFX('select');
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.saveManager.memorySave));
+      const dlAnchor = document.createElement('a');
+      dlAnchor.setAttribute("href", dataStr);
+      dlAnchor.setAttribute("download", "cell_drill_polarity_save.json");
+      document.body.appendChild(dlAnchor);
+      dlAnchor.click();
+      dlAnchor.remove();
+    });
+
+    document.getElementById('btn-import-save').addEventListener('click', () => {
+      this.soundEngine.playSFX('select');
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/json';
+      input.onchange = e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = event => {
+          try {
+            const data = JSON.parse(event.target.result);
+            this.saveManager.memorySave = data;
+            this.saveManager.save();
+            alert("Save imported!");
+            this.refreshStats();
+          } catch(err) {
+            alert("Invalid save file.");
+          }
+        }
+        reader.readAsText(file);
+      }
+      input.click();
+    });
+
+    let resetClicks = 0;
+    const btnReset = document.getElementById('btn-reset-save');
+    btnReset.addEventListener('click', () => {
+      resetClicks++;
+      if (resetClicks === 1) {
+        btnReset.innerText = "Click again to confirm reset";
+        btnReset.style.backgroundColor = "var(--positive-color)";
+        setTimeout(() => { resetClicks = 0; btnReset.innerText = "Reset Save"; btnReset.style.backgroundColor = ""; }, 3000);
+      } else {
+        this.saveManager.reset();
+        this.refreshStats();
+        btnReset.innerText = "Save Reset!";
+        setTimeout(() => { resetClicks = 0; btnReset.innerText = "Reset Save"; btnReset.style.backgroundColor = ""; }, 2000);
+      }
+    });
+
+    this.refreshStats();
+  }
+
+  refreshStats() {
+    document.getElementById('stat-high-score').innerText = this.saveManager.get('highScore');
+    document.getElementById('stat-max-depth').innerText = this.saveManager.get('bestWaveOrCombo');
+  }
+
+  setState(newState) {
+    if (newState !== GameState.OPTIONS && newState !== GameState.HOWTO) {
+      this.previousState = this.currentState;
+    } else {
+      this.previousState = this.currentState === GameState.OPTIONS || this.currentState === GameState.HOWTO ? this.previousState : this.currentState;
+    }
+
+    this.currentState = newState;
+
+    Object.values(this.layers).forEach(layer => layer.classList.remove('active'));
+
+    if (this.layers[newState]) {
+      this.layers[newState].classList.add('active');
+    }
+
+    if (newState === GameState.TITLE) {
+      this.refreshStats();
+      this.soundEngine.stopMusic();
+    } else if (newState === GameState.PLAYING) {
+      this.soundEngine.startMusic();
+    } else if (newState === GameState.PAUSED) {
+      this.soundEngine.stopMusic();
+    }
+  }
+
+  setGameOverStats(score, depth, isNewHigh) {
+    document.getElementById('go-score').innerText = score;
+    document.getElementById('go-depth').innerText = depth;
+    document.getElementById('go-new-high').style.display = isNewHigh ? 'block' : 'none';
+  }
+}
+class Player {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.vx = 0;
+    this.vy = 0;
+    this.radius = 16;
+    this.polarity = 1; // 1: Positive, -1: Negative
+    this.health = 100;
+    this.maxHealth = 100;
+    this.drillPower = 50;
+    this.depthOffset = 0;
+    this.speed = 300;
+    this.friction = 0.9;
+    this.colorPositive = '#d13030';
+    this.colorNegative = '#306bd1';
+  }
+
+  update(dt, input) {
+    // Movement
+    let ax = input.getAxisX();
+    let ay = input.getAxisY();
+
+    this.vx += ax * this.speed * dt;
+    this.vy += ay * this.speed * dt;
+
+    // Auto-descend
+    this.vy += 50 * dt;
+
+    this.vx *= this.friction;
+    this.vy *= this.friction;
+
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+
+    // Bounds checking (logical width = 800)
+    if (this.x < this.radius) {
+      this.x = this.radius;
+      this.vx = 0;
+    }
+    if (this.x > 800 - this.radius) {
+      this.x = 800 - this.radius;
+      this.vx = 0;
+    }
+
+    // Action
+    if (input.consumeAction()) {
+      this.polarity *= -1;
+      return true; // Polarity switched
+    }
+    return false;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // Glow
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = this.polarity === 1 ? this.colorPositive : this.colorNegative;
+
+    // Main body
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = this.polarity === 1 ? this.colorPositive : this.colorNegative;
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
+
+    // Drill bit indicator
+    ctx.beginPath();
+    ctx.moveTo(-8, this.radius);
+    ctx.lineTo(0, this.radius + 12);
+    ctx.lineTo(8, this.radius);
+    ctx.fillStyle = '#aaa';
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+class TerrainNode {
+  constructor(x, y, type) {
+    this.x = x;
+    this.y = y;
+    this.type = type; // 'resource', 'hazard', 'wall'
+    this.radius = type === 'wall' ? 30 + Math.random() * 20 : 15 + Math.random() * 10;
+    this.polarity = Math.random() > 0.5 ? 1 : -1;
+    this.active = true;
+    this.health = type === 'wall' ? 100 : 10;
+    this.colorPositive = '#ff6b6b';
+    this.colorNegative = '#4dabf7';
+  }
+
+  draw(ctx) {
+    if (!this.active) return;
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.type === 'resource') {
+      ctx.beginPath();
+      ctx.moveTo(0, -this.radius);
+      ctx.lineTo(this.radius, 0);
+      ctx.lineTo(0, this.radius);
+      ctx.lineTo(-this.radius, 0);
+      ctx.fillStyle = this.polarity === 1 ? this.colorPositive : this.colorNegative;
+      ctx.globalAlpha = 0.8;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+    } else if (this.type === 'hazard') {
+      ctx.beginPath();
+      for(let i=0; i<8; i++) {
+        let r = i % 2 === 0 ? this.radius : this.radius * 0.5;
+        let a = (Math.PI * 2 / 8) * i;
+        ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+      }
+      ctx.closePath();
+      ctx.fillStyle = this.polarity === 1 ? this.colorPositive : this.colorNegative;
+      ctx.fill();
+    } else if (this.type === 'wall') {
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.fillStyle = '#2a1b38';
+      ctx.fill();
+      ctx.strokeStyle = '#4a2b58';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // Polarity indicator
+    if (this.type !== 'wall') {
+      ctx.fillStyle = '#fff';
+      ctx.font = '14px Courier New';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(this.polarity === 1 ? '+' : '-', 0, 0);
+    }
+
+    ctx.restore();
+  }
+}
+
+class ParticleSystem {
+  constructor() {
+    this.particles = [];
+  }
+
+  emit(x, y, color, count, speed) {
+    for(let i=0; i<count; i++) {
+      let a = Math.random() * Math.PI * 2;
+      let s = Math.random() * speed;
+      this.particles.push({
+        x: x, y: y,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s,
+        life: 1.0,
+        color: color,
+        size: 2 + Math.random() * 3
+      });
+    }
+  }
+
+  update(dt) {
+    for(let i = this.particles.length - 1; i >= 0; i--) {
+      let p = this.particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt * 2; // half second life
+      if (p.life <= 0) {
+        this.particles.splice(i, 1);
+      }
+    }
+  }
+
+  draw(ctx) {
+    for(let p of this.particles) {
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1.0;
+  }
+}
+class Game {
+  constructor() {
+    this.saveManager = new SaveManager();
+    this.soundEngine = new SoundEngine(this.saveManager);
+    this.uiManager = new UIManager(this.saveManager, this.soundEngine, this);
+
+    this.canvas = document.getElementById('gameCanvas');
+    this.ctx = this.canvas.getContext('2d', { alpha: false });
+    this.layoutManager = new LayoutManager(this.canvas);
+    this.inputManager = new InputManager();
+
+    this.player = null;
+    this.nodes = [];
+    this.particles = new ParticleSystem();
+
+    this.lastTime = 0;
+    this.score = 0;
+    this.depth = 0;
+    this.cameraY = 0;
+
+    this.shakeTime = 0;
+    this.shakeMagnitude = 0;
+
+    this.loop = this.loop.bind(this);
+    requestAnimationFrame(this.loop);
+  }
+
+  startPlay() {
+    this.saveManager.set('totalGamesPlayed', this.saveManager.get('totalGamesPlayed') + 1);
+    this.player = new Player(400, 100);
+    this.nodes = [];
+    this.particles = new ParticleSystem();
+    this.score = 0;
+    this.depth = 0;
+    this.cameraY = 0;
+    this.shakeTime = 0;
+
+    // Initial generation
+    for(let i=0; i<20; i++) {
+      this.generateChunk(i * 100 + 300);
+    }
+
+    this.uiManager.setState(GameState.PLAYING);
+    this.soundEngine.init();
+    this.soundEngine.startMusic();
+  }
+
+  generateChunk(yOffset) {
+    // Generate Walls
+    if (Math.random() < 0.4) {
+      this.nodes.push(new TerrainNode(Math.random() * 200, yOffset, 'wall'));
+    }
+    if (Math.random() < 0.4) {
+      this.nodes.push(new TerrainNode(800 - Math.random() * 200, yOffset, 'wall'));
+    }
+
+    // Generate Resource/Hazard
+    const r = Math.random();
+    if (r < 0.3) {
+      this.nodes.push(new TerrainNode(100 + Math.random() * 600, yOffset, 'resource'));
+    } else if (r < 0.6) {
+      this.nodes.push(new TerrainNode(100 + Math.random() * 600, yOffset, 'hazard'));
+    }
+  }
+
+  doShake(mag, time) {
+    const shakeOpt = parseInt(this.saveManager.getOption('screenShake'));
+    if (shakeOpt === 0) return;
+    this.shakeMagnitude = mag * (shakeOpt / 100);
+    this.shakeTime = time;
+  }
+
+  gameOver() {
+    this.uiManager.setState(GameState.GAME_OVER);
+    this.soundEngine.playSFX('gameover');
+
+    const hs = this.saveManager.get('highScore');
+    const isNewHigh = this.score > hs;
+    if (isNewHigh) this.saveManager.set('highScore', this.score);
+
+    const maxDepth = this.saveManager.get('bestWaveOrCombo');
+    if (this.depth > maxDepth) this.saveManager.set('bestWaveOrCombo', Math.floor(this.depth));
+
+    this.saveManager.set('totalScoreAccumulated', this.saveManager.get('totalScoreAccumulated') + this.score);
+
+    // Milestones
+    if (this.score >= 1000) this.saveManager.unlockMilestone('Bronze Driller');
+    if (this.score >= 5000) this.saveManager.unlockMilestone('Silver Magnet');
+    if (this.depth >= 10000) this.saveManager.unlockMilestone('Deep Cell Explorer');
+
+    this.uiManager.setGameOverStats(Math.floor(this.score), Math.floor(this.depth), isNewHigh);
+  }
+
+  update(dt) {
+    this.inputManager.update();
+
+    if (this.uiManager.currentState !== GameState.PLAYING) return;
+
+    // Player Update
+    const switched = this.player.update(dt, this.inputManager);
+    if (switched) this.soundEngine.playSFX('switch');
+
+    // Camera follows player Y
+    this.cameraY = this.player.y - 150;
+    this.depth = Math.max(this.depth, this.player.y);
+
+    // Procedural Generation
+    const maxY = Math.max(...this.nodes.map(n => n.y), this.cameraY + 600);
+    if (maxY < this.cameraY + 800) {
+      this.generateChunk(maxY + 100);
+    }
+
+    // Cleanup nodes out of bounds
+    this.nodes = this.nodes.filter(n => n.y > this.cameraY - 200 && n.active);
+
+    // Node Physics & Collisions
+    for (let node of this.nodes) {
+      if (!node.active) continue;
+
+      const dx = this.player.x - node.x;
+      const dy = this.player.y - node.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+
+      // Magnetism
+      if (node.type !== 'wall' && dist < 300) {
+        const force = 50000 / (dist * dist + 100); // Inverse square law
+        const direction = node.polarity === this.player.polarity ? 1 : -1; // 1 = Repel, -1 = Attract
+
+        const fX = (dx / dist) * force * direction * dt;
+        const fY = (dy / dist) * force * direction * dt;
+
+        node.x -= fX; // Move node opposite to force on player for visual effect
+        node.y -= fY;
+      }
+
+      // Collision
+      if (dist < this.player.radius + node.radius) {
+        if (node.type === 'resource') {
+          node.active = false;
+          this.score += 100;
+          this.soundEngine.playSFX('collect');
+          this.particles.emit(node.x, node.y, node.polarity === 1 ? '#ff6b6b' : '#4dabf7', 15, 150);
+        } else if (node.type === 'hazard') {
+          node.active = false;
+          this.player.health -= 20;
+          this.soundEngine.playSFX('hit');
+          this.doShake(10, 0.2);
+          this.particles.emit(node.x, node.y, '#ffffff', 20, 200);
+          if (this.player.health <= 0) this.gameOver();
+        } else if (node.type === 'wall') {
+          // Drill Wall
+          node.health -= this.player.drillPower * dt;
+          this.soundEngine.playSFX('drill');
+          this.player.vy *= 0.5; // Slow down
+          this.particles.emit(this.player.x, this.player.y + this.player.radius, '#555', 2, 50);
+          if (node.health <= 0) {
+            node.active = false;
+            this.score += 50;
+            this.doShake(5, 0.1);
+          }
+        }
+      }
+    }
+
+    // Particles
+    const pOpt = this.saveManager.getOption('particles');
+    if (pOpt === 'high' || (pOpt === 'low' && Math.random() < 0.5)) {
+      this.particles.update(dt);
+    }
+
+    if (this.shakeTime > 0) {
+      this.shakeTime -= dt;
+    }
+  }
+
+  draw() {
+    const ctx = this.layoutManager.ctx;
+    this.layoutManager.clear();
+
+    // Grid Background
+    ctx.strokeStyle = '#2a1b38';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const startY = Math.floor(this.cameraY / 100) * 100;
+    for(let i=0; i<8; i++) {
+      ctx.moveTo(0, startY + i*100 - this.cameraY);
+      ctx.lineTo(800, startY + i*100 - this.cameraY);
+    }
+    for(let i=0; i<8; i++) {
+      ctx.moveTo(i*100, 0);
+      ctx.lineTo(i*100, 600);
+    }
+    ctx.stroke();
+
+    ctx.save();
+
+    // Shake
+    if (this.shakeTime > 0 && this.uiManager.currentState === GameState.PLAYING) {
+      const sx = (Math.random() - 0.5) * this.shakeMagnitude;
+      const sy = (Math.random() - 0.5) * this.shakeMagnitude;
+      ctx.translate(sx, sy);
+    }
+
+    ctx.translate(0, -this.cameraY);
+
+    // Entities
+    if (this.uiManager.currentState === GameState.PLAYING || this.uiManager.currentState === GameState.PAUSED) {
+      for (let node of this.nodes) {
+        node.draw(ctx);
+      }
+      this.particles.draw(ctx);
+      this.player.draw(ctx);
+    }
+
+    ctx.restore();
+
+    // HUD
+    if (this.uiManager.currentState === GameState.PLAYING) {
+      ctx.fillStyle = '#fff';
+      ctx.font = '20px Courier New';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`Score: ${Math.floor(this.score)}`, 20, 20);
+      ctx.fillText(`Depth: ${Math.floor(this.depth)}m`, 20, 50);
+
+      // Health Bar
+      ctx.fillStyle = '#f00';
+      ctx.fillRect(20, 80, 200, 15);
+      ctx.fillStyle = '#0f0';
+      ctx.fillRect(20, 80, 200 * (this.player.health / this.player.maxHealth), 15);
+      ctx.strokeStyle = '#fff';
+      ctx.strokeRect(20, 80, 200, 15);
+
+      // Touch HUD logic
+      const touchOpt = this.saveManager.getOption('touchControls');
+      const showTouch = touchOpt === 'always' || (touchOpt === 'auto' && this.inputManager.touch.active);
+      const dpad = document.getElementById('touch-dpad');
+      const action = document.getElementById('touch-btn-action');
+      if (showTouch) {
+        dpad.style.display = 'block';
+        action.style.display = 'block';
+
+        if (this.inputManager.touch.active && !this.inputManager.touch.isRightSide) {
+           const dx = this.inputManager.touch.x - this.inputManager.touch.startX;
+           const dy = this.inputManager.touch.y - this.inputManager.touch.startY;
+           const mag = Math.min(40, Math.sqrt(dx*dx + dy*dy));
+           const ang = Math.atan2(dy, dx);
+           const knob = document.getElementById('touch-dpad-knob');
+           knob.style.transform = `translate(calc(-50% + ${Math.cos(ang)*mag}px), calc(-50% + ${Math.sin(ang)*mag}px))`;
+        } else {
+           document.getElementById('touch-dpad-knob').style.transform = 'translate(-50%, -50%)';
+        }
+      } else {
+        dpad.style.display = 'none';
+        action.style.display = 'none';
+      }
+    }
+  }
+
+  loop(timestamp) {
+    const rawDt = (timestamp - this.lastTime) / 1000;
+    const dt = Math.min(rawDt, 0.1); // Frame-rate independent with cap
+    this.lastTime = timestamp;
+
+    this.update(dt);
+    this.draw();
+
+    requestAnimationFrame(this.loop);
+  }
+}
+
+// Bootstrap
+window.addEventListener('load', () => {
+  window.arcadeGame = new Game();
+});
+</script></body></html>

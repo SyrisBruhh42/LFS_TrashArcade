@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Volcanic Time Forge</title>
+  <style>
+    :root {
+      --accent: #7f5598;
+      --bg: #1a0f14;
+      --text: #f0e6d2;
+      --panel: rgba(26, 15, 20, 0.85);
+    }
+    body, html {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: var(--bg); color: var(--text);
+      font-family: monospace; overflow: hidden;
+      touch-action: none; user-select: none;
+      -webkit-user-select: none;
+    }
+    #game-container {
+      position: relative; width: 100%; height: 100%;
+      display: flex; justify-content: center; align-items: center;
+    }
+    canvas {
+      display: block;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    #ui-layer {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; display: flex; flex-direction: column;
+    }
+    .screen {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      display: none; flex-direction: column; justify-content: center; align-items: center;
+      background: var(--panel); pointer-events: auto;
+    }
+    .screen.active { display: flex; }
+    h1 { color: var(--accent); text-shadow: 0 0 10px var(--accent); margin-bottom: 0.5em; text-align: center; font-size: 3em; }
+    h2 { color: #ff8800; }
+    button {
+      background: transparent; border: 2px solid var(--accent); color: var(--text);
+      padding: 15px 30px; margin: 10px; font-size: 1.2em; font-family: inherit;
+      cursor: pointer; transition: all 0.2s; text-transform: uppercase;
+    }
+    button:hover, button:focus {
+      background: var(--accent); color: #fff; box-shadow: 0 0 15px var(--accent); outline: none;
+    }
+    #hud {
+      position: absolute; top: 10px; left: 10px; right: 10px;
+      display: flex; justify-content: space-between;
+      pointer-events: none; text-shadow: 1px 1px 2px #000;
+      font-size: 1.2em; z-index: 10;
+    }
+    #btn-pause {
+      pointer-events: auto; background: rgba(0,0,0,0.5); border: 1px solid var(--text);
+      padding: 5px 15px; margin: 0; font-size: 1em;
+    }
+    .modal-content {
+      background: #2a1a24; border: 2px solid var(--accent); padding: 20px;
+      border-radius: 8px; max-width: 400px; width: 90%; text-align: center;
+      max-height: 80vh; overflow-y: auto;
+    }
+    .options-row {
+      display: flex; justify-content: space-between; margin: 10px 0; align-items: center;
+    }
+    .options-row input[type="range"] { flex: 1; margin-left: 10px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    #mobile-controls {
+      position: absolute; bottom: 20px; left: 20px; right: 20px;
+      display: none; justify-content: space-between; pointer-events: none; z-index: 5;
+    }
+    .dpad, .action-btn { pointer-events: auto; opacity: 0.5; }
+    .dpad { width: 120px; height: 120px; background: rgba(255,255,255,0.1); border-radius: 50%; position: relative; border: 2px solid rgba(255,255,255,0.2); }
+    .dpad-thumb { width: 40px; height: 40px; background: var(--text); border-radius: 50%; position: absolute; top: 40px; left: 40px; }
+    .action-btn { width: 80px; height: 80px; background: rgba(255,255,255,0.1); border: 2px solid var(--text); border-radius: 50%; display: flex; justify-content: center; align-items: center; }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+    <div id="ui-layer">
+      <!-- PLAYING HUD -->
+      <div id="hud" style="display: none;">
+        <div>Wave: <span id="hud-wave">1</span> | Score: <span id="hud-score">0</span></div>
+        <div>Energy: <span id="hud-energy">100</span></div>
+        <button id="btn-pause">II</button>
+      </div>
+
+      <!-- TITLE SCREEN -->
+      <div id="screen-title" class="screen active">
+        <h1>VOLCANIC TIME FORGE</h1>
+        <p>High Score: <span id="title-highscore">0</span></p>
+        <button id="btn-play">Play</button>
+        <button id="btn-howto">How to Play</button>
+        <button id="btn-options-title">Options</button>
+        <div style="margin-top: 30px;"><a href="../../index.html">Back to Arcade</a></div>
+      </div>
+
+      <!-- HOW TO PLAY SCREEN -->
+      <div id="screen-howto" class="screen">
+        <div class="modal-content">
+          <h2>How to Play</h2>
+          <p>Defend the core! Build towers to stop the fiery threats.</p>
+          <p><b>Time Dilation:</b> Time moves incredibly slow when you are STILL. Moving or building speeds up time.</p>
+          <p><b>Controls:</b><br>WASD/Arrows/Drag to move cursor.<br>Space/Tap to build a tower (costs 50 Energy).<br>Energy recharges passively.</p>
+          <button id="btn-howto-close">Back</button>
+        </div>
+      </div>
+
+      <!-- OPTIONS SCREEN -->
+      <div id="screen-options" class="screen">
+        <div class="modal-content">
+          <h2>Options</h2>
+          <div class="options-row">
+            <label>Master Mute</label>
+            <input type="checkbox" id="opt-mute">
+          </div>
+          <div class="options-row">
+            <label>SFX Vol</label>
+            <input type="range" id="opt-sfx" min="0" max="100" value="80">
+          </div>
+          <div class="options-row">
+            <label>Music Vol</label>
+            <input type="range" id="opt-music" min="0" max="100" value="50">
+          </div>
+          <div class="options-row">
+            <label>Screen Shake</label>
+            <select id="opt-shake"><option value="1">100%</option><option value="0.5">50%</option><option value="0">Off</option></select>
+          </div>
+          <div class="options-row">
+            <label>Particles</label>
+            <select id="opt-particles"><option value="1">High</option><option value="0.5">Low</option></select>
+          </div>
+          <div class="options-row">
+            <button id="btn-export-save">Export Save</button>
+            <button id="btn-import-save">Import Save</button>
+          </div>
+          <div class="options-row" style="justify-content: center;">
+            <button id="btn-reset-save" style="border-color: #ff4444;">Reset Save</button>
+          </div>
+          <button id="btn-options-close">Back</button>
+        </div>
+      </div>
+
+      <!-- PAUSED SCREEN -->
+      <div id="screen-paused" class="screen">
+        <h2>PAUSED</h2>
+        <button id="btn-resume">Resume</button>
+        <button id="btn-options-pause">Options</button>
+        <button id="btn-restart">Restart</button>
+        <div style="margin-top: 30px;"><a href="../../index.html">Quit to Arcade</a></div>
+      </div>
+
+      <!-- GAME OVER SCREEN -->
+      <div id="screen-gameover" class="screen">
+        <h2>CORE BREACHED</h2>
+        <p>Wave Reached: <span id="go-wave">1</span></p>
+        <p>Final Score: <span id="go-score">0</span></p>
+        <p id="go-highscore-msg" style="color: #ff8800; font-weight: bold; display: none;">NEW HIGH SCORE!</p>
+        <button id="btn-playagain">Play Again</button>
+        <button id="btn-title">Title Screen</button>
+      </div>
+
+    </div>
+
+    <div id="mobile-controls">
+      <div class="dpad" id="virtual-dpad"><div class="dpad-thumb" id="virtual-thumb"></div></div>
+      <div class="action-btn" id="virtual-action">BUILD</div>
+    </div>
+
+  </div>
+  <script defer src="./game.js"></script>
+</body>
+</html>

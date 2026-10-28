@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Neon Core Drill</title>
+<style>
+  :root {
+    --accent: #58fd7c;
+    --bg-color: #050a1f;
+    --text-color: #e0e0e0;
+    --font: 'Courier New', Courier, monospace;
+  }
+  body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font);
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+  #ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+  .screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: rgba(5, 10, 31, 0.85);
+    pointer-events: auto;
+  }
+  .screen.active {
+    display: flex;
+  }
+  h1 {
+    font-size: 3rem;
+    color: var(--accent);
+    text-shadow: 0 0 10px var(--accent);
+    margin-bottom: 0.5rem;
+    text-align: center;
+  }
+  h2 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+  }
+  button {
+    background: transparent;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    padding: 10px 20px;
+    margin: 10px;
+    font-size: 1.2rem;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  button:hover {
+    background: var(--accent);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--accent);
+  }
+  .hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .hud-item {
+    font-size: 1.5rem;
+    color: var(--accent);
+    text-shadow: 0 0 5px var(--accent);
+  }
+  #pause-btn {
+    pointer-events: auto;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  a.back-link {
+    position: absolute;
+    bottom: 20px;
+    color: #888;
+    text-decoration: none;
+    font-size: 0.9rem;
+    pointer-events: auto;
+  }
+  a.back-link:hover {
+    color: var(--accent);
+  }
+  .modal {
+    background: #111;
+    border: 2px solid var(--accent);
+    padding: 20px;
+    border-radius: 5px;
+    max-width: 80%;
+    max-height: 80%;
+    overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="game-canvas"></canvas>
+
+  <div id="hud" class="hud" style="display:none;">
+    <div class="hud-item" id="hud-score">Score: 0</div>
+    <button id="pause-btn">II</button>
+    <div class="hud-item" id="hud-depth">Depth: 0m</div>
+  </div>
+
+  <div id="ui-layer">
+    <!-- TITLE SCREEN -->
+    <div id="screen-title" class="screen active">
+      <h1>NEON CORE DRILL</h1>
+      <p style="color:#aaa; text-align:center; max-width: 400px;">Drill deep. Mine resources. Survive the shifting geometry.</p>
+      <div id="title-stats" style="margin-bottom: 20px; color: var(--accent);">High Score: 0</div>
+      <button id="btn-play">Play</button>
+      <button id="btn-howto">How to Play</button>
+      <button id="btn-options-title">Options</button>
+      <a href="../../index.html" class="back-link">Back to Arcade</a>
+    </div>
+
+    <!-- PAUSED SCREEN -->
+    <div id="screen-paused" class="screen">
+      <h2>PAUSED</h2>
+      <button id="btn-resume">Resume</button>
+      <button id="btn-restart">Restart</button>
+      <button id="btn-options-pause">Options</button>
+      <button id="btn-quit">Quit to Title</button>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div id="screen-gameover" class="screen">
+      <h2 style="color: #ff4444; text-shadow: 0 0 10px #ff4444;">SYSTEM FAILURE</h2>
+      <div id="gameover-score" style="font-size:1.5rem; margin: 10px;">Score: 0</div>
+      <div id="gameover-high" style="color: var(--accent); margin-bottom: 20px;"></div>
+      <button id="btn-playagain">Play Again</button>
+      <button id="btn-title-from-go">Title Screen</button>
+    </div>
+
+    <!-- OPTIONS MODAL -->
+    <div id="screen-options" class="screen">
+      <div class="modal">
+        <h2>Options</h2>
+        <label>Master Mute: <input type="checkbox" id="opt-mute"></label><br><br>
+        <label>SFX Vol: <input type="range" id="opt-sfx" min="0" max="100" value="80"></label><br><br>
+        <label>Music Vol: <input type="range" id="opt-music" min="0" max="100" value="60"></label><br><br>
+        <label>Screen Shake:
+          <select id="opt-shake">
+            <option value="1">100%</option>
+            <option value="0.5">50%</option>
+            <option value="0">Off</option>
+          </select>
+        </label><br><br>
+        <button id="btn-export-save">Export Save</button>
+        <button id="btn-import-save">Import Save</button>
+        <button id="btn-reset-save">Reset Save</button>
+        <br><br>
+        <button id="btn-close-options">Close</button>
+      </div>
+    </div>
+
+    <!-- HOW TO PLAY MODAL -->
+    <div id="screen-howto" class="screen">
+      <div class="modal">
+        <h2>How to Play</h2>
+        <ul style="text-align: left;">
+          <li><b>Desktop:</b> WASD/Arrows to move. Mouse click to drill forward.</li>
+          <li><b>Touch:</b> Drag screen to move. Tap to drill.</li>
+          <li><b>Goal:</b> Collect Neon Ore to score. The arena shrinks! Avoid crushing geometry.</li>
+          <li><b>Pause:</b> 'P' key or tap pause button.</li>
+        </ul>
+        <button id="btn-close-howto">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+
+const SAVE_KEY = 'arcade_game_046_046-neon-core-drill_v1';
+
+class SaveManager {
+    constructor() {
+        this.data = {
+            highScore: 0,
+            bestDepth: 0,
+            totalGamesPlayed: 0,
+            totalScoreAccumulated: 0,
+            unlockedMilestones: [],
+            options: {
+                mute: false,
+                sfxVol: 80,
+                musicVol: 60,
+                shake: 1
+            }
+        };
+        this.load();
+    }
+
+    load() {
+        try {
+            const raw = localStorage.getItem(SAVE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                this.data = { ...this.data, ...parsed };
+                if (parsed.options) {
+                    this.data.options = { ...this.data.options, ...parsed.options };
+                }
+            }
+        } catch (e) {
+            console.warn("Save load failed, using fallback.", e);
+        }
+    }
+
+    save() {
+        try {
+            localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+        } catch (e) {
+            console.warn("Save failed.", e);
+        }
+    }
+
+    reset() {
+        try {
+            localStorage.removeItem(SAVE_KEY);
+        } catch(e) {}
+        this.data.highScore = 0;
+        this.data.bestDepth = 0;
+        this.data.totalGamesPlayed = 0;
+        this.data.totalScoreAccumulated = 0;
+        this.data.unlockedMilestones = [];
+        this.save();
+    }
+}
+
+class SoundEngine {
+    constructor(saveManager) {
+        this.save = saveManager;
+        this.ctx = null;
+        this.master = null;
+        this.sfx = null;
+        this.music = null;
+        this.initialized = false;
+
+        // UI bindings for AudioContext unlock
+        const unlock = () => {
+            if (!this.initialized) this.init();
+            else if (this.ctx.state === 'suspended') this.ctx.resume();
+        };
+        window.addEventListener('pointerdown', unlock, { once: true });
+        window.addEventListener('keydown', unlock, { once: true });
+        window.addEventListener('touchstart', unlock, { once: true });
+    }
+
+    init() {
+        if (this.initialized) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+
+        this.ctx = new AudioContext();
+        this.master = this.ctx.createGain();
+        this.sfx = this.ctx.createGain();
+        this.music = this.ctx.createGain();
+
+        this.sfx.connect(this.master);
+        this.music.connect(this.master);
+        this.master.connect(this.ctx.destination);
+
+        this.updateVolumes();
+        this.initialized = true;
+        this.startMusic();
+    }
+
+    updateVolumes() {
+        if (!this.initialized) return;
+        const opt = this.save.data.options;
+        this.master.gain.value = opt.mute ? 0 : 1;
+        this.sfx.gain.value = opt.sfxVol / 100;
+        this.music.gain.value = opt.musicVol / 100;
+    }
+
+    playOsc(type, freq, time, vol) {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq[0], this.ctx.currentTime);
+        if (freq.length > 1) {
+            osc.frequency.exponentialRampToValueAtTime(freq[1], this.ctx.currentTime + time);
+        }
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + time);
+
+        osc.connect(gain);
+        gain.connect(this.sfx);
+        osc.start();
+        osc.stop(this.ctx.currentTime + time);
+    }
+
+    playNoise(time, vol) {
+        if (!this.initialized) return;
+        const bufferSize = this.ctx.sampleRate * time;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1000;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + time);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.sfx);
+        noise.start();
+    }
+
+    play(id) {
+        if (!this.initialized) return;
+        switch(id) {
+            case 'drill': this.playNoise(0.1, 0.5); break;
+            case 'collect': this.playOsc('sine', [800, 1200], 0.1, 0.3); break;
+            case 'hit': this.playOsc('sawtooth', [150, 50], 0.2, 0.5); this.playNoise(0.2, 0.8); break;
+            case 'click': this.playOsc('square', [600, 800], 0.05, 0.2); break;
+        }
+    }
+
+    startMusic() {
+        if (!this.initialized || this.musicOsc) return;
+        // Simple arp
+        let time = this.ctx.currentTime + 0.1;
+        const loop = () => {
+            if (this.ctx.state !== 'running') {
+                setTimeout(loop, 100);
+                return;
+            }
+            const notes = [220, 261.63, 329.63, 392, 440];
+            const note = notes[Math.floor(Math.random() * notes.length)] / 2; // deeper synth
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.value = note;
+
+            gain.gain.setValueAtTime(0.2, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.25);
+
+            osc.connect(gain);
+            gain.connect(this.music);
+            osc.start(time);
+            osc.stop(time + 0.25);
+
+            time += 0.25;
+            this.musicTimer = setTimeout(loop, 250);
+        };
+        loop();
+    }
+}
+
+class InputManager {
+    constructor(canvas) {
+        this.keys = {};
+        this.pointer = { x: 0, y: 0, down: false, pressed: false };
+        this.logicalW = 1280;
+        this.logicalH = 720;
+
+        window.addEventListener('keydown', e => {
+            this.keys[e.key.toLowerCase()] = true;
+            if (e.key === 'p' || e.key === 'P') this.keys['pause'] = true;
+        });
+        window.addEventListener('keyup', e => {
+            this.keys[e.key.toLowerCase()] = false;
+            if (e.key === 'p' || e.key === 'P') this.keys['pause'] = false;
+        });
+
+        const updatePointer = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            this.pointer.x = (clientX - rect.left) / rect.width * this.logicalW;
+            this.pointer.y = (clientY - rect.top) / rect.height * this.logicalH;
+        };
+
+        canvas.addEventListener('pointerdown', e => {
+            updatePointer(e);
+            this.pointer.down = true;
+            this.pointer.pressed = true; // one frame flag
+        });
+        canvas.addEventListener('pointermove', e => {
+            if (this.pointer.down) updatePointer(e);
+        });
+        window.addEventListener('pointerup', () => {
+            this.pointer.down = false;
+        });
+
+        // Touch specific to satisfy requirements
+        canvas.addEventListener('touchstart', e => {
+            // e.preventDefault(); // Don't prevent default indiscriminately
+        }, {passive: false});
+    }
+
+    update() {
+        this.pointer.pressed = false;
+        this.keys['pause'] = false; // consume pause key
+    }
+
+    getAxis() {
+        let x = 0; let y = 0;
+        if (this.keys['a'] || this.keys['arrowleft']) x -= 1;
+        if (this.keys['d'] || this.keys['arrowright']) x += 1;
+        if (this.keys['w'] || this.keys['arrowup']) y -= 1;
+        if (this.keys['s'] || this.keys['arrowdown']) y += 1;
+
+        if (x !== 0 || y !== 0) {
+            const len = Math.hypot(x, y);
+            return { x: x/len, y: y/len };
+        }
+
+        return { x: 0, y: 0 }; // We'll handle touch drag separately in player update
+    }
+}
+
+
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('game-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.logicalW = 1280;
+        this.logicalH = 720;
+
+        this.save = new SaveManager();
+        this.audio = new SoundEngine(this.save);
+        this.input = new InputManager(this.canvas);
+
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+        this.lastTime = 0;
+        this.accumulatedTime = 0;
+
+        // Game state
+        this.score = 0;
+        this.depth = 0;
+        this.shakeTime = 0;
+
+        this.entities = [];
+        this.particles = [];
+
+        this.setupResize();
+        this.bindUI();
+
+        // Pause on blur
+        window.addEventListener('blur', () => { if (this.state === 'PLAYING') this.setPause(true); });
+        document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'PLAYING') this.setPause(true); });
+
+        requestAnimationFrame(t => this.loop(t));
+    }
+
+    setupResize() {
+        const resize = () => {
+            this.canvas.width = window.innerWidth;
+            this.canvas.height = window.innerHeight;
+            this.scale = Math.min(window.innerWidth / this.logicalW, window.innerHeight / this.logicalH);
+            this.offsetX = (window.innerWidth - this.logicalW * this.scale) / 2;
+            this.offsetY = (window.innerHeight - this.logicalH * this.scale) / 2;
+        };
+        window.addEventListener('resize', resize);
+        const ro = new ResizeObserver(resize);
+        ro.observe(document.body);
+        resize();
+    }
+
+    bindUI() {
+        const _ = id => document.getElementById(id);
+        const click = (id, fn) => {
+            _(id).addEventListener('click', () => {
+                this.audio.play('click');
+                fn();
+            });
+        };
+
+        // UI Navigation
+        click('btn-play', () => this.startGame());
+        click('btn-howto', () => this.showScreen('screen-howto'));
+        click('btn-close-howto', () => this.showScreen(this.state === 'TITLE' ? 'screen-title' : 'screen-paused'));
+
+        click('btn-options-title', () => this.showScreen('screen-options'));
+        click('btn-options-pause', () => this.showScreen('screen-options'));
+        click('btn-close-options', () => {
+            this.audio.updateVolumes();
+            this.save.save();
+            this.showScreen(this.state === 'TITLE' ? 'screen-title' : 'screen-paused');
+        });
+
+        click('pause-btn', () => this.setPause(true));
+        click('btn-resume', () => this.setPause(false));
+        click('btn-restart', () => this.startGame());
+        click('btn-quit', () => { this.state = 'TITLE'; this.showScreen('screen-title'); });
+
+        click('btn-playagain', () => this.startGame());
+        click('btn-title-from-go', () => { this.state = 'TITLE'; this.showScreen('screen-title'); });
+
+        // Options
+        const bindOpt = (id, key, parser) => {
+            const el = _(id);
+            if (el.type === 'checkbox') el.checked = this.save.data.options[key];
+            else el.value = this.save.data.options[key];
+
+            el.addEventListener('change', () => {
+                this.save.data.options[key] = parser ? parser(el.value) : (el.type === 'checkbox' ? el.checked : el.value);
+                this.audio.updateVolumes();
+                this.save.save();
+            });
+        };
+        bindOpt('opt-mute', 'mute');
+        bindOpt('opt-sfx', 'sfxVol', parseFloat);
+        bindOpt('opt-music', 'musicVol', parseFloat);
+        bindOpt('opt-shake', 'shake', parseFloat);
+
+        // Save Management
+        click('btn-export-save', () => {
+            const data = btoa(JSON.stringify(this.save.data));
+            prompt("Copy your save data:", data);
+        });
+        click('btn-import-save', () => {
+            const data = prompt("Paste your save data:");
+            if (data) {
+                try {
+                    const parsed = JSON.parse(atob(data));
+                    this.save.data = parsed;
+                    this.save.save();
+                    alert("Save imported! Reloading...");
+                    location.reload();
+                } catch(e) {
+                    alert("Invalid save data.");
+                }
+            }
+        });
+        click('btn-reset-save', () => {
+            if (confirm("Reset all progress?")) {
+                if (confirm("Click OK to confirm reset.")) {
+                    this.save.reset();
+                    location.reload();
+                }
+            }
+        });
+
+        // Initial setup
+        _('title-stats').innerText = `High Score: ${this.save.data.highScore} | Max Depth: ${this.save.data.bestDepth}m`;
+    }
+
+    showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        if (id) document.getElementById(id).classList.add('active');
+        document.getElementById('hud').style.display = this.state === 'PLAYING' ? 'flex' : 'none';
+    }
+
+    startGame() {
+        this.audio.init();
+        this.state = 'PLAYING';
+        this.showScreen(null);
+        this.score = 0;
+        this.depth = 0;
+        this.entities = [];
+        this.particles = [];
+        this.shakeTime = 0;
+
+        // Mechanics will initialize player here
+        this.initMechanics();
+    }
+
+    setPause(paused) {
+        if (this.state === 'PLAYING' && paused) {
+            this.state = 'PAUSED';
+            this.showScreen('screen-paused');
+        } else if (this.state === 'PAUSED' && !paused) {
+            this.state = 'PLAYING';
+            this.showScreen(null);
+            this.lastTime = performance.now(); // prevent huge dt
+        }
+    }
+
+    gameOver() {
+        this.state = 'GAME_OVER';
+        this.audio.play('hit');
+        this.addShake(1.0);
+
+        let highStr = "";
+        if (this.score > this.save.data.highScore) {
+            this.save.data.highScore = this.score;
+            highStr = "NEW HIGH SCORE!";
+        }
+        if (this.depth > this.save.data.bestDepth) {
+            this.save.data.bestDepth = Math.floor(this.depth);
+        }
+        this.save.data.totalGamesPlayed++;
+        this.save.data.totalScoreAccumulated += this.score;
+        this.save.save();
+
+        document.getElementById('gameover-score').innerText = `Score: ${this.score} | Depth: ${Math.floor(this.depth)}m`;
+        document.getElementById('gameover-high').innerText = highStr;
+
+        setTimeout(() => this.showScreen('screen-gameover'), 1000);
+    }
+
+    addShake(amt) {
+        this.shakeTime = amt * this.save.data.options.shake;
+    }
+
+    addParticle(x, y, color, speed) {
+        this.particles.push({
+            x, y,
+            vx: (Math.random() - 0.5) * speed,
+            vy: (Math.random() - 0.5) * speed,
+            life: 1.0, color
+        });
+    }
+
+    loop(time) {
+        requestAnimationFrame(t => this.loop(t));
+        if (!this.lastTime) this.lastTime = time;
+        let dt = Math.min((time - this.lastTime) / 1000, 0.1);
+        this.lastTime = time;
+
+        if (this.state === 'PLAYING') {
+            if (this.input.keys['pause']) {
+                this.setPause(true);
+            }
+            this.update(dt);
+        }
+
+        this.draw();
+        this.input.update();
+    }
+
+    update(dt) {
+        if (this.shakeTime > 0) this.shakeTime -= dt;
+
+        // Mechanics update will go here
+        this.updateMechanics(dt);
+
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx * dt * 60;
+            p.y += p.vy * dt * 60;
+            p.life -= dt * 2;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+
+        document.getElementById('hud-score').innerText = `Score: ${this.score}`;
+        document.getElementById('hud-depth').innerText = `Depth: ${Math.floor(this.depth)}m`;
+    }
+
+    draw() {
+        this.ctx.fillStyle = '#050a1f';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.ctx.save();
+        this.ctx.translate(this.offsetX, this.offsetY);
+        this.ctx.scale(this.scale, this.scale);
+
+        if (this.shakeTime > 0 && this.state === 'PLAYING') {
+            const mag = this.shakeTime * 20;
+            this.ctx.translate((Math.random()-0.5)*mag, (Math.random()-0.5)*mag);
+        }
+
+        // Clip to logical area
+        this.ctx.beginPath();
+        this.ctx.rect(0, 0, this.logicalW, this.logicalH);
+        this.ctx.clip();
+
+        // Mechanics draw will go here
+        if (this.state === 'PLAYING' || this.state === 'GAME_OVER') {
+            this.drawMechanics(this.ctx);
+        }
+
+        // Draw Particles
+        for (let p of this.particles) {
+            this.ctx.globalAlpha = Math.max(0, p.life);
+            this.ctx.fillStyle = p.color;
+            this.ctx.fillRect(p.x, p.y, 4, 4);
+        }
+        this.ctx.globalAlpha = 1.0;
+
+        // Letterbox covers
+        this.ctx.restore();
+
+        this.ctx.fillStyle = '#000';
+        if (this.offsetX > 0) {
+            this.ctx.fillRect(0, 0, this.offsetX, this.canvas.height);
+            this.ctx.fillRect(this.canvas.width - this.offsetX, 0, this.offsetX, this.canvas.height);
+        }
+        if (this.offsetY > 0) {
+            this.ctx.fillRect(0, 0, this.canvas.width, this.offsetY);
+            this.ctx.fillRect(0, this.canvas.height - this.offsetY, this.canvas.width, this.offsetY);
+        }
+    }
+
+
+
+
+    // Mechanics Implementation
+    initMechanics() {
+        this.player = {
+            x: this.logicalW / 2,
+            y: this.logicalH / 4,
+            r: 15,
+            vx: 0, vy: 0,
+            speed: 400,
+            angle: Math.PI / 2,
+            drilling: false,
+            energy: 100,
+            maxEnergy: 100,
+            dead: false
+        };
+
+        this.arena = {
+            top: 0,
+            bottom: this.logicalH,
+            left: 0,
+            right: this.logicalW,
+            shrinkTimer: 0,
+            shrinkInterval: 5,
+            targetLeft: 0,
+            targetRight: this.logicalW
+        };
+
+        this.ores = [];
+        this.obstacles = [];
+
+        this.depthSpeed = 100;
+        this.spawnTimer = 0;
+    }
+
+    updateMechanics(dt) {
+        if (this.player.dead) return;
+
+        // Input Handling
+        let axis = this.input.getAxis();
+
+        // Touch Drag
+        if (this.input.pointer.down && !this.input.keys['w'] && !this.input.keys['s'] && !this.input.keys['a'] && !this.input.keys['d']) {
+            let dx = this.input.pointer.x - this.player.x;
+            let dy = this.input.pointer.y - this.player.y;
+            let dist = Math.hypot(dx, dy);
+            if (dist > 10) {
+                axis = { x: dx/dist, y: dy/dist };
+            }
+        }
+
+        // Drilling mechanics
+        this.player.drilling = false;
+        if ((this.input.pointer.pressed || this.input.keys[' ']) && this.player.energy > 10) {
+            this.player.drilling = true;
+            this.player.energy -= 20;
+            this.audio.play('drill');
+            this.addShake(0.2);
+            for(let i=0; i<5; i++) this.addParticle(this.player.x, this.player.y + this.player.r, '#58fd7c', 10);
+
+            // Dash forward
+            this.player.vx = Math.cos(this.player.angle) * 800;
+            this.player.vy = Math.sin(this.player.angle) * 800;
+        } else if (axis.x !== 0 || axis.y !== 0) {
+            this.player.angle = Math.atan2(axis.y, axis.x);
+            this.player.vx = axis.x * this.player.speed;
+            this.player.vy = axis.y * this.player.speed;
+        } else {
+            this.player.vx *= Math.pow(0.01, dt); // friction
+            this.player.vy *= Math.pow(0.01, dt);
+        }
+
+        this.player.x += this.player.vx * dt;
+        this.player.y += this.player.vy * dt;
+
+        // Energy Regen
+        this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 10 * dt);
+
+        // Depth progression (moving world up)
+        this.depth += (this.depthSpeed + Math.max(0, this.player.vy)) * dt / 50;
+        let scrollY = (this.depthSpeed) * dt;
+
+        // Arena Shrinking (Shifting Geometry)
+        this.arena.shrinkTimer += dt;
+        if (this.arena.shrinkTimer > this.arena.shrinkInterval) {
+            this.arena.shrinkTimer = 0;
+            this.arena.shrinkInterval = Math.max(2, this.arena.shrinkInterval - 0.1);
+            let shrinkAmt = 50;
+            this.arena.targetLeft = Math.min(this.logicalW / 2 - 100, this.arena.targetLeft + shrinkAmt);
+            this.arena.targetRight = Math.max(this.logicalW / 2 + 100, this.arena.targetRight - shrinkAmt);
+            this.addShake(0.5);
+            this.audio.play('hit');
+        }
+
+        // Lerp arena walls
+        this.arena.left += (this.arena.targetLeft - this.arena.left) * dt * 2;
+        this.arena.right += (this.arena.targetRight - this.arena.right) * dt * 2;
+
+        // Player wall collision
+        if (this.player.x - this.player.r < this.arena.left) {
+            this.player.x = this.arena.left + this.player.r;
+            this.player.vx = Math.abs(this.player.vx) * 0.5; // bounce
+            this.takeDamage();
+        }
+        if (this.player.x + this.player.r > this.arena.right) {
+            this.player.x = this.arena.right - this.player.r;
+            this.player.vx = -Math.abs(this.player.vx) * 0.5;
+            this.takeDamage();
+        }
+        if (this.player.y - this.player.r < 0) {
+            this.player.y = this.player.r;
+        }
+        if (this.player.y + this.player.r > this.logicalH) {
+            this.player.y = this.logicalH - this.player.r;
+        }
+
+        // Spawning
+        this.spawnTimer -= dt;
+        if (this.spawnTimer <= 0) {
+            this.spawnTimer = Math.max(0.2, 1.0 - this.depth / 200);
+            let isOre = Math.random() > 0.5;
+            let sx = this.arena.left + 20 + Math.random() * (this.arena.right - this.arena.left - 40);
+            if (isOre) {
+                this.ores.push({ x: sx, y: this.logicalH + 20, r: 10, value: 100 });
+            } else {
+                let w = 40 + Math.random() * 80;
+                let h = 20 + Math.random() * 40;
+                this.obstacles.push({ x: sx, y: this.logicalH + 40, w: w, h: h, active: true });
+            }
+        }
+
+        // Update Ores
+        for (let i = this.ores.length - 1; i >= 0; i--) {
+            let o = this.ores[i];
+            o.y -= scrollY;
+            if (o.y < -20) {
+                this.ores.splice(i, 1);
+                continue;
+            }
+
+            // Collect
+            let dist = Math.hypot(this.player.x - o.x, this.player.y - o.y);
+            if (dist < this.player.r + o.r) {
+                this.score += o.value;
+                this.audio.play('collect');
+                for(let k=0; k<10; k++) this.addParticle(o.x, o.y, '#58fd7c', 5);
+                this.ores.splice(i, 1);
+            }
+        }
+
+        // Update Obstacles
+        for (let i = this.obstacles.length - 1; i >= 0; i--) {
+            let ob = this.obstacles[i];
+            ob.y -= scrollY;
+            if (ob.y + ob.h < 0) {
+                this.obstacles.splice(i, 1);
+                continue;
+            }
+
+            if (ob.active) {
+                // Circle-Rect collision
+                let testX = this.player.x;
+                let testY = this.player.y;
+
+                if (this.player.x < ob.x - ob.w/2) testX = ob.x - ob.w/2;
+                else if (this.player.x > ob.x + ob.w/2) testX = ob.x + ob.w/2;
+                if (this.player.y < ob.y - ob.h/2) testY = ob.y - ob.h/2;
+                else if (this.player.y > ob.y + ob.h/2) testY = ob.y + ob.h/2;
+
+                let dist = Math.hypot(this.player.x - testX, this.player.y - testY);
+                if (dist <= this.player.r) {
+                    if (this.player.drilling) {
+                        // Destroy obstacle
+                        ob.active = false;
+                        this.audio.play('hit');
+                        this.addShake(0.3);
+                        this.score += 50;
+                        for(let k=0; k<20; k++) this.addParticle(ob.x, ob.y, '#ff4444', 15);
+                    } else {
+                        this.takeDamage();
+                        ob.active = false; // Prevent infinite damage
+                    }
+                }
+            }
+        }
+
+        // Speed up over time
+        this.depthSpeed += dt * 2;
+    }
+
+    takeDamage() {
+        if (this.player.dead) return;
+        this.player.dead = true;
+        for(let k=0; k<30; k++) this.addParticle(this.player.x, this.player.y, '#58fd7c', 20);
+        this.gameOver();
+    }
+
+    drawMechanics(ctx) {
+        // Grid background
+        ctx.strokeStyle = 'rgba(88, 253, 124, 0.1)';
+        ctx.lineWidth = 1;
+        let bgOffsetY = (this.depth * 50) % 50;
+        ctx.beginPath();
+        for (let x = 0; x < this.logicalW; x += 50) {
+            ctx.moveTo(x, 0); ctx.lineTo(x, this.logicalH);
+        }
+        for (let y = -bgOffsetY; y < this.logicalH; y += 50) {
+            ctx.moveTo(0, y); ctx.lineTo(this.logicalW, y);
+        }
+        ctx.stroke();
+
+        // Walls
+        ctx.fillStyle = '#110022';
+        ctx.fillRect(0, 0, this.arena.left, this.logicalH);
+        ctx.fillRect(this.arena.right, 0, this.logicalW - this.arena.right, this.logicalH);
+
+        ctx.strokeStyle = '#ff00ff'; // Neon pink shifting walls
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(this.arena.left, 0); ctx.lineTo(this.arena.left, this.logicalH);
+        ctx.moveTo(this.arena.right, 0); ctx.lineTo(this.arena.right, this.logicalH);
+        ctx.stroke();
+
+        // Draw Ores
+        for (let o of this.ores) {
+            ctx.fillStyle = '#58fd7c';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#58fd7c';
+            ctx.beginPath();
+            ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        // Draw Obstacles
+        for (let ob of this.obstacles) {
+            if (!ob.active) continue;
+            ctx.fillStyle = '#ff4444';
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = '#ff4444';
+            ctx.fillRect(ob.x - ob.w/2, ob.y - ob.h/2, ob.w, ob.h);
+
+            // Warning pattern
+            ctx.strokeStyle = '#220000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(ob.x - ob.w/2, ob.y - ob.h/2);
+            ctx.lineTo(ob.x + ob.w/2, ob.y + ob.h/2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        // Draw Player
+        if (!this.player.dead) {
+            ctx.save();
+            ctx.translate(this.player.x, this.player.y);
+            ctx.rotate(this.player.angle);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#58fd7c';
+
+            // Drill bit
+            ctx.beginPath();
+            ctx.moveTo(this.player.r, 0);
+            ctx.lineTo(-this.player.r, this.player.r * 0.8);
+            ctx.lineTo(-this.player.r, -this.player.r * 0.8);
+            ctx.closePath();
+            ctx.fill();
+
+            if (this.player.drilling) {
+                // Drill glow
+                ctx.fillStyle = 'rgba(88, 253, 124, 0.8)';
+                ctx.beginPath();
+                ctx.arc(this.player.r + 5, 0, 8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+
+            // Energy bar (UI)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(this.player.x - 20, this.player.y - 30, 40, 5);
+            ctx.fillStyle = '#58fd7c';
+            ctx.fillRect(this.player.x - 20, this.player.y - 30, 40 * (this.player.energy / this.player.maxEnergy), 5);
+        }
+    }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    window.game = new Game();
+});
+</script>
+</body>
+</html>

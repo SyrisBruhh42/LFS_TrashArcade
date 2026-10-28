@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Arctic Perimeter</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- TITLE SCREEN -->
+    <div id="ui-title" class="ui-layer active">
+      <div class="content">
+        <h1>Arctic Perimeter</h1>
+        <p class="stats">High Score: <span id="title-high-score">0</span></p>
+        <div class="buttons">
+          <button id="btn-play">Play</button>
+          <button id="btn-how-to">How to Play</button>
+          <button id="btn-options-title">Options</button>
+          <a href="../../index.html" class="button-link">Back to Arcade</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- PLAYING HUD -->
+    <div id="ui-playing" class="ui-layer">
+      <div class="hud-top">
+        <div class="score-box">Score: <span id="hud-score">0</span></div>
+        <div class="wave-box">Wave: <span id="hud-wave">1</span></div>
+        <div class="currency-box">Scrap: <span id="hud-scrap">100</span></div>
+        <button id="btn-pause" class="icon-btn">II</button>
+      </div>
+
+      <!-- Tower selection UI -->
+      <div class="tower-selection">
+        <button class="tower-btn active" data-type="0">1: Gun ($50)</button>
+        <button class="tower-btn" data-type="1">2: Laser ($100)</button>
+        <button class="tower-btn" data-type="2">3: Bomb ($150)</button>
+      </div>
+      <div class="base-health-box">Base Integrity: <span id="hud-health">100</span>%</div>
+    </div>
+
+    <!-- PAUSED MODAL -->
+    <div id="ui-paused" class="ui-layer modal">
+      <div class="content">
+        <h2>PAUSED</h2>
+        <div class="buttons">
+          <button id="btn-resume">Resume</button>
+          <button id="btn-restart">Restart</button>
+          <button id="btn-options-pause">Options</button>
+          <button id="btn-how-to-pause">How to Play</button>
+          <a href="../../index.html" class="button-link">Quit to Arcade</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- HOW TO PLAY MODAL -->
+    <div id="ui-how-to" class="ui-layer modal">
+      <div class="content">
+        <h2>How to Play</h2>
+        <p>Defend the research base from frost mutants.</p>
+        <p>The ice floe will constantly shrink. If enemies reach the base, it loses integrity.</p>
+        <p><strong>Keyboard:</strong> WASD/Arrows to move cursor/player. 1-3 to select tower. Space/Click to build tower where you stand.</p>
+        <p><strong>Touch:</strong> Use left joystick to move. Tap buttons to build.</p>
+        <button id="btn-close-how-to">Close</button>
+      </div>
+    </div>
+
+    <!-- OPTIONS MODAL -->
+    <div id="ui-options" class="ui-layer modal">
+      <div class="content">
+        <h2>Options</h2>
+        <div class="option-row">
+          <label>Master Mute</label>
+          <input type="checkbox" id="opt-mute">
+        </div>
+        <div class="option-row">
+          <label>SFX Volume</label>
+          <input type="range" id="opt-sfx" min="0" max="100" value="80">
+        </div>
+        <div class="option-row">
+          <label>Music Volume</label>
+          <input type="range" id="opt-music" min="0" max="100" value="50">
+        </div>
+        <div class="option-row">
+          <label>Screen Shake</label>
+          <select id="opt-shake">
+            <option value="1">100%</option>
+            <option value="0.5">50%</option>
+            <option value="0">Off</option>
+          </select>
+        </div>
+        <div class="option-row">
+          <label>Particles</label>
+          <select id="opt-particles">
+            <option value="high">High</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div class="option-row">
+          <label>Palette</label>
+          <select id="opt-palette">
+            <option value="default">Default</option>
+            <option value="high-contrast">High Contrast</option>
+          </select>
+        </div>
+        <div class="option-row">
+          <label>Touch Controls</label>
+          <select id="opt-touch">
+            <option value="auto">Auto</option>
+            <option value="always">Always</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div class="buttons save-ops">
+          <button id="btn-export-save">Export Save</button>
+          <button id="btn-import-save">Import Save</button>
+          <button id="btn-reset-save">Reset Save</button>
+        </div>
+        <textarea id="save-data-io" style="display:none;" placeholder="Paste save data here..."></textarea>
+        <button id="btn-submit-import" style="display:none;">Confirm Import</button>
+        <button id="btn-close-options">Close</button>
+      </div>
+    </div>
+
+    <!-- GAME OVER MODAL -->
+    <div id="ui-game-over" class="ui-layer modal">
+      <div class="content">
+        <h2>GAME OVER</h2>
+        <p>Base destroyed!</p>
+        <p class="final-score">Score: <span id="go-score">0</span></p>
+        <p class="final-wave">Survived to Wave: <span id="go-wave">0</span></p>
+        <p id="go-new-high" class="highlight" style="display:none;">NEW HIGH SCORE!</p>
+        <div class="milestones" id="go-milestones"></div>
+        <div class="buttons">
+          <button id="btn-play-again">Play Again</button>
+          <button id="btn-title-return">Title Screen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOUCH CONTROLS -->
+    <div id="virtual-controls">
+      <div id="joystick-zone">
+        <div id="joystick-base"><div id="joystick-stick"></div></div>
+      </div>
+      <div id="button-zone">
+        <button id="vbtn-build" class="vbtn">BUILD</button>
+        <button id="vbtn-next" class="vbtn">TYPE</button>
+      </div>
+    </div>
+
+  </div>
+  <script defer src="./game.js"></script>
+</body>
+</html>

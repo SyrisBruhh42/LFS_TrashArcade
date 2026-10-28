@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Orbital Forge Recoil</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #111; color: #fff;
+      font-family: sans-serif;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #game-container {
+      position: relative;
+      width: 100%; height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      display: block;
+      width: 100%; height: 100%;
+      position: absolute;
+      top: 0; left: 0;
+      z-index: 1;
+    }
+    .ui-layer {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.7);
+      transition: opacity 0.3s;
+    }
+    .ui-layer.hidden {
+      opacity: 0;
+      pointer-events: none;
+      display: none;
+    }
+    h1 { font-size: 3rem; margin-bottom: 1rem; color: #ab4777; text-shadow: 0 0 10px #ab4777; }
+    h2 { font-size: 2rem; margin-bottom: 1rem; color: #e8a55d; }
+    button {
+      background: #ab4777;
+      color: #fff;
+      border: 2px solid #fff;
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 1.2rem;
+      cursor: pointer;
+      border-radius: 5px;
+      text-transform: uppercase;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+    button:hover {
+      background: #e8a55d;
+      border-color: #e8a55d;
+      box-shadow: 0 0 15px #e8a55d;
+    }
+    .hud {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 5;
+      pointer-events: none;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    #score-display { font-size: 1.5rem; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px #000; }
+    #health-display { font-size: 1.5rem; font-weight: bold; color: #ff4444; text-shadow: 1px 1px 2px #000; }
+    #pause-btn {
+      pointer-events: auto;
+      background: rgba(0,0,0,0.5);
+      border: 2px solid #ab4777;
+      color: #fff;
+      width: 40px; height: 40px;
+      font-size: 1.2rem;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .modal {
+      background: rgba(20, 10, 10, 0.95);
+      border: 2px solid #ab4777;
+      padding: 2rem;
+      border-radius: 10px;
+      max-width: 90%;
+      max-height: 90%;
+      overflow-y: auto;
+    }
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    .options-grid label { display: block; margin-bottom: 5px; }
+    .options-grid input[type="range"] { width: 100%; }
+    .arcade-link {
+      display: inline-block;
+      margin-top: 20px;
+      color: #aaa;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .arcade-link:hover { color: #fff; text-decoration: underline; }
+    #virtual-joystick {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      z-index: 20;
+      pointer-events: none;
+      display: none;
+    }
+    #virtual-knob {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 40px; height: 40px;
+      margin-top: -20px; margin-left: -20px;
+      border-radius: 50%;
+      background: rgba(171, 71, 119, 0.5);
+      pointer-events: none;
+    }
+  </style>
+  <script defer src="./game.js"></script>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="virtual-joystick">
+      <div id="virtual-knob"></div>
+    </div>
+
+    <div id="ui-hud" class="hud hidden">
+      <div>
+        <div id="score-display">SCORE: 0</div>
+        <div id="health-display">♥♥♥</div>
+      </div>
+      <button id="pause-btn">II</button>
+    </div>
+
+    <div id="ui-title" class="ui-layer">
+      <div class="modal">
+        <h1>Orbital Forge</h1>
+        <h2>Recoil</h2>
+        <p style="margin-bottom: 20px; color: #ccc;">High Score: <span id="title-highscore">0</span></p>
+        <button id="btn-play">Play</button>
+        <button id="btn-howto">How to Play</button>
+        <button id="btn-options-title">Options</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+
+    <div id="ui-howto" class="ui-layer hidden">
+      <div class="modal">
+        <h2>How to Play</h2>
+        <div style="text-align: left; line-height: 1.6; margin-bottom: 20px;">
+          <p><strong>Mechanic:</strong> You cannot move directly! You must shoot to propel yourself in the opposite direction via <strong>recoil</strong>.</p>
+          <p><strong>Controls:</strong></p>
+          <ul>
+            <li><strong>Desktop:</strong> Mouse to aim, Click/Space to fire.</li>
+            <li><strong>Touch:</strong> Drag anywhere to aim and fire.</li>
+          </ul>
+          <p><strong>Goal:</strong> Avoid the magma gravity wells and enemies. Survive and rack up score!</p>
+        </div>
+        <button id="btn-howto-close">Back</button>
+      </div>
+    </div>
+
+    <div id="ui-options" class="ui-layer hidden">
+      <div class="modal">
+        <h2>Options</h2>
+        <div class="options-grid">
+          <div>
+            <label>Master Volume</label>
+            <input type="range" id="opt-vol-master" min="0" max="100" value="100">
+          </div>
+          <div>
+            <label>SFX Volume</label>
+            <input type="range" id="opt-vol-sfx" min="0" max="100" value="100">
+          </div>
+          <div>
+            <label>Music Volume</label>
+            <input type="range" id="opt-vol-music" min="0" max="100" value="100">
+          </div>
+          <div>
+            <label>Screen Shake</label>
+            <select id="opt-shake">
+              <option value="1">100%</option>
+              <option value="0.5">50%</option>
+              <option value="0">Off</option>
+            </select>
+          </div>
+          <div>
+            <label>Particles</label>
+            <select id="opt-particles">
+              <option value="high">High</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div>
+            <label>Touch Controls</label>
+            <select id="opt-touch">
+              <option value="auto">Auto</option>
+              <option value="always">Always</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #444;">
+          <button id="btn-save-export">Export Save</button>
+          <button id="btn-save-import">Import Save</button>
+          <button id="btn-save-reset">Reset Save</button>
+        </div>
+        <textarea id="export-text" style="width:100%; height:60px; margin-top:10px; display:none; background:#222; color:#fff; border:1px solid #555;"></textarea>
+        <button id="btn-options-close" style="margin-top: 20px;">Close</button>
+      </div>
+    </div>
+
+    <div id="ui-paused" class="ui-layer hidden">
+      <div class="modal">
+        <h2>PAUSED</h2>
+        <button id="btn-resume">Resume</button>
+        <button id="btn-restart-pause">Restart</button>
+        <button id="btn-options-pause">Options</button>
+        <button id="btn-quit">Quit to Title</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+
+    <div id="ui-game-over" class="ui-layer hidden">
+      <div class="modal">
+        <h2>GAME OVER</h2>
+        <p style="font-size: 1.5rem; margin-bottom: 10px;">Score: <span id="go-score">0</span></p>
+        <p id="go-highscore-banner" style="color: #ab4777; font-weight: bold; display: none; margin-bottom: 10px;">NEW HIGH SCORE!</p>
+        <div id="go-milestones" style="color: #e8a55d; font-size: 0.9rem; margin-bottom: 20px;"></div>
+        <button id="btn-play-again">Play Again</button>
+        <button id="btn-go-title">Title Screen</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      // Inline bootstrap script to initialize the engine from game.js
+      if (window.GameEngine) {
+        const engine = new GameEngine();
+        engine.start();
+      } else {
+        console.error("GameEngine not found in game.js!");
+      }
+    });
+  </script>
+</body>
+</html>

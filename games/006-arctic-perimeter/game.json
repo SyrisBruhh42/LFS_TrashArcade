@@ -1,0 +1,12 @@
+{
+  "id": "006",
+  "slug": "006-arctic-perimeter",
+  "title": "Arctic Perimeter",
+  "genre": "Wave-Defense Tower Micro-Strategy",
+  "coreMechanic": "Shrinking Arena / Shifting Geometry",
+  "setting": "Frozen Arctic Research Base",
+  "description": "Defend the arctic base from creeping frost mutants. Place thermal turrets to survive while the ice floe steadily shrinks, pushing you to edge of survival.",
+  "controls": "Keyboard (WASD/Arrows to move, Space/Click to place tower, 1-3 select tower type). Touch (Virtual joystick to move, on-screen buttons for tower logic).",
+  "createdAt": "2024-05-18",
+  "accentColor": "#9a5695"
+}

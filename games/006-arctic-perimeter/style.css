@@ -1,0 +1,97 @@
+:root {
+  --bg-color: #0d1b2a;
+  --text-color: #e0e1dd;
+  --accent-color: #9a5695;
+  --accent-hover: #b56bb0;
+  --ui-bg: rgba(13, 27, 42, 0.85);
+  --ui-border: #415a77;
+}
+
+[data-palette="high-contrast"] {
+  --bg-color: #000000;
+  --text-color: #ffffff;
+  --accent-color: #ff00ff;
+  --accent-hover: #ff66ff;
+  --ui-bg: rgba(0, 0, 0, 0.95);
+  --ui-border: #ffffff;
+}
+
+* { box-sizing: border-box; user-select: none; }
+body, html {
+  margin: 0; padding: 0; width: 100%; height: 100%;
+  background: #000; color: var(--text-color);
+  font-family: monospace, sans-serif;
+  overflow: hidden; touch-action: none;
+}
+
+#game-container {
+  position: relative; width: 100vw; height: 100vh;
+  display: flex; justify-content: center; align-items: center;
+  background: var(--bg-color);
+}
+
+#game-canvas {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  display: block;
+}
+
+.ui-layer {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.3s;
+  display: flex; flex-direction: column; z-index: 10;
+}
+.ui-layer.active { pointer-events: auto; opacity: 1; visibility: visible; }
+.ui-layer.modal {
+  background: var(--ui-bg); justify-content: center; align-items: center; z-index: 20;
+}
+
+.content {
+  background: var(--ui-bg); padding: 2rem; border: 2px solid var(--ui-border);
+  border-radius: 8px; text-align: center; max-width: 600px;
+}
+
+h1, h2 { color: var(--accent-color); text-transform: uppercase; margin-top: 0; }
+.highlight { color: #ffd700; font-weight: bold; animation: pulse 1s infinite; }
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+.buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+button, .button-link {
+  background: transparent; color: var(--text-color); border: 1px solid var(--accent-color);
+  padding: 10px 20px; font-family: inherit; font-size: 1.1rem; cursor: pointer;
+  text-decoration: none; display: inline-block; text-transform: uppercase;
+  transition: all 0.2s; pointer-events: auto;
+}
+button:hover, .button-link:hover { background: var(--accent-color); color: #fff; }
+
+.option-row { display: flex; justify-content: space-between; align-items: center; margin: 10px 0; gap: 20px; }
+.option-row select, .option-row input { background: #222; color: #fff; border: 1px solid var(--ui-border); padding: 5px; }
+#save-data-io { width: 100%; height: 60px; margin-top: 10px; background: #222; color: #fff; border: 1px solid var(--ui-border); }
+.save-ops { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+.save-ops button { font-size: 0.9rem; padding: 5px 10px; }
+
+#ui-playing { padding: 10px; pointer-events: none; justify-content: space-between; }
+.hud-top { display: flex; justify-content: space-between; align-items: flex-start; pointer-events: auto; font-size: 1.2rem; font-weight: bold; text-shadow: 1px 1px 2px #000; }
+.tower-selection { pointer-events: auto; display: flex; gap: 5px; margin-bottom: 20px; justify-content: center; }
+.tower-btn { background: rgba(0,0,0,0.5); padding: 5px 10px; border-color: var(--ui-border); font-size: 0.9rem; }
+.tower-btn.active { border-color: var(--accent-color); background: rgba(154,86,149,0.3); }
+.base-health-box { pointer-events: auto; text-align: center; font-size: 1.5rem; font-weight: bold; color: #ff4444; text-shadow: 1px 1px 2px #000; padding-bottom: 20px; }
+
+.icon-btn { padding: 5px 10px; font-weight: bold; }
+
+#virtual-controls {
+  position: absolute; bottom: 0; left: 0; width: 100%; height: 40%;
+  pointer-events: none; z-index: 5; display: none; opacity: 0.6;
+}
+#virtual-controls.active { display: flex; justify-content: space-between; align-items: flex-end; padding: 20px; }
+#joystick-zone, #button-zone { pointer-events: auto; width: 150px; height: 150px; position: relative; }
+#button-zone { display: flex; gap: 10px; justify-content: flex-end; align-items: flex-end; }
+#joystick-base {
+  width: 120px; height: 120px; border: 2px solid rgba(255,255,255,0.5); border-radius: 50%;
+  position: absolute; bottom: 20px; left: 20px;
+}
+#joystick-stick {
+  width: 50px; height: 50px; background: rgba(255,255,255,0.5); border-radius: 50%;
+  position: absolute; top: 35px; left: 35px;
+}
+.vbtn { width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid rgba(255,255,255,0.5); }
+.vbtn:active { background: rgba(255,255,255,0.5); }

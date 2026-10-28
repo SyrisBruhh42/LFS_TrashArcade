@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Gothic Drill Sacrifice</title>
+    <style>
+        :root {
+            --bg: #0a050f;
+            --text: #e0e0e0;
+            --accent: #5be29e;
+            --accent-dim: #2b6a4a;
+            --danger: #e25b6a;
+            --danger-dim: #6a2b33;
+            --ui-bg: rgba(20, 10, 30, 0.8);
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at center, #1a0f2e 0%, #05020a 100%);
+        }
+        canvas {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            image-rendering: pixelated;
+        }
+
+        /* UI Overlays */
+        .ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+        }
+        .hud {
+            display: none;
+            justify-content: space-between;
+            padding: 20px;
+            pointer-events: auto;
+            text-shadow: 1px 1px 2px #000;
+        }
+        .hud.active { display: flex; }
+        .hud-left { font-size: 24px; color: var(--accent); }
+        .hud-right { text-align: right; }
+        .hud-health { color: var(--danger); font-size: 20px; margin-bottom: 5px; }
+        .hud-score { font-size: 24px; color: #fff; }
+        .btn-pause {
+            background: none; border: 2px solid var(--text); color: var(--text);
+            padding: 5px 15px; font-size: 20px; cursor: pointer; border-radius: 5px;
+            font-family: inherit; font-weight: bold;
+        }
+        .btn-pause:active { background: rgba(255,255,255,0.2); }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--ui-bg);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            pointer-events: auto;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 100;
+        }
+        .modal.active { display: flex; }
+
+        h1 { font-size: 48px; color: var(--accent); margin-bottom: 10px; text-shadow: 0 0 10px var(--accent-dim); }
+        h2 { font-size: 32px; color: #fff; margin-bottom: 20px; }
+        p { font-size: 18px; max-width: 600px; line-height: 1.5; margin-bottom: 20px; }
+
+        .btn {
+            background: transparent;
+            border: 2px solid var(--accent);
+            color: var(--accent);
+            padding: 15px 30px;
+            font-size: 20px;
+            margin: 10px;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-family: inherit;
+            font-weight: bold;
+            transition: all 0.2s;
+            box-shadow: 0 0 5px var(--accent-dim);
+        }
+        .btn:hover { background: var(--accent-dim); color: #fff; }
+        .btn:active { transform: scale(0.95); }
+        .btn-danger { border-color: var(--danger); color: var(--danger); box-shadow: 0 0 5px var(--danger-dim); }
+        .btn-danger:hover { background: var(--danger-dim); color: #fff; }
+
+        .options-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; text-align: left;
+        }
+        .option-row { display: flex; justify-content: space-between; align-items: center; width: 300px; }
+        input[type="range"] { accent-color: var(--accent); }
+
+        .save-data-box {
+            width: 80%; height: 60px; background: rgba(0,0,0,0.5); color: var(--accent);
+            border: 1px solid var(--accent-dim); padding: 5px; font-family: monospace;
+            resize: none; margin-bottom: 10px;
+        }
+
+        #touch-controls {
+            display: none; position: absolute; bottom: 20px; left: 0; width: 100%; height: 150px;
+            pointer-events: none; justify-content: space-between; padding: 0 20px; box-sizing: border-box;
+        }
+        #touch-controls.active { display: flex; pointer-events: auto; }
+        .touch-zone {
+            width: 150px; height: 150px; background: rgba(255,255,255,0.1); border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.3); display: flex; justify-content: center; align-items: center;
+        }
+        .touch-dpad { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; width: 100%; height: 100%; }
+        .dpad-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); }
+        .touch-action { width: 100px; height: 100px; border-radius: 50%; background: rgba(226, 91, 106, 0.2); border: 2px solid var(--danger); display: flex; justify-content: center; align-items: center; color: var(--danger); font-weight: bold;}
+
+        .back-link { position: absolute; top: 10px; left: 10px; color: #888; text-decoration: none; font-size: 14px; }
+        .back-link:hover { color: #fff; }
+
+        .milestone-badge { display: inline-block; padding: 5px 10px; margin: 5px; background: var(--accent-dim); color: #fff; border-radius: 3px; font-size: 14px; }
+        .milestone-locked { background: #333; color: #777; }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+
+        <div class="ui-layer">
+            <div id="hud" class="hud">
+                <div class="hud-left">
+                    Depth: <span id="hud-depth">0</span>m<br>
+                    Multiplier: x<span id="hud-mult">1</span>
+                </div>
+                <div class="hud-right">
+                    <div class="hud-health">Health: <span id="hud-hp">100</span>%</div>
+                    <div class="hud-score">Score: <span id="hud-score">0</span></div>
+                    <div style="margin-top:10px;"><button id="btn-pause-hud" class="btn-pause">II</button></div>
+                </div>
+            </div>
+
+            <div id="touch-controls">
+                <div class="touch-zone" id="joystick-zone">
+                    <div class="touch-dpad">
+                        <div></div><div class="dpad-btn" id="dpad-up">^</div><div></div>
+                        <div class="dpad-btn" id="dpad-left">&lt;</div><div></div><div class="dpad-btn" id="dpad-right">&gt;</div>
+                        <div></div><div class="dpad-btn" id="dpad-down">v</div><div></div>
+                    </div>
+                </div>
+                <div class="touch-action" id="action-btn">OD</div>
+            </div>
+        </div>
+
+        <div id="screen-title" class="modal active">
+            <a href="../../index.html" class="back-link">&lt; Back to Arcade</a>
+            <h1>GOTHIC DRILL SACRIFICE</h1>
+            <p>Descend into the haunted depths. Sacrifice your life force to power the arcane drill.</p>
+            <div style="margin-bottom: 20px; color: var(--accent);">High Score: <span id="title-highscore">0</span></div>
+            <button id="btn-play" class="btn">Play</button>
+            <button id="btn-howto" class="btn">How to Play</button>
+            <button id="btn-options-title" class="btn">Options</button>
+
+            <div style="margin-top: 30px;">
+                <h3>Milestones</h3>
+                <div id="title-milestones"></div>
+            </div>
+        </div>
+
+        <div id="screen-howto" class="modal">
+            <h2>HOW TO PLAY</h2>
+            <div style="text-align: left; max-width: 500px; margin-bottom: 20px;">
+                <p><strong>Move/Drill:</strong> WASD or Arrow Keys (or Touch D-Pad)</p>
+                <p><strong>Overdrive:</strong> Spacebar (or Touch OD button)</p>
+                <p>Drill through earth blocks to descend. Avoid indestructible bedrock.</p>
+                <p>Ghosts will drain your health if touched. Drill them while in OVERDRIVE to destroy them.</p>
+                <p>Activating OVERDRIVE costs <span style="color:var(--danger)">10% Health</span>, but makes you invulnerable, faster, and destroys ghosts for massive points!</p>
+                <p>Collect green soul gems to restore health.</p>
+            </div>
+            <button id="btn-howto-back" class="btn">Back</button>
+        </div>
+
+        <div id="screen-options" class="modal">
+            <h2>OPTIONS</h2>
+            <div class="options-grid">
+                <div class="option-row">
+                    <label for="opt-master-vol">Master Vol:</label>
+                    <input type="range" id="opt-master-vol" min="0" max="100" value="100">
+                </div>
+                <div class="option-row">
+                    <label for="opt-sfx-vol">SFX Vol:</label>
+                    <input type="range" id="opt-sfx-vol" min="0" max="100" value="100">
+                </div>
+                <div class="option-row">
+                    <label for="opt-music-vol">Music Vol:</label>
+                    <input type="range" id="opt-music-vol" min="0" max="100" value="100">
+                </div>
+                <div class="option-row">
+                    <label for="opt-shake">Screen Shake:</label>
+                    <select id="opt-shake" style="background:var(--bg);color:var(--text);border:1px solid var(--accent);padding:5px;">
+                        <option value="1">100%</option>
+                        <option value="0.5">50%</option>
+                        <option value="0">Off</option>
+                    </select>
+                </div>
+                <div class="option-row">
+                    <label for="opt-particles">Particles:</label>
+                    <select id="opt-particles" style="background:var(--bg);color:var(--text);border:1px solid var(--accent);padding:5px;">
+                        <option value="1">High</option>
+                        <option value="0.5">Low</option>
+                    </select>
+                </div>
+                 <div class="option-row">
+                    <label for="opt-touch">Touch Controls:</label>
+                    <select id="opt-touch" style="background:var(--bg);color:var(--text);border:1px solid var(--accent);padding:5px;">
+                        <option value="auto">Auto</option>
+                        <option value="always">Always</option>
+                        <option value="off">Off</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; border-top: 1px solid #555; padding-top: 20px; width: 100%; max-width: 400px;">
+                <h3>Save Data</h3>
+                <textarea id="save-data-text" class="save-data-box" spellcheck="false"></textarea>
+                <div>
+                    <button id="btn-export-save" class="btn" style="font-size:14px; padding: 10px;">Export</button>
+                    <button id="btn-import-save" class="btn" style="font-size:14px; padding: 10px;">Import</button>
+                    <button id="btn-reset-save" class="btn btn-danger" style="font-size:14px; padding: 10px;">Reset</button>
+                </div>
+            </div>
+
+            <button id="btn-options-back" class="btn" style="margin-top: 20px;">Back</button>
+        </div>
+
+        <div id="screen-paused" class="modal">
+            <h2>PAUSED</h2>
+            <button id="btn-resume" class="btn">Resume</button>
+            <button id="btn-restart-pause" class="btn">Restart</button>
+            <button id="btn-options-pause" class="btn">Options</button>
+            <button id="btn-quit" class="btn btn-danger">Quit to Title</button>
+        </div>
+
+        <div id="screen-gameover" class="modal">
+            <h2>DRILL DESTROYED</h2>
+            <p>Depth Reached: <span id="go-depth" style="color:var(--accent);">0</span>m</p>
+            <p>Final Score: <span id="go-score" style="color:#fff;font-size:24px;">0</span></p>
+            <p id="go-new-high" style="color:var(--accent); font-weight:bold; display:none;">NEW HIGH SCORE!</p>
+
+            <div id="go-milestones-unlocked" style="margin: 15px 0;"></div>
+
+            <button id="btn-restart-go" class="btn">Play Again</button>
+            <button id="btn-title-go" class="btn">Title Screen</button>
+        </div>
+    </div>
+
+    <script defer src="./main.js"></script>
+</body>
+</html>

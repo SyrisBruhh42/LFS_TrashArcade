@@ -1,0 +1,44 @@
+name: Release qualification
+
+# Bootstrap and future owner infrastructure qualification. This check runs the
+# candidate on an ephemeral runner with a read-only token and no repository secrets.
+# It never grants game PRs an alternate integration path.
+on:
+  push:
+    branches: [codex/repair-jules-pipeline-20261024]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: Release qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: Controller, recovery and game regressions
+        run: |
+          python3 -m unittest discover -s tests -v
+          for test in tests/*.cjs; do node "$test"; done
+      - name: Complete catalog and browser coverage
+        run: |
+          git diff --exit-code HEAD --
+          python3 tools/check_games.py --strict --all-runtime --check-registry --report release-evidence.json
+          git diff --exit-code HEAD --
+      - name: Preserve exact candidate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: release-evidence.json
+          if-no-files-found: warn
+          retention-days: 14

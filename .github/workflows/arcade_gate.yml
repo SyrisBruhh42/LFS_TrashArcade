@@ -1,0 +1,241 @@
+name: Arcade Gate
+
+# Automatic integration is held by default and requires live protection qualification. --match-head-commit does not pin
+# the base: branch protection/merge queue must be qualified before enabling it.
+# Runtime execution receives no write token, secrets, or persisted credentials.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 */4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pr-gate:
+    name: Arcade gate
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    concurrency:
+      group: pr-gate-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    outputs:
+      mode: ${{ steps.lane.outputs.mode }}
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - name: Check out pinned trusted base
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4; verified upstream tag 2026-10-24
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4; verified upstream tag 2026-10-24
+        with:
+          node-version: "22"
+
+      - name: Select explicit review lane
+        id: lane
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          labels = json.loads(os.environ['LABELS'])
+          body = os.environ.get('PR_BODY') or ''
+          has_incident = (
+              len(re.findall(r'^Factory incident: ([A-Za-z0-9][A-Za-z0-9_.-]{2,79})\s*$', body, re.M)) == 1
+              and len(re.findall(r'^Factory incident spec: ([0-9a-f]{64})\s*$', body, re.M)) == 1
+          )
+          mode = 'phase'
+          if 'arcade:infrastructure' in labels:
+              if os.environ['ASSOCIATION'] != 'OWNER':
+                  raise SystemExit('PATH GUARD: infrastructure lane requires repository owner authorship and explicit label')
+              mode = 'infrastructure'
+          elif 'arcade:maintenance' in labels or has_incident:
+              mode = 'maintenance'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('mode=' + mode + '\n')
+          PY
+
+      - name: Fetch PR head as data (public repository; no token persisted)
+        run: |
+          git fetch --no-tags origin "refs/pull/${PR}/head:refs/remotes/pr/head"
+          test "$(git rev-parse refs/remotes/pr/head)" = "$HEAD_SHA"
+          git cat-file -e "${HEAD_SHA}^{commit}"
+
+      - name: Validate exact target and overlay on pinned base
+        if: steps.lane.outputs.mode != 'infrastructure'
+        env:
+          MODE: ${{ steps.lane.outputs.mode }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess
+          args = ['python3', 'tools/path_guard.py', '--base', os.environ['BASE_SHA'], '--head', os.environ['HEAD_SHA'],
+                  '--mode', os.environ['MODE'], '--output', 'targets.json', '--overlay']
+          if os.environ['MODE'] == 'maintenance':
+              body = os.environ.get('PR_BODY', '')
+              ids = re.findall(r'^Factory incident: ([A-Za-z0-9][A-Za-z0-9_.-]{2,79})\s*$', body, re.M)
+              specs = re.findall(r'^Factory incident spec: ([0-9a-f]{64})\s*$', body, re.M)
+              if len(ids) != 1 or len(specs) != 1:
+                  raise SystemExit('Maintenance requires one incident ID and specification hash from the reviewed catalog')
+              args += ['--require-assignment', '--incident-id', ids[0], '--incident-spec', specs[0]]
+          subprocess.run(args, check=True)
+          PY
+
+      - name: Strict static and exact changed-game runtime checks
+        if: steps.lane.outputs.mode != 'infrastructure'
+        run: python3 tools/check_games.py --strict --check-registry --targets-file targets.json --report gate-evidence.json
+
+      # This lane checks candidate tooling on a disposable, read-only-token runner.
+      # Its report cannot enable automatic merge; an owner reviews the code itself.
+      - name: Check owner infrastructure candidate
+        if: steps.lane.outputs.mode == 'infrastructure'
+        run: |
+          git checkout --detach "$HEAD_SHA"
+          python3 -m unittest discover -s tests -v
+          node --test tests/*.cjs
+          python3 tools/check_games.py --strict --all-runtime --check-registry --report gate-evidence.json
+
+      - name: Preserve evidence (data only)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4; verified upstream tag 2026-10-24
+        with:
+          name: gate-evidence-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            targets.json
+            gate-evidence.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Record integration hold
+        if: always()
+        run: echo 'Automatic merge held unless explicitly enabled and live protected-base qualification passes. Maintenance and infrastructure require owner review.' >> "$GITHUB_STEP_SUMMARY"
+
+  pr-report:
+    name: Trusted gate feedback
+    needs: pr-gate
+    if: always() && github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4; verified upstream tag 2026-10-24
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4; verified upstream tag 2026-10-24
+        continue-on-error: true
+        with:
+          name: gate-evidence-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: evidence
+      - name: Render bounded feedback using trusted base code only
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RESULT: ${{ needs.pr-gate.result }}
+          MODE: ${{ needs.pr-gate.outputs.mode }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 tools/gate_feedback.py --head "$HEAD_SHA" --base "$BASE_SHA" --run "$RUN_URL" --result "$RESULT" --mode "$MODE" --directory evidence --output comment.md
+      - name: Publish status only (never execute or merge PR code)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RESULT: ${{ needs.pr-gate.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body-file comment.md
+          STATE=failure
+          if [ "$RESULT" = success ]; then STATE=success; fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" -f state="$STATE" -f context='Arcade gate' -f description='Bounded validation; see run evidence and integration policy' -f target_url="$RUN_URL"
+
+  integrate:
+    name: Protected automatic integration
+    needs: [pr-gate, pr-report]
+    if: github.event_name == 'pull_request_target' && needs.pr-gate.result == 'success' && needs.pr-report.result == 'success' && needs.pr-gate.outputs.mode == 'phase' && vars.ARCADE_AUTO_MERGE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: arcade-integration
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4; verified upstream tag 2026-10-24
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify protection, recheck tested revisions, and integrate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Separate Administration:read capability, never supplied to PR code.
+          ARCADE_POLICY_TOKEN: ${{ secrets.ARCADE_POLICY_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ARCADE_AUTO_MERGE: ${{ vars.ARCADE_AUTO_MERGE }}
+        run: python3 tools/integrate_pr.py --pr "$PR" --head "$HEAD_SHA" --base "$BASE_SHA" --execute
+
+  main-guard:
+    name: Main guard
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    concurrency:
+      group: main-guard
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4; verified upstream tag 2026-10-24
+        with:
+          # For pushes this is the event revision; dispatcher requires exact live
+          # main SHA and a fresh success, so an older green run cannot authorize it.
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4; verified upstream tag 2026-10-24
+        with:
+          node-version: "22"
+      - name: Regression tests
+        run: |
+          python3 -m unittest discover -s tests -v
+          node --test tests/*.cjs
+      - name: All-game runtime coverage and registry freshness
+        run: |
+          git diff --exit-code HEAD --
+          python3 tools/check_games.py --strict --all-runtime --check-registry --report gate-evidence.json
+          git diff --exit-code HEAD --
+      - name: Preserve complete coverage evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4; verified upstream tag 2026-10-24
+        with:
+          name: main-evidence-${{ github.sha }}
+          path: gate-evidence.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Record hold on failure
+        if: failure()
+        run: echo 'Main acceptance failed. Dispatcher requires a fresh successful Main guard for the exact main SHA and must hold. No automatic revert, branch write, or registry rewrite was attempted.' >> "$GITHUB_STEP_SUMMARY"

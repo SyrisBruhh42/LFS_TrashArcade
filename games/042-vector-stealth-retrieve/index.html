@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vector Stealth Retrieve</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            touch-action: none;
+            user-select: none;
+            color: #56b587;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            display: block;
+            box-shadow: 0 0 20px rgba(86, 181, 135, 0.5);
+            background-color: #05100a;
+        }
+        .crt::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+        }
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            background: rgba(0, 0, 0, 0.85);
+        }
+        .screen.active {
+            display: flex;
+        }
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #56b587;
+            text-align: center;
+        }
+        h2 {
+            font-size: 32px;
+            margin-bottom: 15px;
+            text-shadow: 0 0 8px #56b587;
+        }
+        button {
+            background: transparent;
+            color: #56b587;
+            border: 2px solid #56b587;
+            padding: 15px 30px;
+            font-size: 24px;
+            font-family: inherit;
+            margin: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-shadow: 0 0 5px #56b587;
+            box-shadow: 0 0 10px rgba(86, 181, 135, 0.3) inset, 0 0 10px rgba(86, 181, 135, 0.3);
+        }
+        button:hover, button:active {
+            background: #56b587;
+            color: #000;
+        }
+        a {
+            color: #56b587;
+            text-decoration: none;
+            margin-top: 20px;
+            font-size: 18px;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        #hud {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: none;
+        }
+        #hud.active {
+            display: block;
+        }
+        .hud-element {
+            position: absolute;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 0 5px #56b587;
+        }
+        #score-display { top: 20px; left: 20px; }
+        #wave-display { top: 20px; right: 20px; }
+        #ammo-display { bottom: 20px; left: 20px; }
+        #health-display { bottom: 20px; right: 20px; }
+        #btn-pause {
+            position: absolute;
+            top: 20px; left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            font-size: 20px;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="crt">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <!-- Title Screen -->
+            <div id="screen-title" class="screen active">
+                <h1>VECTOR STEALTH RETRIEVE</h1>
+                <p>High Score: <span id="title-highscore">0</span></p>
+                <button id="btn-play">Play</button>
+                <button id="btn-howto">How to Play</button>
+                <button id="btn-options-title">Options</button>
+                <a href="../../index.html">Back to Arcade</a>
+            </div>
+
+            <!-- HUD -->
+            <div id="hud">
+                <div id="score-display" class="hud-element">Score: 0</div>
+                <div id="wave-display" class="hud-element">Wave: 1</div>
+                <div id="ammo-display" class="hud-element">Ammo: 1/1</div>
+                <div id="health-display" class="hud-element">Health: 3</div>
+                <button id="btn-pause">II</button>
+            </div>
+
+            <!-- Pause Screen -->
+            <div id="screen-pause" class="screen">
+                <h2>PAUSED</h2>
+                <button id="btn-resume">Resume</button>
+                <button id="btn-restart">Restart</button>
+                <button id="btn-options-pause">Options</button>
+                <a href="../../index.html">Quit to Arcade</a>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="screen-gameover" class="screen">
+                <h2>MISSION FAILED</h2>
+                <p>Final Score: <span id="go-score">0</span></p>
+                <p id="new-highscore-msg" style="display:none; color: gold; text-shadow: 0 0 10px gold;">NEW HIGH SCORE!</p>
+                <button id="btn-playagain">Play Again</button>
+                <button id="btn-title">Title Screen</button>
+            </div>
+
+            <!-- Options Screen -->
+            <div id="screen-options" class="screen">
+                <h2>OPTIONS</h2>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                    <label>Master Mute: <input type="checkbox" id="opt-mute"></label>
+                    <label>SFX Vol: <input type="range" id="opt-sfx" min="0" max="100" value="100"></label>
+                    <label>Music Vol: <input type="range" id="opt-music" min="0" max="100" value="100"></label>
+                    <label>Screen Shake:
+                        <select id="opt-shake">
+                            <option value="1">100%</option>
+                            <option value="0.5">50%</option>
+                            <option value="0">Off</option>
+                        </select>
+                    </label>
+                    <label>Particles:
+                        <select id="opt-particles">
+                            <option value="high">High</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </label>
+                </div>
+                <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+                    <button id="btn-export">Export Save</button>
+                    <button id="btn-import">Import Save</button>
+                    <button id="btn-reset">Reset Save</button>
+                </div>
+                <button id="btn-options-back">Back</button>
+            </div>
+
+            <!-- How To Play -->
+            <div id="screen-howto" class="screen">
+                <h2>HOW TO PLAY</h2>
+                <div style="max-width: 600px; text-align: left; margin-bottom: 20px; line-height: 1.5;">
+                    <p>- WASD/Arrows to move, Mouse to aim & shoot.</p>
+                    <p>- Touch controls: Left side drag to move, right side tap to shoot.</p>
+                    <p>- You have ONE projectile. Shoot to disable guards.</p>
+                    <p>- You must physically walk over the projectile to retrieve it before you can shoot again!</p>
+                    <p>- Avoid guard vision cones (red lines).</p>
+                    <p>- Steal the objective (yellow) and reach the exit (blue) to clear the level.</p>
+                </div>
+                <button id="btn-howto-back">Back</button>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>

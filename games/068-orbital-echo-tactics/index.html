@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Orbital Echo Tactics</title>
+<style>
+  :root {
+    --accent: #cf7cd4;
+    --bg: #111;
+    --text: #eee;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', Courier, monospace;
+    overflow: hidden;
+    touch-action: none; /* Prevent browser scrolling on touch */
+  }
+  #game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  canvas {
+    display: block;
+    background-color: #000;
+    box-shadow: 0 0 20px var(--accent);
+  }
+  .overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 10;
+  }
+  .hidden { display: none !important; }
+  h1, h2 { color: var(--accent); text-align: center; text-transform: uppercase; text-shadow: 0 0 10px var(--accent); }
+  button {
+    background: transparent;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    padding: 10px 20px;
+    margin: 10px;
+    font-size: 1.2rem;
+    font-family: inherit;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+  }
+  button:hover {
+    background: var(--accent);
+    color: #000;
+    box-shadow: 0 0 15px var(--accent);
+  }
+  #hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .hud-text {
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px #000;
+  }
+  #btn-pause-hud {
+    pointer-events: auto;
+    padding: 5px 15px;
+    margin: 0;
+  }
+  /* Touch Controls */
+  #touch-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-around;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .touch-btn {
+    pointer-events: auto;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 2px solid rgba(207, 124, 212, 0.5);
+    background: rgba(0,0,0,0.3);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: rgba(207, 124, 212, 0.8);
+    font-size: 2rem;
+    user-select: none;
+  }
+  .touch-btn:active {
+    background: rgba(207, 124, 212, 0.3);
+  }
+  .upgrade-card {
+    background: rgba(17, 17, 17, 0.9);
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    padding: 20px;
+    margin: 10px;
+    border-radius: 10px;
+    width: 250px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .upgrade-card:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 15px var(--accent);
+    background: rgba(34, 34, 34, 0.9);
+  }
+  #upgrade-container {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="hud-text" id="score-display">Score: 0</div>
+    <div class="hud-text" id="wave-display" style="color:var(--accent);">Wave: 1</div>
+    <div class="hud-text" id="cooldown-display" style="color:#3498db;">Dash: RDY</div>
+    <button id="btn-pause-hud">II</button>
+  </div>
+
+  <div id="touch-controls" class="hidden">
+    <div id="btn-up" class="touch-btn">U</div>
+    <div id="btn-down" class="touch-btn">D</div>
+    <div id="btn-left" class="touch-btn">L</div>
+    <div id="btn-right" class="touch-btn">R</div>
+    <div id="btn-wait" class="touch-btn">W</div>
+    <div id="btn-dash" class="touch-btn" style="border-color:#3498db; color:#3498db;">DSH</div>
+  </div>
+
+  <div id="screen-title" class="overlay">
+    <h1>Orbital Echo Tactics</h1>
+    <p>High Score: <span id="title-highscore">0</span></p>
+    <div id="title-milestones" style="margin-bottom: 10px;"></div>
+    <button id="btn-play">Play</button>
+    <button id="btn-settings">Settings</button>
+    <a href="../../index.html" style="text-decoration:none;"><button>Back to Arcade</button></a>
+  </div>
+
+
+  <div id="screen-settings" class="overlay hidden" style="overflow-y: auto;">
+    <h2>SETTINGS</h2>
+    <div style="text-align: left; background: rgba(0,0,0,0.8); padding: 20px; border: 1px solid var(--accent); max-width: 400px;">
+      <p>Master Volume: <input type="range" id="masterVol" min="0" max="1" step="0.1" value="1.0"></p>
+      <p>SFX Volume: <input type="range" id="sfxVol" min="0" max="1" step="0.1" value="1.0"></p>
+      <p>Music Volume: <input type="range" id="musicVol" min="0" max="1" step="0.1" value="1.0"></p>
+      <p>Screen Shake:
+        <select id="screenShake">
+          <option value="1.0">100%</option>
+          <option value="0.5">50%</option>
+          <option value="0.0">Off</option>
+        </select>
+      </p>
+      <p>Particle Density:
+        <select id="particles">
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+      </p>
+      <p><label><input type="checkbox" id="highContrast"> High-Contrast/Colorblind Mode</label></p>
+      <p><label><input type="checkbox" id="showFps"> Show FPS Counter</label></p>
+      <p>Touch Controls:
+        <select id="touchControls">
+          <option value="auto">Auto</option>
+          <option value="always">Always On</option>
+          <option value="off">Off</option>
+        </select>
+      </p>
+      <p>Handedness:
+        <select id="handedness">
+          <option value="right">Right</option>
+          <option value="left">Left</option>
+        </select>
+      </p>
+      <hr>
+      <p>Save Data (Base64):</p>
+      <textarea id="saveDataIO" rows="3" style="width:100%;"></textarea>
+      <div style="display:flex; justify-content:space-between; margin-top:5px;">
+        <button id="btn-export-save" style="font-size:0.8rem; padding:5px;">Export</button>
+        <button id="btn-import-save" style="font-size:0.8rem; padding:5px;">Import</button>
+      </div>
+      <div style="text-align:center; margin-top:15px;">
+        <button id="btn-reset-save" style="color:red; border-color:red; font-size:0.8rem;">Reset Data (Click Twice)</button>
+      </div>
+    </div>
+    <button id="btn-close-settings">Close</button>
+  </div>
+
+  <div id="screen-pause" class="overlay hidden">
+    <h2>PAUSED</h2>
+    <button id="btn-resume">Resume</button>
+    <a href="../../index.html" style="text-decoration:none;"><button>Back to Arcade</button></a>
+  </div>
+
+  <div id="screen-upgrade" class="overlay hidden">
+    <h2>SYSTEM UPGRADE AVAILABLE</h2>
+    <p>Select an enhancement for your next cycle:</p>
+    <div id="upgrade-container">
+      <div id="btn-upgrade-1" class="upgrade-card">Upgrade 1</div>
+      <div id="btn-upgrade-2" class="upgrade-card">Upgrade 2</div>
+      <div id="btn-upgrade-3" class="upgrade-card">Upgrade 3</div>
+    </div>
+  </div>
+
+  <div id="screen-gameover" class="overlay hidden">
+    <h2>SYSTEM FAILURE</h2>
+    <p>Score: <span id="go-score">0</span></p>
+    <div id="go-milestones" style="margin-bottom: 10px;"></div>
+    <button id="btn-playagain">Restart</button>
+    <button id="btn-quit-go">Title Screen</button>
+  </div>
+
+  <div id="screen-tutorial" class="overlay hidden">
+    <h2>HOW TO PLAY</h2>
+    <p>Use WASD/Arrows to move.</p>
+    <p>Coordinate with your Echo.</p>
+    <button id="btn-dismiss-tutorial">GOT IT</button>
+  </div>
+</div>
+
+<script src="./game.js"></script>
+</body>
+</html>

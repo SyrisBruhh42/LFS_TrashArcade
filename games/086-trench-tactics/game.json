@@ -1,0 +1,13 @@
+{
+  "id": "086",
+  "slug": "086-trench-tactics",
+  "title": "Trench Tactics",
+  "genre": "Tactical Grid/Turn-Based Blitz",
+  "coreMechanic": "Time-Dilation on Stillness",
+  "setting": "Deep Ocean Trench",
+  "description": "Navigate the deep ocean trench in tactical turn-based blitz combat, where time slows down to a crawl when you are still.",
+  "controls": "Enter/Space/Tap to start. WASD/Arrows or drag to move. Space/Click/Tap to attack. Esc or Pause/Resume for pause.",
+  "createdAt": "2024-03-20",
+  "accentColor": "#cdc3b9",
+  "phase": "3"
+}

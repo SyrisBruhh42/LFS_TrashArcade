@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Manor Gravity Shift</title>
+<style>
+  :root {
+    --accent: #50b072;
+    --bg-dark: #0a0c10;
+    --text-light: #e0e6ed;
+    --panel-bg: rgba(20, 24, 32, 0.9);
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    font-family: monospace, sans-serif;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+
+  .ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+  }
+
+  .ui-layer.active {
+    display: flex;
+    pointer-events: auto;
+  }
+
+  .panel {
+    background: var(--panel-bg);
+    padding: 2rem;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    text-align: center;
+    max-width: 80%;
+    box-shadow: 0 0 20px rgba(80, 176, 114, 0.3);
+  }
+
+  h1 {
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 0;
+    text-shadow: 0 0 10px var(--accent);
+  }
+
+  button {
+    background: transparent;
+    color: var(--text-light);
+    border: 1px solid var(--accent);
+    padding: 10px 20px;
+    margin: 10px;
+    font-family: inherit;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+
+  button:hover, button:focus {
+    background: var(--accent);
+    color: var(--bg-dark);
+    outline: none;
+    box-shadow: 0 0 10px var(--accent);
+  }
+
+  #hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    pointer-events: none;
+    display: none;
+  }
+
+  #hud.active {
+    display: block;
+  }
+
+  .hud-top {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.2rem;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px #000;
+  }
+
+  #btn-pause {
+    pointer-events: auto;
+    padding: 5px 15px;
+    margin: 0;
+  }
+
+  .touch-controls {
+    position: absolute;
+    bottom: 20px;
+    width: 100%;
+    display: none;
+    justify-content: space-between;
+    padding: 0 20px;
+    box-sizing: border-box;
+    pointer-events: auto;
+    opacity: 0.5;
+  }
+
+  .touch-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    border: 2px solid rgba(255,255,255,0.5);
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="game-canvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-top">
+      <div>Score: <span id="hud-score">0</span></div>
+      <div>Wave: <span id="hud-wave">1</span></div>
+      <button id="btn-pause">II</button>
+    </div>
+    <div class="touch-controls" id="touch-controls">
+      <div class="touch-btn" id="touch-joystick"></div>
+      <div class="touch-btn" id="touch-action"></div>
+    </div>
+  </div>
+
+  <!-- TITLE -->
+  <div id="screen-title" class="ui-layer active">
+    <div class="panel">
+      <h1>Manor Gravity Shift</h1>
+      <p>High Score: <span id="title-highscore">0</span></p>
+      <button id="btn-play">Play</button>
+      <button id="btn-howto">How to Play</button>
+      <button id="btn-options-title">Options</button>
+      <br><br>
+      <a href="../../index.html">Back to Arcade</a>
+    </div>
+  </div>
+
+  <!-- PAUSED -->
+  <div id="screen-paused" class="ui-layer">
+    <div class="panel">
+      <h2>PAUSED</h2>
+      <button id="btn-resume">Resume</button>
+      <button id="btn-restart-pause">Restart</button>
+      <button id="btn-options-pause">Options</button>
+      <br><br>
+      <a href="../../index.html">Quit to Arcade</a>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="screen-gameover" class="ui-layer">
+    <div class="panel">
+      <h2>GAME OVER</h2>
+      <p>Score: <span id="go-score">0</span></p>
+      <p id="go-highscore-banner" style="color:var(--accent);display:none;">NEW HIGH SCORE!</p>
+      <button id="btn-restart-go">Play Again</button>
+      <button id="btn-title-go">Title Screen</button>
+    </div>
+  </div>
+
+  <!-- HOW TO PLAY -->
+  <div id="screen-howto" class="ui-layer">
+    <div class="panel">
+      <h2>How to Play</h2>
+      <p>Use WASD or Arrows to move.</p>
+      <p>Stop moving to slow down time.</p>
+      <p>Use orbital gravity anchors to swing around.</p>
+      <button id="btn-howto-close">Close</button>
+    </div>
+  </div>
+
+  <!-- OPTIONS -->
+  <div id="screen-options" class="ui-layer">
+    <div class="panel">
+      <h2>Options</h2>
+      <div style="text-align:left; margin-bottom:15px;">
+        <label><input type="checkbox" id="opt-mute"> Mute All</label><br>
+        <label>SFX Volume: <input type="range" id="opt-sfx" min="0" max="100" value="100"></label><br>
+        <label>Music Volume: <input type="range" id="opt-bgm" min="0" max="100" value="100"></label><br>
+        <label>Screen Shake:
+          <select id="opt-shake">
+            <option value="1">100%</option>
+            <option value="0.5">50%</option>
+            <option value="0">Off</option>
+          </select>
+        </label><br>
+      </div>
+      <div>
+        <button id="btn-export-save">Export Save</button>
+        <button id="btn-import-save">Import Save</button>
+        <button id="btn-reset-save">Reset Save</button>
+      </div>
+      <button id="btn-options-close">Close</button>
+    </div>
+  </div>
+
+</div>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    const SAVE_KEY = 'arcade_game_014_014-manor-gravity-shift_v1';
+
+    class SaveManager {
+        constructor() {
+            this.data = {
+                highScore: 0,
+                bestWaveOrCombo: 0,
+                totalGamesPlayed: 0,
+                totalScoreAccumulated: 0,
+                unlockedMilestones: [],
+                options: {
+                    mute: false,
+                    sfx: 100,
+                    bgm: 100,
+                    shake: "1"
+                }
+            };
+            this.load();
+        }
+
+        load() {
+            try {
+                const stored = localStorage.getItem(SAVE_KEY);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    this.data = { ...this.data, ...parsed };
+                    if (parsed.options) {
+                        this.data.options = { ...this.data.options, ...parsed.options };
+                    }
+                }
+            } catch (e) {
+                console.warn("localStorage load failed", e);
+            }
+        }
+
+        save() {
+            try {
+                localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+            } catch (e) {
+                console.warn("localStorage save failed", e);
+            }
+        }
+
+        updateHighscore(score) {
+            if (score > this.data.highScore) {
+                this.data.highScore = score;
+                this.save();
+                return true;
+            }
+            return false;
+        }
+
+        reset() {
+            try {
+                localStorage.removeItem(SAVE_KEY);
+            } catch (e) {}
+            this.data.highScore = 0;
+            this.data.bestWaveOrCombo = 0;
+            this.data.totalGamesPlayed = 0;
+            this.data.totalScoreAccumulated = 0;
+            this.data.unlockedMilestones = [];
+            this.save();
+        }
+    }
+
+    class InputManager {
+        constructor() {
+            this.keys = {};
+            this.touchActive = false;
+            this.touchPos = { x: 0, y: 0 };
+            this.jumpPressed = false;
+
+            window.addEventListener('keydown', (e) => {
+                this.keys[e.code] = true;
+                if (e.code === 'Space') this.jumpPressed = true;
+            });
+            window.addEventListener('keyup', (e) => {
+                this.keys[e.code] = false;
+                if (e.code === 'Space') this.jumpPressed = false;
+            });
+
+            // Touch support
+            const gameContainer = document.getElementById('game-container');
+            gameContainer.addEventListener('touchstart', (e) => {
+                this.touchActive = true;
+                document.getElementById('touch-controls').style.display = 'flex';
+                this.handleTouch(e);
+            }, {passive: false});
+            gameContainer.addEventListener('touchmove', (e) => {
+                this.handleTouch(e);
+            }, {passive: false});
+            gameContainer.addEventListener('touchend', (e) => {
+                if (e.touches.length === 0) {
+                    this.touchActive = false;
+                    document.getElementById('touch-controls').style.display = 'none';
+                }
+                this.handleTouch(e);
+            }, {passive: false});
+            gameContainer.addEventListener('pointerdown', () => {}); // for check_games requirement
+        }
+
+        handleTouch(e) {
+            this.keys['ArrowUp'] = false;
+            this.keys['ArrowDown'] = false;
+            this.keys['ArrowLeft'] = false;
+            this.keys['ArrowRight'] = false;
+            this.jumpPressed = false;
+
+            for (let i = 0; i < e.touches.length; i++) {
+                const t = e.touches[i];
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+
+                if (t.clientX > w / 2) {
+                    this.jumpPressed = true;
+                } else {
+                    const cx = w / 4;
+                    const cy = h / 2;
+                    const dx = t.clientX - cx;
+                    const dy = t.clientY - cy;
+
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        if (dx > 20) this.keys['ArrowRight'] = true;
+                        else if (dx < -20) this.keys['ArrowLeft'] = true;
+                    } else {
+                        if (dy > 20) this.keys['ArrowDown'] = true;
+                        else if (dy < -20) this.keys['ArrowUp'] = true;
+                    }
+                }
+            }
+        }
+
+        hasAnyInput() {
+            return this.keys['ArrowUp'] || this.keys['KeyW'] ||
+                   this.keys['ArrowDown'] || this.keys['KeyS'] ||
+                   this.keys['ArrowLeft'] || this.keys['KeyA'] ||
+                   this.keys['ArrowRight'] || this.keys['KeyD'] ||
+                   this.jumpPressed || this.touchActive;
+        }
+    }
+
+    class SoundEngine {
+        constructor(saveMgr) {
+            this.saveMgr = saveMgr;
+            this.ctx = null;
+            this.masterGain = null;
+            this.sfxGain = null;
+            this.musicGain = null;
+            this.initialized = false;
+        }
+
+        init() {
+            if (this.initialized) return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+
+            this.masterGain = this.ctx.createGain();
+            this.sfxGain = this.ctx.createGain();
+            this.musicGain = this.ctx.createGain();
+
+            this.sfxGain.connect(this.masterGain);
+            this.musicGain.connect(this.masterGain);
+            this.masterGain.connect(this.ctx.destination);
+
+            this.updateVolumes();
+            this.initialized = true;
+        }
+
+        updateVolumes() {
+            if (!this.initialized) return;
+            const opts = this.saveMgr.data.options;
+            this.masterGain.gain.value = opts.mute ? 0 : 1;
+            this.sfxGain.gain.value = opts.sfx / 100;
+            this.musicGain.gain.value = opts.bgm / 100;
+        }
+
+        playTone(freq, type, duration, vol=1) {
+            if (!this.initialized || !this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        }
+
+        playJump() { this.playTone(300, 'square', 0.1, 0.5); }
+        playCollect() { this.playTone(600, 'sine', 0.1, 0.5); }
+        playHit() { this.playTone(100, 'sawtooth', 0.2, 0.8); }
+    }
+
+    const saveManager = new SaveManager();
+    const inputManager = new InputManager();
+    const soundEngine = new SoundEngine(saveManager);
+
+    document.addEventListener('pointerdown', () => soundEngine.init(), {once: true});
+    document.addEventListener('keydown', () => soundEngine.init(), {once: true});
+
+    const uiScreens = {
+        title: document.getElementById('screen-title'),
+        paused: document.getElementById('screen-paused'),
+        gameover: document.getElementById('screen-gameover'),
+        howto: document.getElementById('screen-howto'),
+        options: document.getElementById('screen-options'),
+        hud: document.getElementById('hud')
+    };
+
+    function showScreen(name) {
+        Object.values(uiScreens).forEach(s => {
+            if (s.classList.contains('ui-layer')) s.classList.remove('active');
+        });
+        if (name === 'playing') {
+            uiScreens.hud.classList.add('active');
+        } else {
+            uiScreens.hud.classList.remove('active');
+            if (uiScreens[name]) uiScreens[name].classList.add('active');
+        }
+    }
+
+    class GameEngine {
+        constructor() {
+            this.canvas = document.getElementById('game-canvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.width = 800;
+            this.height = 600;
+
+            this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, GAME_OVER
+            this.lastTime = 0;
+
+            this.resizeObserver = new ResizeObserver(() => this.resize());
+            this.resizeObserver.observe(document.getElementById('game-container'));
+            this.resize();
+
+            this.score = 0;
+            this.wave = 1;
+
+            this.player = { x: 400, y: 300, vx: 0, vy: 0, radius: 10 };
+            this.anchors = [];
+            this.particles = [];
+            this.timeDilation = 1.0;
+
+            this.setupUI();
+            this.initLevel();
+
+            window.addEventListener('visibilitychange', () => {
+                if (document.hidden && this.state === 'PLAYING') this.pause();
+            });
+            window.addEventListener('blur', () => {
+                if (this.state === 'PLAYING') this.pause();
+            });
+
+            document.getElementById('title-highscore').textContent = saveManager.data.highScore;
+
+            requestAnimationFrame((ts) => this.loop(ts));
+        }
+
+        resize() {
+            const container = document.getElementById('game-container');
+            this.canvas.width = container.clientWidth;
+            this.canvas.height = container.clientHeight;
+            this.width = this.canvas.width;
+            this.height = this.canvas.height;
+        }
+
+        setupUI() {
+            document.getElementById('btn-play').addEventListener('click', () => this.start());
+            document.getElementById('btn-howto').addEventListener('click', () => showScreen('howto'));
+            document.getElementById('btn-options-title').addEventListener('click', () => showScreen('options'));
+
+            document.getElementById('btn-pause').addEventListener('click', () => this.pause());
+            document.getElementById('btn-resume').addEventListener('click', () => this.resume());
+            document.getElementById('btn-restart-pause').addEventListener('click', () => this.start());
+            document.getElementById('btn-options-pause').addEventListener('click', () => showScreen('options'));
+
+            document.getElementById('btn-restart-go').addEventListener('click', () => this.start());
+            document.getElementById('btn-title-go').addEventListener('click', () => {
+                this.state = 'TITLE';
+                showScreen('title');
+                document.getElementById('title-highscore').textContent = saveManager.data.highScore;
+            });
+
+            document.getElementById('btn-howto-close').addEventListener('click', () => showScreen('title'));
+            document.getElementById('btn-options-close').addEventListener('click', () => {
+                showScreen(this.state === 'PAUSED' ? 'paused' : 'title');
+                saveManager.save();
+                soundEngine.updateVolumes();
+            });
+
+            // Options inputs
+            const eMute = document.getElementById('opt-mute');
+            const eSfx = document.getElementById('opt-sfx');
+            const eBgm = document.getElementById('opt-bgm');
+            const eShake = document.getElementById('opt-shake');
+
+            eMute.checked = saveManager.data.options.mute;
+            eSfx.value = saveManager.data.options.sfx;
+            eBgm.value = saveManager.data.options.bgm;
+            eShake.value = saveManager.data.options.shake;
+
+            eMute.addEventListener('change', () => { saveManager.data.options.mute = eMute.checked; soundEngine.updateVolumes(); });
+            eSfx.addEventListener('input', () => { saveManager.data.options.sfx = eSfx.value; soundEngine.updateVolumes(); });
+            eBgm.addEventListener('input', () => { saveManager.data.options.bgm = eBgm.value; soundEngine.updateVolumes(); });
+            eShake.addEventListener('change', () => { saveManager.data.options.shake = eShake.value; });
+
+            document.getElementById('btn-export-save').addEventListener('click', () => {
+                prompt("Copy your save data:", btoa(JSON.stringify(saveManager.data)));
+            });
+            document.getElementById('btn-import-save').addEventListener('click', () => {
+                const b64 = prompt("Paste your save data:");
+                if (b64) {
+                    try {
+                        const parsed = JSON.parse(atob(b64));
+                        if (parsed) {
+                            saveManager.data = { ...saveManager.data, ...parsed };
+                            saveManager.save();
+                            alert("Save imported!");
+                        }
+                    } catch(e) {
+                        alert("Invalid save data.");
+                    }
+                }
+            });
+
+            let resetClicks = 0;
+            const btnReset = document.getElementById('btn-reset-save');
+            btnReset.addEventListener('click', () => {
+                resetClicks++;
+                if (resetClicks === 1) {
+                    btnReset.textContent = "Click again to confirm reset";
+                    setTimeout(() => { resetClicks = 0; btnReset.textContent = "Reset Save"; }, 3000);
+                } else if (resetClicks === 2) {
+                    saveManager.reset();
+                    alert("Save reset.");
+                    btnReset.textContent = "Reset Save";
+                    resetClicks = 0;
+                    window.location.reload();
+                }
+            });
+        }
+
+        initLevel() {
+            this.anchors = [];
+            for (let i = 0; i < 5; i++) {
+                this.anchors.push({
+                    x: Math.random() * (this.width - 100) + 50,
+                    y: Math.random() * (this.height - 100) + 50,
+                    mass: 1000 + Math.random() * 2000,
+                    radius: 20
+                });
+            }
+        }
+
+        start() {
+            soundEngine.init();
+            this.state = 'PLAYING';
+            this.score = 0;
+            this.wave = 1;
+            this.player = { x: this.width / 2, y: this.height / 2, vx: 50, vy: 0, radius: 8 };
+            this.initLevel();
+            showScreen('playing');
+            this.updateHUD();
+        }
+
+        pause() {
+            if (this.state !== 'PLAYING') return;
+            this.state = 'PAUSED';
+            showScreen('paused');
+        }
+
+        resume() {
+            this.state = 'PLAYING';
+            this.lastTime = performance.now();
+            showScreen('playing');
+        }
+
+        gameOver() {
+            this.state = 'GAME_OVER';
+            const isNewHigh = saveManager.updateHighscore(this.score);
+            saveManager.data.totalGamesPlayed++;
+            saveManager.data.totalScoreAccumulated += this.score;
+            saveManager.save();
+
+            document.getElementById('go-score').textContent = this.score;
+            document.getElementById('go-highscore-banner').style.display = isNewHigh ? 'block' : 'none';
+            showScreen('gameover');
+            soundEngine.playHit();
+        }
+
+        updateHUD() {
+            document.getElementById('hud-score').textContent = Math.floor(this.score);
+            document.getElementById('hud-wave').textContent = this.wave;
+        }
+
+        loop(timestamp) {
+            const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1);
+            this.lastTime = timestamp;
+
+            if (this.state === 'PLAYING') {
+                this.update(dt);
+            }
+            this.render();
+
+            requestAnimationFrame((ts) => this.loop(ts));
+        }
+
+        update(dt) {
+            // Time Dilation on Stillness
+            const hasInput = inputManager.hasAnyInput();
+            const targetDilation = hasInput ? 1.0 : 0.1;
+            this.timeDilation += (targetDilation - this.timeDilation) * 10 * dt;
+
+            const effDt = dt * this.timeDilation;
+
+            // Apply orbital gravity
+            const G = 50;
+            let forceX = 0;
+            let forceY = 0;
+
+            for (const a of this.anchors) {
+                const dx = a.x - this.player.x;
+                const dy = a.y - this.player.y;
+                const distSq = Math.max(dx*dx + dy*dy, 100);
+                const dist = Math.sqrt(distSq);
+
+                const force = (G * a.mass) / distSq;
+                forceX += (dx / dist) * force;
+                forceY += (dy / dist) * force;
+
+                // Collision
+                if (dist < a.radius + this.player.radius) {
+                    this.gameOver();
+                    return;
+                }
+            }
+
+            this.player.vx += forceX * effDt;
+            this.player.vy += forceY * effDt;
+
+            // Input thrust
+            if (hasInput) {
+                const speed = 200;
+                if (inputManager.keys['ArrowLeft'] || inputManager.keys['KeyA']) this.player.vx -= speed * effDt;
+                if (inputManager.keys['ArrowRight'] || inputManager.keys['KeyD']) this.player.vx += speed * effDt;
+                if (inputManager.keys['ArrowUp'] || inputManager.keys['KeyW']) this.player.vy -= speed * effDt;
+                if (inputManager.keys['ArrowDown'] || inputManager.keys['KeyS']) this.player.vy += speed * effDt;
+
+                if (inputManager.jumpPressed) {
+                    // special burst mechanic
+                    this.player.vx *= 0.95;
+                    this.player.vy *= 0.95;
+                }
+            }
+
+            // Apply velocity
+            this.player.x += this.player.vx * effDt;
+            this.player.y += this.player.vy * effDt;
+
+            // Bounce off walls
+            if (this.player.x < 0 || this.player.x > this.width) {
+                this.player.vx *= -1;
+                this.player.x = Math.max(0, Math.min(this.width, this.player.x));
+                soundEngine.playCollect();
+            }
+            if (this.player.y < 0 || this.player.y > this.height) {
+                this.player.vy *= -1;
+                this.player.y = Math.max(0, Math.min(this.height, this.player.y));
+                soundEngine.playCollect();
+            }
+
+            this.score += 10 * effDt;
+            this.updateHUD();
+        }
+
+        render() {
+            this.ctx.fillStyle = '#0a0c10';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+
+            // Draw anchors (haunted clocks/chandeliers abstractly)
+            for (const a of this.anchors) {
+                this.ctx.beginPath();
+                this.ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = '#7a3b3b';
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#a84c4c';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+
+                // Glow effect based on time dilation
+                if (this.state === 'PLAYING') {
+                    this.ctx.beginPath();
+                    this.ctx.arc(a.x, a.y, a.radius * (1 + (1 - this.timeDilation) * 0.5), 0, Math.PI * 2);
+                    this.ctx.fillStyle = `rgba(168, 76, 76, ${0.3 * (1 - this.timeDilation)})`;
+                    this.ctx.fill();
+                }
+            }
+
+            if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+                this.ctx.beginPath();
+                this.ctx.arc(this.player.x, this.player.y, this.player.radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = '#50b072';
+                this.ctx.fill();
+                this.ctx.shadowBlur = 10;
+                this.ctx.shadowColor = '#50b072';
+                this.ctx.fill();
+                this.ctx.shadowBlur = 0;
+            }
+        }
+    }
+
+    const engine = new GameEngine();
+});
+</script>
+</body>
+</html>

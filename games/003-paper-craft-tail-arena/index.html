@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Paper Craft Tail Arena</title>
+<style>
+  :root {
+    --accent: #c298fa;
+    --bg: #fdf5e6;
+    --text: #2c2c2c;
+  }
+  * { box-sizing: border-box; }
+  body, html {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: monospace;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+  }
+  #game-container {
+    position: relative; width: 100%; height: 100%;
+    display: flex; justify-content: center; align-items: center;
+  }
+  canvas {
+    display: block; width: 100%; height: 100%;
+    background: radial-gradient(circle at center, #ffffff 0%, #e6dfd5 100%);
+  }
+  .overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    background: rgba(253, 245, 230, 0.85);
+    z-index: 10;
+  }
+  .hidden { display: none !important; }
+  h1 { font-size: 3rem; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); text-align: center;}
+  button {
+    background: white; border: 2px solid var(--accent); color: var(--text);
+    padding: 15px 30px; font-size: 1.5rem; margin: 10px; cursor: pointer;
+    box-shadow: 4px 4px 0px var(--accent);
+    transition: transform 0.1s;
+    font-family: inherit;
+    font-weight: bold;
+  }
+  button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px var(--accent); }
+  a.back-link {
+    display: block; margin-top: 20px; color: var(--text); text-decoration: none;
+    border-bottom: 2px solid var(--accent); padding-bottom: 2px;
+  }
+  #hud {
+    position: absolute; top: 0; left: 0; width: 100%; padding: 20px;
+    display: flex; justify-content: space-between;
+    pointer-events: none; z-index: 5;
+  }
+  .hud-stat { font-size: 1.5rem; font-weight: bold; background: rgba(255,255,255,0.7); padding: 5px 10px; border: 2px dashed var(--accent); }
+
+  #touch-controls {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 50%;
+    pointer-events: none; z-index: 6;
+  }
+  .joystick-zone {
+    position: absolute; bottom: 20px; width: 150px; height: 150px;
+    border-radius: 50%; background: rgba(194, 152, 250, 0.2);
+    border: 2px dashed rgba(194, 152, 250, 0.5);
+    pointer-events: auto;
+  }
+  #stick-left { left: 20px; }
+  #stick-right { right: 20px; }
+  .knob {
+    position: absolute; top: 50%; left: 50%; width: 50px; height: 50px;
+    margin: -25px 0 0 -25px; border-radius: 50%; background: rgba(194, 152, 250, 0.8);
+  }
+  #btn-bank {
+    position: absolute; bottom: 180px; right: 40px;
+    width: 80px; height: 80px; border-radius: 50%;
+    background: #ffcc00; border: 4px solid #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 1.2rem;
+    pointer-events: auto;
+  }
+
+  .options-panel { background: #fff; border: 4px solid var(--accent); padding: 20px; max-width: 400px; width: 90%; max-height: 80%; overflow-y: auto; text-align: center; }
+  .opt-row { display: flex; justify-content: space-between; align-items: center; margin: 10px 0; border-bottom: 1px dotted #ccc; padding-bottom: 5px; }
+  .opt-row input[type=range] { width: 100px; }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="game-canvas"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="hud-stat" id="hud-score">Score: 0</div>
+    <div class="hud-stat" id="hud-multiplier">Tail Mult: x1</div>
+    <div class="hud-stat" id="hud-hp">HP: 3</div>
+    <div style="pointer-events: auto; cursor: pointer;" class="hud-stat" id="btn-pause">II</div>
+  </div>
+
+  <div id="touch-controls" class="hidden">
+    <div id="stick-left" class="joystick-zone"><div class="knob" id="knob-left"></div></div>
+    <div id="stick-right" class="joystick-zone"><div class="knob" id="knob-right"></div></div>
+    <div id="btn-bank">BANK!</div>
+  </div>
+
+  <div id="screen-title" class="overlay">
+    <h1>Paper Craft<br>Tail Arena</h1>
+    <div style="margin-bottom: 20px;">High Score: <span id="title-highscore">0</span></div>
+    <button id="btn-play">Play</button>
+    <button id="btn-how">How to Play</button>
+    <button id="btn-opts-title">Options</button>
+    <a href="../../index.html" class="back-link">Back to Arcade</a>
+  </div>
+
+  <div id="screen-how" class="overlay hidden">
+    <h2>How to Play</h2>
+    <div style="max-width: 400px; text-align: left; background: #fff; padding: 20px; border: 2px dashed var(--accent);">
+      <p><b>Move:</b> WASD or Left Stick</p>
+      <p><b>Aim/Shoot:</b> Mouse or Right Stick</p>
+      <p><b>Mechanic:</b> Collect scraps to grow your paper tail. The longer the tail, the higher your multiplier!</p>
+      <p><b>Risk:</b> If enemies touch you or your tail, you take damage and lose your tail.</p>
+      <p><b>Reward:</b> Press SPACE or the BANK button to cut your tail and securely bank its length as massive points!</p>
+    </div>
+    <button id="btn-how-back">Back</button>
+  </div>
+
+  <div id="screen-pause" class="overlay hidden">
+    <h1>PAUSED</h1>
+    <button id="btn-resume">Resume</button>
+    <button id="btn-restart">Restart</button>
+    <button id="btn-opts-pause">Options</button>
+    <button id="btn-quit">Quit to Title</button>
+  </div>
+
+  <div id="screen-gameover" class="overlay hidden">
+    <h1>Game Over</h1>
+    <h2 id="go-score">Score: 0</h2>
+    <div id="go-highscore-banner" class="hidden" style="color: #ff0055; font-weight: bold; margin-bottom: 10px;">NEW HIGH SCORE!</div>
+    <div style="margin-bottom: 20px;">Max Tail Length: <span id="go-maxtail">0</span></div>
+    <button id="btn-play-again">Play Again</button>
+    <button id="btn-quit-go">Title Screen</button>
+  </div>
+
+  <div id="screen-options" class="overlay hidden">
+    <div class="options-panel">
+      <h2>Options</h2>
+      <div class="opt-row"><span>Master Mute</span><input type="checkbox" id="opt-mute"></div>
+      <div class="opt-row"><span>SFX Vol</span><input type="range" id="opt-sfx" min="0" max="100" value="100"></div>
+      <div class="opt-row"><span>Music Vol</span><input type="range" id="opt-bgm" min="0" max="100" value="100"></div>
+      <div class="opt-row"><span>Screen Shake</span><select id="opt-shake"><option value="1">100%</option><option value="0.5">50%</option><option value="0">Off</option></select></div>
+      <div class="opt-row"><span>Particles</span><select id="opt-particles"><option value="high">High</option><option value="low">Low</option></select></div>
+      <div class="opt-row"><span>Touch Controls</span><select id="opt-touch"><option value="auto">Auto</option><option value="always">Always</option><option value="off">Off</option></select></div>
+      <hr>
+      <button id="btn-export">Export Save</button>
+      <textarea id="save-data-str" rows="3" style="width:100%; font-size:10px;" placeholder="Base64 Save Data"></textarea>
+      <button id="btn-import">Import Save</button>
+      <button id="btn-reset" style="color: red; border-color: red;">Reset Save</button>
+      <hr>
+      <button id="btn-opts-back">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- SaveManager ---
+const SAVE_KEY = 'arcade_game_003_003-paper-craft-tail-arena_v1';
+const SaveManager = {
+  data: {
+    highScore: 0,
+    bestWaveOrCombo: 0,
+    totalGamesPlayed: 0,
+    totalScoreAccumulated: 0,
+    unlockedMilestones: [],
+    options: {
+      mute: false, sfx: 100, bgm: 100, shake: 1, particles: 'high', touch: 'auto'
+    }
+  },
+  load: function() {
+    try {
+      const stored = localStorage.getItem(SAVE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        this.data = { ...this.data, ...parsed, options: { ...this.data.options, ...parsed.options } };
+      }
+    } catch(e) { console.warn('Save load failed', e); }
+  },
+  save: function() {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); } catch(e) { console.warn('Save failed', e); }
+  },
+  reset: function() {
+    try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
+    this.data = {
+      highScore: 0, bestWaveOrCombo: 0, totalGamesPlayed: 0, totalScoreAccumulated: 0, unlockedMilestones: [],
+      options: { mute: false, sfx: 100, bgm: 100, shake: 1, particles: 'high', touch: 'auto' }
+    };
+    this.save();
+  }
+};
+
+// --- SoundEngine ---
+const SoundEngine = {
+  ctx: null, masterGain: null, sfxGain: null, bgmGain: null,
+  musicOsc: null, musicInterval: null,
+  init: function() {
+    if (this.ctx) return;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    this.ctx = new AudioCtx();
+    this.masterGain = this.ctx.createGain();
+    this.sfxGain = this.ctx.createGain();
+    this.bgmGain = this.ctx.createGain();
+    this.sfxGain.connect(this.masterGain);
+    this.bgmGain.connect(this.masterGain);
+    this.masterGain.connect(this.ctx.destination);
+    this.updateVolumes();
+  },
+  updateVolumes: function() {
+    if (!this.masterGain) return;
+    this.masterGain.gain.value = SaveManager.data.options.mute ? 0 : 1;
+    this.sfxGain.gain.value = SaveManager.data.options.sfx / 100;
+    this.bgmGain.gain.value = SaveManager.data.options.bgm / 100;
+  },
+  resume: function() {
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  playTone: function(freq, type, duration, vol, isBgm=false) {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(isBgm ? this.bgmGain : this.sfxGain);
+    osc.start();
+    osc.stop(this.ctx.currentTime + duration);
+  },
+  playShoot: function() { this.playTone(600, 'triangle', 0.1, 0.5); },
+  playHit: function() { this.playTone(150, 'square', 0.3, 0.8); },
+  playCollect: function() { this.playTone(800, 'sine', 0.1, 0.4); this.playTone(1200, 'sine', 0.15, 0.4); },
+  playBank: function() { this.playTone(400, 'sine', 0.1, 0.6); setTimeout(()=>this.playTone(600, 'sine', 0.3, 0.8), 100); },
+  playGameOver: function() { this.playTone(100, 'sawtooth', 1.0, 1.0); },
+  startMusic: function() {
+    this.stopMusic();
+    if (!this.ctx) return;
+    let step = 0;
+    const notes = [220, 261.63, 329.63, 293.66];
+    this.musicInterval = setInterval(() => {
+      this.playTone(notes[step % notes.length], 'sine', 0.2, 0.2, true);
+      step++;
+    }, 250);
+  },
+  stopMusic: function() {
+    if (this.musicInterval) { clearInterval(this.musicInterval); this.musicInterval = null; }
+  }
+};
+
+// --- InputManager ---
+const Input = {
+  keys: {}, mouse: { x: 0, y: 0, down: false },
+  sticks: { left: { x: 0, y: 0, active: false }, right: { x: 0, y: 0, active: false } },
+  bankPressed: false,
+  isTouchDevice: false,
+  init: function() {
+    window.addEventListener('keydown', e => { this.keys[e.code] = true; if(e.code==='Space') this.bankPressed=true; SoundEngine.init(); SoundEngine.resume(); });
+    window.addEventListener('keyup', e => { this.keys[e.code] = false; });
+    const canvas = document.getElementById('game-canvas');
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      this.mouse.x = e.clientX - rect.left;
+      this.mouse.y = e.clientY - rect.top;
+    });
+    canvas.addEventListener('mousedown', e => { this.mouse.down = true; SoundEngine.init(); SoundEngine.resume(); });
+    canvas.addEventListener('mouseup', e => { this.mouse.down = false; });
+    canvas.addEventListener('pointerdown', () => { this.isTouchDevice = true; SoundEngine.init(); SoundEngine.resume(); });
+
+    // Touch Joysticks
+    this.setupStick('stick-left', 'left', 'knob-left');
+    this.setupStick('stick-right', 'right', 'knob-right');
+    document.getElementById('btn-bank').addEventListener('touchstart', (e) => { e.preventDefault(); this.bankPressed = true; });
+  },
+  setupStick: function(id, stickName, knobId) {
+    const el = document.getElementById(id);
+    const knob = document.getElementById(knobId);
+    let touchId = null;
+    const update = (e) => {
+      e.preventDefault();
+      for(let i=0; i<e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === touchId) {
+          const rect = el.getBoundingClientRect();
+          const cx = rect.left + rect.width/2;
+          const cy = rect.top + rect.height/2;
+          let dx = t.clientX - cx;
+          let dy = t.clientY - cy;
+          const maxDist = rect.width/2;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist > maxDist) { dx = (dx/dist)*maxDist; dy = (dy/dist)*maxDist; }
+          knob.style.transform = `translate(${dx}px, ${dy}px)`;
+          this.sticks[stickName].x = dx / maxDist;
+          this.sticks[stickName].y = dy / maxDist;
+        }
+      }
+    };
+    el.addEventListener('touchstart', e => {
+      e.preventDefault();
+      this.isTouchDevice = true;
+      const t = e.changedTouches[0];
+      touchId = t.identifier;
+      this.sticks[stickName].active = true;
+      update(e);
+      SoundEngine.init(); SoundEngine.resume();
+    });
+    el.addEventListener('touchmove', update);
+    const end = (e) => {
+      for(let i=0; i<e.changedTouches.length; i++) {
+        if(e.changedTouches[i].identifier === touchId) {
+          touchId = null;
+          this.sticks[stickName].active = false;
+          this.sticks[stickName].x = 0; this.sticks[stickName].y = 0;
+          knob.style.transform = `translate(0px, 0px)`;
+        }
+      }
+    };
+    el.addEventListener('touchend', end);
+    el.addEventListener('touchcancel', end);
+  },
+  consumeBank: function() {
+    if (this.bankPressed) { this.bankPressed = false; return true; }
+    return false;
+  },
+  getMoveVec: function() {
+    let dx = 0, dy = 0;
+    if (this.sticks.left.active) { dx = this.sticks.left.x; dy = this.sticks.left.y; }
+    else {
+      if (this.keys['KeyW'] || this.keys['ArrowUp']) dy -= 1;
+      if (this.keys['KeyS'] || this.keys['ArrowDown']) dy += 1;
+      if (this.keys['KeyA'] || this.keys['ArrowLeft']) dx -= 1;
+      if (this.keys['KeyD'] || this.keys['ArrowRight']) dx += 1;
+    }
+    const len = Math.sqrt(dx*dx + dy*dy);
+    if (len > 0) { dx /= len; dy /= len; }
+    return {x: dx, y: dy};
+  },
+  getAimVec: function(playerX, playerY) {
+    if (this.sticks.right.active) {
+      const len = Math.sqrt(this.sticks.right.x**2 + this.sticks.right.y**2);
+      if (len > 0.2) return { x: this.sticks.right.x/len, y: this.sticks.right.y/len, shooting: true };
+    }
+    if (this.mouse.down) {
+      let dx = this.mouse.x - playerX;
+      let dy = this.mouse.y - playerY;
+      const len = Math.sqrt(dx*dx + dy*dy);
+      if (len > 0) return { x: dx/len, y: dy/len, shooting: true };
+    }
+    return { x: 0, y: -1, shooting: false }; // Default up
+  }
+};
+
+// --- Math & Utils ---
+const Utils = {
+  rand: (min, max) => Math.random() * (max - min) + min,
+  drawPoly: (ctx, x, y, radius, sides, angle, fill, stroke) => {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+    ctx.beginPath();
+    for (let i = 0; i < sides; i++) {
+      const a = (Math.PI * 2 / sides) * i;
+      ctx.lineTo(Math.cos(a) * radius, Math.sin(a) * radius);
+    }
+    ctx.closePath();
+    if(fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if(stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+    // Paper fold line
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(radius, 0); ctx.strokeStyle='rgba(0,0,0,0.1)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.restore();
+  }
+};
+
+// --- Game Classes ---
+class Player {
+  constructor(x, y) {
+    this.x = x; this.y = y; this.radius = 15;
+    this.vx = 0; this.vy = 0; this.speed = 300;
+    this.angle = 0;
+    this.hp = 3;
+    this.tail = []; // Array of positions
+    this.tailSpacing = 20;
+    this.shootTimer = 0;
+    this.invulnTimer = 0;
+  }
+  update(dt, width, height) {
+    const move = Input.getMoveVec();
+    this.vx = move.x * this.speed;
+    this.vy = move.y * this.speed;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.x = Math.max(this.radius, Math.min(width - this.radius, this.x));
+    this.y = Math.max(this.radius, Math.min(height - this.radius, this.y));
+
+    const aim = Input.getAimVec(this.x, this.y);
+    if (move.x !== 0 || move.y !== 0 || aim.shooting) {
+      this.angle = Math.atan2(aim.shooting ? aim.y : move.y, aim.shooting ? aim.x : move.x);
+    }
+
+    if (aim.shooting) {
+      this.shootTimer -= dt;
+      if (this.shootTimer <= 0) {
+        this.shootTimer = 0.15;
+        Engine.bullets.push(new Bullet(this.x, this.y, aim.x, aim.y, true));
+        SoundEngine.playShoot();
+      }
+    }
+
+    if (this.invulnTimer > 0) this.invulnTimer -= dt;
+
+    // Update tail history
+    if (this.tail.length > 0) {
+      let targetX = this.x; let targetY = this.y;
+      for (let i=0; i<this.tail.length; i++) {
+        let seg = this.tail[i];
+        let dx = targetX - seg.x; let dy = targetY - seg.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > this.tailSpacing) {
+          seg.x += (dx/dist) * (dist - this.tailSpacing);
+          seg.y += (dy/dist) * (dist - this.tailSpacing);
+        }
+        targetX = seg.x; targetY = seg.y;
+      }
+    }
+  }
+  draw(ctx) {
+    if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 10) % 2 === 0) return;
+
+    // Draw Tail (Ribbon)
+    if (this.tail.length > 0) {
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y);
+      for(let seg of this.tail) ctx.lineTo(seg.x, seg.y);
+      ctx.strokeStyle = '#c298fa'; ctx.lineWidth = 4;
+      ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+      for(let seg of this.tail) {
+        Utils.drawPoly(ctx, seg.x, seg.y, 8, 4, seg.x*0.1, '#fff', '#c298fa');
+      }
+    }
+
+    // Draw Plane
+    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
+    ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 5; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
+    ctx.beginPath();
+    ctx.moveTo(20, 0); ctx.lineTo(-10, 15); ctx.lineTo(-5, 0); ctx.lineTo(-10, -15); ctx.closePath();
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+    // Fold
+    ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(20, 0); ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
+  }
+  addTailSegment() {
+    let last = this.tail.length > 0 ? this.tail[this.tail.length-1] : {x: this.x, y: this.y};
+    this.tail.push({x: last.x, y: last.y});
+    SoundEngine.playCollect();
+  }
+  takeHit() {
+    if (this.invulnTimer > 0) return false;
+    this.hp--;
+    this.invulnTimer = 1.0;
+    SoundEngine.playHit();
+    Engine.shake(10);
+    Engine.spawnParticles(this.x, this.y, '#ff0000', 20);
+    if (this.tail.length > 0) {
+      // Scatter tail
+      for(let seg of this.tail) Engine.scraps.push(new Scrap(seg.x, seg.y));
+      this.tail = [];
+    }
+    return true;
+  }
+}
+
+class Bullet {
+  constructor(x, y, dx, dy, isPlayer) {
+    this.x = x; this.y = y; this.vx = dx * 600; this.vy = dy * 600;
+    this.isPlayer = isPlayer;
+    this.radius = 4; this.life = 2.0;
+  }
+  update(dt) { this.x += this.vx*dt; this.y += this.vy*dt; this.life -= dt; }
+  draw(ctx) {
+    ctx.fillStyle = this.isPlayer ? '#333' : '#ff3366';
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+class Enemy {
+  constructor(x, y) {
+    this.x = x; this.y = y; this.radius = 12;
+    this.speed = Utils.rand(50, 150);
+    this.sides = Math.floor(Utils.rand(3, 6));
+    this.hp = this.sides - 2;
+    this.angle = 0;
+  }
+  update(dt, px, py) {
+    let dx = px - this.x; let dy = py - this.y;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > 0) { this.x += (dx/dist)*this.speed*dt; this.y += (dy/dist)*this.speed*dt; }
+    this.angle += dt;
+  }
+  draw(ctx) {
+    Utils.drawPoly(ctx, this.x, this.y, this.radius, this.sides, this.angle, '#ffcccc', '#ff3366');
+  }
+}
+
+class Scrap {
+  constructor(x, y) { this.x = x; this.y = y; this.radius = 6; this.angle = Utils.rand(0, Math.PI*2); this.life = 10; }
+  update(dt) { this.life -= dt; }
+  draw(ctx) {
+    ctx.globalAlpha = Math.min(1, this.life);
+    Utils.drawPoly(ctx, this.x, this.y, this.radius, 4, this.angle, '#fff', '#c298fa');
+    ctx.globalAlpha = 1;
+  }
+}
+
+class Particle {
+  constructor(x, y, color, life, speed) {
+    this.x = x; this.y = y; this.color = color; this.life = life; this.maxLife = life;
+    let a = Utils.rand(0, Math.PI*2);
+    let s = Utils.rand(speed*0.5, speed);
+    this.vx = Math.cos(a)*s; this.vy = Math.sin(a)*s;
+  }
+  update(dt) { this.x += this.vx*dt; this.y += this.vy*dt; this.life -= dt; }
+  draw(ctx) {
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = this.life / this.maxLife;
+    ctx.fillRect(this.x, this.y, 4, 4);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// --- Main Engine ---
+const Engine = {
+  state: 'TITLE', lastTime: performance.now(),
+  canvas: null, ctx: null, width: 0, height: 0,
+  player: null, bullets: [], enemies: [], scraps: [], particles: [],
+  score: 0, wave: 1, spawnTimer: 0, shakeAmt: 0,
+
+  init: function() {
+    SaveManager.load();
+    this.canvas = document.getElementById('game-canvas');
+    this.ctx = this.canvas.getContext('2d');
+
+    // Resize handling
+    const observer = new ResizeObserver(() => this.resize());
+    observer.observe(document.getElementById('game-container'));
+    this.resize();
+
+    Input.init();
+
+    // UI Listeners
+    document.getElementById('btn-play').onclick = () => this.start();
+    document.getElementById('btn-how').onclick = () => { document.getElementById('screen-title').classList.add('hidden'); document.getElementById('screen-how').classList.remove('hidden'); };
+    document.getElementById('btn-how-back').onclick = () => { document.getElementById('screen-how').classList.add('hidden'); document.getElementById('screen-title').classList.remove('hidden'); };
+    document.getElementById('btn-pause').onclick = () => this.pause();
+    document.getElementById('btn-resume').onclick = () => this.resume();
+    document.getElementById('btn-restart').onclick = () => this.start();
+    document.getElementById('btn-quit').onclick = () => this.quit();
+    document.getElementById('btn-play-again').onclick = () => this.start();
+    document.getElementById('btn-quit-go').onclick = () => this.quit();
+
+    const showOpts = (backTo) => { document.querySelectorAll('.overlay').forEach(e=>e.classList.add('hidden')); document.getElementById('screen-options').classList.remove('hidden'); this.optBackTo = backTo; this.updateOptsUI(); };
+    document.getElementById('btn-opts-title').onclick = () => showOpts('screen-title');
+    document.getElementById('btn-opts-pause').onclick = () => showOpts('screen-pause');
+    document.getElementById('btn-opts-back').onclick = () => { document.getElementById('screen-options').classList.add('hidden'); document.getElementById(this.optBackTo).classList.remove('hidden'); SaveManager.save(); SoundEngine.updateVolumes(); this.applyOptions(); };
+
+    // Options UI
+    const o = SaveManager.data.options;
+    document.getElementById('opt-mute').checked = o.mute;
+    document.getElementById('opt-sfx').value = o.sfx;
+    document.getElementById('opt-bgm').value = o.bgm;
+    document.getElementById('opt-shake').value = o.shake;
+    document.getElementById('opt-particles').value = o.particles;
+    document.getElementById('opt-touch').value = o.touch;
+    ['opt-mute', 'opt-sfx', 'opt-bgm', 'opt-shake', 'opt-particles', 'opt-touch'].forEach(id => {
+      document.getElementById(id).addEventListener('change', (e) => {
+        let val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+        if(e.target.type === 'range') val = parseInt(val);
+        SaveManager.data.options[id.replace('opt-','')] = val;
+        SoundEngine.updateVolumes();
+        this.applyOptions();
+      });
+    });
+
+    document.getElementById('btn-export').onclick = () => { document.getElementById('save-data-str').value = btoa(JSON.stringify(SaveManager.data)); document.getElementById('save-data-str').select(); document.execCommand('copy'); alert('Copied to clipboard!'); };
+    document.getElementById('btn-import').onclick = () => { try { const d = JSON.parse(atob(document.getElementById('save-data-str').value)); SaveManager.data = d; SaveManager.save(); alert('Loaded!'); this.updateOptsUI(); } catch(e) { alert('Invalid save data'); } };
+    let rstClicks = 0;
+    document.getElementById('btn-reset').onclick = (e) => { rstClicks++; if(rstClicks>=2) { SaveManager.reset(); alert('Reset!'); rstClicks=0; e.target.innerText='Reset Save'; this.updateOptsUI(); } else { e.target.innerText='Click again to confirm reset'; setTimeout(()=>{rstClicks=0; e.target.innerText='Reset Save';}, 2000); } };
+
+    document.addEventListener('visibilitychange', () => { if(document.hidden && this.state === 'PLAYING') this.pause(); });
+    window.addEventListener('blur', () => { if(this.state === 'PLAYING') this.pause(); });
+
+    this.applyOptions();
+    this.quit(); // Show title
+    requestAnimationFrame((t) => this.loop(t));
+  },
+
+  updateOptsUI: function() {
+    const o = SaveManager.data.options;
+    document.getElementById('opt-mute').checked = o.mute;
+    document.getElementById('opt-sfx').value = o.sfx;
+    document.getElementById('opt-bgm').value = o.bgm;
+    document.getElementById('opt-shake').value = o.shake;
+    document.getElementById('opt-particles').value = o.particles;
+    document.getElementById('opt-touch').value = o.touch;
+  },
+
+  applyOptions: function() {
+    const tch = SaveManager.data.options.touch;
+    if (tch === 'always' || (tch === 'auto' && Input.isTouchDevice)) {
+      document.getElementById('touch-controls').classList.remove('hidden');
+    } else {
+      document.getElementById('touch-controls').classList.add('hidden');
+    }
+  },
+
+  resize: function() {
+    const w = this.canvas.clientWidth; const h = this.canvas.clientHeight;
+    this.canvas.width = w; this.canvas.height = h;
+    this.width = w; this.height = h;
+  },
+
+  start: function() {
+    document.querySelectorAll('.overlay').forEach(e=>e.classList.add('hidden'));
+    document.getElementById('hud').classList.remove('hidden');
+    this.state = 'PLAYING';
+    this.player = new Player(this.width/2, this.height/2);
+    this.bullets = []; this.enemies = []; this.scraps = []; this.particles = [];
+    this.score = 0; this.wave = 1; this.spawnTimer = 2;
+    this.applyOptions();
+    SoundEngine.init(); SoundEngine.startMusic();
+    this.updateHUD();
+  },
+
+  pause: function() {
+    if (this.state !== 'PLAYING') return;
+    this.state = 'PAUSED';
+    document.getElementById('screen-pause').classList.remove('hidden');
+    SoundEngine.stopMusic();
+  },
+
+  resume: function() {
+    if (this.state !== 'PAUSED') return;
+    this.state = 'PLAYING';
+    document.getElementById('screen-pause').classList.add('hidden');
+    this.lastTime = performance.now();
+    SoundEngine.startMusic();
+  },
+
+  quit: function() {
+    this.state = 'TITLE';
+    document.querySelectorAll('.overlay').forEach(e=>e.classList.add('hidden'));
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('screen-title').classList.remove('hidden');
+    document.getElementById('title-highscore').innerText = SaveManager.data.highScore;
+    SoundEngine.stopMusic();
+  },
+
+  gameOver: function() {
+    this.state = 'GAME_OVER';
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('screen-gameover').classList.remove('hidden');
+    SoundEngine.stopMusic(); SoundEngine.playGameOver();
+
+    SaveManager.data.totalGamesPlayed++;
+    SaveManager.data.totalScoreAccumulated += this.score;
+    if(this.player.tail.length > SaveManager.data.bestWaveOrCombo) SaveManager.data.bestWaveOrCombo = this.player.tail.length;
+
+    document.getElementById('go-score').innerText = `Score: ${this.score}`;
+    document.getElementById('go-maxtail').innerText = SaveManager.data.bestWaveOrCombo;
+    if (this.score > SaveManager.data.highScore) {
+      SaveManager.data.highScore = this.score;
+      document.getElementById('go-highscore-banner').classList.remove('hidden');
+    } else {
+      document.getElementById('go-highscore-banner').classList.add('hidden');
+    }
+    SaveManager.save();
+  },
+
+  shake: function(amt) {
+    this.shakeAmt = amt * parseFloat(SaveManager.data.options.shake);
+  },
+
+  spawnParticles: function(x, y, color, count) {
+    if(SaveManager.data.options.particles === 'low') count = Math.floor(count/3);
+    for(let i=0; i<count; i++) this.particles.push(new Particle(x, y, color, Utils.rand(0.2, 0.6), 200));
+  },
+
+  updateHUD: function() {
+    if(this.state !== 'PLAYING') return;
+    document.getElementById('hud-score').innerText = `Score: ${this.score}`;
+    document.getElementById('hud-multiplier').innerText = `Tail Mult: x${this.player.tail.length + 1}`;
+    document.getElementById('hud-hp').innerText = `HP: ${this.player.hp}`;
+  },
+
+  loop: function(time) {
+    requestAnimationFrame(t => this.loop(t));
+    let dt = (time - this.lastTime) / 1000;
+    this.lastTime = time;
+    if (dt > 0.1) dt = 0.1;
+    if (this.state === 'PLAYING') this.update(dt);
+    this.draw();
+  },
+
+  update: function(dt) {
+    this.player.update(dt, this.width, this.height);
+
+    // Bank Mechanic
+    if (Input.consumeBank() && this.player.tail.length > 0) {
+      let mult = this.player.tail.length + 1;
+      let points = this.player.tail.length * 50 * mult;
+      this.score += points;
+      this.spawnParticles(this.player.x, this.player.y, '#ffd700', 30);
+      this.player.tail = [];
+      SoundEngine.playBank();
+      this.shake(5);
+    }
+
+    // Spawning
+    this.spawnTimer -= dt;
+    if (this.spawnTimer <= 0) {
+      this.spawnTimer = Math.max(0.5, 2.0 - (this.wave * 0.1));
+      let ex, ey;
+      if (Math.random() < 0.5) { ex = Math.random() < 0.5 ? -20 : this.width+20; ey = Utils.rand(0, this.height); }
+      else { ex = Utils.rand(0, this.width); ey = Math.random() < 0.5 ? -20 : this.height+20; }
+      this.enemies.push(new Enemy(ex, ey));
+      this.wave += 0.05;
+    }
+
+    // Bullets
+    for (let i = this.bullets.length-1; i>=0; i--) {
+      let b = this.bullets[i]; b.update(dt);
+      if (b.x<0 || b.x>this.width || b.y<0 || b.y>this.height || b.life<=0) { this.bullets.splice(i, 1); continue; }
+      if (b.isPlayer) {
+        for(let j=this.enemies.length-1; j>=0; j--) {
+          let e = this.enemies[j];
+          let dist = Math.sqrt((b.x-e.x)**2 + (b.y-e.y)**2);
+          if (dist < e.radius + b.radius) {
+            e.hp--; this.bullets.splice(i, 1);
+            this.spawnParticles(e.x, e.y, '#fff', 5);
+            if (e.hp <= 0) {
+              this.score += 10 * (this.player.tail.length + 1);
+              this.scraps.push(new Scrap(e.x, e.y));
+              this.spawnParticles(e.x, e.y, '#ff3366', 15);
+              this.enemies.splice(j, 1);
+              SoundEngine.playHit();
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    // Enemies vs Player & Tail
+    for (let i = this.enemies.length-1; i>=0; i--) {
+      let e = this.enemies[i]; e.update(dt, this.player.x, this.player.y);
+      let distToPlayer = Math.sqrt((e.x-this.player.x)**2 + (e.y-this.player.y)**2);
+      if (distToPlayer < e.radius + this.player.radius) {
+        if(this.player.takeHit()) { this.enemies.splice(i, 1); continue; }
+      }
+      // Check tail collision
+      let hitTail = false;
+      for(let j=0; j<this.player.tail.length; j++) {
+        let seg = this.player.tail[j];
+        if (Math.sqrt((e.x-seg.x)**2 + (e.y-seg.y)**2) < e.radius + 8) {
+          hitTail = true; break;
+        }
+      }
+      if (hitTail) {
+        if(this.player.takeHit()) { this.enemies.splice(i, 1); continue; }
+      }
+    }
+
+    // Scraps
+    for (let i = this.scraps.length-1; i>=0; i--) {
+      let s = this.scraps[i]; s.update(dt);
+      if (s.life <= 0) { this.scraps.splice(i, 1); continue; }
+      if (Math.sqrt((s.x-this.player.x)**2 + (s.y-this.player.y)**2) < s.radius + this.player.radius + 20) {
+        this.player.addTailSegment();
+        this.scraps.splice(i, 1);
+      }
+    }
+
+    // Particles
+    for(let i=this.particles.length-1; i>=0; i--) {
+      this.particles[i].update(dt);
+      if (this.particles[i].life <= 0) this.particles.splice(i, 1);
+    }
+
+    if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - dt*60);
+
+    this.updateHUD();
+
+    if (this.player.hp <= 0) this.gameOver();
+  },
+
+  draw: function() {
+    this.ctx.clearRect(0, 0, this.width, this.height);
+
+    // Draw grid lines
+    this.ctx.strokeStyle = 'rgba(0,0,0,0.05)'; this.ctx.lineWidth = 1;
+    for(let x=0; x<this.width; x+=50) { this.ctx.beginPath(); this.ctx.moveTo(x,0); this.ctx.lineTo(x,this.height); this.ctx.stroke(); }
+    for(let y=0; y<this.height; y+=50) { this.ctx.beginPath(); this.ctx.moveTo(0,y); this.ctx.lineTo(this.width,y); this.ctx.stroke(); }
+
+    if (this.state === 'TITLE') return;
+
+    this.ctx.save();
+    if (this.shakeAmt > 0) {
+      this.ctx.translate((Math.random()-0.5)*this.shakeAmt, (Math.random()-0.5)*this.shakeAmt);
+    }
+
+    for(let s of this.scraps) s.draw(this.ctx);
+    for(let e of this.enemies) e.draw(this.ctx);
+    for(let b of this.bullets) b.draw(this.ctx);
+    if(this.state !== 'GAME_OVER') this.player.draw(this.ctx);
+    for(let p of this.particles) p.draw(this.ctx);
+
+    this.ctx.restore();
+  }
+};
+
+window.addEventListener('load', () => Engine.init());
+</script>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Abyssal Ricochet</title>
+  <style>
+    :root {
+      --accent: #70e2f9;
+      --bg: #0a0e17;
+      --text: #ffffff;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: monospace, sans-serif;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+    }
+    #gameContainer {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+    .ui-layer.hidden {
+      display: none;
+    }
+    .ui-box {
+      background: rgba(10, 14, 23, 0.85);
+      border: 2px solid var(--accent);
+      padding: 2rem;
+      border-radius: 8px;
+      text-align: center;
+      pointer-events: auto;
+      max-width: 80%;
+    }
+    h1 {
+      color: var(--accent);
+      margin-top: 0;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    button {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 10px 20px;
+      font-family: inherit;
+      font-size: 1rem;
+      cursor: pointer;
+      margin: 10px;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+    button:hover, button:active {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    a.arcade-link {
+      display: inline-block;
+      margin-top: 20px;
+      color: #888;
+      text-decoration: none;
+      font-size: 0.8rem;
+    }
+    a.arcade-link:hover {
+      color: #fff;
+    }
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 20px;
+      box-sizing: border-box;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .hud-text {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: var(--accent);
+      text-shadow: 1px 1px 2px #000;
+    }
+  </style>
+  <script defer src="./ui.js"></script>
+  <script defer src="./vfx.js"></script>
+  <script defer src="./world.js"></script>
+  <script defer src="./game.js"></script>
+  <script defer src="./enemies.js"></script>
+  <script defer src="./bosses.js"></script>
+  <script defer src="./progression.js"></script>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud" class="hidden">
+      <div id="scoreDisplay" class="hud-text">SCORE: 0</div>
+      <div id="abilityDisplay" class="hud-text" style="color: #ffeb3b;">DASH: READY</div>
+      <div id="waveDisplay" class="hud-text">WAVE: 1</div>
+      <div id="comboDisplay" class="hud-text" style="color: #ff9800; text-align: center; width: 100%; position: absolute; top: 60px;">COMBO x1.0</div>
+    </div>
+
+    <div id="bossUI" class="hidden" style="position: absolute; top: 80px; left: 50%; transform: translateX(-50%); width: 80%; max-width: 600px; text-align: center; z-index: 6; pointer-events: none;">
+      <div id="bossWarning" style="color: #ff4444; font-size: 2rem; font-weight: bold; text-shadow: 2px 2px 4px #000; animation: blink 1s infinite; display: none;">WARNING: ABYSSAL ENTITY DETECTED</div>
+      <div id="bossName" style="color: #fff; font-size: 1.2rem; margin-bottom: 5px; text-shadow: 1px 1px 2px #000; display: none;"></div>
+      <div id="bossHealthBarContainer" style="width: 100%; height: 20px; background: #333; border: 2px solid #70e2f9; display: none;">
+        <div id="bossHealthBar" style="width: 100%; height: 100%; background: #ff4444; transition: width 0.1s;"></div>
+      </div>
+    </div>
+    <style>@keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }</style>
+
+    <div id="screen-TITLE" class="ui-layer">
+      <div class="ui-box">
+        <h1>Abyssal Ricochet</h1>
+        <p>Bounce off the shrinking trenches.</p>
+        <p>Use Mouse/Touch to aim and launch.</p>
+        <button id="btn-start">Start Game</button>
+        <button id="btn-options">Options / Milestones</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+
+
+    <div id="screen-UPGRADE_DRAFT" class="ui-layer hidden">
+      <div class="ui-box">
+        <h1>WAVE CLEARED</h1>
+        <p>Select an Upgrade:</p>
+        <div id="draftChoices" style="display: flex; flex-direction: column; gap: 10px;">
+        </div>
+      </div>
+    </div>
+
+    <div id="screen-PAUSED" class="ui-layer hidden">
+      <div class="ui-box">
+        <h1>Paused</h1>
+        <button id="btn-resume">Resume</button>
+        <button id="btn-options-pause">Options / Milestones</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+
+    <div id="screen-GAME_OVER" class="ui-layer hidden">
+      <div class="ui-box">
+        <h1>Crushed</h1>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button id="btn-restart">Play Again</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+  </div>
+
+    <div id="screen-OPTIONS" class="ui-layer hidden" style="z-index: 20;">
+      <div class="ui-box" style="max-height: 80vh; overflow-y: auto;">
+        <h1>Options & Milestones</h1>
+        <div style="text-align: left; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <label>Master Mute <input type="checkbox" id="opt-masterMute"></label>
+          <label>High Contrast <input type="checkbox" id="opt-highContrast"></label>
+          <label>Show FPS <input type="checkbox" id="opt-showFPS"></label>
+          <label>SFX Volume <input type="range" id="opt-sfxVolume" min="0" max="100"></label>
+          <label>Music Volume <input type="range" id="opt-musicVolume" min="0" max="100"></label>
+          <label>Screen Shake
+            <select id="opt-screenShake">
+              <option value="1.0">100%</option>
+              <option value="0.5">50%</option>
+              <option value="0.0">Off</option>
+            </select>
+          </label>
+          <label>Particles
+            <select id="opt-particles">
+              <option value="High">High</option>
+              <option value="Low">Low</option>
+            </select>
+          </label>
+          <label>Touch Controls
+            <select id="opt-touchControls">
+              <option value="Auto">Auto</option>
+              <option value="Always">Always</option>
+              <option value="Off">Off</option>
+              <option value="Left">Left Handed</option>
+              <option value="Right">Right Handed</option>
+            </select>
+          </label>
+        </div>
+        <div style="margin-top: 10px;">
+            <button id="btn-export-save">Export Save</button>
+            <button id="btn-import-save">Import Save</button>
+            <button id="btn-reset-save">Reset Save</button>
+        </div>
+        <h2>Milestones</h2>
+        <div id="milestone-list" style="text-align: left; font-size: 0.8rem; margin-bottom: 20px;"></div>
+        <button id="btn-close-options">Close</button>
+      </div>
+    </div>
+</body>
+
+</html>

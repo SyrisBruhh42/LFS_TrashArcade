@@ -1,0 +1,18 @@
+You are implementing one bounded autonomous game task for LFS_TrashArcade. Read AGENTS.md and `docs/TOP-400-FLASH-INSPIRATION.md`, then execute only the assigned SESSION DESIGN BRIEF with zero human-in-the-loop questions.
+
+The brief fixes the game folder, observed baseline commit, phase, Flash Portal inspiration exemplars, curated palette, lore prologue, and acceptance behavior. Verify the assigned folder and phase against the observed baseline before editing. Preserve save compatibility and existing working controls. Edit only the assigned game folder, with one generated-file exception: run `python3 tools/build_registry.py` and include its exact `games/registry.js` output. Never edit the registry by hand. Do not change tools, workflows, governance, or other games.
+
+Operate 100% autonomously: NEVER pause for `AWAITING_USER_FEEDBACK` or ask the user how to resolve a design trade-off. Whenever a phase description mentions a concept that differs from the assigned game's genre or twist (e.g., Dress-Up runway judging, Makeover salon tools, Dating Sim calendar/affection, Adult/Mature Newgrounds city hustle, Cooking/Diner stations, Virtual Pet training, Distance Launcher workshop, or 1-hit Stealth), autonomously adapt the phase mechanic to fit the game's actual genre rules.
+
+Enforce the **Golden-Era Flash Portal UI, Lore & Synergy Standard** on every game:
+1. **Setting-Authentic Art & Palette (No Generic Dark Neon Circles):** Render layered, expressive Canvas/DOM visuals matching the brief's curated palette (warm pastels, sunlit dioramas, parchment, casino felt, or thick-ink comic frames).
+2. **Lore Anchor & 3-Panel `How to Play` Guide:** Anchor the Title Screen with a compelling Lore Prologue and explicit Win Objective, plus an intuitive 3-panel `How to Play` guide (`1. The Goal & Lore`, `2. How the Loop Works & Why`, `3. Desktop & Touch Controls`).
+3. **Smooth Tabbed Options Modal & Cabinet Synergy:** Provide a logically organized Options modal (`Audio & Comfort` | `Controls & Handedness` | collapsible `<details>` `Manage Save Data` so raw Base64 export/import textareas never clutter the screen) and expose `window.ARCADE_CARTRIDGE_META` so the Arcade Home Cabinet can inspect and preview the game's assets.
+
+Execute the **2-Item Self-Mix Budget** on every phase advance:
+1. **Prior-Phase Health & Backfill Check:** Inspect the existing files in the assigned game folder. If an earlier phase deliverable (such as Phase 6 progression/shop/draft, Lore/How-To-Play/Options polish, or touch controls) was skipped, stubbed, or broken, repair or backfill a clean, compact implementation of that missing feature first.
+2. **Focused Target-Phase Deliverable:** Implement the assigned phase's core behavior cleanly. When `game.js` is over 600 lines, prefer placing the new phase subsystem in a focused module file (e.g., `progression.js`, `vfx.js`, `audio.js`, `ui.js`) loaded via `<script defer src="...">` in `index.html` rather than bloating a single monolithic file.
+
+Prioritize complete observable behavior and UI clarity over code volume. Reuse existing systems, remove redundant code when safe, and avoid speculative features. No line-count target applies.
+
+Run `python3 tools/build_registry.py`, include the exact generated `games/registry.js` with the game change, then run `python3 tools/preflight.py`, inspect its actual result, and verify the brief's behavioral checks. Immediately after `PREFLIGHT OK`, call the `submit` / publish Pull Request tool to open one PR (never stop in `AWAITING_USER_FEEDBACK` with an unsubmitted branch) and retain/repair that PR if bounded gate feedback arrives.

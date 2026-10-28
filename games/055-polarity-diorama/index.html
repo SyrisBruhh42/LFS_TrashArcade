@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Polarity Diorama</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #2b2b2b;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+    <script defer src="./vfx.js"></script>
+    <script defer src="./game.js"></script>
+</head>
+<body>
+    <div id="uiLayer" style="position:absolute; top:10px; left:10px; z-index:100; display:none;"><a href="../../index.html" style="color:#fff; text-decoration:none; font-family:monospace; background:rgba(0,0,0,0.5); padding:5px 10px; border-radius:4px;">Back to Arcade</a></div>
+    <canvas id="gameCanvas"></canvas>
+</body>
+</html>

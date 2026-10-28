@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Chrono Cell Rush</title>
+  <style>
+    :root {
+      --accent: #ecf7f4;
+      --bg: #11151c;
+      --text: #ffffff;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: monospace, sans-serif;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+    }
+    #gameContainer {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+    .ui-layer.hidden {
+      display: none;
+    }
+    .ui-box {
+      background: rgba(17, 21, 28, 0.85);
+      border: 2px solid var(--accent);
+      padding: 2rem;
+      border-radius: 8px;
+      text-align: center;
+      pointer-events: auto;
+      max-width: 80%;
+    }
+    h1 {
+      color: var(--accent);
+      margin-top: 0;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    button {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 10px 20px;
+      font-family: inherit;
+      font-size: 1rem;
+      cursor: pointer;
+      margin: 10px;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+    button:hover, button:active {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    a.arcade-link {
+      display: inline-block;
+      margin-top: 20px;
+      color: #888;
+      text-decoration: none;
+      font-size: 0.8rem;
+    }
+    a.arcade-link:hover {
+      color: #fff;
+    }
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 20px;
+      box-sizing: border-box;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .hud-text {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: var(--accent);
+      text-shadow: 1px 1px 2px #000;
+    }
+
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      text-align: left;
+    }
+    .setting-row label {
+      margin-right: 20px;
+    }
+    .milestones-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 20px;
+    }
+    .milestone-badge {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #222;
+        border: 2px solid #444;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        opacity: 0.5;
+        position: relative;
+    }
+    .milestone-badge.unlocked {
+        border-color: #ffaa00;
+        background: #443300;
+        opacity: 1;
+        box-shadow: 0 0 10px #ffaa00;
+    }
+    .milestone-badge:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #000;
+        color: #fff;
+        padding: 5px;
+        border-radius: 4px;
+        white-space: nowrap;
+        z-index: 20;
+        font-size: 0.7rem;
+        pointer-events: none;
+    }
+    .fps-counter {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        color: #0f0;
+        font-family: monospace;
+        z-index: 100;
+        pointer-events: none;
+    }
+
+  </style>
+  <script defer src="./game.js"></script>
+</head>
+<body>
+<div id="fpsCounter" class="fps-counter hidden">60 FPS</div>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+
+        <div id="hud" class="hidden">
+      <div style="display: flex; flex-direction: column;">
+          <div id="scoreDisplay" class="hud-text">SCORE: 0</div>
+          <div id="comboDisplay" class="hud-text" style="color: #ffaa00;">COMBO: 1.0x</div>
+          <div style="width: 150px; height: 8px; border: 1px solid #ffaa00; margin-top: 4px;">
+              <div id="comboBar" style="width: 100%; height: 100%; background: #ffaa00;"></div>
+          </div>
+          <div id="shieldsDisplay" class="hud-text" style="color: #00ffff; margin-top: 4px; font-size: 1rem;">SHIELDS: 0/0</div>
+      </div>
+      <div id="waveDisplay" class="hud-text">WAVE: 1</div>
+      <div id="dashDisplay" class="hud-text">DASH: READY</div>
+    </div>
+
+    <div id="screen-TITLE" class="ui-layer">
+      <div class="ui-box">
+        <h1>Chrono Cell Rush</h1>
+        <p>Fight inside a cell. Stop moving to slow time.</p>
+        <p>WASD to move, Mouse to aim/shoot.</p>
+
+        <div id="title-milestones" class="milestones-container"></div>
+
+        <button id="btn-start">Start Game</button>
+        <button id="btn-settings">Settings</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+
+    <div id="screen-UPGRADE_DRAFT" class="ui-layer hidden">
+      <div class="ui-box" style="max-width: 90%;">
+        <h1>Evolution Draft</h1>
+        <p>Choose your upgrade:</p>
+        <div id="upgrade-options" style="display: flex; gap: 10px; justify-content: center; margin: 20px 0; flex-wrap: wrap;">
+           <!-- Upgrades injected here -->
+        </div>
+      </div>
+    </div>
+
+
+    <div id="screen-SETTINGS" class="ui-layer hidden">
+      <div class="ui-box" style="max-height: 80vh; overflow-y: auto;">
+        <h1>Settings</h1>
+
+        <div class="setting-row">
+            <label>Master Mute</label>
+            <input type="checkbox" id="opt-masterMute">
+        </div>
+
+        <div class="setting-row">
+            <label>SFX Volume</label>
+            <input type="range" id="opt-sfxVolume" min="0" max="1" step="0.1" value="1">
+        </div>
+
+        <div class="setting-row">
+            <label>Music Volume</label>
+            <input type="range" id="opt-musicVolume" min="0" max="1" step="0.1" value="1">
+        </div>
+
+        <div class="setting-row">
+            <label>Screen Shake</label>
+            <select id="opt-screenShake">
+                <option value="1">100%</option>
+                <option value="0.5">50%</option>
+                <option value="0">Off</option>
+            </select>
+        </div>
+
+        <div class="setting-row">
+            <label>Particles</label>
+            <select id="opt-particles">
+                <option value="High">High</option>
+                <option value="Low">Low</option>
+            </select>
+        </div>
+
+        <div class="setting-row">
+            <label>High Contrast</label>
+            <input type="checkbox" id="opt-highContrast">
+        </div>
+
+        <div class="setting-row">
+            <label>Show FPS</label>
+            <input type="checkbox" id="opt-showFPS">
+        </div>
+
+        <div class="setting-row">
+            <label>Touch Controls</label>
+            <select id="opt-touchControls">
+                <option value="Auto">Auto</option>
+                <option value="Always">Always</option>
+                <option value="Off">Off</option>
+            </select>
+        </div>
+
+        <div class="setting-row">
+            <label>Touch Handedness</label>
+            <select id="opt-touchHandedness">
+                <option value="Right">Right</option>
+                <option value="Left">Left</option>
+            </select>
+        </div>
+
+        <hr style="border-color: var(--accent); margin: 20px 0;">
+
+        <button id="btn-exportSave">Export Save</button>
+        <button id="btn-importSave">Import Save</button>
+        <button id="btn-resetSave" style="color: #ff4444; border-color: #ff4444;">Reset Data</button>
+
+        <div style="margin-top: 20px;">
+            <button id="btn-settings-close">Back</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="screen-TUTORIAL" class="ui-layer hidden">
+      <div class="ui-box">
+        <h1>Welcome to the Core</h1>
+        <p>1. Move with <b>WASD</b></p>
+        <p>2. Aim and shoot with the <b>Mouse</b></p>
+        <p>3. <span style="color: #00ffff">STOP MOVING</span> to slow time!</p>
+        <p>4. Collect matter to restore shields.</p>
+        <button id="btn-tutorial-ok">Got it</button>
+      </div>
+    </div>
+
+    <div id="screen-PAUSED" class="ui-layer hidden">
+      <div class="ui-box">
+        <h1>Paused</h1>
+        <button id="btn-resume">Resume</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+
+    <div id="screen-GAME_OVER" class="ui-layer hidden">
+      <div class="ui-box">
+        <h1>Defeated</h1>
+        <p>Final Score: <span id="finalScore">0</span></p>
+
+        <div id="gameover-milestones" class="milestones-container"></div>
+
+        <button id="btn-restart">Play Again</button>
+        <br>
+        <a href="../../index.html" class="arcade-link">Back to Arcade</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

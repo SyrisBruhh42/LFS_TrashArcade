@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Paper Polarity Beats</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="game.js"></script>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ui-layer">
+      <!-- TITLE STATE -->
+      <div id="ui-title" class="screen active">
+        <h1>PAPER POLARITY BEATS</h1>
+        <div class="stats" id="title-stats">High Score: 0</div>
+        <button id="btn-play" class="btn">Play</button>
+        <button id="btn-howto" class="btn">How to Play</button>
+        <button id="btn-options-title" class="btn">Options</button>
+        <a href="../../index.html" class="back-link">Back to Arcade</a>
+      </div>
+
+      <!-- PLAYING STATE HUD -->
+      <div id="ui-playing" class="screen">
+        <div class="hud-top">
+          <div id="hud-score">Score: 0</div>
+          <div id="hud-multiplier">x1</div>
+        </div>
+        <div class="hud-health" id="hud-health"></div>
+        <button id="btn-pause" class="btn-icon">II</button>
+
+        <!-- Virtual Controls (touch only fallback) -->
+        <div id="virtual-controls">
+          <div id="touch-zone-left" class="touch-zone"></div>
+          <div id="touch-zone-right" class="touch-zone"></div>
+        </div>
+      </div>
+
+      <!-- PAUSED STATE -->
+      <div id="ui-paused" class="screen">
+        <h2>PAUSED</h2>
+        <button id="btn-resume" class="btn">Resume</button>
+        <button id="btn-restart" class="btn">Restart</button>
+        <button id="btn-options-pause" class="btn">Options</button>
+        <a href="../../index.html" class="back-link">Quit to Arcade</a>
+      </div>
+
+      <!-- GAME OVER STATE -->
+      <div id="ui-gameover" class="screen">
+        <h2>GAME OVER</h2>
+        <div id="go-score">Final Score: 0</div>
+        <div id="go-new-high" class="hidden">NEW HIGH SCORE!</div>
+        <div id="go-milestones"></div>
+        <button id="btn-play-again" class="btn">Play Again</button>
+        <button id="btn-title" class="btn">Title Screen</button>
+      </div>
+
+      <!-- OPTIONS MODAL -->
+      <div id="ui-options" class="modal hidden">
+        <h2>OPTIONS</h2>
+        <div class="option-row">
+          <label>Master Volume:</label>
+          <input type="range" id="opt-master-vol" min="0" max="100" value="100">
+        </div>
+        <div class="option-row">
+          <label>SFX Volume:</label>
+          <input type="range" id="opt-sfx-vol" min="0" max="100" value="100">
+        </div>
+        <div class="option-row">
+          <label>Music Volume:</label>
+          <input type="range" id="opt-music-vol" min="0" max="100" value="100">
+        </div>
+        <div class="option-row">
+          <label>Screen Shake:</label>
+          <select id="opt-shake">
+            <option value="1">100%</option>
+            <option value="0.5">50%</option>
+            <option value="0">Off</option>
+          </select>
+        </div>
+        <div class="option-row">
+          <label>Particles:</label>
+          <select id="opt-particles">
+            <option value="1">High</option>
+            <option value="0.5">Low</option>
+          </select>
+        </div>
+        <div class="option-row save-ops">
+          <button id="btn-export-save" class="btn-small">Export Save</button>
+          <button id="btn-import-save" class="btn-small">Import Save</button>
+          <button id="btn-reset-save" class="btn-small danger">Reset Save</button>
+        </div>
+        <button id="btn-close-options" class="btn">Close</button>
+      </div>
+
+      <!-- HOW TO PLAY MODAL -->
+      <div id="ui-howto" class="modal hidden">
+        <h2>HOW TO PLAY</h2>
+        <p><strong>Keyboard/Mouse:</strong> Press SPACE or Click to switch your polarity.</p>
+        <p><strong>Touch:</strong> Tap anywhere to switch polarity.</p>
+        <p><strong>Goal:</strong> Match your polarity (Light/Dark) to the incoming paper shapes to score points. Mismatched shapes damage your structural integrity!</p>
+        <button id="btn-close-howto" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      // Inline initializer
+      if (typeof GameEngine !== 'undefined') {
+        const engine = new GameEngine();
+        engine.init();
+      }
+    });
+  </script>
+</body>
+</html>
