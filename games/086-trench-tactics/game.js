@@ -251,22 +251,6 @@ class Entity {
     }
 }
 
-class Enemy extends Entity {
-    constructor(x, y, size) {
-        super(x, y, size, '#e74c3c');
-        this.speed = 100;
-    }
-    update(dt, player) {
-        let dx = player.x - this.x;
-        let dy = player.y - this.y;
-        let dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist > 0) {
-            this.x += (dx/dist) * this.speed * dt;
-            this.y += (dy/dist) * this.speed * dt;
-        }
-    }
-}
-
 class Projectile extends Entity {
     constructor(x, y, vx, vy) {
         super(x-4, y-4, 8, '#f1c40f');
@@ -281,10 +265,93 @@ class Projectile extends Entity {
 }
 
 class Game {
+
+    initOptions() {
+        this.optionsModal = document.getElementById('options-modal');
+        this.btnCloseOpts = document.getElementById('btn-close-options');
+        this.tabAudio = document.getElementById('tab-audio');
+        this.tabControls = document.getElementById('tab-controls');
+        this.tabSave = document.getElementById('tab-save');
+        this.panelAudio = document.getElementById('panel-audio');
+        this.panelControls = document.getElementById('panel-controls');
+        this.panelSave = document.getElementById('panel-save');
+        this.volSlider = document.getElementById('vol-slider');
+        this.btnExport = document.getElementById('btn-export');
+        this.btnImport = document.getElementById('btn-import');
+        this.btnReset = document.getElementById('btn-reset');
+        this.btnOptionsOpen = document.getElementById('options-button');
+        this.btnOptionsOpen.addEventListener('click', () => { if(this.state === 'TITLE' || this.state === 'PAUSED') { this.prevState = this.state; this.state = 'OPTIONS'; this.optionsModal.style.display = 'flex'; } });
+
+        this.btnCloseOpts.addEventListener('click', () => {
+            this.optionsModal.style.display = 'none';
+            this.state = this.prevState || 'TITLE';
+        });
+
+        const setTab = (activeTab, activePanel) => {
+            [this.tabAudio, this.tabControls, this.tabSave].forEach(t => {
+                t.style.background = 'transparent';
+                t.style.color = '#cdc3b9';
+                t.style.fontWeight = 'normal';
+            });
+            [this.panelAudio, this.panelControls, this.panelSave].forEach(p => p.style.display = 'none');
+
+            activeTab.style.background = '#cdc3b9';
+            activeTab.style.color = '#050a12';
+            activeTab.style.fontWeight = 'bold';
+            activePanel.style.display = 'block';
+        };
+
+        this.tabAudio.addEventListener('click', () => setTab(this.tabAudio, this.panelAudio));
+        this.tabControls.addEventListener('click', () => setTab(this.tabControls, this.panelControls));
+        this.tabSave.addEventListener('click', () => setTab(this.tabSave, this.panelSave));
+
+        this.volSlider.value = this.saveManager.data.options.soundVolume;
+        this.volSlider.addEventListener('input', (e) => {
+            this.saveManager.data.options.soundVolume = parseFloat(e.target.value);
+            if (this.soundEngine.masterGain) {
+                this.soundEngine.masterGain.gain.value = this.saveManager.data.options.soundVolume;
+            }
+            this.saveManager.save();
+        });
+
+        this.btnExport.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(btoa(JSON.stringify(this.saveManager.data)));
+                alert('Save data copied to clipboard!');
+            } catch(err) {
+                alert('Failed to copy save data.');
+            }
+        });
+
+        this.btnImport.addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                const parsed = JSON.parse(atob(text));
+                this.saveManager.data = {...this.saveManager.data, ...parsed};
+                this.saveManager.save();
+                this.volSlider.value = this.saveManager.data.options.soundVolume;
+                if (this.soundEngine.masterGain) this.soundEngine.masterGain.gain.value = this.saveManager.data.options.soundVolume;
+                alert('Save data imported successfully!');
+            } catch(err) {
+                alert('Invalid save data format.');
+            }
+        });
+
+        this.btnReset.addEventListener('click', () => {
+            if(confirm('Are you sure you want to reset all save data?')) {
+                localStorage.removeItem(this.saveManager.saveKey);
+                this.saveManager.load();
+                this.volSlider.value = this.saveManager.data.options.soundVolume;
+                if (this.soundEngine.masterGain) this.soundEngine.masterGain.gain.value = this.saveManager.data.options.soundVolume;
+                alert('Save data reset!');
+            }
+        });
+    }
+
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.state = 'TITLE';
+        this.state = this.prevState || 'TITLE';
         this.saveManager = new SaveManager();
         this.soundEngine = new SoundEngine();
         this.inputManager = new InputManager();
@@ -309,6 +376,7 @@ class Game {
             this.inputManager.wakeAudio();
             if (this.state === 'PLAYING') this.pause(); else if (this.state === 'PAUSED') this.resume();
         });
+        this.initOptions();
         this.setupResize();
         requestAnimationFrame(this.loop.bind(this));
     }
@@ -343,6 +411,7 @@ class Game {
     }
     syncControls() {
         this.pauseButton.hidden = !['PLAYING', 'PAUSED'].includes(this.state);
+        if (this.btnOptionsOpen) this.btnOptionsOpen.hidden = !['TITLE', 'PAUSED'].includes(this.state);
         this.pauseButton.textContent = this.state === 'PAUSED' ? 'Resume' : 'Pause';
         const dashBtn = document.getElementById('dash-button');
         if (dashBtn) dashBtn.hidden = this.state !== 'PLAYING';
@@ -373,7 +442,18 @@ class Game {
             x = Math.random() * this.width;
             y = Math.random() > 0.5 ? 0 : this.height - this.grid.cellSize;
         }
-        this.enemies.push(new Enemy(this.grid.snap(x), this.grid.snap(y), this.grid.cellSize));
+        x = this.grid.snap(x);
+        y = this.grid.snap(y);
+
+        let typeRand = Math.random();
+        let EnemyClass = Enemy;
+        if (typeRand < 0.2) EnemyClass = RookCharger;
+        else if (typeRand < 0.4) EnemyClass = BishopLaser;
+        else if (typeRand < 0.6) EnemyClass = ShieldPhalanx;
+        else if (typeRand < 0.8) EnemyClass = ZoneBomber;
+        else EnemyClass = TileSpawner;
+
+        this.enemies.push(new EnemyClass(x, y, this.grid.cellSize));
     }
 
     update(dt) {
@@ -383,20 +463,14 @@ class Game {
             if (this.inputManager.justPressed['Enter'] || this.inputManager.justPressed['Space'] || this.inputManager.mouse.justDown || this.inputManager.touch.justDown) {
                 this.start();
             } else if (this.inputManager.justPressed['KeyO']) {
-                this.state = 'OPTIONS';
+                this.prevState = this.state; this.state = 'OPTIONS'; this.optionsModal.style.display = 'flex';
             }
         } else if (this.state === 'OPTIONS') {
             if (this.inputManager.justPressed['Escape']) {
-                this.state = 'TITLE';
+                this.state = this.prevState || 'TITLE';
+                this.optionsModal.style.display = 'none';
                 this.inputManager.keys['Escape'] = false;
-            } else if (this.inputManager.justPressed['KeyM']) {
-                this.saveManager.data.options.soundVolume = this.saveManager.data.options.soundVolume > 0 ? 0 : 1;
-                if (this.soundEngine.masterGain) {
-                    this.soundEngine.masterGain.gain.value = this.saveManager.data.options.soundVolume;
-                }
-                this.saveManager.save();
-            }
-        } else if (this.state === 'PLAYING') {
+            }} else if (this.state === 'PLAYING') {
             document.getElementById('back-button').classList.add('hidden');
             if (this.inputManager.justPressed['Escape']) {
                 this.pause();
@@ -455,7 +529,7 @@ class Game {
 
             for (let i = this.enemies.length - 1; i >= 0; i--) {
                 let e = this.enemies[i];
-                e.update(effectiveDt, this.player);
+                e.update(effectiveDt, this.player, this);
                 if (this.checkCollision(this.player, e) && this.player.invulnerable <= 0) {
                     this.soundEngine.playHit();
                     this.state = 'GAME_OVER';
@@ -547,15 +621,11 @@ class Game {
             this.ctx.font = '16px monospace';
             this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, 400);
         } else if (this.state === 'OPTIONS') {
-            this.ctx.fillStyle = 'rgba(5, 10, 18, 0.9)';
-            this.ctx.fillRect(0, 0, this.width, this.height);
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '30px monospace';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('OPTIONS', this.width/2, 80);
-            this.ctx.font = '16px monospace';
-            this.ctx.fillText('Volume (M to Mute): ' + (this.saveManager.data.options.soundVolume * 100).toFixed(0) + '%', this.width/2, 140);
-            this.ctx.fillText('Press [Esc] to Return', this.width/2, 300);
+            if (this.inputManager.justPressed['Escape']) {
+                this.state = this.prevState || 'TITLE';
+                this.optionsModal.style.display = 'none';
+                this.inputManager.keys['Escape'] = false;
+            }
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(5, 10, 18, 0.7)';
             this.ctx.fillRect(0, 0, this.width, this.height);

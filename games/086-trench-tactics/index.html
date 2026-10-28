@@ -26,9 +26,40 @@
         </div>
     </div>
     <button id="pause-button" type="button" hidden>Pause</button>
+    <button id="options-button" type="button" style="position:fixed; left:16px; bottom:16px; z-index:10; min-width:100px; min-height:48px; padding:10px; border:2px solid #cdc3b9; border-radius:8px; background:#050a12; color:#cdc3b9; font:bold 16px monospace; touch-action:manipulation;">Options</button>
     <button id="dash-button" type="button" hidden style="position:fixed; right:126px; bottom:16px; z-index:10; min-width:100px; min-height:48px; padding:10px; border:2px solid #cdc3b9; border-radius:8px; background:#050a12; color:#cdc3b9; font:bold 16px monospace; touch-action:manipulation;">Dash</button>
+
+    <div id="options-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:400px; max-width:90%; background:rgba(5, 10, 18, 0.95); border:2px solid #cdc3b9; border-radius:8px; padding:20px; z-index:2000; flex-direction:column; gap:10px; font-family:monospace; color:#cdc3b9;">
+        <h2 style="margin-top:0; text-align:center;">OPTIONS</h2>
+        <div style="display:flex; border-bottom:1px solid #cdc3b9; margin-bottom:10px;">
+            <button type="button" id="tab-audio" style="flex:1; background:#cdc3b9; color:#050a12; border:none; padding:5px; font-weight:bold; cursor:pointer;">Audio</button>
+            <button type="button" id="tab-controls" style="flex:1; background:transparent; color:#cdc3b9; border:none; padding:5px; cursor:pointer;">Controls</button>
+            <button type="button" id="tab-save" style="flex:1; background:transparent; color:#cdc3b9; border:none; padding:5px; cursor:pointer;">Save</button>
+        </div>
+        <div id="panel-audio" style="display:block;">
+            <label style="display:flex; align-items:center; gap:10px;">Volume: <input type="range" id="vol-slider" min="0" max="1" step="0.1" value="1" style="flex:1;"></label>
+        </div>
+        <div id="panel-controls" style="display:none; line-height:1.5;">
+            <p style="margin:5px 0;"><strong>WASD/Arrows/Drag:</strong> Move.</p>
+            <p style="margin:5px 0;"><strong>Space/Click/Tap:</strong> Attack.</p>
+            <p style="margin:5px 0;"><strong>Shift/Right-Click/Dash:</strong> Dash.</p>
+        </div>
+        <div id="panel-save" style="display:none;">
+            <details>
+                <summary style="cursor:pointer;">Manage Save Data</summary>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+                    <button type="button" id="btn-export" style="padding:8px; cursor:pointer; background:#2c3e50; color:#cdc3b9; border:1px solid #cdc3b9;">Copy to Clipboard</button>
+                    <button type="button" id="btn-import" style="padding:8px; cursor:pointer; background:#2c3e50; color:#cdc3b9; border:1px solid #cdc3b9;">Import from Clipboard</button>
+                    <button type="button" id="btn-reset" style="padding:8px; cursor:pointer; background:#c0392b; color:#fff; border:none;">Reset Save</button>
+                </div>
+            </details>
+        </div>
+        <button type="button" id="btn-close-options" style="margin-top:20px; padding:10px; background:#cdc3b9; color:#050a12; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">Close</button>
+    </div>
+
     <script src="game.js"></script>
     <script defer src="player.js"></script>
     <script defer src="world.js"></script>
+    <script defer src="enemies.js"></script>
 </body>
 </html>
