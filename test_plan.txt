@@ -1,0 +1,10 @@
+1. Implement Phase 10 logic inside a dedicated script `games/085-scrap-heist-retrieval/endgame.js`.
+    - This script will contain the logic for drawing the Round 1 contextual goal banner during the first 3 seconds of gameplay (`wave === 1`) and the detailed victory/mastery summary when the game is over (`state === 'GAME_OVER'`).
+    - The code will be less than 400 lines.
+2. Inject `<script defer src="endgame.js"></script>` in `games/085-scrap-heist-retrieval/index.html` strictly before `<script defer src="game.js"></script>`.
+3. Wire `endgame.js` into `game.js`.
+    - Hook it into `draw()` in `game.js` to render the banners/summaries.
+4. Update `games/085-scrap-heist-retrieval/game.json` to have `"phase": "10"`.
+5. Verify `window.ARCADE_CARTRIDGE_META` in `game.js` contains the accurate lore, palette, instructions, and setting as per the brief.
+6. Run `python3 tools/build_registry.py`.
+7. Pre-commit check with `python3 tools/preflight.py`.
