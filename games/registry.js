@@ -1135,7 +1135,7 @@ window.ARCADE_REGISTRY = [
     "controls": "WASD/Arrows to move, Space/Click to shoot. Touch joystick and tap.",
     "createdAt": "2023-10-24",
     "accentColor": "#4ad5c0",
-    "phase": "9",
+    "phase": "10",
     "path": "./games/085-scrap-heist-retrieval/index.html"
   },
   {
@@ -1149,7 +1149,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Enter/Space/Tap to start. WASD/Arrows or drag to move. Space/Click/Tap to attack. Esc or Pause/Resume for pause.",
     "createdAt": "2024-03-20",
     "accentColor": "#cdc3b9",
-    "phase": "3",
+    "phase": "4",
     "path": "./games/086-trench-tactics/index.html"
   }
 ];

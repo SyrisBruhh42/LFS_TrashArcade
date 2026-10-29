@@ -1338,21 +1338,28 @@ class Game {
                 this.ctx.font = '18px monospace';
                 this.ctx.fillText('Tap, click or press Esc to resume', this.width/2, this.height/2 + 40);
             } else if (this.state === 'GAME_OVER') {
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                this.ctx.fillRect(0, 0, this.width, this.height);
-                this.ctx.fillStyle = '#f00';
-                this.ctx.font = '50px monospace';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText('GAME OVER', this.width/2, this.height/2 - 20);
-                this.ctx.fillStyle = '#fff';
-                this.ctx.font = '20px monospace';
-                this.ctx.fillText('Score: ' + this.score, this.width/2, this.height/2 + 20);
-                this.ctx.fillText('Press SPACE to restart', this.width/2, this.height/2 + 60);
+                if (window.Endgame) {
+                    window.Endgame.drawGameOverSummary(this.ctx, this);
+                } else {
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    this.ctx.fillRect(0, 0, this.width, this.height);
+                    this.ctx.fillStyle = '#f00';
+                    this.ctx.font = '50px monospace';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('GAME OVER', this.width/2, this.height/2 - 20);
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.font = '20px monospace';
+                    this.ctx.fillText('Score: ' + this.score, this.width/2, this.height/2 + 20);
+                    this.ctx.fillText('Press SPACE to restart', this.width/2, this.height/2 + 60);
+                }
             }
         }
     }
 
     drawHUD() {
+        if (window.Endgame) {
+            window.Endgame.drawRound1Banner(this.ctx, this);
+        }
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '20px monospace';
         this.ctx.textAlign = 'left';
@@ -1441,7 +1448,7 @@ window.onload = () => {
         instructions: "WASD/Arrows to move, Space/Click to shoot. Touch joystick and tap.",
         winObjective: "Retrieve scrap and survive.",
         colors: {
-            primary: "#1f1916",
+            primary: "#362a23",
             accent: "#ff7043",
             secondary: "#ffca28"
         }
