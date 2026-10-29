@@ -305,6 +305,7 @@ class Game {
         this.spawnTimer = 0;
         this.bossActive = null;
         this.bossEncounterCounter = 0;
+        this.upgradeManager = new UpgradeManager(this);
         this.nextBossScore = 150;
 
         this.pauseButton = document.getElementById('pause-button');
@@ -361,6 +362,7 @@ class Game {
         this.projectiles = [];
         this.bossActive = null;
         this.bossEncounterCounter = 0;
+        this.upgradeManager = new UpgradeManager(this);
         this.nextBossScore = 150;
         this.saveManager.data.totalGamesPlayed++;
         this.saveManager.save();
@@ -389,6 +391,8 @@ class Game {
 
     update(dt) {
         if (this.world) this.world.update(dt);
+        if (this.upgradeManager) this.upgradeManager.update(dt, this.inputManager);
+        if (this.state === 'UPGRADE') return;
         if (this.state === 'TITLE') {
             document.getElementById('back-button').classList.remove('hidden');
             if (this.inputManager.justPressed['Enter'] || this.inputManager.justPressed['Space'] || this.inputManager.mouse.justDown || this.inputManager.touch.justDown) {
@@ -461,6 +465,7 @@ class Game {
                 if (this.bossActive.hp <= 0) {
                     this.bossActive = null;
                     this.score += 100;
+                    if (this.upgradeManager) this.upgradeManager.triggerDraft();
                     this.soundEngine.playPowerup();
                 }
             }
@@ -478,11 +483,11 @@ class Game {
                         if (e.takeDamage) {
                             if (e.takeDamage()) {
                                 this.enemies.splice(j, 1);
-                                this.score += 10;
+                                this.score += 10 * (this.upgradeManager ? this.upgradeManager.synergyMultiplier : 1);
                             }
                         } else {
                             this.enemies.splice(j, 1);
-                            this.score += 10;
+                            this.score += 10 * (this.upgradeManager ? this.upgradeManager.synergyMultiplier : 1);
                         }
                         this.projectiles.splice(i, 1);
                         this.soundEngine.playHit();
@@ -530,7 +535,7 @@ class Game {
         this.ctx.fillRect(0, 0, this.width, this.height);
         if (this.world) this.world.draw(this.ctx);
 
-        if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER') {
+        if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'GAME_OVER' || this.state === 'UPGRADE') {
             this.grid.draw(this.ctx);
             for (let e of this.enemies) e.draw(this.ctx);
             for (let p of this.projectiles) p.draw(this.ctx);
@@ -545,6 +550,7 @@ class Game {
             this.ctx.fillStyle = this.timeMultiplier < 1.0 ? '#4a90e2' : '#e74c3c';
             this.ctx.fillText(`Time Flow: ${Math.round(this.timeMultiplier * 100)}%`, this.width - 20, 30);
 
+            if (this.upgradeManager) this.upgradeManager.draw(this.ctx, this.width, this.height);
             if (this.bossActive) {
                 this.bossActive.drawBossUI(this.ctx, this.width, this.height);
             }
