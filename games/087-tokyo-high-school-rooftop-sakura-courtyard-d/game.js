@@ -42,6 +42,54 @@ class SaveManager {
     }
 }
 
+class SoundEngine {
+    constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.sfxGain = null;
+        this.musicGain = null;
+        this.initialized = false;
+    }
+    init() {
+        if (this.initialized) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        this.ctx = new AudioContext();
+        this.masterGain = this.ctx.createGain();
+        this.sfxGain = this.ctx.createGain();
+        this.musicGain = this.ctx.createGain();
+        this.sfxGain.connect(this.masterGain);
+        this.musicGain.connect(this.masterGain);
+        this.masterGain.connect(this.ctx.destination);
+        this.initialized = true;
+    }
+    resume() {
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    }
+    setVolumes(master, sfx, music) {
+        if (!this.initialized) return;
+        this.masterGain.gain.value = master;
+        this.sfxGain.gain.value = sfx;
+        this.musicGain.gain.value = music;
+    }
+    playTone(freq, type, duration, vol = 0.5) {
+        if (!this.initialized || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+    playBlip() { this.playTone(800, 'sine', 0.05, 0.2); }
+    playConfirm() { this.playTone(1200, 'square', 0.1, 0.2); }
+    playError() { this.playTone(300, 'sawtooth', 0.2, 0.3); }
+    playStatUp() { this.playTone(600, 'triangle', 0.15, 0.3); setTimeout(() => this.playTone(800, 'triangle', 0.2, 0.3), 100); }
+}
 
 class InputManager {
     constructor(canvas) {
@@ -120,8 +168,7 @@ class Game {
         if (typeof ProgressionManager !== 'undefined') this.progression = new ProgressionManager(this);
         if (typeof VFXManager !== 'undefined') this.vfx = new VFXManager(this);
 
-        this.state = 'TITLE';
-        if(this.sound) { this.sound.setMilestoneMode(false); } // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER, SHOWDOWN, SHOP
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER, SHOWDOWN, SHOP
         this.lastTime = 0;
         this.buttons = [];
 
@@ -178,7 +225,6 @@ class Game {
     resume() {
         if (this.state === 'PAUSED') {
             this.state = 'PLAYING';
-        if(this.sound) { this.sound.setMilestoneMode(false); }
             this.saveManager.save();
         }
     }
@@ -212,7 +258,6 @@ class Game {
             if (this.input.justPressed['Enter'] || this.input.mouse.justDown) {
                 this.sound.init();
                 this.sound.resume();
-                this.sound.startAdaptiveBgm();
 
                 // Check if clicking buttons
                 let clickedBtn = false;
@@ -225,7 +270,6 @@ class Game {
 
                 if (!clickedBtn) {
                     this.state = 'PLAYING';
-        if(this.sound) { this.sound.setMilestoneMode(false); }
                     this.sound.playConfirm();
                     if (this.vfx) {
                         this.vfx.burst(400, 300, 30, '#ff4081');
@@ -235,8 +279,7 @@ class Game {
             }
 
             this.buttons = [
-                { x: 300, y: 450, w: 200, h: 40, text: 'Start (Enter)', onClick: () => { this.state = 'PLAYING';
-        if(this.sound) { this.sound.setMilestoneMode(false); } this.sound.playConfirm(); } },
+                { x: 300, y: 450, w: 200, h: 40, text: 'Start (Enter)', onClick: () => { this.state = 'PLAYING'; this.sound.playConfirm(); } },
                 { x: 300, y: 500, w: 200, h: 40, text: 'How to Play', onClick: () => { document.getElementById('help-modal').classList.add('active'); } },
                 { x: 300, y: 550, w: 200, h: 40, text: 'Options', onClick: () => { document.getElementById('options-modal').classList.add('active'); } }
             ];
@@ -260,7 +303,6 @@ class Game {
             if (this.input.mouse.justDown) {
                 this.sound.init();
                 this.sound.resume();
-                this.sound.startAdaptiveBgm();
                 for (let b of this.buttons) {
                     if (this.isHover(b)) {
                         b.onClick();
@@ -269,14 +311,12 @@ class Game {
             }
         } else if (this.state === 'SHOP') {
             this.buttons = [
-                { x: 340, y: 500, w: 120, h: 40, text: 'Back', onClick: () => { this.state = 'PLAYING';
-        if(this.sound) { this.sound.setMilestoneMode(false); } this.sound.playConfirm(); } }
+                { x: 340, y: 500, w: 120, h: 40, text: 'Back', onClick: () => { this.state = 'PLAYING'; this.sound.playConfirm(); } }
             ];
 
             if (this.input.mouse.justDown) {
                 this.sound.init();
                 this.sound.resume();
-                this.sound.startAdaptiveBgm();
                 for (let b of this.buttons) {
                     if (this.isHover(b)) {
                         b.onClick();
@@ -286,7 +326,6 @@ class Game {
 
             if (this.saveManager.data.day > 30) {
                 this.state = 'GAMEOVER';
-        if(this.sound) { this.sound.setMilestoneMode(false); }
             }
         } else if (this.state === 'SHOWDOWN') {
             this.buttons = [
@@ -297,7 +336,6 @@ class Game {
             if (this.input.mouse.justDown) {
                 this.sound.init();
                 this.sound.resume();
-                this.sound.startAdaptiveBgm();
                 for (let b of this.buttons) {
                     if (this.isHover(b)) {
                         b.onClick();
@@ -310,7 +348,6 @@ class Game {
                 this.saveManager.data.day = 1;
                 this.saveManager.save();
                 this.state = 'TITLE';
-        if(this.sound) { this.sound.setMilestoneMode(false); }
             }
         }
     }
@@ -368,9 +405,7 @@ class Game {
             if(this.vfx) { this.vfx.burst(160, 550, 30, '#ff4081'); this.vfx.addFloatingText(160, 550, `+${odRefund} Stamina!`, '#7c4dff'); this.vfx.addShake(3, 0.2); }
         }
 
-        if(type === 'explore' && this.sound.playRomance) this.sound.playRomance();
-        else if(type === 'work' && this.sound.playWork) this.sound.playWork();
-        else this.sound.playStatUp();
+        this.sound.playStatUp();
         this.advanceTime();
     }
 
