@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tokyo High-School Rooftop & Sakura Courtyard Dating 087</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #fff8f6; color: #ff4081; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; user-select: none; }
+        #game-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #fff8f6 0%, #ffe4ec 100%); }
+        canvas { display: block; max-width: 100%; max-height: 100%; box-shadow: 0 4px 15px rgba(255, 64, 129, 0.2); border-radius: 8px; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
+        .back-link { position: absolute; top: 16px; left: 16px; color: #ff4081; text-decoration: none; border: 2px solid #ff4081; padding: 8px 16px; font-weight: bold; background: rgba(255, 248, 246, 0.9); border-radius: 20px; pointer-events: auto; z-index: 1000; transition: all 0.2s; font-size: 14px; }
+        .back-link:hover { background: #ff4081; color: #fff; }
+
+        /* DOM UI Elements */
+        .modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 255, 255, 0.95); border: 3px solid #ff4081; border-radius: 12px; padding: 24px; box-shadow: 0 10px 30px rgba(124, 77, 255, 0.3); pointer-events: auto; display: none; z-index: 100; max-width: 80%; max-height: 80%; overflow-y: auto; color: #333; }
+        .modal.active { display: block; }
+        .modal h2 { color: #ff4081; margin-top: 0; border-bottom: 2px solid #ffe4ec; padding-bottom: 10px; }
+        .modal h3 { color: #7c4dff; margin-bottom: 8px; }
+        .modal-close { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #ff4081; cursor: pointer; font-weight: bold; }
+        .modal-close:hover { color: #7c4dff; }
+
+        .tabs { display: flex; border-bottom: 2px solid #ffe4ec; margin-bottom: 16px; }
+        .tab-btn { padding: 8px 16px; border: none; background: none; font-weight: bold; color: #999; cursor: pointer; font-size: 16px; border-bottom: 3px solid transparent; }
+        .tab-btn.active { color: #ff4081; border-bottom-color: #ff4081; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .btn { padding: 10px 20px; background: #ff4081; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin: 4px; transition: background 0.2s; }
+        .btn:hover { background: #7c4dff; }
+
+        details { margin-top: 16px; padding: 10px; border: 1px solid #ffe4ec; border-radius: 6px; }
+        summary { font-weight: bold; color: #ff4081; cursor: pointer; }
+        textarea { width: 100%; height: 80px; margin-top: 8px; border: 1px solid #ccc; border-radius: 4px; padding: 8px; font-family: monospace; resize: vertical; }
+
+        .controls-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px dashed #eee; }
+
+        /* How to Play Panels */
+        .panel-container { display: flex; flex-direction: column; gap: 16px; }
+        .instruction-panel { background: #fff8f6; border-left: 4px solid #ff4081; padding: 12px 16px; border-radius: 4px; }
+        .instruction-panel h4 { margin: 0 0 8px 0; color: #7c4dff; }
+        .instruction-panel p { margin: 0; line-height: 1.4; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600" tabindex="0"></canvas>
+        <div id="ui-layer">
+            <a href="../../index.html" class="back-link">Back to Arcade</a>
+
+            <!-- Options Modal -->
+            <div id="options-modal" class="modal">
+                <button class="modal-close" type="button" onclick="document.getElementById('options-modal').classList.remove('active'); window.game.resume();">&times;</button>
+                <h2>Options</h2>
+
+                <div class="tabs">
+                    <button class="tab-btn active" type="button" onclick="switchTab('audio')">Audio & Comfort</button>
+                    <button class="tab-btn" type="button" onclick="switchTab('controls')">Controls</button>
+                </div>
+
+                <div id="tab-audio" class="tab-content active">
+                    <div class="controls-row">
+                        <span>Master Volume</span>
+                        <input type="range" id="vol-master" min="0" max="1" step="0.1" value="1">
+                    </div>
+                    <div class="controls-row">
+                        <span>Music Volume</span>
+                        <input type="range" id="vol-music" min="0" max="1" step="0.1" value="1">
+                    </div>
+                    <div class="controls-row">
+                        <span>SFX Volume</span>
+                        <input type="range" id="vol-sfx" min="0" max="1" step="0.1" value="1">
+                    </div>
+                    <div class="controls-row">
+                        <span>High-Contrast Mode</span>
+                        <input type="checkbox" id="toggle-contrast">
+                    </div>
+                    <div class="controls-row">
+                        <span>Reduce Motion</span>
+                        <input type="checkbox" id="toggle-motion">
+                    </div>
+                </div>
+
+                <div id="tab-controls" class="tab-content">
+                    <div class="controls-row">
+                        <span>Left-Handed Touch Mode</span>
+                        <input type="checkbox" id="toggle-lefthand">
+                    </div>
+
+                    <details>
+                        <summary>Manage Save Data</summary>
+                        <p style="font-size: 12px; color: #666;">Export your progress to text, or import a save code.</p>
+                        <textarea id="save-data-text" placeholder="Save data base64 string..."></textarea>
+                        <div style="margin-top: 8px;">
+                            <button class="btn" type="button" onclick="exportSave()" style="font-size: 12px; padding: 6px 12px;">Export</button>
+                            <button class="btn" type="button" onclick="importSave()" style="font-size: 12px; padding: 6px 12px; background: #7c4dff;">Import</button>
+                            <button class="btn" type="button" onclick="resetSave()" style="font-size: 12px; padding: 6px 12px; background: #dc3545; float: right;">Reset Data</button>
+                        </div>
+                    </details>
+                </div>
+            </div>
+
+            <!-- How to Play Modal -->
+            <div id="help-modal" class="modal">
+                <button class="modal-close" type="button" onclick="document.getElementById('help-modal').classList.remove('active'); window.game.resume();">&times;</button>
+                <h2>How to Play</h2>
+                <div class="panel-container">
+                    <div class="instruction-panel">
+                        <h4>1. The Goal & Lore</h4>
+                        <p>You have 30 days before the Grand Starlight Festival to balance your daily schedule, build your personal stats, navigate rival drama, and win the heart of one of 5 romanceable leads—or claim solo superstardom.</p>
+                    </div>
+                    <div class="instruction-panel">
+                        <h4>2. How the Loop Works & Why</h4>
+                        <p>Spend Stamina on Work, Study, Studio Practice, or Shopping to boost Charm, Wit, Talent, and Cash. Visit locations to trigger branching dialogue, combine clues/gadgets, and give favorite gifts to raise Affection.</p>
+                    </div>
+                    <div class="instruction-panel">
+                        <h4>3. Desktop & Touch Controls</h4>
+                        <p><strong>Desktop:</strong> Use Mouse to click choices and schedule activities. Press <strong>Enter</strong> to start or advance text. Press <strong>Esc</strong> to pause.<br>
+                        <strong>Mobile:</strong> Tap choices and schedule buttons directly.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // UI Helpers
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabId).classList.add('active');
+        }
+
+        function exportSave() {
+            if(window.game && window.game.saveManager) {
+                const data = btoa(JSON.stringify(window.game.saveManager.data));
+                document.getElementById('save-data-text').value = data;
+            }
+        }
+
+        function importSave() {
+            if(window.game && window.game.saveManager) {
+                try {
+                    const text = document.getElementById('save-data-text').value;
+                    const data = JSON.parse(atob(text));
+                    window.game.saveManager.data = data;
+                    window.game.saveManager.save();
+                    alert('Save loaded successfully!');
+                } catch(e) {
+                    alert('Invalid save data.');
+                }
+            }
+        }
+
+    function resetSave() {
+            if(confirm('Are you sure you want to reset all progress? This cannot be undone.')) {
+                if(window.game && window.game.saveManager) {
+                    localStorage.removeItem(window.game.saveManager.saveKey);
+                    window.location.reload();
+                }
+            }
+        }
+    </script>
+    <script src="game.js"></script>
+</body>
+</html>
