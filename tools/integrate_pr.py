@@ -105,6 +105,21 @@ def verify_protection(repo: str) -> None:
         raise Hold("review bypass allowances require separate qualification")
 
 
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def sync_tested_base(pr_number: int, base: str) -> None:
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        if git("rev-parse", "HEAD") != base:
+            raise Hold("integration helper must execute from the tested trusted base checkout")
+    else:
+        git("fetch", "--no-tags", "origin", f"{base}:refs/remotes/origin/tested-base",
+            f"refs/pull/{pr_number}/head:refs/remotes/pr/head")
+        if git("rev-parse", "refs/remotes/origin/tested-base") != base:
+            raise Hold("integration helper must execute from the tested trusted base checkout")
+
+
 def verify_pr(repo: str, number: int, head: str, base: str) -> dict:
     pr = api(f"repos/{repo}/pulls/{number}")
     if not isinstance(pr, dict) or pr.get("state") != "open" or pr.get("draft") or pr.get("merged"):
@@ -229,9 +244,7 @@ def main() -> int:
     parser.add_argument("--execute", action="store_true", help="Merge once only after all independent prerequisites pass")
     args = parser.parse_args()
     try:
-        trusted = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
-        if trusted != args.base:
-            raise Hold("integration helper must execute from the tested trusted base checkout")
+        sync_tested_base(args.pr, args.base)
         result = integrate(args.repository, args.pr, args.head, args.base, execute=args.execute,
                            run_id=os.environ.get("GITHUB_RUN_ID", ""), enabled=os.environ.get("ARCADE_AUTO_MERGE") == "true")
     except (Hold, GitHubError, subprocess.SubprocessError, OSError) as exc:

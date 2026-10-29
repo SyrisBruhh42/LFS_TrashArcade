@@ -182,22 +182,70 @@ async function main() {
     if(!playingSeen)fail('PLAYING state not observed after start');
     playingBaseline=await evaluate('__arcadeObserverFrames',observerContext);
     playingStartedAt=performance.now();
+    const trajectorySamples=[];
+    const canvasHashes=[];
+    const sampleStateAndCanvas=async()=>{
+      try{
+        const snap=await evaluate(`(() => {
+          const g=window.game||window.gameInstance||window.app||{};
+          const p=g.player||g.hero||g.ship||g.avatar||{};
+          const c=document.querySelector('canvas');
+          let ch='';
+          if(c&&c.width>0&&c.height>0){
+            try{
+              const ctx=c.getContext('2d');
+              if(ctx){
+                const d=ctx.getImageData(0,0,Math.min(16,c.width),Math.min(16,c.height)).data;
+                let h=2166136261>>>0;
+                for(let i=0;i<d.length;i+=4){
+                  h^=((d[i]>>4)<<8)|((d[i+1]>>4)<<4)|(d[i+2]>>4);
+                  h=Math.imul(h,16777619)>>>0;
+                }
+                ch=h.toString(16);
+              }
+            }catch(_e){}
+          }
+          return {
+            x:Number(p.x??g.x??0)||0,
+            y:Number(p.y??g.y??0)||0,
+            vx:Number(p.vx??p.dx??0)||0,
+            vy:Number(p.vy??p.dy??0)||0,
+            score:Number(g.score??g.points??0)||0,
+            entities:Number((g.enemies?.length??0)+(g.projectiles?.length??0)+(g.particles?.length??0)+(g.items?.length??0))||0,
+            canvas_hash:ch
+          };
+        })()`);
+        if(snap&&typeof snap==='object'){
+          trajectorySamples.push([snap.x,snap.y,snap.vx,snap.vy,snap.score,snap.entities]);
+          if(snap.canvas_hash)canvasHashes.push(snap.canvas_hash);
+        }
+      }catch(_e){}
+    };
     if(playingSeen) {
       try {
+        await sampleStateAndCanvas();
         await input({kind:'key',key:'d',code:'KeyD'},'keydown');
         await input({kind:'key',key:' ',code:'Space'},'keydown');
         interactionSent=true;
-        await pause(150);
+        for(let step=0;step<5;step++){await pause(30);await sampleStateAndCanvas();}
         await input({kind:'key',key:'d',code:'KeyD'},'keyup');
         await input({kind:'key',key:' ',code:'Space'},'keyup');
+        await input({kind:'key',key:'a',code:'KeyA'},'keydown');
+        for(let step=0;step<4;step++){await pause(30);await sampleStateAndCanvas();}
+        await input({kind:'key',key:'a',code:'KeyA'},'keyup');
       }catch(error){fail(error.message);}
+    }
+    while(performance.now()-playingStartedAt<900 && trajectorySamples.length<30){
+      await pause(30);
+      if(playingSeen)await sampleStateAndCanvas();
     }
     await pause(Math.max(0,900-(performance.now()-playingStartedAt)));
     const frames=await evaluate('__arcadeObserverFrames',observerContext);
     const playingFrames=playingSeen?frames-playingBaseline:0;
     const evidence={title_seen:titleSeen,playing_seen:playingSeen,interaction_sent:interactionSent,
       frames,playing_frames:playingFrames,errors:[...new Set(pageErrors)],title_applicable:!directStart,
-      observation_ms:performance.now()-observedAt,playing_observation_ms:performance.now()-playingStartedAt};
+      observation_ms:performance.now()-observedAt,playing_observation_ms:performance.now()-playingStartedAt,
+      trajectory_samples:trajectorySamples,canvas_hashes:canvasHashes};
     const version=await send('Browser.getVersion');
     evidence.environment={browser:version.product,protocol:version.protocolVersion,headless:true,physical_device:false,
       input:'CDP native keyboard/mouse and emulated touch',

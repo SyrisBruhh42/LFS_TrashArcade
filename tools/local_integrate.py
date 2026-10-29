@@ -337,12 +337,19 @@ def run_tick(cfg, state, remote, controller_sha, *, save, paused, clock=None, re
         state.setdefault("integration", current)["cursor"] = sid
     rec, repo = state["sessions"][sid], cfg["repo"]
     number = int(rec["pr"].rsplit("/", 1)[1])
+    if any(i["repo"] == repo and i["pr"] == number and i["status"] != "not_sent" for i in current["intents"].values()):
+        raise Hold("PR already has durable integration history; no repeated merge request")
     pr = api(f"repos/{repo}/pulls/{number}")
+    if str(pr.get("state") or "open").lower() != "open":
+        if read_only:
+            raise Hold("PR must be open, ready and unmerged")
+        rec["outcome"] = "merged" if pr.get("merged") else "failed:closed"
+        rec.pop("gate_status", None)
+        save(state)
+        return {"status": "reconciled_closed_candidate", "action": "reconciled_closed_candidate", "session": sid, "pr": number}
     head, base = pr.get("head", {}).get("sha", ""), pr.get("base", {}).get("sha", "")
     if not SHA.fullmatch(head) or not SHA.fullmatch(base) or pr.get("number") != number:
         raise Hold("PR identity unavailable")
-    if any(i["repo"] == repo and i["pr"] == number and i["status"] != "not_sent" for i in current["intents"].values()):
-        raise Hold("PR already has durable integration history; no repeated merge request")
     policy.verify_protection(repo)
     policy.verify_pr(repo, number, head, base)
     deadline = main_deadline(repo, base, clock_fn())

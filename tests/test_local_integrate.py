@@ -485,7 +485,7 @@ class PostmergeMaintenanceTests(unittest.TestCase):
             with patch.object(f, "inventory", return_value={}), patch.object(f.integration, "run_tick", side_effect=error), patch.object(f, "dispatch") as dispatch, patch.object(f, "reconcile") as reconcile:
                 self.assertEqual(f.tick(args), 0)
             dispatch.assert_not_called()
-            reconcile.assert_not_called()
+            reconcile.assert_called_once()
 
     def test_red_main_tick_routes_only_matching_maintenance_and_keeps_all_feedback_dry(self):
         spec, item = self.fixture()

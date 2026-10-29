@@ -77,7 +77,7 @@ class FactoryTests(unittest.TestCase):
                     "maintenance_enabled": True, "repair_owner": "native", "controller_native_repairs_disabled": False,
                     "daily_cap": 96, "max_active_sessions": 12, "max_open_prs": 8, "max_unfinished_games": 2,
                     "account_active_cap": 60, "account_daily_cap": 300, "account_active_reserve": 1,
-                    "account_daily_reserve": 5, "max_repair_messages": 1, "max_rebase_messages": 1,
+                    "account_daily_reserve": 10, "max_repair_messages": 1, "max_rebase_messages": 1,
                     "max_repairs_per_tick": 1, "healthy_ticks_required": 2, "inventory_max_age_seconds": 180}
         self.assertEqual({key: cfg[key] for key in expected}, expected)
 
@@ -391,7 +391,7 @@ class FactoryTests(unittest.TestCase):
             self.assertEqual(f.tick(args), 0)
         integrate.assert_called_once()
         capacity.assert_not_called()
-        reconcile.assert_not_called()
+        reconcile.assert_called_once()
         dispatch.assert_not_called()
 
     def test_unknown_provider_scope_prevents_local_integration(self):
@@ -405,7 +405,7 @@ class FactoryTests(unittest.TestCase):
         args = self.tick_fixture()
         with patch.object(f, "inventory", return_value={}), patch.object(f.integration, "run_tick", side_effect=f.integration.Hold("unresolved merge")), patch.object(f, "reconcile") as reconcile, patch.object(f, "dispatch") as dispatch:
             self.assertEqual(f.tick(args), 0)
-        reconcile.assert_not_called()
+        reconcile.assert_called_once()
         dispatch.assert_not_called()
 
     def test_paid_admission_independently_honors_merge_ledger(self):

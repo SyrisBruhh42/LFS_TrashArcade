@@ -51,6 +51,52 @@ def browser_command(chrome: str, profile: str, url: str) -> list[str]:
             "--enable-logging=stderr", "--v=0", url]
 
 
+def compute_trajectory_and_canvas_entropy(evidence: dict) -> dict:
+    """Computes state-space trajectory Shannon entropy, participation dimension d_eff, and canvas frame diff ratio."""
+    samples = evidence.get("trajectory_samples")
+    hashes = evidence.get("canvas_hashes")
+    if not isinstance(samples, list) or len(samples) < 4:
+        return {"h_traj": None, "d_eff": None, "canvas_diff_ratio": None}
+    counts: dict[tuple, int] = {}
+    n = len(samples)
+    for row in samples:
+        if isinstance(row, list) and len(row) >= 6:
+            q = (round(float(row[0]) / 4.0), round(float(row[1]) / 4.0), round(float(row[4])), round(float(row[5])))
+            counts[q] = counts.get(q, 0) + 1
+    h_traj = 0.0
+    if counts and n > 0:
+        for c in counts.values():
+            p = c / n
+            if p > 0:
+                h_traj -= p * math.log2(p)
+    active_cols: list[list[float]] = []
+    for col_idx in range(6):
+        col = [float(r[col_idx]) for r in samples if isinstance(r, list) and len(r) > col_idx]
+        if len(col) == n:
+            mean = sum(col) / n
+            var = sum((x - mean) ** 2 for x in col) / n
+            if var > 1e-9:
+                std = math.sqrt(var)
+                active_cols.append([(x - mean) / std for x in col])
+    m = len(active_cols)
+    if m >= 2:
+        frob_sq = 0.0
+        for i in range(m):
+            for j in range(m):
+                rij = sum(active_cols[i][t] * active_cols[j][t] for t in range(n)) / n
+                frob_sq += rij * rij
+        d_eff = (m * m) / frob_sq if frob_sq > 0 else 1.0
+    elif m == 1:
+        d_eff = 1.0
+    else:
+        d_eff = 0.0
+    canvas_diff_ratio = None
+    if isinstance(hashes, list) and len(hashes) >= 2:
+        diffs = sum(1 for idx in range(1, len(hashes)) if hashes[idx] != hashes[idx - 1])
+        canvas_diff_ratio = diffs / (len(hashes) - 1)
+    return {"h_traj": round(h_traj, 4), "d_eff": round(d_eff, 4), "canvas_diff_ratio": canvas_diff_ratio}
+
+
 def assess(result: subprocess.CompletedProcess, nonce: str, *, direct_start: bool = False, required_scenarios: tuple[str, ...] = (), source_sha: str | None = None, expected_behavior_hash: str | None = None) -> dict:
     if result.returncode != 0:
         return {"status":"FAIL", "classification":"infrastructure", "reason":f"browser exited {result.returncode}", "details":result.stderr[-1000:]}
@@ -72,6 +118,11 @@ def assess(result: subprocess.CompletedProcess, nonce: str, *, direct_start: boo
                   and evidence["interaction_sent"] is True and evidence["frames"] >= 2
                   and evidence["playing_frames"] >= 2 and evidence["observation_ms"] >= 1500
                   and evidence["playing_observation_ms"] >= 900 and evidence["errors"] == [])
+        traj_metrics = compute_trajectory_and_canvas_entropy(evidence)
+        evidence["trajectory_metrics"] = traj_metrics
+        if required_scenarios and traj_metrics["h_traj"] is not None and len(evidence.get("trajectory_samples", [])) >= 6:
+            if traj_metrics["h_traj"] == 0.0 and (traj_metrics["canvas_diff_ratio"] is not None and traj_metrics["canvas_diff_ratio"] == 0.0):
+                passed = False
         scenarios = evidence.get("scenarios", [])
         if not isinstance(scenarios, list):
             raise ValueError("invalid scenario evidence")
@@ -205,7 +256,7 @@ def audit(folders: list[Path], contracts_path: Path | None = None, *, source_sha
     records = []
     for folder in folders:
         contract = catalog.get(folder.name)
-        if contract is None and folder.name[:3].isdigit() and int(folder.name[:3]) >= max(86, minimum):
+        if contract is None and folder.name[:3].isdigit() and int(folder.name[:3]) >= minimum:
             contract = default
         try:
             records.append(run_game(folder, contract, source_sha=source_sha, require_behavior=require_behavior, expected_behavior_hash=expected_behavior_hash, required_scenarios=required_scenarios))
