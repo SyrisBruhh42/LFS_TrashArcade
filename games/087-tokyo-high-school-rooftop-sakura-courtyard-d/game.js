@@ -166,6 +166,7 @@ class Game {
         if (typeof RosterManager !== 'undefined') this.rosters = new RosterManager(this);
         if (typeof BossManager !== 'undefined') this.bosses = new BossManager(this);
         if (typeof ProgressionManager !== 'undefined') this.progression = new ProgressionManager(this);
+        if (typeof VFXManager !== 'undefined') this.vfx = new VFXManager(this);
 
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER, SHOWDOWN, SHOP
         this.lastTime = 0;
@@ -237,6 +238,7 @@ class Game {
         if (this.world && (this.state === 'PLAYING' || this.state === 'TITLE' || this.state === 'SHOWDOWN' || this.state === 'SHOP')) this.world.update(dt, this.input);
         if (this.state === 'SHOWDOWN' && this.bosses) this.bosses.update(dt);
         if (this.progression) this.progression.update(dt);
+        if (this.vfx) this.vfx.update(dt);
         this.draw();
         this.input.update();
 
@@ -269,6 +271,10 @@ class Game {
                 if (!clickedBtn) {
                     this.state = 'PLAYING';
                     this.sound.playConfirm();
+                    if (this.vfx) {
+                        this.vfx.burst(400, 300, 30, '#ff4081');
+                        this.vfx.addShake(5, 0.5);
+                    }
                 }
             }
 
@@ -360,9 +366,23 @@ class Game {
         let witMod = (this.saveManager.data.perks && this.saveManager.data.perks.includes('p4')) ? 2 : 0;
 
         this.saveManager.data.stats.stamina -= staminaCost;
-        if (type === 'study') this.saveManager.data.stats.wit += Math.floor((5 + witMod) * multi);
-        if (type === 'work') this.saveManager.data.stats.cash += Math.floor(20 * multi);
-        if (type === 'practice') { this.saveManager.data.stats.talent += Math.floor(5 * multi); this.saveManager.data.stats.charm += Math.floor((2 + charmMod) * multi); }
+        if (type === 'study') {
+            let gain = Math.floor((5 + witMod) * multi);
+            this.saveManager.data.stats.wit += gain;
+            if(this.vfx) { this.vfx.burst(160, 230, 10, '#7c4dff'); this.vfx.addFloatingText(160, 230, `+${gain} Wit`, '#7c4dff'); }
+        }
+        if (type === 'work') {
+            let gain = Math.floor(20 * multi);
+            this.saveManager.data.stats.cash += gain;
+            if(this.vfx) { this.vfx.burst(160, 310, 10, '#ffff00'); this.vfx.addFloatingText(160, 310, `+¥${gain}`, '#ffff00'); }
+        }
+        if (type === 'practice') {
+            let gainT = Math.floor(5 * multi);
+            let gainC = Math.floor((2 + charmMod) * multi);
+            this.saveManager.data.stats.talent += gainT;
+            this.saveManager.data.stats.charm += gainC;
+            if(this.vfx) { this.vfx.burst(160, 390, 15, '#ff4081'); this.vfx.addFloatingText(160, 390, `+${gainT} Talent, +${gainC} Charm`, '#ff4081'); }
+        }
         if (type === 'explore') {
             if (this.rosters) {
                 const lead = this.rosters.getActiveLead();
@@ -374,6 +394,7 @@ class Game {
             this.saveManager.data.inventory.push("Clue");
             this.saveManager.data.stats.charm += 3;
             if (this.gadgetRig) this.gadgetRig.addCluePower(25);
+            if(this.vfx) { this.vfx.burst(160, 470, 20, '#ffb6c1'); this.vfx.addFloatingText(160, 470, '+3 Charm, Clue Found!', '#ffb6c1'); }
         }
 
         if (this.gadgetRig && this.gadgetRig.overdriveActive) {
@@ -381,6 +402,7 @@ class Game {
             if (this.saveManager.data.perks && this.saveManager.data.perks.includes('p3')) odRefund = 20;
             this.saveManager.data.stats.stamina += odRefund; // Overdrive refund
             this.saveManager.data.stats.charm += Math.floor(5 * (this.progression ? this.progression.synergyMultiplier : 1));
+            if(this.vfx) { this.vfx.burst(160, 550, 30, '#ff4081'); this.vfx.addFloatingText(160, 550, `+${odRefund} Stamina!`, '#7c4dff'); this.vfx.addShake(3, 0.2); }
         }
 
         this.sound.playStatUp();
@@ -473,6 +495,7 @@ class Game {
             this.ctx.fillText(`Final Charm: ${this.saveManager.data.stats.charm}`, 400, 300);
             this.ctx.fillText('Click to Restart', 400, 400);
         }
+        if (this.vfx) this.vfx.draw(this.ctx);
     }
 
     drawButtons() {
