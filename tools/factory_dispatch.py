@@ -203,6 +203,23 @@ def get_capsule_segment_state_safe(capsule_id: str = "lfs-trash-arcade") -> str:
 
 def compute_dynamic_290_fleet_caps() -> dict:
     """Compute dynamic 290/24h quota lending across active DOCKED_READY capsules + 10 VIP idea queue reserve."""
+    for cand in (
+        Path(__file__).resolve().parents[3] / "core" / "companion" / "clients" / "linux",
+        Path.home() / "Projects" / "LFS-Suite" / "3-lfs-aegis-linux" / "core" / "companion" / "clients" / "linux",
+    ):
+        if cand.is_dir() and str(cand) not in sys.path:
+            sys.path.insert(0, str(cand))
+    try:
+        from aegis_factory_conductor import compute_shazeer_fleet_control_290  # type: ignore[import-not-found]
+
+        ctrl = compute_shazeer_fleet_control_290()
+        if isinstance(ctrl, dict) and isinstance(ctrl.get("dynamic_caps"), dict):
+            dc = dict(ctrl["dynamic_caps"])
+            if "lfs-trasharcade-factory" in dc and "lfs-trash-arcade" not in dc:
+                dc["lfs-trash-arcade"] = dc["lfs-trasharcade-factory"]
+            return {**ctrl, **dc, "dynamic_caps": dc}
+    except Exception:
+        pass
     current = now()
     cutoff = current - timedelta(hours=24)
     vip_file = STATE_DIR.parent / "lfs-idea-queue" / "state.json"
@@ -1469,7 +1486,8 @@ def capacity(cfg: dict, state: dict, remote: dict) -> dict:
     if sum(bool(r.get("pr")) for r in local_live) >= cfg["max_open_prs"]:
         raise Hold("Open PR work-in-progress cap reached")
     local_daily = sum(current - parse_ts(r["created"]) < timedelta(hours=24) for r in state["sessions"].values())
-    effective_local_cap = int(dyn_caps.get("dynamic_caps", {}).get("lfs-trash-arcade", cfg["daily_cap"]))
+    dyn_map = dyn_caps.get("dynamic_caps", dyn_caps) if isinstance(dyn_caps, dict) else {}
+    effective_local_cap = int(dyn_map.get("lfs-trash-arcade", dyn_map.get("lfs-trasharcade-factory", cfg["daily_cap"])))
     if local_daily >= effective_local_cap:
         raise Hold("Local rolling-24h dispatch budget reached")
     return observation
