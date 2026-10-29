@@ -268,6 +268,10 @@ class Game {
         this.bossEncounterCounter = 0;
         this.upgradeManager = new UpgradeManager(this);
         this.nextBossScore = 150;
+        this.campaignManager = new CampaignManager(this);
+        if(!this.saveManager.data.options) this.saveManager.data.options = { soundVolume: 1, musicVolume: 1, reduceMotion: false, highContrast: false, handedness: 'right' };
+        if(this.saveManager.data.options.reduceMotion === undefined) Object.assign(this.saveManager.data.options, { reduceMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches, highContrast: false, handedness: 'right' });
+        this.campaignManager.updateDashButtonPosition();
 
         this.pauseButton = document.getElementById('pause-button');
         this.pauseButton.addEventListener('click', () => {
@@ -318,6 +322,8 @@ class Game {
         this.soundEngine.resume();
         this.state = 'PLAYING';
         this.score = 0;
+        this.saveManager.data.totalGamesPlayed = (this.saveManager.data.totalGamesPlayed || 0) + 1;
+        this.saveManager.save();
         this.player = new Player(this.grid.snap(this.width/2), this.grid.snap(this.height/2), this.grid.cellSize);
         this.enemies = [];
         this.projectiles = [];
@@ -361,17 +367,13 @@ class Game {
                 this.start();
             } else if (this.inputManager.justPressed['KeyO']) {
                 this.state = 'OPTIONS';
+                this.campaignManager.showOptions();
             }
         } else if (this.state === 'OPTIONS') {
             if (this.inputManager.justPressed['Escape']) {
                 this.state = 'TITLE';
                 this.inputManager.keys['Escape'] = false;
-            } else if (this.inputManager.justPressed['KeyM']) {
-                this.saveManager.data.options.soundVolume = this.saveManager.data.options.soundVolume > 0 ? 0 : 1;
-                if (this.soundEngine.masterGain) {
-                    this.soundEngine.masterGain.gain.value = this.saveManager.data.options.soundVolume;
-                }
-                this.saveManager.save();
+                this.campaignManager.hideOptions();
             }
         } else if (this.state === 'PLAYING') {
             document.getElementById('back-button').classList.add('hidden');
@@ -512,6 +514,7 @@ class Game {
             }
         }
 
+        if(this.campaignManager) this.campaignManager.draw(this.ctx, this.width, this.height);
         this.syncControls();
         this.inputManager.update();
     }
@@ -522,7 +525,8 @@ class Game {
     }
 
     draw() {
-        if (this.vfx) this.vfx.applyShake(this.ctx);
+        if (this.campaignManager) this.campaignManager.update(1/60);
+        if (this.vfx && !this.saveManager.data.options?.reduceMotion) this.vfx.applyShake(this.ctx);
         this.ctx.fillStyle = '#050a12';
         this.ctx.fillRect(0, 0, this.width, this.height);
         if (this.world) this.world.draw(this.ctx);
@@ -549,53 +553,10 @@ class Game {
         }
 
         if (this.state === 'TITLE') {
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = 'bold 40px monospace';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('TRENCH TACTICS', this.width/2, 80);
-
-            this.ctx.font = '14px monospace';
-            this.ctx.fillText('LORE: Navigate the deep ocean trench in tactical turn-based blitz combat.', this.width/2, 110, this.width - 40);
-
-            this.ctx.fillStyle = 'rgba(13, 53, 84, 0.8)';
-            this.ctx.fillRect(50, 140, 220, 120);
-            this.ctx.fillRect(290, 140, 220, 120);
-            this.ctx.fillRect(530, 140, 220, 120);
-
-            this.ctx.fillStyle = '#00e5ff';
-            this.ctx.font = 'bold 16px monospace';
-            this.ctx.fillText('1. The Goal', 160, 165);
-            this.ctx.fillText('2. The Loop', 400, 165);
-            this.ctx.fillText('3. Controls', 640, 165);
-
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '13px monospace';
-            this.ctx.fillText('Survive and destroy', 160, 195);
-            this.ctx.fillText('enemies for points.', 160, 215);
-            this.ctx.fillText('Stillness slows time.', 400, 195);
-            this.ctx.fillText('Movement speeds it up.', 400, 215);
-            this.ctx.fillText('WASD/Drag: Move', 640, 195);
-            this.ctx.fillText('Space/Tap: Attack', 640, 215);
-
-            this.ctx.font = '24px monospace';
-            this.ctx.fillStyle = '#00e676';
-            this.ctx.fillText('Enter / Space / Tap to Start', this.width/2, 320);
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '18px monospace';
-            this.ctx.fillText('Press [O] for Options', this.width/2, 360);
-
-            this.ctx.font = '16px monospace';
-            this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, 400);
+            this.campaignManager.drawTitleScreen(this.ctx, this.width, this.height);
         } else if (this.state === 'OPTIONS') {
             this.ctx.fillStyle = 'rgba(5, 10, 18, 0.9)';
             this.ctx.fillRect(0, 0, this.width, this.height);
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '30px monospace';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('OPTIONS', this.width/2, 80);
-            this.ctx.font = '16px monospace';
-            this.ctx.fillText('Volume (M to Mute): ' + (this.saveManager.data.options.soundVolume * 100).toFixed(0) + '%', this.width/2, 140);
-            this.ctx.fillText('Press [Esc] to Return', this.width/2, 300);
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(5, 10, 18, 0.7)';
             this.ctx.fillRect(0, 0, this.width, this.height);
