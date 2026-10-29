@@ -1163,7 +1163,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Desktop: Enter to Start, Mouse to click. Mobile: Tap to interact.",
     "createdAt": "2024-03-24",
     "accentColor": "#ff4081",
-    "phase": "5",
+    "phase": "6",
     "lore": "You have 30 days before the Grand Starlight Festival to balance your daily schedule, build your personal stats (Charm, Wit, Talent, Cash), navigate rival drama, and win the heart of one of 5 distinct romanceable leads—or claim solo superstardom.",
     "inspiration": "Pacthesis Dating Sims (Chrono Days, Number Days, Star Days, Lunar Days, Idol Days, Kingdom Days), Love Hina Sim Date RPG, SimGirl & Date Ariane, Cute Knight & Magical Diary Flash.",
     "objective": "Manage your Stamina and Cash across Morning/Afternoon/Evening slots, raise the stats required for your chosen character route, choose perceptive dialogue responses, and unlock a True Ending CG before Day 30.",
