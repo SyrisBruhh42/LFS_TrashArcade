@@ -37,28 +37,35 @@ class CampaignManager {
         }
     }
 
-    ce(tag, style, id, inner) {
+    ce(tag, className, id, inner) {
         let el = document.createElement(tag);
-        if (style) el.style.cssText = style;
+        if (className) el.className = className;
         if (id) el.id = id;
-        if (inner) el.innerHTML = inner;
+        if (inner) el.innerText = inner;
         return el;
     }
 
     initDOM() {
-        this.overlay = this.ce('div', 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(5,10,18,0.9);display:none;justify-content:center;align-items:center;z-index:2000;pointer-events:auto;font-family:monospace;color:#cdc3b9;', 'options-modal-overlay');
+        this.overlay = this.ce('div', null, 'options-modal-overlay');
+        this.overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(5,10,18,0.9);display:none;justify-content:center;align-items:center;z-index:2000;pointer-events:auto;font-family:monospace;color:#cdc3b9;';
 
-        let m = this.ce('div', 'width:80%;max-width:600px;background:#0d3554;border:2px solid #00e5ff;border-radius:8px;padding:20px;display:flex;flex-direction:column;max-height:90%;overflow-y:auto;');
-        m.appendChild(this.ce('h2', 'text-align:center;margin-top:0;color:#00e5ff;', null, 'OPTIONS & MILESTONES'));
+        let m = this.ce('div');
+        m.style.cssText = 'width:80%;max-width:600px;background:#0d3554;border:2px solid #00e5ff;border-radius:8px;padding:20px;display:flex;flex-direction:column;max-height:90%;overflow-y:auto;';
 
-        let tabs = this.ce('div', 'display:flex;justify-content:space-around;margin-bottom:20px;border-bottom:1px solid #cdc3b9;');
+        let title = this.ce('h2', null, null, 'OPTIONS & MILESTONES');
+        title.style.cssText = 'text-align:center;margin-top:0;color:#00e5ff;';
+        m.appendChild(title);
+
+        let tabs = this.ce('div');
+        tabs.style.cssText = 'display:flex;justify-content:space-around;margin-bottom:20px;border-bottom:1px solid #cdc3b9;';
 
         let tN = ['Audio & Comfort', 'Controls', 'Milestones', 'Manage Save Data'];
         this.tC = [];
         this.tB = [];
 
         for (let i = 0; i < tN.length; i++) {
-            let btn = this.ce('button', 'background:none;border:none;color:#cdc3b9;font:bold 14px monospace;cursor:pointer;padding:10px;outline:none;', null, tN[i]);
+            let btn = this.ce('button', null, null, tN[i]);
+            btn.style.cssText = 'background:none;border:none;color:#cdc3b9;font:bold 14px monospace;cursor:pointer;padding:10px;outline:none;';
             btn.type = 'button';
             btn.onclick = () => this.switchTab(i);
             tabs.appendChild(btn);
@@ -69,24 +76,63 @@ class CampaignManager {
             this.tC.push(cnt);
         }
 
-        this.tC[0].innerHTML = `
-            <div style="margin-bottom:15px;">
-                <label>Master Volume: <span id="vol-val">100%</span></label><br>
-                <input type="range" id="vol-slider" min="0" max="100" value="100" style="width:100%;">
-            </div>
-            <div style="margin-bottom:15px;">
-                <label><input type="checkbox" id="reduced-motion-chk"> Reduced Motion</label>
-            </div>
-            <div style="margin-bottom:15px;">
-                <label><input type="checkbox" id="high-contrast-chk"> High Contrast Mode</label>
-            </div>`;
+        let dMb = 'margin-bottom:15px;';
 
-        this.tC[1].innerHTML = `<div style="margin-bottom:15px;"><label><input type="checkbox" id="left-handed-chk"> Left-Handed Touch Controls</label><p style="font-size:12px;color:#aaa;">Swaps virtual dash button and joystick sides.</p></div>`;
+        let r = this.ce('input', null, 'vol-slider');
+        r.style.width = '100%';
+        r.type = 'range'; r.min = 0; r.max = 100; r.value = 100;
+        let v = this.ce('span', null, 'vol-val', '100%');
+        let d1 = this.ce('div'); d1.style.cssText = dMb;
+        let l1 = this.ce('label');
+        l1.innerText = 'Master Volume: ';
+        l1.appendChild(v);
+        d1.appendChild(l1);
+        d1.appendChild(document.createElement('br'));
+        d1.appendChild(r);
+        this.tC[0].appendChild(d1);
+
+        let c1 = this.ce('input', null, 'reduced-motion-chk'); c1.type = 'checkbox';
+        let d2 = this.ce('div'); d2.style.cssText = dMb;
+        let l2 = this.ce('label'); l2.appendChild(c1); l2.appendChild(document.createTextNode(' Reduced Motion'));
+        d2.appendChild(l2); this.tC[0].appendChild(d2);
+
+        let c2 = this.ce('input', null, 'high-contrast-chk'); c2.type = 'checkbox';
+        let d3 = this.ce('div'); d3.style.cssText = dMb;
+        let l3 = this.ce('label'); l3.appendChild(c2); l3.appendChild(document.createTextNode(' High Contrast Mode'));
+        d3.appendChild(l3); this.tC[0].appendChild(d3);
+
+        let c3 = this.ce('input', null, 'left-handed-chk'); c3.type = 'checkbox';
+        let d4 = this.ce('div'); d4.style.cssText = dMb;
+        let l4 = this.ce('label'); l4.appendChild(c3); l4.appendChild(document.createTextNode(' Left-Handed Touch Controls'));
+        d4.appendChild(l4); this.tC[1].appendChild(d4);
+
         this.tC[2].id = 'milestones-container';
 
-        this.tC[3].innerHTML = `<details><summary style="cursor:pointer;color:#00e5ff;margin-bottom:10px;">Export / Import Save Data</summary><textarea id="save-data-text" style="width:100%;height:100px;background:#050a12;color:#cdc3b9;border:1px solid #cdc3b9;font-family:monospace;margin-bottom:10px;"></textarea><div style="display:flex;gap:10px;"><button type="button" id="export-btn" style="flex:1;padding:10px;background:#061a2b;color:#cdc3b9;border:1px solid #00e5ff;cursor:pointer;">Copy to Clipboard</button><button type="button" id="import-btn" style="flex:1;padding:10px;background:#061a2b;color:#cdc3b9;border:1px solid #00e5ff;cursor:pointer;">Import Save</button></div></details><div style="margin-top:20px;text-align:center;"><button type="button" id="reset-save-btn" style="padding:10px 20px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;">Reset All Data</button></div>`;
+        let d5 = this.ce('details');
+        let s5 = this.ce('summary', null, null, 'Export / Import Save Data');
+        s5.style.cssText = 'cursor:pointer;color:#00e5ff;margin-bottom:10px;';
+        d5.appendChild(s5);
+        let txt = this.ce('textarea', null, 'save-data-text');
+        txt.style.cssText = 'width:100%;height:100px;background:#050a12;color:#cdc3b9;border:1px solid #cdc3b9;font-family:monospace;margin-bottom:10px;';
+        d5.appendChild(txt);
 
-        let closeBtn = this.ce('button', 'margin-top:20px;padding:10px;background:#00e676;color:#050a12;border:none;font:bold 16px monospace;cursor:pointer;border-radius:4px;', null, 'Resume / Close [Esc]');
+        let bStyle = 'flex:1;padding:10px;background:#061a2b;color:#cdc3b9;border:1px solid #00e5ff;cursor:pointer;';
+        let bExp = this.ce('button', null, 'export-btn', 'Copy to Clipboard'); bExp.style.cssText = bStyle; bExp.type = 'button';
+        let bImp = this.ce('button', null, 'import-btn', 'Import Save'); bImp.style.cssText = bStyle; bImp.type = 'button';
+        let d6 = this.ce('div'); d6.style.cssText = 'display:flex;gap:10px;';
+        d6.appendChild(bExp); d6.appendChild(bImp);
+        d5.appendChild(d6);
+        this.tC[3].appendChild(d5);
+
+        let bRes = this.ce('button', null, 'reset-save-btn', 'Reset All Data');
+        bRes.style.cssText = 'padding:10px 20px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;';
+        bRes.type = 'button';
+        let d7 = this.ce('div'); d7.style.cssText = 'margin-top:20px;text-align:center;';
+        d7.appendChild(bRes);
+        this.tC[3].appendChild(d7);
+
+        let closeBtn = this.ce('button', null, null, 'Resume / Close [Esc]');
+        closeBtn.style.cssText = 'margin-top:20px;padding:10px;background:#00e676;color:#050a12;border:none;font:bold 16px monospace;cursor:pointer;border-radius:4px;';
         closeBtn.type = 'button';
         closeBtn.onclick = () => {
             this.g.state = 'TITLE';
@@ -203,12 +249,18 @@ class CampaignManager {
                 let m = this.mils[i];
                 let unl = this.g.saveManager.data.unlockedMilestones.includes(m.id);
                 let bc = unl ? '#00e676' : '#555';
-                let div = this.ce('div', 'padding:10px;margin-bottom:10px;border:1px solid ' + bc + ';border-radius:4px;display:flex;justify-content:space-between;');
+                let div = this.ce('div');
+                div.style.cssText = 'padding:10px;margin-bottom:10px;border:1px solid ' + bc + ';border-radius:4px;display:flex;justify-content:space-between;';
 
                 let tc = unl ? '#00e676' : '#cdc3b9';
                 let sc = unl ? '#00e676' : '#e74c3c';
 
-                div.innerHTML = '<div><strong style="color:' + tc + '">' + m.name + '</strong><br><span style="font-size:12px;color:#aaa;">' + m.desc + '</span></div><div style="color:' + sc + '">' + (unl ? 'UNLOCKED' : 'LOCKED') + '</div>';
+                let dd1 = this.ce('div');
+                let st = this.ce('strong'); st.style.color = tc; st.innerText = m.name;
+                let sp = this.ce('span'); sp.style.cssText = 'font-size:12px;color:#aaa;'; sp.innerText = m.desc;
+                dd1.appendChild(st); dd1.appendChild(document.createElement('br')); dd1.appendChild(sp);
+                let dd2 = this.ce('div'); dd2.style.color = sc; dd2.innerText = unl ? 'UNLOCKED' : 'LOCKED';
+                div.appendChild(dd1); div.appendChild(dd2);
                 c.appendChild(div);
             }
         }
