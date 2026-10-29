@@ -162,6 +162,7 @@ class Game {
         this.sound = new SoundEngine();
         this.input = new InputManager(this.canvas);
         if (typeof GadgetRig !== 'undefined') this.gadgetRig = new GadgetRig(this);
+        if (typeof WorldRenderer !== 'undefined') this.world = new WorldRenderer(this);
 
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER
         this.lastTime = 0;
@@ -230,6 +231,7 @@ class Game {
 
         this.update(dt);
         if (this.state === 'PLAYING' && this.gadgetRig) this.gadgetRig.update(dt);
+        if (this.world && (this.state === 'PLAYING' || this.state === 'TITLE')) this.world.update(dt, this.input);
         this.draw();
         this.input.update();
 
@@ -343,8 +345,12 @@ class Game {
     }
 
     draw() {
-        this.ctx.fillStyle = '#fff8f6';
-        this.ctx.fillRect(0, 0, 800, 600);
+        if (this.world) {
+            this.world.draw(this.ctx);
+        } else {
+            this.ctx.fillStyle = '#fff8f6';
+            this.ctx.fillRect(0, 0, 800, 600);
+        }
 
         if (this.state === 'TITLE') {
             this.ctx.fillStyle = '#ff4081';
@@ -378,8 +384,8 @@ class Game {
             this.ctx.fillText(`Wit: ${stats.wit}`, 150, 90);
             this.ctx.fillText(`Talent: ${stats.talent}`, 20, 120);
 
-            // Draw main area
-            this.ctx.fillStyle = '#ffe4ec';
+            // Main area background handled by world.js, we draw just the text/overlay here
+            this.ctx.fillStyle = 'rgba(255, 228, 236, 0.7)';
             this.ctx.fillRect(280, 50, 500, 400);
             this.ctx.fillStyle = '#ff4081';
             this.ctx.font = '24px sans-serif';
