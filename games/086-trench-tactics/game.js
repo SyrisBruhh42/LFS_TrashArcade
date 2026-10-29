@@ -303,6 +303,9 @@ class Game {
         this.lastAimDir = {x: 1, y: 0};
 
         this.spawnTimer = 0;
+        this.bossActive = null;
+        this.bossEncounterCounter = 0;
+        this.nextBossScore = 150;
 
         this.pauseButton = document.getElementById('pause-button');
         this.pauseButton.addEventListener('click', () => {
@@ -356,6 +359,9 @@ class Game {
         this.player = new Player(this.grid.snap(this.width/2), this.grid.snap(this.height/2), this.grid.cellSize);
         this.enemies = [];
         this.projectiles = [];
+        this.bossActive = null;
+        this.bossEncounterCounter = 0;
+        this.nextBossScore = 150;
         this.saveManager.data.totalGamesPlayed++;
         this.saveManager.save();
     }
@@ -433,10 +439,30 @@ class Game {
 
             this.player.update(dt, this.grid, this.inputManager, this.soundEngine, this);
 
-            this.spawnTimer -= effectiveDt;
-            if (this.spawnTimer <= 0) {
-                this.spawnEnemy();
-                this.spawnTimer = 2.0;
+            if (!this.bossActive) {
+                this.spawnTimer -= effectiveDt;
+                if (this.spawnTimer <= 0) {
+                    this.spawnEnemy();
+                    this.spawnTimer = 2.0;
+                }
+                if (this.score >= this.nextBossScore) {
+                    this.bossEncounterCounter++;
+                    this.nextBossScore += 300;
+                    let sx = this.grid.snap(this.width/2 - this.grid.cellSize);
+                    let sy = 0;
+                    if (this.bossEncounterCounter % 2 === 1) {
+                        this.bossActive = new DreadnoughtAlpha(sx, sy, this.grid.cellSize);
+                    } else {
+                        this.bossActive = new DreadnoughtOmega(sx, sy, this.grid.cellSize);
+                    }
+                    this.enemies.push(this.bossActive);
+                }
+            } else {
+                if (this.bossActive.hp <= 0) {
+                    this.bossActive = null;
+                    this.score += 100;
+                    this.soundEngine.playPowerup();
+                }
             }
 
             for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -518,6 +544,10 @@ class Game {
             this.ctx.textAlign = 'right';
             this.ctx.fillStyle = this.timeMultiplier < 1.0 ? '#4a90e2' : '#e74c3c';
             this.ctx.fillText(`Time Flow: ${Math.round(this.timeMultiplier * 100)}%`, this.width - 20, 30);
+
+            if (this.bossActive) {
+                this.bossActive.drawBossUI(this.ctx, this.width, this.height);
+            }
         }
 
         if (this.state === 'TITLE') {
