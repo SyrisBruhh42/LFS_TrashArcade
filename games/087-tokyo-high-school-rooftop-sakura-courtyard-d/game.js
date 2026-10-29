@@ -165,9 +165,8 @@ class Game {
         if (typeof WorldRenderer !== 'undefined') this.world = new WorldRenderer(this);
         if (typeof RosterManager !== 'undefined') this.rosters = new RosterManager(this);
         if (typeof BossManager !== 'undefined') this.bosses = new BossManager(this);
-        if (typeof ProgressionManager !== 'undefined') this.progression = new ProgressionManager(this);
 
-        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER, SHOWDOWN, SHOP
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER, SHOWDOWN
         this.lastTime = 0;
         this.buttons = [];
 
@@ -234,9 +233,8 @@ class Game {
 
         this.update(dt);
         if ((this.state === 'PLAYING' || this.state === 'SHOWDOWN') && this.gadgetRig) this.gadgetRig.update(dt);
-        if (this.world && (this.state === 'PLAYING' || this.state === 'TITLE' || this.state === 'SHOWDOWN' || this.state === 'SHOP')) this.world.update(dt, this.input);
+        if (this.world && (this.state === 'PLAYING' || this.state === 'TITLE' || this.state === 'SHOWDOWN')) this.world.update(dt, this.input);
         if (this.state === 'SHOWDOWN' && this.bosses) this.bosses.update(dt);
-        if (this.progression) this.progression.update(dt);
         this.draw();
         this.input.update();
 
@@ -292,22 +290,6 @@ class Game {
                 this.buttons.push({ x: 700, y: 200, w: 60, h: 30, text: 'Next', onClick: () => { this.rosters.nextLead(); this.sound.playConfirm(); } });
             }
 
-            this.buttons.push({ x: 680, y: 70, w: 100, h: 40, text: 'Boutique', onClick: () => { this.state = 'SHOP'; this.sound.playConfirm(); } });
-
-            if (this.input.mouse.justDown) {
-                this.sound.init();
-                this.sound.resume();
-                for (let b of this.buttons) {
-                    if (this.isHover(b)) {
-                        b.onClick();
-                    }
-                }
-            }
-        } else if (this.state === 'SHOP') {
-            this.buttons = [
-                { x: 340, y: 500, w: 120, h: 40, text: 'Back', onClick: () => { this.state = 'PLAYING'; this.sound.playConfirm(); } }
-            ];
-
             if (this.input.mouse.justDown) {
                 this.sound.init();
                 this.sound.resume();
@@ -335,7 +317,6 @@ class Game {
                         b.onClick();
                     }
                 }
-                if (this.progression) this.progression.handleShopClick();
             }
         } else if (this.state === 'GAMEOVER') {
             if (this.input.justPressed['Enter'] || this.input.mouse.justDown) {
@@ -347,22 +328,15 @@ class Game {
     }
 
     doAction(type) {
-        let staminaCost = 20;
-        if (this.saveManager.data.perks && this.saveManager.data.perks.includes('p2')) staminaCost = 15;
-
-        if (this.saveManager.data.stats.stamina < staminaCost) {
+        if (this.saveManager.data.stats.stamina < 20) {
             this.sound.playError();
             return;
         }
 
-        let multi = this.progression ? this.progression.synergyMultiplier : 1;
-        let charmMod = (this.saveManager.data.perks && this.saveManager.data.perks.includes('p1')) ? 2 : 0;
-        let witMod = (this.saveManager.data.perks && this.saveManager.data.perks.includes('p4')) ? 2 : 0;
-
-        this.saveManager.data.stats.stamina -= staminaCost;
-        if (type === 'study') this.saveManager.data.stats.wit += Math.floor((5 + witMod) * multi);
-        if (type === 'work') this.saveManager.data.stats.cash += Math.floor(20 * multi);
-        if (type === 'practice') { this.saveManager.data.stats.talent += Math.floor(5 * multi); this.saveManager.data.stats.charm += Math.floor((2 + charmMod) * multi); }
+        this.saveManager.data.stats.stamina -= 20;
+        if (type === 'study') this.saveManager.data.stats.wit += 5;
+        if (type === 'work') this.saveManager.data.stats.cash += 20;
+        if (type === 'practice') { this.saveManager.data.stats.talent += 5; this.saveManager.data.stats.charm += 2; }
         if (type === 'explore') {
             if (this.rosters) {
                 const lead = this.rosters.getActiveLead();
@@ -377,10 +351,8 @@ class Game {
         }
 
         if (this.gadgetRig && this.gadgetRig.overdriveActive) {
-            let odRefund = 10;
-            if (this.saveManager.data.perks && this.saveManager.data.perks.includes('p3')) odRefund = 20;
-            this.saveManager.data.stats.stamina += odRefund; // Overdrive refund
-            this.saveManager.data.stats.charm += Math.floor(5 * (this.progression ? this.progression.synergyMultiplier : 1));
+            this.saveManager.data.stats.stamina += 10; // Overdrive refund
+            this.saveManager.data.stats.charm += 5;
         }
 
         this.sound.playStatUp();
@@ -456,11 +428,7 @@ class Game {
             if (this.rosters) this.rosters.draw(this.ctx);
 
             this.drawButtons();
-            if (this.progression) this.progression.draw(this.ctx);
             if (this.gadgetRig) this.gadgetRig.draw(this.ctx);
-        } else if (this.state === 'SHOP') {
-            if (this.progression) this.progression.drawShop(this.ctx);
-            this.drawButtons();
         } else if (this.state === 'SHOWDOWN') {
             if (this.bosses) this.bosses.draw(this.ctx);
             this.drawButtons();

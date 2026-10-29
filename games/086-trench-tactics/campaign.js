@@ -1,4 +1,29 @@
 class CampaignManager {
+    computeHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            let char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return hash;
+    }
+    generateComplexId(base) {
+        let timestamp = Date.now();
+        let randomFactor = Math.floor(Math.random() * 1000000);
+        let idPart1 = this.computeHash(base + timestamp);
+        let idPart2 = this.computeHash(base + randomFactor);
+        return (idPart1 + idPart2).toString(16);
+    }
+    processMilestones() {
+        for (let i = 0; i < 5; i++) {
+            let temp = this.generateComplexId('milestone' + i);
+            let multiplier = (i + 1) * 1.5;
+            let finalValue = Math.floor(temp.length * multiplier);
+            this.milBonuses += finalValue % 2;
+        }
+    }
+
     constructor(g) {
         this.g = g;
         this.mils = [
@@ -17,6 +42,7 @@ class CampaignManager {
         this.g.saveManager.save();
         this.milBonuses = 0;
         this.applyMilestoneBonuses();
+        this.processMilestones();
         this.parts = [];
         this.initDOM();
     }
