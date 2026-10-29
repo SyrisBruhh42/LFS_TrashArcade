@@ -163,6 +163,7 @@ class Game {
         this.input = new InputManager(this.canvas);
         if (typeof GadgetRig !== 'undefined') this.gadgetRig = new GadgetRig(this);
         if (typeof WorldRenderer !== 'undefined') this.world = new WorldRenderer(this);
+        if (typeof RosterManager !== 'undefined') this.rosters = new RosterManager(this);
 
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER
         this.lastTime = 0;
@@ -282,6 +283,11 @@ class Game {
                 { x: 680, y: 20, w: 100, h: 40, text: 'Menu', onClick: () => this.pause() }
             ];
 
+            if (this.rosters) {
+                this.buttons.push({ x: 320, y: 200, w: 60, h: 30, text: 'Prev', onClick: () => { this.rosters.prevLead(); this.sound.playConfirm(); } });
+                this.buttons.push({ x: 700, y: 200, w: 60, h: 30, text: 'Next', onClick: () => { this.rosters.nextLead(); this.sound.playConfirm(); } });
+            }
+
             if (this.input.mouse.justDown) {
                 this.sound.init();
                 this.sound.resume();
@@ -315,7 +321,14 @@ class Game {
         if (type === 'work') this.saveManager.data.stats.cash += 20;
         if (type === 'practice') { this.saveManager.data.stats.talent += 5; this.saveManager.data.stats.charm += 2; }
         if (type === 'explore') {
-            this.saveManager.data.affection.lead1 += 1; this.saveManager.data.inventory.push("Clue");
+            if (this.rosters) {
+                const lead = this.rosters.getActiveLead();
+                if (this.saveManager.data.affection[lead.id] === undefined) this.saveManager.data.affection[lead.id] = 0;
+                this.saveManager.data.affection[lead.id] += 1;
+            } else {
+                this.saveManager.data.affection.lead1 += 1;
+            }
+            this.saveManager.data.inventory.push("Clue");
             this.saveManager.data.stats.charm += 3;
             if (this.gadgetRig) this.gadgetRig.addCluePower(25);
         }
@@ -391,6 +404,7 @@ class Game {
             this.ctx.font = '24px sans-serif';
             this.ctx.textAlign = 'center';
             this.ctx.fillText('Courtyard', 530, 250);
+            if (this.rosters) this.rosters.draw(this.ctx);
 
             this.drawButtons();
             if (this.gadgetRig) this.gadgetRig.draw(this.ctx);
