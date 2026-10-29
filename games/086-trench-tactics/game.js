@@ -246,6 +246,7 @@ class Game {
         this.ctx = canvas.getContext('2d');
         this.state = 'TITLE';
         this.saveManager = new SaveManager();
+        this.campaignManager = new CampaignManager(this);
         this.soundEngine = new SoundEngine();
         this.inputManager = new InputManager();
         this.lastTime = performance.now();
@@ -275,6 +276,7 @@ class Game {
             if (this.state === 'PLAYING') this.pause(); else if (this.state === 'PAUSED') this.resume();
         });
         this.setupResize();
+        if (this.campaignManager) this.campaignManager.updateUI();
         requestAnimationFrame(this.loop.bind(this));
     }
 
@@ -587,15 +589,8 @@ class Game {
             this.ctx.font = '16px monospace';
             this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, 400);
         } else if (this.state === 'OPTIONS') {
-            this.ctx.fillStyle = 'rgba(5, 10, 18, 0.9)';
-            this.ctx.fillRect(0, 0, this.width, this.height);
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '30px monospace';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('OPTIONS', this.width/2, 80);
-            this.ctx.font = '16px monospace';
-            this.ctx.fillText('Volume (M to Mute): ' + (this.saveManager.data.options.soundVolume * 100).toFixed(0) + '%', this.width/2, 140);
-            this.ctx.fillText('Press [Esc] to Return', this.width/2, 300);
+            // UI handled by CampaignManager (DOM)
+
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(5, 10, 18, 0.7)';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -815,5 +810,5 @@ window.ARCADE_CARTRIDGE_META = {
     setting: "Deep Ocean Trench",
     lore: "Navigate the deep ocean trench in tactical turn-based blitz combat. Time slows down when you are still.",
     instructions: "WASD/Arrows to move, Space/Click to attack. Dodge enemy fire and score high.",
-    colors: { primary: "#061a2b", secondary: "#0d3554", accent: "#00e5ff", text: "#cdc3b9" }
+    colors: { primary: "#0d3554", secondary: "#0d3554", accent: "#00e5ff", text: "#cdc3b9" }
 };
