@@ -166,6 +166,8 @@ class Game {
         this.lastTime = 0;
         this.buttons = [];
 
+        this.phase2 = new Phase2Subsystem(this);
+
         // Resize harness
         this.resizeObserver = new ResizeObserver(() => this.handleResize());
         this.resizeObserver.observe(this.canvas.parentElement);
@@ -287,6 +289,8 @@ class Game {
                 }
             }
 
+            this.phase2.update(dt);
+
             if (this.saveManager.data.day > 30) {
                 this.state = 'GAMEOVER';
             }
@@ -378,6 +382,7 @@ class Game {
             this.ctx.fillText('Courtyard', 530, 250);
 
             this.drawButtons();
+            this.phase2.draw(this.ctx);
         } else if (this.state === 'GAMEOVER') {
             this.ctx.fillStyle = '#ff4081';
             this.ctx.font = 'bold 36px sans-serif';

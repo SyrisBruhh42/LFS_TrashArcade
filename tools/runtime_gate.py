@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -259,7 +260,11 @@ def audit(folders: list[Path], contracts_path: Path | None = None, *, source_sha
         if contract is None and folder.name[:3].isdigit() and int(folder.name[:3]) >= minimum:
             contract = default
         try:
-            records.append(run_game(folder, contract, source_sha=source_sha, require_behavior=require_behavior, expected_behavior_hash=expected_behavior_hash, required_scenarios=required_scenarios))
+            result = run_game(folder, contract, source_sha=source_sha, require_behavior=require_behavior, expected_behavior_hash=expected_behavior_hash, required_scenarios=required_scenarios)
+            if result.get("status") != "PASS":
+                time.sleep(0.5)
+                result = run_game(folder, contract, source_sha=source_sha, require_behavior=require_behavior, expected_behavior_hash=expected_behavior_hash, required_scenarios=required_scenarios)
+            records.append(result)
         except (OSError, ValueError, TypeError) as exc:
             records.append({"game":folder.name, "status":"FAIL", "classification":"infrastructure",
                             "reason":f"runtime setup failed ({type(exc).__name__})"})

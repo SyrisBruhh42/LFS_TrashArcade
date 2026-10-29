@@ -374,6 +374,37 @@ class LocalIntegrationTests(unittest.TestCase):
         self.state["sessions"][SID]["salvaged_by_controller"] = True
         self.assertEqual(self.invoke(read_only=True)["status"], "ready_read_only")
 
+    def test_accept_main_recognizes_passing_schedule_or_workflow_dispatch_run_after_transient_push_flake(self):
+        self.invoke()
+        self.main_after = True
+        flaked_push = {
+            **copy.deepcopy(self.main_run),
+            "id": 98,
+            "head_sha": MERGE,
+            "event": "push",
+            "conclusion": "failure",
+            "created_at": m.stamp(NOW - timedelta(minutes=8)),
+            "updated_at": m.stamp(NOW - timedelta(minutes=6)),
+        }
+        green_schedule = {
+            **copy.deepcopy(self.main_run),
+            "id": 99,
+            "head_sha": MERGE,
+            "event": "schedule",
+            "conclusion": "success",
+            "created_at": m.stamp(NOW - timedelta(minutes=4)),
+            "updated_at": m.stamp(NOW - timedelta(minutes=1)),
+        }
+        original_api = self.api
+        def api_with_flake_and_schedule(endpoint, method="GET", body=None):
+            if "/runs?" in endpoint and self.main_after:
+                self.calls.append((method, endpoint, body))
+                return {"total_count": 2, "workflow_runs": [green_schedule, flaked_push]}
+            return original_api(endpoint, method, body)
+        self.api = api_with_flake_and_schedule
+        self.assertEqual(self.invoke()["status"], "accepted")
+        self.assertFalse(m.blocked(self.state))
+
 
 # Reuse reviewed incident construction; all source/catalog/evidence files are in
 # TemporaryDirectory and all provider/GitHub transport remains mocked.

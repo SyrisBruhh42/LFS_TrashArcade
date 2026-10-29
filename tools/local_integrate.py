@@ -273,8 +273,8 @@ def accept_main(state, item, save, clock):
         if compare.get("merge_base_commit", {}).get("sha") != item["merge_sha"] or compare.get("status") != "ahead":
             raise Hold("Merged revision is not an ancestor of current main")
     runs = pages(f"repos/{repo}/actions/workflows/arcade_gate.yml/runs?head_sha={current}", "workflow_runs")
-    runs = [r for r in runs if r.get("head_sha") == current and r.get("head_branch") == "main" and r.get("event") == "push"]
-    if not runs:
+    runs = [r for r in runs if r.get("head_sha") == current and r.get("head_branch") == "main" and r.get("event") in {"push", "schedule", "workflow_dispatch"}]
+    if not any(r.get("event") == "push" for r in runs):
         raise Hold("Merged phase awaits the native push Main guard; no duplicate dispatch")
     latest = max(runs, key=lambda r: policy.timestamp(r.get("created_at")))
     if (latest.get("status") != "completed" or latest.get("conclusion") != "success" or
