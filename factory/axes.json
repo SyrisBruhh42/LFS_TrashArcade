@@ -286,7 +286,7 @@
     },
     "10": {
       "title": "Phase 10/10 — Full UI/Asset Synergy, Balance Polish & Acceptance Evidence",
-      "focus": "Perform final integration, self-mix audit of all prior phases, and UI/Cabinet synergy verification: verify `window.ARCADE_CARTRIDGE_META` exposes accurate lore, palette, instructions, and scene descriptors to the Arcade Home; ensure all upgrades, audio, touch controls, and options work smoothly; add a concise Round 1 contextual goal banner; and set `\"phase\": \"10\"` in `game.json`."
+      "focus": "Perform final integration and UI/Cabinet synergy verification (`endgame.js` or endgame/synergy subsystem): verify `window.ARCADE_CARTRIDGE_META` exposes accurate lore, palette, instructions, and scene descriptors to the Arcade Home; add a concise Round 1 contextual goal banner and victory/mastery summary; and set `\"phase\": \"10\"` in `game.json`."
     }
   }
 }

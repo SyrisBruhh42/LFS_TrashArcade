@@ -32,9 +32,20 @@ CATALOG_PATH = ROOT / "factory" / "flash_inspiration_catalog.json"
 CATALOG = json.loads(CATALOG_PATH.read_text(encoding="utf-8")) if CATALOG_PATH.is_file() else {}
 V1_MAX_ID = 51
 TOTAL_PHASES = 10
+PHASE_MODULE_MAP = {
+    2: "controls.js",
+    3: "world.js",
+    4: "rosters.js",
+    5: "bosses.js",
+    6: "progression.js",
+    7: "vfx.js",
+    8: "audio.js",
+    9: "campaign.js",
+    10: "endgame.js",
+}
 
 
-def archetype_guidance(genre: str, setting: str) -> dict:
+def archetype_guidance(genre: str, setting: str, phase: int = 1) -> dict:
     arch = (CATALOG.get("archetypes") or {}).get(genre, {})
     set_pal = (CATALOG.get("settingPalettes") or {}).get(setting, {})
     pal = arch.get("palette") or {}
@@ -58,9 +69,14 @@ def archetype_guidance(genre: str, setting: str) -> dict:
         "objective": arch.get("objective", f"Complete the {genre} objective and master the signature mechanic to unlock all milestones."),
         "howSteps": how_steps,
         "phaseAdaptation": (
-            f"Roster/Challenges: {phase_adapt.get('enemies', '5 genre-authentic challenge/client/enemy archetypes')}; "
-            f"Milestone Showdowns: {phase_adapt.get('bosses', '2 multi-phase milestone showdowns/finals')}; "
-            f"Progression: {phase_adapt.get('upgrades', 'Genre-authentic shop, wardrobe, venue, or perk upgrades')}."
+            f"Target Phase 4 Roster/Challenges: {phase_adapt.get('enemies', '5 genre-authentic challenge/client/enemy archetypes')}."
+            if int(phase) == 4 else (
+                f"Target Phase 5 Milestone Showdowns: {phase_adapt.get('bosses', '2 multi-phase milestone showdowns/finals')}."
+                if int(phase) == 5 else (
+                    f"Target Phase 6 Progression: {phase_adapt.get('upgrades', 'Genre-authentic shop, wardrobe, venue, or perk upgrades')}."
+                    if int(phase) == 6 else ""
+                )
+            )
         ),
     }
 
@@ -91,36 +107,51 @@ def build_advance_brief(folder: Path, meta: dict, baseline_sha: str = "") -> dic
         raise ValueError("Only unfinished phased games can advance")
     p_spec = AXES["phases"][str(target_phase)]
     files_summary = ", ".join(f"`{p.name}` ({p.stat().st_size} B)" for p in sorted(folder.iterdir()) if p.is_file())
+    game_js = folder / "game.js"
+    game_js_lines = len(game_js.read_text(encoding="utf-8").splitlines()) if game_js.is_file() else 0
+    mod_file = PHASE_MODULE_MAP.get(target_phase, f"phase{target_phase}.js")
 
     genre = meta["genre"]
     twist = meta["coreMechanic"]
     setting = meta["setting"]
-    g_info = archetype_guidance(genre, setting)
+    g_info = archetype_guidance(genre, setting, phase=target_phase)
     label = f"[Phase {target_phase}/{TOTAL_PHASES}] {slug} ({p_spec['title'].split('—')[-1].strip()})"
 
-    md = "\n".join([
+    sharding_rule = (
+        f"- **MANDATORY MODULE SHARDING (`game.js` is {game_js_lines} lines > 800):** "
+        f"Implement Phase {target_phase} inside a dedicated ES5/ES6 script `games/{slug}/{mod_file}` (`<= 400` lines), "
+        f"include `<script defer src=\"./{mod_file}\"></script>` before `game.js` in `games/{slug}/index.html`, "
+        f"and wire it into `game.js` using at most 15 lines of clean hook calls. Do NOT rewrite or reformat `game.js`."
+        if game_js_lines > 800 else
+        f"- **Modular Architecture:** Prefer implementing Phase {target_phase} in `games/{slug}/{mod_file}` (`<= 400` lines) "
+        f"loaded via `<script defer src=\"./{mod_file}\"></script>` in `index.html` and wired cleanly into `game.js`."
+    )
+
+    lines = [
         f"## SESSION DESIGN BRIEF — PHASE {target_phase} OF {TOTAL_PHASES} UPGRADE (assigned by the factory; do not re-roll)",
-        f"- **Mode:** IN-PLACE MULTI-SESSION GAME EXPANSION (`Phase {cur_phase}` -> `Phase {target_phase}` of `{TOTAL_PHASES}`).",
+        f"- **Mode:** SINGLE-PHASE ATOMIC EXPANSION (`Phase {cur_phase}` -> `Phase {target_phase}` of `{TOTAL_PHASES}`).",
         f"- **Existing game folder:** `games/{slug}/` (DO NOT create a new folder; edit/add game files ONLY inside `games/{slug}/`; include only the exact output of `python3 tools/build_registry.py` as the registry exception).",
         f"- **Game id:** `{gid}` | **Slug:** `{slug}` | **Title:** `{meta.get('title')}`",
         f"- **Axis A sub-genre** (`genre`): {genre}",
         f"- **Axis B mechanical twist** (`coreMechanic`): {twist}",
         f"- **Axis C setting / visual theme** (`setting`): {setting}",
-        f"- **Flash Portal Inspiration & Audience Goal:** Inspired by *{g_info['exemplars']}*. Target audience: {g_info['targetAudience']} ({g_info['audienceDesire']}). Target session pacing: **{g_info['sessionLength']}**.",
-        f"- **Art Direction & Palette (`{g_info['styleName']}`):** Primary bg `{g_info['bgPrimary']}` -> `{g_info['bgSecondary']}`, primary accent `{g_info['accent']}`, secondary accent `{g_info['secondary']}`. Avoid generic black-background neon circles unless the setting is specifically CRT Vector.",
-        f"- **Lore, Instructions & Smooth Options UI Contract:** Ensure the game provides a clear Lore Prologue on the Title screen, a logical 3-Panel `How to Play` guide (`1. Goal & Lore` | `2. How It Works & Why` | `3. Desktop & Touch Controls`), a smooth tabbed Options modal (`Audio & Comfort` | `Controls & Handedness` | collapsible `<details>` `Manage Save Data` so raw Base64 textareas never clutter the screen), and exposes `window.ARCADE_CARTRIDGE_META` for Arcade Home Cabinet synergy.",
+        f"- **Flash Portal Inspiration & UI Synergy:** Inspired by *{g_info['exemplars']}*. Preserve existing `How to Play` guide and `window.ARCADE_CARTRIDGE_META` compatibility without refactoring earlier phases.",
+        f"- **Art Direction & Palette (`{g_info['styleName']}`):** Primary bg `{g_info['bgPrimary']}` -> `{g_info['bgSecondary']}`, primary accent `{g_info['accent']}`, secondary accent `{g_info['secondary']}`.",
         f"- **Save key:** `arcade_game_{gid}_{slug}_v1` (preserve existing save compatibility).",
         f"- **Current files in `games/{slug}/`:** {files_summary}",
-        f"- **Self-Mix Step 1 (Prior-Phase Health & Backfill):** Audit `games/{slug}/` across Phases 1..{cur_phase}; if any prior-phase mechanic (such as Phase 6 progression/shop/draft, Lore/How-To-Play/Options polish, or touch controls) was skipped or stubbed, backfill a compact working implementation before adding Phase {target_phase}.",
-        f"- **Self-Mix Step 2 — Phase {target_phase} Deliverable ({p_spec['title']}):** {p_spec['focus']}",
-        f"- **Autonomous Genre Adaptation:** Adapt all Phase {target_phase} mechanics autonomously to `{genre}` x `{twist}` ({g_info['phaseAdaptation']}). Never pause for user input.",
+        f"- **Sole Deliverable — Phase {target_phase} ({p_spec['title']}):** {p_spec['focus']}",
+    ]
+    if g_info["phaseAdaptation"]:
+        lines.append(f"- **Genre Adaptation for Phase {target_phase}:** {g_info['phaseAdaptation']}")
+    lines.extend([
+        "- **STRICT SINGLE-PHASE FOCUS (`C_orthogonal = 1`):** Do NOT audit, backfill, or refactor Phases 1.." + str(cur_phase) + ". Focus 100% of your diff on Phase " + str(target_phase) + ".",
+        sharding_rule,
         f"- **Observed baseline commit:** `{baseline_sha or 'not supplied; local preview only'}`. Verify the assigned folder against this baseline.",
         "- **Generated registry:** Run `python3 tools/build_registry.py`; include only its exact `games/registry.js` output, then run `python3 tools/preflight.py`. Never hand-edit registry content.",
-        "- **Acceptance:** Demonstrate the assigned behavior, keyboard and touch start/restart, one complete core action loop, save/load/reset compatibility, and audio controls where present. Report exact checks and unverified behavior.",
-        "- **Efficiency:** Make the smallest coherent change. Reuse existing systems; remove redundant code where safe. Code length and number of new features are not acceptance criteria.",
+        "- **Acceptance:** Demonstrate the assigned Phase " + str(target_phase) + " behavior, keyboard and touch start/restart, one complete core action loop, save/load/reset compatibility, and audio controls where present.",
         f"- **Manifest update required:** Update `\"phase\": \"{target_phase}\"` inside `games/{slug}/game.json` while keeping `id`, `slug`, `genre`, `coreMechanic`, and `setting` unchanged.",
-        "- **Modular code guidance:** Prefer adding a focused module script (e.g. `<script defer src=\"./module.js\"></script>` in `index.html`) when `game.js` exceeds 600 lines. Never leave `TODO` or `To be implemented` stubs, and ensure the game boots and plays in Chrome with zero runtime errors.",
     ])
+    md = "\n".join(lines)
     return {
         "mode": "advance",
         "id": gid,
@@ -225,7 +256,12 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=None, help="Deterministic seed (default: OS entropy).")
     ap.add_argument("--baseline-sha", default="", help="Accepted main commit assigned by the controller.")
     ap.add_argument("--max-unfinished-games", type=int, default=2, help="Do not start a new game at this unfinished-game limit.")
+    ap.add_argument("positional_args", nargs="*", help=argparse.SUPPRESS)
     args = ap.parse_args()
+    if args.positional_args and args.source_root == ROOT:
+        cand_root = Path(args.positional_args[0])
+        if (cand_root / "games").is_dir():
+            args.source_root = cand_root
 
     if args.baseline_sha and not re.fullmatch(r"[0-9a-f]{40}", args.baseline_sha):
         raise SystemExit("pick_brief: baseline must be a full commit SHA")

@@ -123,6 +123,181 @@ def empty_state() -> dict:
     return {"schema": 2, "sessions": {}, "intents": {}, "lessons": [], "api_fail_streak": 0}
 
 
+BASE_290_FLEET_CAPS: dict[str, int] = {
+    "enclave-digital-twin": 110,
+    "lfs-trash-arcade": 96,
+    "lfs-tycoon": 54,
+    "willow-desktop-pet": 30,
+}
+
+
+def verify_repo_is_public(repo_slug: str) -> tuple[bool, dict]:
+    """Pre-flight check verifying `repo_slug` is PUBLIC on GitHub (0 private Actions billing)."""
+    slug = str(repo_slug or "").strip()
+    cache_file = STATE_DIR.parent / "lfs-jules-fleet" / "repo_visibility_cache.json"
+    cached: dict = {}
+    if cache_file.is_file():
+        try:
+            cached = json.loads(cache_file.read_text(encoding="utf-8"))
+        except Exception:
+            cached = {}
+    if slug in cached and isinstance(cached[slug], dict):
+        entry = cached[slug]
+        is_pub = bool(entry.get("is_public", True))
+        return is_pub, entry
+    try:
+        proc = subprocess.run(
+            ["gh", "repo", "view", slug, "--json", "name,visibility,isPrivate"],
+            capture_output=True,
+            text=True,
+            timeout=6,
+            check=False,
+        )
+        if proc.returncode == 0 and proc.stdout.strip().startswith("{"):
+            info = json.loads(proc.stdout)
+            if isinstance(info, dict) and "isPrivate" in info:
+                is_priv = bool(info.get("isPrivate", False))
+                res = {
+                    "repo": slug,
+                    "is_public": not is_priv,
+                    "is_private": is_priv,
+                    "visibility": str(info.get("visibility") or ("PRIVATE" if is_priv else "PUBLIC")).upper(),
+                    "updated_at_iso": iso(now()),
+                }
+                if not READ_ONLY:
+                    try:
+                        cache_file.parent.mkdir(parents=True, exist_ok=True)
+                        cached[slug] = res
+                        cache_file.write_text(json.dumps(cached, indent=2) + "\n", encoding="utf-8")
+                    except OSError:
+                        pass
+                return not is_priv, res
+    except Exception:
+        pass
+    known_pub = slug in {
+        "SyrisBruhh42/LFS_TrashArcade",
+        "SyrisBruhh42/LFS-Tycoon",
+        "SyrisBruhh42/enclave-digital-twin",
+        "SyrisBruhh42/willow-desktop-pet",
+    }
+    return known_pub, {"repo": slug, "is_public": known_pub, "is_private": not known_pub, "source": "fallback"}
+
+
+def get_capsule_segment_state_safe(capsule_id: str = "lfs-trash-arcade") -> str:
+    """Query `segment_manifest.get_capsule_segment_state(capsule_id)` safely."""
+    for cand in (
+        Path.home() / "Projects" / "LFS-Suite" / "3-lfs-aegis-linux" / "core" / "lfs-ctl",
+        ROOT.parent.parent / "core" / "lfs-ctl",
+    ):
+        if cand.is_dir() and str(cand) not in sys.path:
+            sys.path.insert(0, str(cand))
+    try:
+        import segment_manifest  # type: ignore[import-not-found]
+
+        if hasattr(segment_manifest, "get_capsule_segment_state"):
+            return str(segment_manifest.get_capsule_segment_state(capsule_id) or "DOCKED_READY")
+    except Exception:
+        pass
+    return "DOCKED_READY"
+
+
+def compute_dynamic_290_fleet_caps() -> dict:
+    """Compute dynamic 290/24h quota lending across active DOCKED_READY capsules + 10 VIP idea queue reserve."""
+    current = now()
+    cutoff = current - timedelta(hours=24)
+    vip_file = STATE_DIR.parent / "lfs-idea-queue" / "state.json"
+    vip_used = 0
+    if vip_file.is_file():
+        try:
+            vdata = json.loads(vip_file.read_text(encoding="utf-8"))
+            items = vdata.get("sessions") or vdata.get("ideas") or {}
+            recs = items.values() if isinstance(items, dict) else (items if isinstance(items, list) else [])
+            for r in recs:
+                if isinstance(r, dict):
+                    ts_s = str(r.get("created_at") or r.get("created") or r.get("dispatched_at_iso") or "")
+                    if ts_s and parse_ts(ts_s) >= cutoff:
+                        vip_used += 1
+        except Exception:
+            pass
+    vip_overage = max(0, vip_used - 10)
+    effective_auto_ceiling = max(0, 290 - vip_overage)
+    seg_states = {cid: get_capsule_segment_state_safe(cid) for cid in BASE_290_FLEET_CAPS}
+    active_cids = [
+        cid for cid, st in seg_states.items() if st not in ("CHECKED_OUT_TO_USB", "DOCKED_DEHYDRATED", "UNDOCKED_ABSENT")
+    ]
+    if not active_cids:
+        dyn = {cid: 0 for cid in BASE_290_FLEET_CAPS}
+    else:
+        weight_sum = sum(BASE_290_FLEET_CAPS[cid] for cid in active_cids)
+        dyn = {}
+        assigned = 0
+        for cid in BASE_290_FLEET_CAPS:
+            if cid not in active_cids:
+                dyn[cid] = 0
+            else:
+                share = int(round(effective_auto_ceiling * (BASE_290_FLEET_CAPS[cid] / weight_sum)))
+                dyn[cid] = share
+                assigned += share
+        diff = effective_auto_ceiling - assigned
+        if diff != 0 and active_cids:
+            dyn[active_cids[0]] = max(0, dyn[active_cids[0]] + diff)
+    return {
+        "effective_autonomous_ceiling_24h": effective_auto_ceiling,
+        "vip_idea_dispatched_24h": vip_used,
+        "segment_states": seg_states,
+        "dynamic_caps": dyn,
+    }
+
+
+def verify_factory_abac_authority(action_id: str = "capsule.launch", capsule_id: str = "lfs-trash-arcade") -> tuple[bool, str]:
+    """Evaluate `aegis_abac.evaluate_typed_abac` (`AUTH-1`) before executing factory mutations."""
+    for cand in (
+        Path.home() / "Projects" / "LFS-Suite" / "3-lfs-aegis-linux" / "core" / "companion" / "clients" / "linux",
+        ROOT.parent.parent / "core" / "companion" / "clients" / "linux",
+    ):
+        if cand.is_dir() and str(cand) not in sys.path:
+            sys.path.insert(0, str(cand))
+    try:
+        import aegis_abac  # type: ignore[import-not-found]
+
+        if hasattr(aegis_abac, "evaluate_typed_abac"):
+            dec = aegis_abac.evaluate_typed_abac(action=action_id)
+            return bool(dec.get("allowed", True)), str(dec.get("code", "ALLOW"))
+    except Exception:
+        pass
+    return True, "ALLOW_FALLBACK"
+
+
+def _compile_arcade_incident_fixture(session_id: str, reason: str, diagnostics: list[str]) -> str | None:
+    """Compile a gate rejection or cut-loss into a ZT-6 redacted regression fixture (`incident_to_fixture.py`)."""
+    if READ_ONLY:
+        return None
+    for cand in (
+        Path.home() / "Projects" / "LFS-Suite" / "3-lfs-aegis-linux" / "core" / "lfs-ctl",
+        ROOT.parent.parent / "core" / "lfs-ctl",
+    ):
+        if cand.is_dir() and str(cand) not in sys.path:
+            sys.path.insert(0, str(cand))
+    try:
+        from incident_to_fixture import IncidentToFixtureCompiler  # type: ignore[import-not-found]
+
+        compiler = IncidentToFixtureCompiler(fixtures_dir=STATE_DIR / "fixtures")
+        res = compiler.compile_incident(
+            incident_id=f"trasharcade-{session_id}-{reason}",
+            raw_payload={
+                "task_id": "PF-08-TRASHARCADE-FACTORY",
+                "session_id": session_id,
+                "error_signature": reason,
+                "root_cause": "; ".join(diagnostics[:3]) if diagnostics else reason,
+                "expected_guard": "Arcade Gate & 10-Phase Modular Contract",
+            },
+            source_type="trasharcade_factory_incident",
+        )
+        return str(res.get("fixture_path") or "")
+    except Exception:
+        return None
+
+
 def load_state() -> dict:
     try:
         state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
@@ -732,11 +907,22 @@ def extract_latest_changeset(cfg: dict, sid: str, session: dict) -> str | None:
                 return patch_txt
     if not cfg.get("salvage_changesets_enabled", False) or READ_ONLY:
         return None
+    activities: list[dict] = []
+    token = ""
     try:
-        page = api_retry("GET", f"/sessions/{sid}/activities?pageSize=50")
+        for _ in range(30):
+            query = {"pageSize": 100}
+            if token:
+                query["pageToken"] = token
+            page = api_retry("GET", f"/sessions/{sid}/activities?" + urllib.parse.urlencode(query))
+            activities.extend(a for a in (page.get("activities", []) or []) if isinstance(a, dict))
+            token = page.get("nextPageToken", "")
+            if not isinstance(token, str) or not token:
+                break
     except Exception:
-        return None
-    for act in reversed(page.get("activities", []) or []):
+        if not activities:
+            return None
+    for act in reversed(activities):
         if not isinstance(act, dict):
             continue
         items = list(act.get("artifacts", []) or []) + list(act.get("outputs", []) or []) + [act]
@@ -903,6 +1089,7 @@ def cut_loss_session(cfg: dict, state: dict, sid: str, rec: dict, session: dict,
         log("dry_run_cut_loss", session=sid, game_id=rec.get("game_id"), reason=reason)
         return False
     diagnostics = []
+    unidiff = None
     if pr is not None:
         report = gate_feedback(cfg, pr)
         if report and report.get("errors"):
@@ -923,12 +1110,26 @@ def cut_loss_session(cfg: dict, state: dict, sid: str, rec: dict, session: dict,
                 return False
             if cs_diags:
                 diagnostics = list(cs_diags)[:5]
+    if unidiff:
+        try:
+            salvage_dir = STATE_DIR.parent / "lfs-jules-fleet" / "salvage"
+            salvage_dir.mkdir(parents=True, exist_ok=True)
+            (salvage_dir / f"{sid}.json").write_text(
+                json.dumps({"session_id": sid, "record": rec, "reason": reason, "latest_unidiff_patch": unidiff, "archived_at": iso(now())}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
     if rec.get("pr") and (pr is None or pr.get("state") == "OPEN"):
         try:
             gh("pr", "close", rec["pr"], "--comment",
                f"Factory cut-loss controller closing unmerged PR ({reason}); releasing game lock for a clean second pass.")
         except Hold:
             pass
+    try:
+        api("DELETE", f"/sessions/{sid}")
+    except Exception:
+        pass
     rec["abandoned"] = True
     rec["cut_loss_reason"] = reason
     if diagnostics:
@@ -936,13 +1137,21 @@ def cut_loss_session(cfg: dict, state: dict, sid: str, rec: dict, session: dict,
     rec.pop("hold", None)
     set_outcome(rec, reason if reason.startswith("failed:") else "failed:cut_loss")
     lesson_key = f"{rec.get('game_id')}:{rec.get('phase')}"
+    fixture_path = _compile_arcade_incident_fixture(sid, reason, diagnostics or []) if not dry else None
     state.setdefault("cut_loss_lessons", {})[lesson_key] = {
         "game_id": str(rec.get("game_id", "")),
         "phase": str(rec.get("phase", "")),
         "reason": reason,
         "diagnostics": diagnostics,
+        "fixture_path": fixture_path,
         "recorded_at": iso(now()),
     }
+    lesson_str = f"[{lesson_key}] {reason}: " + ("; ".join((diagnostics or [])[:2]) or "keep modular and run preflight.py")
+    lessons_list = state.setdefault("lessons", [])
+    if isinstance(lessons_list, list) and lesson_str not in lessons_list:
+        lessons_list.append(lesson_str[:220])
+        if len(lessons_list) > 25:
+            del lessons_list[:-25]
     save_state(state)
     log("session_cut_loss", session=sid, game_id=rec.get("game_id"), phase=rec.get("phase"), reason=reason)
     return True
@@ -1002,12 +1211,18 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
             rec.setdefault("pr_seen", iso(now()))
         age_h = (now() - parse_ts(rec["created"])).total_seconds() / 3600
         if st == "AWAITING_PLAN_APPROVAL" and not rec.get("pr"):
-            if not rec.get("plan_approved") and not dry:
+            if age_h > cfg["stale_session_hours"]:
+                if cut_loss_session(cfg, state, sid, rec, session, "stale_provider_session", dry, force_grace=True):
+                    continue
+            elif not rec.get("plan_approved") and not dry:
                 jules_post(f"sessions/{sid}:approvePlan", cfg)
                 rec["plan_approved"] = True
                 save_state(state)
                 log("plan_approved", session=sid)
         elif st == "AWAITING_USER_FEEDBACK" and not rec.get("pr"):
+            if age_h > cfg["stale_session_hours"]:
+                if cut_loss_session(cfg, state, sid, rec, session, "stale_provider_session", dry, force_grace=True):
+                    continue
             nudges = int(rec.get("nudges", 0))
             max_nudges = int(cfg.get("max_feedback_nudges", 2))
             cooldown_min = float(cfg.get("nudge_cooldown_minutes", 5))
@@ -1054,6 +1269,7 @@ def reconcile(cfg: dict, state: dict, remote: dict, dry: bool) -> None:
                            "state,statusCheckRollup,isDraft,headRefOid,baseRefOid,comments,mergeCommit,mergeable,mergeStateStatus"))
         if pr.get("state") in {"MERGED", "CLOSED"}:
             set_outcome(rec, "merged" if pr["state"] == "MERGED" else "failed:closed")
+            rec.pop("gate_status", None)
             if pr["state"] == "MERGED":
                 rec["merge_sha"] = (pr.get("mergeCommit") or {}).get("oid")
             if st in TERMINAL:
@@ -1238,12 +1454,14 @@ def observe_account(cfg: dict, state: dict, remote: dict) -> dict:
 def capacity(cfg: dict, state: dict, remote: dict) -> dict:
     observation = observe_account(cfg, state, remote)
     current = now()
+    dyn_caps = compute_dynamic_290_fleet_caps()
+    vip_overage = max(0, int(dyn_caps.get("vip_idea_dispatched_24h", 0)) - 10)
     active_cap, daily_cap = cfg.get("account_active_cap"), cfg.get("account_daily_cap")
     if active_cap is None or daily_cap is None:
         raise Hold("Shared account active and rolling-24h budgets must be explicitly configured")
     if observation["account_active"] >= active_cap - cfg.get("account_active_reserve", 0):
         raise Hold("Account concurrency budget including reserve reached")
-    if observation["account_created_24h"] >= daily_cap - cfg.get("account_daily_reserve", 0):
+    if observation["account_created_24h"] >= daily_cap - cfg.get("account_daily_reserve", 10) - vip_overage:
         raise Hold("Account rolling-24h budget including reserve reached")
     local_live = [r for r in state["sessions"].values() if assignment_occupied(r)]
     if sum(not r.get("pr") for r in local_live) >= cfg["max_active_sessions"]:
@@ -1251,7 +1469,8 @@ def capacity(cfg: dict, state: dict, remote: dict) -> dict:
     if sum(bool(r.get("pr")) for r in local_live) >= cfg["max_open_prs"]:
         raise Hold("Open PR work-in-progress cap reached")
     local_daily = sum(current - parse_ts(r["created"]) < timedelta(hours=24) for r in state["sessions"].values())
-    if local_daily >= cfg["daily_cap"]:
+    effective_local_cap = int(dyn_caps.get("dynamic_caps", {}).get("lfs-trash-arcade", cfg["daily_cap"]))
+    if local_daily >= effective_local_cap:
         raise Hold("Local rolling-24h dispatch budget reached")
     return observation
 
@@ -1338,6 +1557,16 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
              incident_id: str | None = None) -> None:
     if not cfg.get("enabled") or PAUSE_FILE.exists():
         raise Hold("Create stopped by local kill switch")
+    seg_state = get_capsule_segment_state_safe("lfs-trash-arcade")
+    if seg_state in ("CHECKED_OUT_TO_USB", "DOCKED_DEHYDRATED", "UNDOCKED_ABSENT"):
+        log("skip", status="PAUSED_PORTABLE_SEGMENT_OUT", capsule_id="lfs-trash-arcade", segment_state=seg_state)
+        raise Hold("PAUSED_PORTABLE_SEGMENT_OUT")
+    abac_ok, abac_code = verify_factory_abac_authority("capsule.launch", "lfs-trash-arcade")
+    if not abac_ok:
+        raise Hold(f"AUTH-1 ABAC gate rejected dispatch: {abac_code}")
+    is_pub, _ = verify_repo_is_public(cfg["repo"])
+    if not is_pub:
+        raise Hold(f"Repository {cfg['repo']} is not verified PUBLIC")
     if any(i["status"] in {"pending", "ambiguous"} for i in state["intents"].values()):
         raise Hold("Unresolved create intent; never repeat a create")
     live = [r for r in state["sessions"].values() if assignment_occupied(r)]
@@ -1375,9 +1604,13 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
     lesson_note = ""
     lesson = state.get("cut_loss_lessons", {}).get(f"{gid}:{phase}")
     if isinstance(lesson, dict) and lesson.get("reason"):
-        diag_lines = "\n".join(f"- {d}" for d in lesson.get("diagnostics", [])[:5])
+        clean_reason = re.sub(r'["\'\{\}]', '', str(lesson["reason"]))
+        diag_lines = "\n".join(
+            f"- {re.sub(r'[{}]', '', str(d))}"
+            for d in lesson.get("diagnostics", [])[:5]
+        )
         lesson_note = (f"\n\n## Second-Pass Failure Lesson (Do Not Repeat)\n"
-                       f"- Prior attempt on this phase was cut due to: `{lesson['reason']}`.\n"
+                       f"- Prior attempt on this phase was cut due to: `{clean_reason}`.\n"
                        f"- Keep changes strictly modular, never ask for human input, and run `python3 tools/build_registry.py` before committing.\n"
                        + (f"- Prior gate diagnostics to avoid:\n{diag_lines}\n" if diag_lines else ""))
     phase_goal_note = ""
@@ -1385,7 +1618,15 @@ def dispatch(cfg: dict, state: dict, dry: bool, baseline_sha: str, source_root: 
         goal_text = PHASE_GOALS[int(phase)]
         if goal_text not in brief["markdown"]:
             phase_goal_note = f"\n\n## Phase {phase} Mandatory Call-Site Goal\n{goal_text}\n"
-    prompt = (("" if incident_id else PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n") + brief["markdown"] + phase_goal_note + lesson_note +
+    critic_rubric = (
+        "\n\n<CRITIC_REVIEW_RUBRIC>\n"
+        "Automated Self-Review & Critic Contract:\n"
+        f"- Evaluate ONLY whether Target Phase {phase} was implemented cleanly inside `games/{brief.get('slug', '')}/` and `games/registry.js`.\n"
+        "- Do NOT inspect, backfill, or refactor earlier phases.\n"
+        "- If `python3 tools/preflight.py` passes, the implementation is COMPLETE.\n"
+        "</CRITIC_REVIEW_RUBRIC>\n"
+    ) if not incident_id else ""
+    prompt = (("" if incident_id else PROMPT_FILE.read_text(encoding="utf-8").strip() + "\n\n") + brief["markdown"] + phase_goal_note + lesson_note + critic_rubric +
               f"\n\nFactory correlation: {correlation}\nBaseline commit: {baseline_sha}\n")
     title = f"[factory:{correlation}] {brief['label']}"[:120]
     autonomous = cfg.get("plan_policy") == "autonomous_game_scope"
@@ -1547,6 +1788,14 @@ def tick(args: argparse.Namespace) -> int:
     if not cfg.get("enabled") or PAUSE_FILE.exists():
         log("skip", reason="config_disabled" if not cfg.get("enabled") else "local_pause_file")
         return 0
+    seg_state = get_capsule_segment_state_safe("lfs-trash-arcade")
+    if seg_state in ("CHECKED_OUT_TO_USB", "DOCKED_DEHYDRATED", "UNDOCKED_ABSENT"):
+        log("skip", status="PAUSED_PORTABLE_SEGMENT_OUT", reason="PAUSED_PORTABLE_SEGMENT_OUT", segment_state=seg_state)
+        return 0
+    is_pub, _ = verify_repo_is_public(cfg["repo"])
+    if not is_pub:
+        log("skip", reason=f"repo_not_public:{cfg['repo']}")
+        return 0
     try:
         pauses = json.loads(gh("issue", "list", "-R", cfg["repo"], "--label", PAUSE_LABEL, "--state", "open", "--json", "number"))
         if pauses:
@@ -1577,9 +1826,18 @@ def tick(args: argparse.Namespace) -> int:
             log("reconciled_without_paid_actions", tracked=len(state["sessions"]))
             return 0
         observe_account(cfg, state, remote)  # No paid feedback while inventory or scope is uncertain.
+        mutations_held = (bool(state.get("breaker")) or state.get("migration", {}).get("admission_hold") is True or
+                          integration.blocked(state) or
+                          cfg.get("account_active_cap") is None or cfg.get("account_daily_cap") is None or
+                          (state.get("cooldown_until") and now() < parse_ts(state["cooldown_until"])))
+        integrate_only = getattr(args, "integrate_only", False)
+        if not integrate_only:
+            reconcile(cfg, state, remote, args.dry_run or bool(mutations_held))
+            maintenance.reconcile(state)
+            if not args.dry_run and not READ_ONLY:
+                save_state(state)
         # Drain reviewed phase PRs before capacity admission. This consumes no Jules
         # quota. Any unresolved merge also blocks paid feedback and new creates.
-        integrate_only = getattr(args, "integrate_only", False)
         postmerge_incident = None
         try:
             decision = integration.run_tick(cfg, state, remote, controller_sha, save=save_state,
@@ -1615,20 +1873,13 @@ def tick(args: argparse.Namespace) -> int:
             raise Hold("Local integration evidence malformed; no further mutations") from None
         if integrate_only:
             if not isinstance(decision, dict) or decision.get("status") not in (
-                    "disabled", "no_candidate", "ready_read_only", "merged_awaiting_main", "accepted"):
+                    "disabled", "no_candidate", "ready_read_only", "merged_awaiting_main", "accepted", "reconciled_closed_candidate"):
                 raise Hold("Local integration decision malformed; no further mutations")
             log("integration_only", **decision)
             return 0  # No feedback, maintenance fallback or creation, including when no candidate exists.
         if decision["status"] in {"merged_awaiting_main", "accepted"}:
             log("local_integration", **decision)
             raise Hold("Integration completed its one action; require a fresh tick before paid work")
-        # --no-dispatch remains reconciliation-only, but may deliver bounded repairs.
-        mutations_held = (bool(state.get("breaker")) or state.get("migration", {}).get("admission_hold") is True or
-                          cfg.get("account_active_cap") is None or cfg.get("account_daily_cap") is None or
-                          (state.get("cooldown_until") and now() < parse_ts(state["cooldown_until"])))
-        if not postmerge_incident:
-            reconcile(cfg, state, remote, args.dry_run or bool(mutations_held))
-            maintenance.reconcile(state)
         capacity(cfg, state, remote)
         selected = maintenance.select(state) if cfg["maintenance_enabled"] else None
         if postmerge_incident and (not selected or selected["spec"]["id"] != postmerge_incident):

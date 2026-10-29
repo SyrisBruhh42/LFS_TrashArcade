@@ -49,6 +49,17 @@ MARKERS = (
 SCRIPT_RE = re.compile(r"<script\b([^>]*)>([\s\S]*?)</script\s*>", re.I)
 SVG_NS_RE = re.compile(r"https?://www\.w3\.org/(?:2000/svg|1999/xlink|1999/xhtml|XML/1998/namespace)", re.I)
 STUB_RE = re.compile(r"//\s*(?:TODO\b|FIXME\b|To be implemented\b|placeholder\b)", re.I)
+JS_BRANCH_RE = re.compile(r"\b(?:if|else\s+if|for|while|case|catch)\b|\?\s*[^:?]+\s*:|&&|\|\|")
+JS_FUNC_DEF_RE = re.compile(
+    r"(?:\bfunction\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\()|(?:^\s*(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^;{}()]*\)\s*\{)",
+    re.M,
+)
+JS_CALL_SITE_RE = re.compile(r"\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\(")
+JS_STRING_LIT_RE = re.compile(r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)""")
+JS_AST_TOKEN_RE = re.compile(
+    r"\b(?:const|let|var|function|return|if|else|for|while|switch|case|break|continue|new|this|class|try|catch)\b"
+    r"|[+\-*/%&|^!~=<>?:]+|\b[A-Za-z_$][A-Za-z0-9_$]*\s*\("
+)
 FORBIDDEN = (
     (re.compile(r"<script[^>]*\btype\s*=\s*['\"]?module", re.I), "<script type=\"module\"> is forbidden (blocked over file://)"),
     (re.compile(r"https?://", re.I), "external URL (http:// or https://) found; everything must be inline and offline"),
@@ -58,6 +69,62 @@ FORBIDDEN = (
     (re.compile(r"\bXMLHttpRequest\b"), "XMLHttpRequest is forbidden (blocked over file://)"),
 )
 
+
+def compute_js_ast_metrics(js_sources: list[str]) -> dict:
+    """Computes McCabe cyclomatic complexity, structural AST token count, string literal count, and call graph."""
+    src = re.sub(r"/\*[\s\S]*?\*/|//[^\n]*", "", "\n".join(js_sources))
+    string_nodes = len(JS_STRING_LIT_RE.findall(src))
+    no_strings = JS_STRING_LIT_RE.sub('""', src)
+    mccabe = 1 + len(JS_BRANCH_RE.findall(no_strings))
+    ast_nodes = len(JS_AST_TOKEN_RE.findall(no_strings))
+    functions = {
+        m.group(1) or m.group(2)
+        for m in JS_FUNC_DEF_RE.finditer(no_strings)
+        if (m.group(1) or m.group(2)) not in {"if", "for", "while", "switch", "catch", "function", "return"}
+    }
+    calls = {m.group(1) for m in JS_CALL_SITE_RE.finditer(no_strings)}
+    return {
+        "mccabe": mccabe,
+        "ast_nodes": ast_nodes,
+        "string_nodes": string_nodes,
+        "functions": functions,
+        "calls": calls,
+    }
+
+
+def load_base_js_sources(slug: str, base_sha: str) -> tuple[int, list[str]]:
+    """Loads baseline phase and JS sources for `games/<slug>` from git revision `base_sha`."""
+    if not base_sha or not re.fullmatch(r"[0-9a-f]{40}", base_sha):
+        return 0, []
+    try:
+        meta_raw = subprocess.run(
+            ["git", "show", f"{base_sha}:games/{slug}/game.json"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        ).stdout
+        base_phase = int(json.loads(meta_raw).get("phase", "0"))
+    except Exception:
+        return 0, []
+    try:
+        ls_out = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", base_sha, "--", f"games/{slug}"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+    except Exception:
+        return base_phase, []
+    blobs: list[str] = []
+    for rel in sorted(ls_out):
+        if rel.endswith(".js"):
+            res = subprocess.run(["git", "show", f"{base_sha}:{rel}"], cwd=ROOT, capture_output=True, text=True)
+            if res.returncode == 0:
+                blobs.append(res.stdout)
+        elif rel.endswith("index.html"):
+            res = subprocess.run(["git", "show", f"{base_sha}:{rel}"], cwd=ROOT, capture_output=True, text=True)
+            if res.returncode == 0:
+                for m in SCRIPT_RE.finditer(res.stdout):
+                    attrs, body = m.group(1) or "", m.group(2) or ""
+                    if not re.search(r"\bsrc\s*=", attrs, re.I) and body.strip():
+                        blobs.append(body)
+    return base_phase, blobs
 
 
 class Report:
@@ -146,7 +213,7 @@ def check_manifest(folder: Path, rep: Report) -> dict | None:
     return meta
 
 
-def check_files(folder: Path, meta: dict | None, rep: Report, js_files: list[tuple[str, str]]) -> None:
+def check_files(folder: Path, meta: dict | None, rep: Report, js_files: list[tuple[str, str]], base_sha: str | None = None, target_slugs: set[str] | None = None) -> None:
     where = f"games/{folder.name}"
     if folder.is_symlink():
         rep.err(where, "symlink game folder forbidden.")
@@ -228,6 +295,43 @@ def check_files(folder: Path, meta: dict | None, rep: Report, js_files: list[tup
         stub_m = STUB_RE.search(all_js_text)
         if stub_m:
             rep.err(where, f"unfinished stub comment `{stub_m.group(0).strip()}` is forbidden; implement all features completely.")
+        cur_metrics = compute_js_ast_metrics(js_only_blobs)
+        cur_phase = int(meta.get("phase", "1")) if str(meta.get("phase", "1")).isdigit() else 1
+        min_total_mccabe = 10 + 6 * (cur_phase - 1)
+        min_total_ast = 80 + 50 * (cur_phase - 1)
+        if cur_metrics["mccabe"] < min_total_mccabe or cur_metrics["ast_nodes"] < min_total_ast:
+            rep.err(
+                where,
+                f"Phase {cur_phase} AST/cyclomatic floor not met: McCabe={cur_metrics['mccabe']} (min {min_total_mccabe}), "
+                f"AST_nodes={cur_metrics['ast_nodes']} (min {min_total_ast}).",
+            )
+        if base_sha and (target_slugs is None or folder.name in target_slugs):
+            base_phase, base_blobs = load_base_js_sources(folder.name, base_sha)
+            if base_blobs and cur_phase > base_phase >= 1:
+                base_metrics = compute_js_ast_metrics(base_blobs)
+                delta_mccabe = cur_metrics["mccabe"] - base_metrics["mccabe"]
+                delta_ast = cur_metrics["ast_nodes"] - base_metrics["ast_nodes"]
+                delta_strings = max(0, cur_metrics["string_nodes"] - base_metrics["string_nodes"])
+                if delta_mccabe < 8 or delta_ast < 65:
+                    rep.err(
+                        where,
+                        f"Phase {base_phase}->{cur_phase} upgrade lacks substantive logic: "
+                        f"Delta McCabe={delta_mccabe} (min +8), Delta AST={delta_ast} (min +65). "
+                        f"Metadata-only or stubbed phase increments are rejected.",
+                    )
+                if delta_ast > 0 and delta_strings > max(4, int(0.20 * delta_ast)):
+                    rep.err(
+                        where,
+                        f"Phase {base_phase}->{cur_phase} string-literal inflation: {delta_strings} new strings vs "
+                        f"{delta_ast} AST nodes (>20% cap). Add executable control flow, not text padding.",
+                    )
+                new_funcs = cur_metrics["functions"] - base_metrics["functions"] - {"init", "update", "draw", "render", "loop", "reset", "start"}
+                if new_funcs and not (new_funcs & cur_metrics["calls"]):
+                    rep.err(
+                        where,
+                        f"Phase {base_phase}->{cur_phase} dead-code injection: new functions {sorted(new_funcs)[:5]} "
+                        f"are never called from the active game loop.",
+                    )
 
 
 
@@ -320,11 +424,23 @@ def main() -> int:
     if not folders:
         rep.err("games", "no game folders found.")
 
+    diff_base_sha: str | None = None
+    diff_target_slugs: set[str] | None = None
+    if args.targets_file and args.targets_file.is_file():
+        try:
+            tev = json.loads(args.targets_file.read_text(encoding="utf-8"))
+            if isinstance(tev, dict) and re.fullmatch(r"[0-9a-f]{40}", str(tev.get("base_sha", ""))):
+                diff_base_sha = str(tev["base_sha"])
+            if isinstance(tev, dict) and isinstance(tev.get("targets"), list):
+                diff_target_slugs = {str(t) for t in tev["targets"]}
+        except Exception:
+            pass
+
     metas: list[tuple[Path, dict]] = []
     js_files: list[tuple[str, str]] = []
     for folder in folders:
         meta = check_manifest(folder, rep)
-        check_files(folder, meta, rep, js_files)
+        check_files(folder, meta, rep, js_files, base_sha=diff_base_sha, target_slugs=diff_target_slugs)
         if meta:
             metas.append((folder, meta))
     run_js_syntax(js_files, rep)
