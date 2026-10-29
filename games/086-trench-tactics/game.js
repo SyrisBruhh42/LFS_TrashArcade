@@ -293,6 +293,7 @@ class Game {
         this.height = canvas.height;
         this.grid = new Grid(this.width, this.height, 40);
         this.world = new World(this.width, this.height);
+        this.vfx = new VFXManager();
 
         this.player = null;
         this.enemies = [];
@@ -392,6 +393,7 @@ class Game {
     update(dt) {
         if (this.world) this.world.update(dt);
         if (this.upgradeManager) this.upgradeManager.update(dt, this.inputManager);
+        if (this.vfx) this.vfx.update(dt);
         if (this.state === 'UPGRADE') return;
         if (this.state === 'TITLE') {
             document.getElementById('back-button').classList.remove('hidden');
@@ -459,10 +461,19 @@ class Game {
                     } else {
                         this.bossActive = new DreadnoughtOmega(sx, sy, this.grid.cellSize);
                     }
+                    if (this.vfx) {
+                        this.vfx.addShake(10, 0.8);
+                        this.vfx.addFloatingText(this.width/2, this.height/2, "WARNING: BOSS APPROACHING", "#e74c3c");
+                    }
                     this.enemies.push(this.bossActive);
                 }
             } else {
                 if (this.bossActive.hp <= 0) {
+                    if (this.vfx) {
+                        this.vfx.burst(this.bossActive.x + this.bossActive.size/2, this.bossActive.y + this.bossActive.size/2, '#00e5ff', 50);
+                        this.vfx.addShake(15, 0.5);
+                        this.vfx.addFloatingText(this.bossActive.x, this.bossActive.y, "+100 Boss Defeated!", '#00e5ff');
+                    }
                     this.bossActive = null;
                     this.score += 100;
                     if (this.upgradeManager) this.upgradeManager.triggerDraft();
@@ -480,14 +491,29 @@ class Game {
                 for (let j = this.enemies.length - 1; j >= 0; j--) {
                     let e = this.enemies[j];
                     if (this.checkCollision(p, e)) {
+                        let points = 10 * (this.upgradeManager ? this.upgradeManager.synergyMultiplier : 1);
                         if (e.takeDamage) {
                             if (e.takeDamage()) {
                                 this.enemies.splice(j, 1);
-                                this.score += 10 * (this.upgradeManager ? this.upgradeManager.synergyMultiplier : 1);
+                                this.score += points;
+                                if (this.vfx) {
+                                    this.vfx.burst(e.x + e.size/2, e.y + e.size/2, '#00e5ff', 15);
+                                    this.vfx.addFloatingText(e.x, e.y, "+" + points, '#00e676');
+                                    this.vfx.addShake(3, 0.1);
+                                }
+                            } else {
+                                if (this.vfx) {
+                                    this.vfx.burst(e.x + e.size/2, e.y + e.size/2, '#cdc3b9', 5);
+                                }
                             }
                         } else {
                             this.enemies.splice(j, 1);
-                            this.score += 10 * (this.upgradeManager ? this.upgradeManager.synergyMultiplier : 1);
+                            this.score += points;
+                            if (this.vfx) {
+                                this.vfx.burst(e.x + e.size/2, e.y + e.size/2, '#00e5ff', 15);
+                                this.vfx.addFloatingText(e.x, e.y, "+" + points, '#00e676');
+                                this.vfx.addShake(3, 0.1);
+                            }
                         }
                         this.projectiles.splice(i, 1);
                         this.soundEngine.playHit();
@@ -500,6 +526,10 @@ class Game {
                 let e = this.enemies[i];
                 e.update(effectiveDt, this.player);
                 if (this.checkCollision(this.player, e) && this.player.invulnerable <= 0) {
+                    if (this.vfx) {
+                        this.vfx.burst(this.player.x + this.player.size/2, this.player.y + this.player.size/2, '#e74c3c', 30);
+                        this.vfx.addShake(10, 0.4);
+                    }
                     this.soundEngine.playHit();
                     this.state = 'GAME_OVER';
                     if (this.score > this.saveManager.data.highScore) {
@@ -531,6 +561,7 @@ class Game {
     }
 
     draw() {
+        if (this.vfx) this.vfx.applyShake(this.ctx);
         this.ctx.fillStyle = '#050a12';
         this.ctx.fillRect(0, 0, this.width, this.height);
         if (this.world) this.world.draw(this.ctx);
@@ -623,6 +654,11 @@ class Game {
             this.ctx.font = '20px monospace';
             this.ctx.fillText(`Score: ${this.score}`, this.width/2, this.height/2);
             this.ctx.fillText('Press Space or Click to Restart', this.width/2, this.height/2 + 40);
+        }
+
+        if (this.vfx) {
+            this.vfx.draw(this.ctx);
+            this.vfx.clearShake(this.ctx);
         }
     }
 
