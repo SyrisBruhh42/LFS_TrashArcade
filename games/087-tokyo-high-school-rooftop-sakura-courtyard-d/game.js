@@ -161,6 +161,7 @@ class Game {
         this.saveManager = new SaveManager();
         this.sound = new SoundEngine();
         this.input = new InputManager(this.canvas);
+        if (typeof GadgetRig !== 'undefined') this.gadgetRig = new GadgetRig(this);
 
         this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER
         this.lastTime = 0;
@@ -228,6 +229,7 @@ class Game {
         this.lastTime = timestamp;
 
         this.update(dt);
+        if (this.state === 'PLAYING' && this.gadgetRig) this.gadgetRig.update(dt);
         this.draw();
         this.input.update();
 
@@ -274,6 +276,7 @@ class Game {
                 { x: 100, y: 280, w: 120, h: 60, text: 'Work', onClick: () => this.doAction('work') },
                 { x: 100, y: 360, w: 120, h: 60, text: 'Practice', onClick: () => this.doAction('practice') },
                 { x: 100, y: 440, w: 120, h: 60, text: 'Explore', onClick: () => this.doAction('explore') },
+                { x: 100, y: 520, w: 120, h: 40, text: 'Combine', onClick: () => { if (this.gadgetRig) this.gadgetRig.activateOverdrive(); } },
                 { x: 680, y: 20, w: 100, h: 40, text: 'Menu', onClick: () => this.pause() }
             ];
 
@@ -312,6 +315,12 @@ class Game {
         if (type === 'explore') {
             this.saveManager.data.affection.lead1 += 1; this.saveManager.data.inventory.push("Clue");
             this.saveManager.data.stats.charm += 3;
+            if (this.gadgetRig) this.gadgetRig.addCluePower(25);
+        }
+
+        if (this.gadgetRig && this.gadgetRig.overdriveActive) {
+            this.saveManager.data.stats.stamina += 10; // Overdrive refund
+            this.saveManager.data.stats.charm += 5;
         }
 
         this.sound.playStatUp();
@@ -378,6 +387,7 @@ class Game {
             this.ctx.fillText('Courtyard', 530, 250);
 
             this.drawButtons();
+            if (this.gadgetRig) this.gadgetRig.draw(this.ctx);
         } else if (this.state === 'GAMEOVER') {
             this.ctx.fillStyle = '#ff4081';
             this.ctx.font = 'bold 36px sans-serif';
