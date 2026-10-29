@@ -93,7 +93,8 @@ class ProgressionManager {
                     this.game.saveManager.data.stats.cash -= p.cost;
                     this.game.saveManager.data.perks.push(p.id);
                     p.owned = true;
-                    this.game.sound.playConfirm();
+                    if(this.game.sound.playItemUnlock) this.game.sound.playItemUnlock();
+                    else this.game.sound.playConfirm();
                 } else {
                     this.game.sound.playError();
                 }
