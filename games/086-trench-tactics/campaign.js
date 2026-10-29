@@ -1,176 +1,102 @@
 class CampaignManager {
-    constructor(game) {
-        this.game = game;
-        this.initDOM();
-        this.milestones = [
-            { id: 'first_blood', name: 'First Blood', desc: 'Destroy your first enemy.', condition: (d) => d.totalScoreAccumulated >= 10 },
-            { id: 'survivor', name: 'Trench Survivor', desc: 'Reach a score of 500 in one game.', condition: (d) => d.highScore >= 500 },
-            { id: 'veteran', name: 'Veteran Tactician', desc: 'Play 10 games.', condition: (d) => d.totalGamesPlayed >= 10 },
-            { id: 'hoarder', name: 'Score Hoarder', desc: 'Accumulate 5000 total score.', condition: (d) => d.totalScoreAccumulated >= 5000 },
-            { id: 'boss_slayer', name: 'Boss Slayer', desc: 'Defeat a boss (score >= 300).', condition: (d) => d.highScore >= 300 }
+    constructor(g) {
+        this.g = g;
+        this.mils = [
+            { id: 'first_blood', name: 'First Blood', desc: 'Destroy your first enemy.', cond: (d) => d.totalScoreAccumulated >= 10 },
+            { id: 'survivor', name: 'Trench Survivor', desc: 'Reach a score of 500 in one game.', cond: (d) => d.highScore >= 500 },
+            { id: 'veteran', name: 'Veteran Tactician', desc: 'Play 10 games.', cond: (d) => d.totalGamesPlayed >= 10 },
+            { id: 'hoarder', name: 'Score Hoarder', desc: 'Accumulate 5000 total score.', cond: (d) => d.totalScoreAccumulated >= 5000 },
+            { id: 'boss_slayer', name: 'Boss Slayer', desc: 'Defeat a boss.', cond: (d) => d.highScore >= 300 }
         ];
 
-        let opts = this.game.saveManager.data.options;
-        if (opts.reducedMotion === undefined) opts.reducedMotion = false;
-        if (opts.highContrast === undefined) opts.highContrast = false;
-        if (opts.leftHanded === undefined) opts.leftHanded = false;
+        let o = this.g.saveManager.data.options;
+        if (o.reducedMotion === undefined) o.reducedMotion = false;
+        if (o.highContrast === undefined) o.highContrast = false;
+        if (o.leftHanded === undefined) o.leftHanded = false;
 
-        this.game.saveManager.save();
-        this.milestoneBonuses = 0;
+        this.g.saveManager.save();
+        this.milBonuses = 0;
         this.applyMilestoneBonuses();
-
-        this.celebrationParticles = [];
+        this.parts = [];
+        this.initDOM();
     }
 
     applyMilestoneBonuses() {
-        this.milestoneBonuses = 0;
-        let unlocks = this.game.saveManager.data.unlockedMilestones;
-        for (let i = 0; i < unlocks.length; i++) {
-            let u = unlocks[i];
-            if (u === 'first_blood') this.milestoneBonuses += 1;
-            else if (u === 'survivor') this.milestoneBonuses += 2;
-            else if (u === 'veteran') this.milestoneBonuses += 3;
-            else if (u === 'hoarder') this.milestoneBonuses += 4;
-            else if (u === 'boss_slayer') this.milestoneBonuses += 5;
+        this.milBonuses = 0;
+        let u = this.g.saveManager.data.unlockedMilestones;
+        for (let i = 0; i < u.length; i++) {
+            if (u[i] === 'first_blood') this.milBonuses += 1;
+            else if (u[i] === 'survivor') this.milBonuses += 2;
+            else if (u[i] === 'veteran') this.milBonuses += 3;
+            else if (u[i] === 'hoarder') this.milBonuses += 4;
+            else if (u[i] === 'boss_slayer') this.milBonuses += 5;
         }
-
-        if (this.game.player) {
-            this.game.player.bonusSpeed = this.milestoneBonuses * 5;
-            this.game.player.bonusDamage = Math.floor(this.milestoneBonuses / 2);
+        if (this.g.player) {
+            this.g.player.bonusSpeed = this.milBonuses * 5;
+            this.g.player.bonusDamage = Math.floor(this.milBonuses / 2);
         }
     }
 
-    createEl(tag, style, id) {
+    ce(tag, style, id, inner) {
         let el = document.createElement(tag);
         if (style) el.style.cssText = style;
         if (id) el.id = id;
+        if (inner) el.innerHTML = inner;
         return el;
     }
 
     initDOM() {
-        this.overlay = this.createEl('div', 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(5,10,18,0.9);display:none;justify-content:center;align-items:center;z-index:2000;pointer-events:auto;font-family:monospace;color:#cdc3b9;', 'options-modal-overlay');
+        this.overlay = this.ce('div', 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(5,10,18,0.9);display:none;justify-content:center;align-items:center;z-index:2000;pointer-events:auto;font-family:monospace;color:#cdc3b9;', 'options-modal-overlay');
 
-        let modal = this.createEl('div', 'width:80%;max-width:600px;background:#0d3554;border:2px solid #00e5ff;border-radius:8px;padding:20px;display:flex;flex-direction:column;max-height:90%;overflow-y:auto;');
+        let m = this.ce('div', 'width:80%;max-width:600px;background:#0d3554;border:2px solid #00e5ff;border-radius:8px;padding:20px;display:flex;flex-direction:column;max-height:90%;overflow-y:auto;');
+        m.appendChild(this.ce('h2', 'text-align:center;margin-top:0;color:#00e5ff;', null, 'OPTIONS & MILESTONES'));
 
-        let title = this.createEl('h2', 'text-align:center;margin-top:0;color:#00e5ff;');
-        title.innerText = 'OPTIONS & MILESTONES';
+        let tabs = this.ce('div', 'display:flex;justify-content:space-around;margin-bottom:20px;border-bottom:1px solid #cdc3b9;');
 
-        let tabs = this.createEl('div', 'display:flex;justify-content:space-around;margin-bottom:20px;border-bottom:1px solid #cdc3b9;');
+        let tN = ['Audio & Comfort', 'Controls', 'Milestones', 'Manage Save Data'];
+        this.tC = [];
+        this.tB = [];
 
-        let tabNames = ['Audio & Comfort', 'Controls', 'Milestones', 'Manage Save Data'];
-        this.tabContents = [];
-        this.tabBtns = [];
-
-        for (let i = 0; i < tabNames.length; i++) {
-            let btn = this.createEl('button', 'background:none;border:none;color:#cdc3b9;font:bold 14px monospace;cursor:pointer;padding:10px;outline:none;');
+        for (let i = 0; i < tN.length; i++) {
+            let btn = this.ce('button', 'background:none;border:none;color:#cdc3b9;font:bold 14px monospace;cursor:pointer;padding:10px;outline:none;', null, tN[i]);
             btn.type = 'button';
-            btn.innerText = tabNames[i];
             btn.onclick = () => this.switchTab(i);
             tabs.appendChild(btn);
-            this.tabBtns.push(btn);
+            this.tB.push(btn);
 
-            let content = this.createEl('div');
-            content.style.display = i === 0 ? 'block' : 'none';
-            this.tabContents.push(content);
+            let cnt = this.ce('div');
+            cnt.style.display = i === 0 ? 'block' : 'none';
+            this.tC.push(cnt);
         }
 
-        // Tab 0: Audio & Comfort
-        let t0 = this.tabContents[0];
-        let d1 = this.createEl('div', 'margin-bottom:15px;');
-        let lbl1 = this.createEl('label');
-        lbl1.innerText = 'Master Volume: ';
-        let span1 = this.createEl('span', '', 'vol-val');
-        span1.innerText = '100%';
-        lbl1.appendChild(span1);
-        let br = this.createEl('br');
-        let range = this.createEl('input', 'width:100%;', 'vol-slider');
-        range.type = 'range';
-        range.min = 0;
-        range.max = 100;
-        range.value = 100;
-        d1.appendChild(lbl1);
-        d1.appendChild(br);
-        d1.appendChild(range);
+        this.tC[0].innerHTML = `
+            <div style="margin-bottom:15px;">
+                <label>Master Volume: <span id="vol-val">100%</span></label><br>
+                <input type="range" id="vol-slider" min="0" max="100" value="100" style="width:100%;">
+            </div>
+            <div style="margin-bottom:15px;">
+                <label><input type="checkbox" id="reduced-motion-chk"> Reduced Motion</label>
+            </div>
+            <div style="margin-bottom:15px;">
+                <label><input type="checkbox" id="high-contrast-chk"> High Contrast Mode</label>
+            </div>`;
 
-        let d2 = this.createEl('div', 'margin-bottom:15px;');
-        let lbl2 = this.createEl('label');
-        let chk1 = this.createEl('input', '', 'reduced-motion-chk');
-        chk1.type = 'checkbox';
-        lbl2.appendChild(chk1);
-        lbl2.appendChild(document.createTextNode(' Reduced Motion'));
-        d2.appendChild(lbl2);
+        this.tC[1].innerHTML = `<div style="margin-bottom:15px;"><label><input type="checkbox" id="left-handed-chk"> Left-Handed Touch Controls</label><p style="font-size:12px;color:#aaa;">Swaps virtual dash button and joystick sides.</p></div>`;
+        this.tC[2].id = 'milestones-container';
 
-        let d3 = this.createEl('div', 'margin-bottom:15px;');
-        let lbl3 = this.createEl('label');
-        let chk2 = this.createEl('input', '', 'high-contrast-chk');
-        chk2.type = 'checkbox';
-        lbl3.appendChild(chk2);
-        lbl3.appendChild(document.createTextNode(' High Contrast Mode'));
-        d3.appendChild(lbl3);
+        this.tC[3].innerHTML = `<details><summary style="cursor:pointer;color:#00e5ff;margin-bottom:10px;">Export / Import Save Data</summary><textarea id="save-data-text" style="width:100%;height:100px;background:#050a12;color:#cdc3b9;border:1px solid #cdc3b9;font-family:monospace;margin-bottom:10px;"></textarea><div style="display:flex;gap:10px;"><button type="button" id="export-btn" style="flex:1;padding:10px;background:#061a2b;color:#cdc3b9;border:1px solid #00e5ff;cursor:pointer;">Copy to Clipboard</button><button type="button" id="import-btn" style="flex:1;padding:10px;background:#061a2b;color:#cdc3b9;border:1px solid #00e5ff;cursor:pointer;">Import Save</button></div></details><div style="margin-top:20px;text-align:center;"><button type="button" id="reset-save-btn" style="padding:10px 20px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;">Reset All Data</button></div>`;
 
-        t0.appendChild(d1);
-        t0.appendChild(d2);
-        t0.appendChild(d3);
-
-        // Tab 1: Controls
-        let t1 = this.tabContents[1];
-        let d4 = this.createEl('div', 'margin-bottom:15px;');
-        let lbl4 = this.createEl('label');
-        let chk3 = this.createEl('input', '', 'left-handed-chk');
-        chk3.type = 'checkbox';
-        lbl4.appendChild(chk3);
-        lbl4.appendChild(document.createTextNode(' Left-Handed Touch Controls'));
-        d4.appendChild(lbl4);
-        t1.appendChild(d4);
-
-        // Tab 2: Milestones
-        this.tabContents[2].id = 'milestones-container';
-
-        // Tab 3: Manage Save Data
-        let t3 = this.tabContents[3];
-        let det = this.createEl('details');
-        let sum = this.createEl('summary', 'cursor:pointer;color:#00e5ff;margin-bottom:10px;');
-        sum.innerText = 'Export / Import Save Data';
-        det.appendChild(sum);
-
-        let txt = this.createEl('textarea', 'width:100%;height:100px;background:#050a12;color:#cdc3b9;border:1px solid #cdc3b9;font-family:monospace;margin-bottom:10px;', 'save-data-text');
-        det.appendChild(txt);
-
-        let bRow = this.createEl('div', 'display:flex;gap:10px;');
-        let bExp = this.createEl('button', 'flex:1;padding:10px;background:#061a2b;color:#cdc3b9;border:1px solid #00e5ff;cursor:pointer;', 'export-btn');
-        bExp.type = 'button';
-        bExp.innerText = 'Copy to Clipboard';
-        let bImp = this.createEl('button', 'flex:1;padding:10px;background:#061a2b;color:#cdc3b9;border:1px solid #00e5ff;cursor:pointer;', 'import-btn');
-        bImp.type = 'button';
-        bImp.innerText = 'Import Save';
-        bRow.appendChild(bExp);
-        bRow.appendChild(bImp);
-        det.appendChild(bRow);
-
-        let d5 = this.createEl('div', 'margin-top:20px;text-align:center;');
-        let bRes = this.createEl('button', 'padding:10px 20px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;', 'reset-save-btn');
-        bRes.type = 'button';
-        bRes.innerText = 'Reset All Data';
-        d5.appendChild(bRes);
-
-        t3.appendChild(det);
-        t3.appendChild(d5);
-
-        let closeBtn = this.createEl('button', 'margin-top:20px;padding:10px;background:#00e676;color:#050a12;border:none;font:bold 16px monospace;cursor:pointer;border-radius:4px;');
+        let closeBtn = this.ce('button', 'margin-top:20px;padding:10px;background:#00e676;color:#050a12;border:none;font:bold 16px monospace;cursor:pointer;border-radius:4px;', null, 'Resume / Close [Esc]');
         closeBtn.type = 'button';
-        closeBtn.innerText = 'Resume / Close [Esc]';
         closeBtn.onclick = () => {
-            this.game.state = 'TITLE';
-            this.game.inputManager.keys['Escape'] = false;
+            this.g.state = 'TITLE';
+            this.g.inputManager.keys['Escape'] = false;
         };
 
-        modal.appendChild(title);
-        modal.appendChild(tabs);
-        for (let i = 0; i < this.tabContents.length; i++) {
-            modal.appendChild(this.tabContents[i]);
-        }
-        modal.appendChild(closeBtn);
-        this.overlay.appendChild(modal);
+        m.appendChild(tabs);
+        for (let i = 0; i < this.tC.length; i++) m.appendChild(this.tC[i]);
+        m.appendChild(closeBtn);
+        this.overlay.appendChild(m);
         document.getElementById('ui-layer').appendChild(this.overlay);
 
         this.bindEvents();
@@ -180,32 +106,31 @@ class CampaignManager {
         document.getElementById('vol-slider').oninput = (e) => {
             let v = parseInt(e.target.value, 10);
             document.getElementById('vol-val').innerText = v + '%';
-            this.game.saveManager.data.options.soundVolume = v / 100.0;
-            if (this.game.soundEngine && this.game.soundEngine.masterGain) {
-                this.game.soundEngine.masterGain.gain.value = this.game.saveManager.data.options.soundVolume;
+            this.g.saveManager.data.options.soundVolume = v / 100.0;
+            if (this.g.soundEngine && this.g.soundEngine.masterGain) {
+                this.g.soundEngine.masterGain.gain.value = this.g.saveManager.data.options.soundVolume;
             }
-            this.game.saveManager.save();
+            this.g.saveManager.save();
         };
 
         document.getElementById('reduced-motion-chk').onchange = (e) => {
-            this.game.saveManager.data.options.reducedMotion = e.target.checked;
-            this.game.saveManager.save();
+            this.g.saveManager.data.options.reducedMotion = e.target.checked;
+            this.g.saveManager.save();
         };
 
         document.getElementById('high-contrast-chk').onchange = (e) => {
-            this.game.saveManager.data.options.highContrast = e.target.checked;
-            this.game.saveManager.save();
+            this.g.saveManager.data.options.highContrast = e.target.checked;
+            this.g.saveManager.save();
         };
 
         document.getElementById('left-handed-chk').onchange = (e) => {
-            this.game.saveManager.data.options.leftHanded = e.target.checked;
-            this.game.saveManager.save();
+            this.g.saveManager.data.options.leftHanded = e.target.checked;
+            this.g.saveManager.save();
             this.updateHandedness();
         };
 
         document.getElementById('export-btn').onclick = () => {
-            let dataStr = JSON.stringify(this.game.saveManager.data);
-            let b64 = btoa(dataStr);
+            let b64 = btoa(JSON.stringify(this.g.saveManager.data));
             let el = document.getElementById('save-data-text');
             el.value = b64;
             el.select();
@@ -214,14 +139,12 @@ class CampaignManager {
 
         document.getElementById('import-btn').onclick = () => {
             try {
-                let el = document.getElementById('save-data-text');
-                let b64 = el.value.trim();
+                let b64 = document.getElementById('save-data-text').value.trim();
                 if (b64.length > 0) {
-                    let dataStr = atob(b64);
-                    let parsed = JSON.parse(dataStr);
+                    let parsed = JSON.parse(atob(b64));
                     if (parsed && typeof parsed === 'object') {
-                        Object.assign(this.game.saveManager.data, parsed);
-                        this.game.saveManager.save();
+                        Object.assign(this.g.saveManager.data, parsed);
+                        this.g.saveManager.save();
                         this.refreshUI();
                         this.applyMilestoneBonuses();
                     }
@@ -232,105 +155,83 @@ class CampaignManager {
         };
 
         document.getElementById('reset-save-btn').onclick = () => {
-            localStorage.removeItem(this.game.saveManager.saveKey);
-            this.game.saveManager.data.highScore = 0;
-            this.game.saveManager.data.bestWaveOrCombo = 0;
-            this.game.saveManager.data.totalGamesPlayed = 0;
-            this.game.saveManager.data.totalScoreAccumulated = 0;
-            this.game.saveManager.data.unlockedMilestones = [];
-            this.game.saveManager.data.options.soundVolume = 1;
-            this.game.saveManager.data.options.musicVolume = 1;
-            this.game.saveManager.data.options.reducedMotion = false;
-            this.game.saveManager.data.options.highContrast = false;
-            this.game.saveManager.data.options.leftHanded = false;
-            this.game.saveManager.save();
+            localStorage.removeItem(this.g.saveManager.saveKey);
+            this.g.saveManager.data.highScore = 0;
+            this.g.saveManager.data.bestWaveOrCombo = 0;
+            this.g.saveManager.data.totalGamesPlayed = 0;
+            this.g.saveManager.data.totalScoreAccumulated = 0;
+            this.g.saveManager.data.unlockedMilestones = [];
+            this.g.saveManager.data.options = { soundVolume: 1, musicVolume: 1, reducedMotion: false, highContrast: false, leftHanded: false };
+            this.g.saveManager.save();
             this.applyMilestoneBonuses();
             this.refreshUI();
         };
     }
 
     switchTab(idx) {
-        for (let i = 0; i < this.tabContents.length; i++) {
-            this.tabContents[i].style.display = i === idx ? 'block' : 'none';
-            this.tabBtns[i].style.color = i === idx ? '#00e5ff' : '#cdc3b9';
-            this.tabBtns[i].style.borderBottom = i === idx ? '2px solid #00e5ff' : 'none';
+        for (let i = 0; i < this.tC.length; i++) {
+            this.tC[i].style.display = i === idx ? 'block' : 'none';
+            this.tB[i].style.color = i === idx ? '#00e5ff' : '#cdc3b9';
+            this.tB[i].style.borderBottom = i === idx ? '2px solid #00e5ff' : 'none';
         }
     }
 
     refreshUI() {
-        if (!this.game || !this.game.saveManager) return;
-        let opts = this.game.saveManager.data.options;
-        let volSlider = document.getElementById('vol-slider');
-        if (volSlider) {
-            let v = Math.round(opts.soundVolume * 100);
-            volSlider.value = v;
+        if (!this.g || !this.g.saveManager) return;
+        let o = this.g.saveManager.data.options;
+        let vs = document.getElementById('vol-slider');
+        if (vs) {
+            let v = Math.round(o.soundVolume * 100);
+            vs.value = v;
             document.getElementById('vol-val').innerText = v + '%';
         }
-        let rmChk = document.getElementById('reduced-motion-chk');
-        if (rmChk) rmChk.checked = !!opts.reducedMotion;
+        let rm = document.getElementById('reduced-motion-chk');
+        if (rm) rm.checked = !!o.reducedMotion;
 
-        let hcChk = document.getElementById('high-contrast-chk');
-        if (hcChk) hcChk.checked = !!opts.highContrast;
+        let hc = document.getElementById('high-contrast-chk');
+        if (hc) hc.checked = !!o.highContrast;
 
-        let lhChk = document.getElementById('left-handed-chk');
-        if (lhChk) lhChk.checked = !!opts.leftHanded;
+        let lh = document.getElementById('left-handed-chk');
+        if (lh) lh.checked = !!o.leftHanded;
 
         this.updateHandedness();
 
-        let container = document.getElementById('milestones-container');
-        if (container) {
-            container.innerHTML = '';
-            for (let i = 0; i < this.milestones.length; i++) {
-                let m = this.milestones[i];
-                let unlocked = this.game.saveManager.data.unlockedMilestones.includes(m.id);
-                let bc = unlocked ? '#00e676' : '#555';
-                let mDiv = this.createEl('div', 'padding:10px;margin-bottom:10px;border:1px solid ' + bc + ';border-radius:4px;display:flex;justify-content:space-between;');
+        let c = document.getElementById('milestones-container');
+        if (c) {
+            c.innerHTML = '';
+            for (let i = 0; i < this.mils.length; i++) {
+                let m = this.mils[i];
+                let unl = this.g.saveManager.data.unlockedMilestones.includes(m.id);
+                let bc = unl ? '#00e676' : '#555';
+                let div = this.ce('div', 'padding:10px;margin-bottom:10px;border:1px solid ' + bc + ';border-radius:4px;display:flex;justify-content:space-between;');
 
-                let tc = unlocked ? '#00e676' : '#cdc3b9';
-                let sc = unlocked ? '#00e676' : '#e74c3c';
-                let statusText = unlocked ? 'UNLOCKED' : 'LOCKED';
+                let tc = unl ? '#00e676' : '#cdc3b9';
+                let sc = unl ? '#00e676' : '#e74c3c';
 
-                let dL = this.createEl('div');
-                let str = this.createEl('strong');
-                str.style.color = tc;
-                str.innerText = m.name;
-                let br = this.createEl('br');
-                let sp = this.createEl('span', 'font-size:12px;color:#aaa;');
-                sp.innerText = m.desc;
-                dL.appendChild(str);
-                dL.appendChild(br);
-                dL.appendChild(sp);
-
-                let dR = this.createEl('div');
-                dR.style.color = sc;
-                dR.innerText = statusText;
-
-                mDiv.appendChild(dL);
-                mDiv.appendChild(dR);
-
-                container.appendChild(mDiv);
+                div.innerHTML = '<div><strong style="color:' + tc + '">' + m.name + '</strong><br><span style="font-size:12px;color:#aaa;">' + m.desc + '</span></div><div style="color:' + sc + '">' + (unl ? 'UNLOCKED' : 'LOCKED') + '</div>';
+                c.appendChild(div);
             }
         }
     }
 
     updateHandedness() {
-        let dashBtn = document.getElementById('dash-button');
-        if (dashBtn) {
-            if (this.game.saveManager.data.options.leftHanded) {
-                dashBtn.style.right = 'auto';
-                dashBtn.style.left = '16px';
+        let db = document.getElementById('dash-button');
+        if (db) {
+            if (this.g.saveManager.data.options.leftHanded) {
+                db.style.right = 'auto';
+                db.style.left = '16px';
             } else {
-                dashBtn.style.left = 'auto';
-                dashBtn.style.right = '126px';
+                db.style.left = 'auto';
+                db.style.right = '126px';
             }
         }
     }
 
     spawnCelebration() {
-        let x = this.game.width / 2;
-        let y = this.game.height / 2;
+        let x = this.g.width / 2;
+        let y = this.g.height / 2;
         for (let i = 0; i < 20; i++) {
-            this.celebrationParticles.push({
+            this.parts.push({
                 x: x,
                 y: y,
                 vx: (Math.random() - 0.5) * 400,
@@ -341,47 +242,24 @@ class CampaignManager {
         }
     }
 
-    updateCelebration() {
-        let dt = 0.016;
-        for (let i = this.celebrationParticles.length - 1; i >= 0; i--) {
-            let p = this.celebrationParticles[i];
-            p.x += p.vx * dt;
-            p.y += p.vy * dt;
-            p.life -= dt;
-            if (p.life <= 0) {
-                this.celebrationParticles.splice(i, 1);
-            }
-        }
-    }
-
-    drawCelebration(ctx) {
-        for (let i = 0; i < this.celebrationParticles.length; i++) {
-            let p = this.celebrationParticles[i];
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = p.life;
-            ctx.fillRect(p.x, p.y, 6, 6);
-        }
-        ctx.globalAlpha = 1.0;
-    }
-
     checkMilestones() {
-        let changed = false;
+        let chg = false;
         let c = 0;
-        for (let i = 0; i < this.milestones.length; i++) {
-            let m = this.milestones[i];
-            if (!this.game.saveManager.data.unlockedMilestones.includes(m.id)) {
-                if (m.condition(this.game.saveManager.data)) {
-                    this.game.saveManager.data.unlockedMilestones.push(m.id);
-                    changed = true;
+        for (let i = 0; i < this.mils.length; i++) {
+            let m = this.mils[i];
+            if (!this.g.saveManager.data.unlockedMilestones.includes(m.id)) {
+                if (m.cond(this.g.saveManager.data)) {
+                    this.g.saveManager.data.unlockedMilestones.push(m.id);
+                    chg = true;
                     c++;
-                    if (this.game.vfx) {
-                        this.game.vfx.addFloatingText(this.game.width/2, 100 + c*20, 'Milestone Unlocked: ' + m.name + '!', '#00e676');
+                    if (this.g.vfx) {
+                        this.g.vfx.addFloatingText(this.g.width/2, 100 + c*20, 'Milestone Unlocked: ' + m.name + '!', '#00e676');
                     }
                 }
             }
         }
-        if (changed) {
-            this.game.saveManager.save();
+        if (chg) {
+            this.g.saveManager.save();
             this.applyMilestoneBonuses();
             this.refreshUI();
             this.spawnCelebration();
@@ -389,13 +267,13 @@ class CampaignManager {
     }
 
     updateUI() {
-        if (this.game.state === 'OPTIONS') {
+        if (this.g.state === 'OPTIONS') {
             if (this.overlay.style.display === 'none') {
                 this.refreshUI();
                 this.switchTab(0);
                 this.overlay.style.display = 'flex';
-                let txt = document.getElementById('save-data-text');
-                if (txt) txt.value = '';
+                let t = document.getElementById('save-data-text');
+                if (t) t.value = '';
             }
         } else {
             if (this.overlay.style.display !== 'none') {
@@ -403,28 +281,33 @@ class CampaignManager {
             }
         }
 
-        if (this.game.vfx) {
-            if (this.game.saveManager.data.options.reducedMotion) {
-                this.game.vfx.reducedMotion = true;
-            } else {
-                this.game.vfx.reducedMotion = false;
+        if (this.g.vfx) {
+            this.g.vfx.reducedMotion = !!this.g.saveManager.data.options.reducedMotion;
+        }
+        if (this.g.world) {
+            this.g.world.highContrast = !!this.g.saveManager.data.options.highContrast;
+        }
+
+        let dt = 0.016;
+        for (let i = this.parts.length - 1; i >= 0; i--) {
+            let p = this.parts[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+            if (p.life <= 0) this.parts.splice(i, 1);
+        }
+        if (this.parts.length > 0 && this.g.ctx) {
+            for (let i = 0; i < this.parts.length; i++) {
+                let p = this.parts[i];
+                this.g.ctx.fillStyle = p.color;
+                this.g.ctx.globalAlpha = p.life;
+                this.g.ctx.fillRect(p.x, p.y, 6, 6);
             }
+            this.g.ctx.globalAlpha = 1.0;
         }
 
-        if (this.game.world) {
-             this.game.world.highContrast = !!this.game.saveManager.data.options.highContrast;
-        }
-
-        this.updateCelebration();
-        if (this.celebrationParticles.length > 0 && this.game.ctx) {
-            this.drawCelebration(this.game.ctx);
-        }
-
-        if (this.game.state === 'PLAYING' || this.game.state === 'GAME_OVER') {
-            let r = Math.random();
-            let threshold = 0.05;
-            let combined = r * threshold;
-            if (r < threshold && combined < 0.01) {
+        if (this.g.state === 'PLAYING' || this.g.state === 'GAME_OVER') {
+            if (Math.random() < 0.05) {
                 this.checkMilestones();
             }
         }
