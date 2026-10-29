@@ -23,6 +23,37 @@ class RosterManager {
         this.activeLeadIndex = (this.activeLeadIndex - 1 + this.leads.length) % this.leads.length;
     }
 
+    canProgress(lead) {
+        let affection = this.game.saveManager.data.affection[lead.id] || 0;
+        let stats = this.game.saveManager.data.stats;
+        let hasReq = false;
+        if (lead.reqStat === 'charm' && stats.charm >= lead.reqAmount) hasReq = true;
+        else if (lead.reqStat === 'talent' && stats.talent >= lead.reqAmount) hasReq = true;
+        else if (lead.reqStat === 'wit' && stats.wit >= lead.reqAmount) hasReq = true;
+        else if (lead.reqStat === 'cash' && stats.cash >= lead.reqAmount) hasReq = true;
+
+        return hasReq && affection >= 10;
+    }
+
+    interact() {
+        const lead = this.getActiveLead();
+        if (!this.game.saveManager.data.affection[lead.id]) {
+            this.game.saveManager.data.affection[lead.id] = 0;
+        }
+
+        let multiplier = 1;
+        if (this.game.saveManager.data.stats.charm > 50) multiplier = 2;
+
+        if (this.canProgress(lead)) {
+            this.game.saveManager.data.affection[lead.id] += 3 * multiplier;
+            return true;
+        } else {
+            this.game.saveManager.data.affection[lead.id] += 1 * multiplier;
+            return false;
+        }
+    }
+
+
     draw(ctx) {
         const lead = this.getActiveLead();
         const affection = this.game.saveManager.data.affection[lead.id] || 0;
