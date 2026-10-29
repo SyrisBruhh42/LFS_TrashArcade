@@ -119,6 +119,7 @@ class Game {
         if (typeof BossManager !== 'undefined') this.bosses = new BossManager(this);
         if (typeof ProgressionManager !== 'undefined') this.progression = new ProgressionManager(this);
         if (typeof VFXManager !== 'undefined') this.vfx = new VFXManager(this);
+        if (typeof CampaignManager !== 'undefined') this.campaign = new CampaignManager(this);
 
         this.state = 'TITLE';
         if(this.sound) { this.sound.setMilestoneMode(false); } // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER, SHOWDOWN, SHOP
@@ -152,6 +153,7 @@ class Game {
         document.getElementById('vol-master').addEventListener('input', e => { this.saveManager.data.options.masterVol = parseFloat(e.target.value); updateOpt(); });
         document.getElementById('vol-music').addEventListener('input', e => { this.saveManager.data.options.musicVol = parseFloat(e.target.value); updateOpt(); });
         document.getElementById('vol-sfx').addEventListener('input', e => { this.saveManager.data.options.sfxVol = parseFloat(e.target.value); updateOpt(); });
+        if(document.getElementById('toggle-mute')) document.getElementById('toggle-mute').addEventListener('change', e => { this.saveManager.data.options.mute = e.target.checked; updateOpt(); });
         document.getElementById('toggle-contrast').addEventListener('change', e => { this.saveManager.data.options.highContrast = e.target.checked; updateOpt(); });
         document.getElementById('toggle-motion').addEventListener('change', e => { this.saveManager.data.options.reduceMotion = e.target.checked; updateOpt(); });
         if(document.getElementById('toggle-lefthand')) document.getElementById('toggle-lefthand').addEventListener('change', e => { this.saveManager.data.options.leftHand = e.target.checked; updateOpt(); });
@@ -160,7 +162,8 @@ class Game {
 
     applyOptions() {
         const opt = this.saveManager.data.options;
-        this.sound.setVolumes(opt.masterVol, opt.sfxVol, opt.musicVol);
+        if (opt.mute) this.sound.setVolumes(0, 0, 0);
+        else this.sound.setVolumes(opt.masterVol, opt.sfxVol, opt.musicVol);
         document.getElementById('vol-master').value = opt.masterVol;
     }
 
@@ -172,6 +175,7 @@ class Game {
         if (this.state === 'PLAYING') {
             this.state = 'PAUSED';
             document.getElementById('options-modal').classList.add('active');
+                if (this.campaign) this.campaign.populateHTML();
         }
     }
 
@@ -193,6 +197,7 @@ class Game {
         if (this.state === 'SHOWDOWN' && this.bosses) this.bosses.update(dt);
         if (this.progression) this.progression.update(dt);
         if (this.vfx) this.vfx.update(dt);
+        if (this.campaign) this.campaign.update(dt);
         this.draw();
         this.input.update();
 
@@ -238,16 +243,18 @@ class Game {
                 { x: 300, y: 450, w: 200, h: 40, text: 'Start (Enter)', onClick: () => { this.state = 'PLAYING';
         if(this.sound) { this.sound.setMilestoneMode(false); } this.sound.playConfirm(); } },
                 { x: 300, y: 500, w: 200, h: 40, text: 'How to Play', onClick: () => { document.getElementById('help-modal').classList.add('active'); } },
-                { x: 300, y: 550, w: 200, h: 40, text: 'Options', onClick: () => { document.getElementById('options-modal').classList.add('active'); } }
+                { x: 300, y: 550, w: 200, h: 40, text: 'Options', onClick: () => { document.getElementById('options-modal').classList.add('active');
+                if (this.campaign) this.campaign.populateHTML(); } }
             ];
         } else if (this.state === 'PLAYING') {
+            const offset = (this.saveManager.data.options && this.saveManager.data.options.leftHand) ? 580 : 0;
             this.buttons = [
-                { x: 100, y: 200, w: 120, h: 60, text: 'Study', onClick: () => this.doAction('study') },
-                { x: 100, y: 280, w: 120, h: 60, text: 'Work', onClick: () => this.doAction('work') },
-                { x: 100, y: 360, w: 120, h: 60, text: 'Practice', onClick: () => this.doAction('practice') },
-                { x: 100, y: 440, w: 120, h: 60, text: 'Explore', onClick: () => this.doAction('explore') },
-                { x: 100, y: 520, w: 120, h: 40, text: 'Combine', onClick: () => { if (this.gadgetRig) this.gadgetRig.activateOverdrive(); } },
-                { x: 680, y: 20, w: 100, h: 40, text: 'Menu', onClick: () => this.pause() }
+                { x: 100 + offset, y: 200, w: 120, h: 60, text: 'Study', onClick: () => this.doAction('study') },
+                { x: 100 + offset, y: 280, w: 120, h: 60, text: 'Work', onClick: () => this.doAction('work') },
+                { x: 100 + offset, y: 360, w: 120, h: 60, text: 'Practice', onClick: () => this.doAction('practice') },
+                { x: 100 + offset, y: 440, w: 120, h: 60, text: 'Explore', onClick: () => this.doAction('explore') },
+                { x: 100 + offset, y: 520, w: 120, h: 40, text: 'Combine', onClick: () => { if (this.gadgetRig) this.gadgetRig.activateOverdrive(); } },
+                { x: 680 - offset, y: 20, w: 100, h: 40, text: 'Menu', onClick: () => this.pause() }
             ];
 
             if (this.rosters) {
@@ -255,7 +262,7 @@ class Game {
                 this.buttons.push({ x: 700, y: 200, w: 60, h: 30, text: 'Next', onClick: () => { this.rosters.nextLead(); this.sound.playConfirm(); } });
             }
 
-            this.buttons.push({ x: 680, y: 70, w: 100, h: 40, text: 'Boutique', onClick: () => { this.state = 'SHOP'; this.sound.playConfirm(); } });
+            this.buttons.push({ x: 680 - offset, y: 70, w: 100, h: 40, text: 'Boutique', onClick: () => { this.state = 'SHOP'; this.sound.playConfirm(); } });
 
             if (this.input.mouse.justDown) {
                 this.sound.init();
@@ -461,6 +468,7 @@ class Game {
             this.ctx.fillText('Click to Restart', 400, 400);
         }
         if (this.vfx) this.vfx.draw(this.ctx);
+        if (this.campaign) this.campaign.draw(this.ctx);
     }
 
     drawButtons() {

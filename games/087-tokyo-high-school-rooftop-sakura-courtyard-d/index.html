@@ -54,8 +54,9 @@
                 <h2>Options</h2>
 
                 <div class="tabs">
-                    <button class="tab-btn active" type="button" onclick="switchTab('audio')">Audio & Comfort</button>
-                    <button class="tab-btn" type="button" onclick="switchTab('controls')">Controls</button>
+                    <button class="tab-btn active" type="button" onclick="switchTab('audio', event)">Audio & Comfort</button>
+                    <button class="tab-btn" type="button" onclick="switchTab('controls', event)">Controls</button>
+                    <button class="tab-btn" type="button" onclick="switchTab('milestones', event)">Milestones</button>
                 </div>
 
                 <div id="tab-audio" class="tab-content active">
@@ -72,6 +73,10 @@
                         <input type="range" id="vol-sfx" min="0" max="1" step="0.1" value="1">
                     </div>
                     <div class="controls-row">
+                        <span>Mute All</span>
+                        <input type="checkbox" id="toggle-mute">
+                    </div>
+                    <div class="controls-row">
                         <span>High-Contrast Mode</span>
                         <input type="checkbox" id="toggle-contrast">
                     </div>
@@ -81,6 +86,9 @@
                     </div>
                 </div>
 
+                <div id="tab-milestones" class="tab-content">
+                    <div id="milestones-list"></div>
+                </div>
                 <div id="tab-controls" class="tab-content">
                     <div class="controls-row">
                         <span>Left-Handed Touch Mode</span>
@@ -125,7 +133,7 @@
 
     <script>
         // UI Helpers
-        function switchTab(tabId) {
+        function switchTab(tabId, event) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             event.target.classList.add('active');
@@ -162,6 +170,7 @@
             }
         }
     </script>
+    <script defer src="campaign.js"></script>
     <script defer src="controls.js"></script>
     <script defer src="world.js"></script>
     <script defer src="rosters.js"></script>
