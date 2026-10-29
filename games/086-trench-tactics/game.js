@@ -29,46 +29,6 @@ class SaveManager {
     }
 }
 
-class SoundEngine {
-    constructor() {
-        this.ctx = null;
-        this.masterGain = null;
-        this.sfxGain = null;
-        this.initialized = false;
-    }
-    init() {
-        if (this.initialized) return;
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContext) return;
-        this.ctx = new AudioContext();
-        this.masterGain = this.ctx.createGain();
-        this.sfxGain = this.ctx.createGain();
-        this.sfxGain.connect(this.masterGain);
-        this.masterGain.connect(this.ctx.destination);
-        this.initialized = true;
-    }
-    resume() {
-        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
-    }
-    playTone(freq, type, duration, vol) {
-        if (!this.initialized || !this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(this.sfxGain);
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
-    }
-    playShoot() { this.playTone(300, 'square', 0.1, 0.5); }
-    playHit() { this.playTone(150, 'sawtooth', 0.2, 0.8); }
-    playMenuMove() { this.playTone(600, 'sine', 0.05, 0.3); }
-    playMenuSelect() { this.playTone(800, 'square', 0.1, 0.4); }
-}
-
 class InputManager {
     constructor() {
         this.keys = {};
@@ -443,6 +403,7 @@ class Game {
                 this.lastAimDir.y = aimY / len;
             }
 
+            if (this.soundEngine && this.soundEngine.update) this.soundEngine.update(dt, this);
             this.player.update(dt, this.grid, this.inputManager, this.soundEngine, this);
 
             if (!this.bossActive) {

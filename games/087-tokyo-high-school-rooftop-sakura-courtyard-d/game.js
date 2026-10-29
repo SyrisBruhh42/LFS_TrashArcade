@@ -164,8 +164,9 @@ class Game {
         if (typeof GadgetRig !== 'undefined') this.gadgetRig = new GadgetRig(this);
         if (typeof WorldRenderer !== 'undefined') this.world = new WorldRenderer(this);
         if (typeof RosterManager !== 'undefined') this.rosters = new RosterManager(this);
+        if (typeof BossManager !== 'undefined') this.bosses = new BossManager(this);
 
-        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER
+        this.state = 'TITLE'; // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER, SHOWDOWN
         this.lastTime = 0;
         this.buttons = [];
 
@@ -231,8 +232,9 @@ class Game {
         this.lastTime = timestamp;
 
         this.update(dt);
-        if (this.state === 'PLAYING' && this.gadgetRig) this.gadgetRig.update(dt);
-        if (this.world && (this.state === 'PLAYING' || this.state === 'TITLE')) this.world.update(dt, this.input);
+        if ((this.state === 'PLAYING' || this.state === 'SHOWDOWN') && this.gadgetRig) this.gadgetRig.update(dt);
+        if (this.world && (this.state === 'PLAYING' || this.state === 'TITLE' || this.state === 'SHOWDOWN')) this.world.update(dt, this.input);
+        if (this.state === 'SHOWDOWN' && this.bosses) this.bosses.update(dt);
         this.draw();
         this.input.update();
 
@@ -301,6 +303,21 @@ class Game {
             if (this.saveManager.data.day > 30) {
                 this.state = 'GAMEOVER';
             }
+        } else if (this.state === 'SHOWDOWN') {
+            this.buttons = [
+                { x: 100, y: 520, w: 120, h: 40, text: 'Combine', onClick: () => { if (this.gadgetRig) this.gadgetRig.activateOverdrive(); } },
+                { x: 100, y: 440, w: 120, h: 40, text: 'Attack', onClick: () => { if (this.bosses && this.bosses.activeShowdown) this.bosses.activeShowdown.hp -= 2; this.sound.playStatUp(); } }
+            ];
+
+            if (this.input.mouse.justDown) {
+                this.sound.init();
+                this.sound.resume();
+                for (let b of this.buttons) {
+                    if (this.isHover(b)) {
+                        b.onClick();
+                    }
+                }
+            }
         } else if (this.state === 'GAMEOVER') {
             if (this.input.justPressed['Enter'] || this.input.mouse.justDown) {
                 this.saveManager.data.day = 1;
@@ -349,6 +366,10 @@ class Game {
             this.saveManager.data.day++;
             this.saveManager.data.stats.stamina = this.saveManager.data.stats.maxStamina;
             this.saveManager.save();
+
+            if (this.bosses && (this.saveManager.data.day === 15 || this.saveManager.data.day === 30)) {
+                this.bosses.startShowdown(this.saveManager.data.day);
+            }
         }
     }
 
@@ -408,6 +429,9 @@ class Game {
 
             this.drawButtons();
             if (this.gadgetRig) this.gadgetRig.draw(this.ctx);
+        } else if (this.state === 'SHOWDOWN') {
+            if (this.bosses) this.bosses.draw(this.ctx);
+            this.drawButtons();
         } else if (this.state === 'GAMEOVER') {
             this.ctx.fillStyle = '#ff4081';
             this.ctx.font = 'bold 36px sans-serif';
