@@ -373,7 +373,12 @@ class Game {
             x = Math.random() * this.width;
             y = Math.random() > 0.5 ? 0 : this.height - this.grid.cellSize;
         }
-        this.enemies.push(new Enemy(this.grid.snap(x), this.grid.snap(y), this.grid.cellSize));
+        let sx = this.grid.snap(x);
+        let sy = this.grid.snap(y);
+        let sz = this.grid.cellSize;
+        let types = [RookCharger, BishopLaser, ShieldPhalanx, TileSpawner, ZoneBomber];
+        let RandomEnemy = types[Math.floor(Math.random() * types.length)];
+        this.enemies.push(new RandomEnemy(sx, sy, sz));
     }
 
     update(dt) {
@@ -444,10 +449,17 @@ class Game {
                 for (let j = this.enemies.length - 1; j >= 0; j--) {
                     let e = this.enemies[j];
                     if (this.checkCollision(p, e)) {
-                        this.enemies.splice(j, 1);
+                        if (e.takeDamage) {
+                            if (e.takeDamage()) {
+                                this.enemies.splice(j, 1);
+                                this.score += 10;
+                            }
+                        } else {
+                            this.enemies.splice(j, 1);
+                            this.score += 10;
+                        }
                         this.projectiles.splice(i, 1);
                         this.soundEngine.playHit();
-                        this.score += 10;
                         break;
                     }
                 }
