@@ -1151,5 +1151,25 @@ window.ARCADE_REGISTRY = [
     "accentColor": "#cdc3b9",
     "phase": "3",
     "path": "./games/086-trench-tactics/index.html"
+  },
+  {
+    "id": "087",
+    "slug": "087-tokyo-high-school-rooftop-sakura-courtyard-d",
+    "title": "Tokyo High-School Rooftop & Sakura Courtyard Dating 087",
+    "genre": "Dating Sim, Romance Visual Novel & Idol Life Sim",
+    "coreMechanic": "Branching Gadget / Clue Combination",
+    "setting": "Tokyo High-School Rooftop & Sakura Courtyard",
+    "description": "You have 30 days before the Grand Starlight Festival to balance your daily schedule, build your personal stats, navigate rival drama, and win the heart of one of 5 distinct romanceable leads.",
+    "controls": "Desktop: Enter to Start, Mouse to click. Mobile: Tap to interact.",
+    "createdAt": "2024-03-24",
+    "accentColor": "#ff4081",
+    "phase": "1",
+    "lore": "You have 30 days before the Grand Starlight Festival to balance your daily schedule, build your personal stats (Charm, Wit, Talent, Cash), navigate rival drama, and win the heart of one of 5 distinct romanceable leads—or claim solo superstardom.",
+    "inspiration": "Pacthesis Dating Sims (Chrono Days, Number Days, Star Days, Lunar Days, Idol Days, Kingdom Days), Love Hina Sim Date RPG, SimGirl & Date Ariane, Cute Knight & Magical Diary Flash.",
+    "objective": "Manage your Stamina and Cash across Morning/Afternoon/Evening slots, raise the stats required for your chosen character route, choose perceptive dialogue responses, and unlock a True Ending CG before Day 30.",
+    "howItWorks": "1. Plan Your Daily Schedule: Spend Stamina on Work, Study, Studio Practice, or Shopping to boost Charm, Wit, Talent, and Cash. | 2. Explore Locations & Converse: Visit the Cafe, Rooftop, Arcade, or VIP Lounge to trigger branching dialogue and give favorite gifts. | 3. Trigger Milestone Dates & Endings: Cross Affection thresholds at Day 10, 20, and 30 to unlock Festival confessions and persistent Album endings.",
+    "sessionLength": "10-15 Min 30-Day Calendar Campaign (Quick-Save Any Day)",
+    "palette": "Background #fff8f6 -> #ffe4ec, Primary Accent #ff4081, Secondary Accent #7c4dff",
+    "path": "./games/087-tokyo-high-school-rooftop-sakura-courtyard-d/index.html"
   }
 ];
