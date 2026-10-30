@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Texas Saloon & High-Roller Parlor Dress-Up, Doll Mak 089</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ui-layer">
+      <div id="title-screen" class="screen">
+        <h1>Texas Saloon & High-Roller Parlor Dress-Up</h1>
+        <p class="lore-prologue">You are the rising lead stylist at an elite international fashion atelier. High-profile clients arrive with urgent event briefs—from Velvet Gothic Galas to Cyber-Idol Debuts—and only your eye for silhouette, fabric texture, and color harmony can win the Gold Crown on the main runway.</p>
+        <button id="btn-start" type="button">Start Game (Enter)</button>
+        <button id="btn-how-to" type="button">How to Play</button>
+        <button id="btn-options" type="button">Options</button>
+      </div>
+
+      <div id="how-to-modal" class="modal hidden">
+        <h2>How to Play</h2>
+        <div class="panels">
+          <div class="panel">
+            <h3>1. The Goal & Lore</h3>
+            <p>Read the Client Brief & Theme Tags: Check the target dress code and bonus color harmony goals.</p>
+          </div>
+          <div class="panel">
+            <h3>2. How the Loop Works & Why</h3>
+            <p>Layer & Customize Garments: Select categories and apply live color/pattern swatches. Walk the runway to receive scores. Risk your score in a Double-or-Nothing draw to maximize your earnings!</p>
+          </div>
+          <div class="panel">
+            <h3>3. Desktop & Touch Controls</h3>
+            <p>Use Mouse or Touch to tap buttons, select garments, and interact with the UI. Keyboard Enter starts the game.</p>
+          </div>
+        </div>
+        <button id="btn-close-how-to" type="button">Close</button>
+      </div>
+
+      <div id="options-modal" class="modal hidden">
+        <h2>Options</h2>
+        <div class="options-section">
+          <h3>Audio & Comfort</h3>
+          <label><input type="checkbox" id="chk-mute"> Mute All Sounds</label>
+        </div>
+        <div class="options-section">
+          <h3>Controls & Handedness</h3>
+          <p>Default Layout is Mouse/Touch</p>
+        </div>
+        <div class="options-section">
+          <details>
+            <summary>Manage Save Data</summary>
+            <textarea id="save-data-export" rows="3" readonly></textarea>
+            <br>
+            <button id="btn-copy-save" type="button">Copy to Clipboard</button>
+            <button id="btn-reset-save" type="button">Reset Progress</button>
+          </details>
+        </div>
+        <button id="btn-close-options" type="button">Close Options</button>
+      </div>
+
+      <div id="ingame-ui" class="hidden">
+        <div id="brief-panel">Client Brief: <span id="current-brief">Baroque Saloon</span></div>
+        <div id="wardrobe-panel">
+            <button id="btn-cat-hair" type="button">Hair</button>
+            <button id="btn-cat-top" type="button">Top</button>
+            <button id="btn-cat-bottom" type="button">Bottom</button>
+            <button id="btn-cat-shoes" type="button">Shoes</button>
+        </div>
+        <div id="item-selection"></div>
+        <button id="btn-runway" type="button">Walk the Runway!</button>
+      </div>
+
+      <div id="runway-ui" class="hidden">
+         <h2 id="runway-result">Score: 0</h2>
+         <p>Double or Nothing?</p>
+         <button id="btn-double" type="button">Draw High-Card (Double/Nothing)</button>
+         <button id="btn-collect" type="button">Collect & Next</button>
+      </div>
+    </div>
+
+    <a href="../../index.html" class="back-link">Back to Arcade</a>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
