@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "mode": "phase",
+  "status": "FAIL",
+  "classification": "content",
+  "base_sha": "1945d4259370c080ee0bb185e867d9d0f1d8a11f",
+  "head_sha": "0186af342311de08f09e478fa415df4d42fd4ad0",
+  "targets": [],
+  "paths": [],
+  "errors": [
+    "Unable to validate repository/manifest data (CalledProcessError)."
+  ],
+  "automatic_merge_eligible": false
+}
