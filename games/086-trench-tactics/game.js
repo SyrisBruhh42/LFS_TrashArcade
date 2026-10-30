@@ -270,6 +270,8 @@ class Game {
         this.upgradeManager = new UpgradeManager(this);
         this.nextBossScore = 150;
 
+        if (typeof EndgameManager !== 'undefined') this.endgameManager = new EndgameManager(this);
+
         this.pauseButton = document.getElementById('pause-button');
         this.pauseButton.addEventListener('click', () => {
             this.inputManager.wakeAudio();
@@ -355,6 +357,7 @@ class Game {
         if (this.world) this.world.update(dt);
         if (this.upgradeManager) this.upgradeManager.update(dt, this.inputManager);
         if (this.vfx) this.vfx.update(dt);
+        if (this.endgameManager) this.endgameManager.update(dt);
         if (this.state === 'UPGRADE') return;
         if (this.state === 'TITLE') {
             document.getElementById('back-button').classList.remove('hidden');
@@ -572,6 +575,10 @@ class Game {
             this.ctx.font = '20px monospace';
             this.ctx.fillText(`Score: ${this.score}`, this.width/2, this.height/2);
             this.ctx.fillText('Press Space or Click to Restart', this.width/2, this.height/2 + 40);
+        }
+
+        if (this.endgameManager) {
+            this.endgameManager.draw(this.ctx);
         }
 
         if (this.vfx) {
