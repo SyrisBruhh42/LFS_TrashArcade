@@ -433,8 +433,8 @@ class Game {
     this.showScreen(null);
     this.state = 'PLAYING';
 
-    this.p1 = new Player(this.width/4, this.height - 100, false, '#00e5ff');
-    this.p2 = new Player(this.width*3/4, this.height - 100, true, '#ff4081');
+    this.p1 = new PlayerController(this.width/4, this.height - 100, false, '#00e5ff');
+    this.p2 = new PlayerController(this.width*3/4, this.height - 100, true, '#ff4081');
     this.ball = new Ball(this.width/2, 200);
 
     this.score1 = 0;
