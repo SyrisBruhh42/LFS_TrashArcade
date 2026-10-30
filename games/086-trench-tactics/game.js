@@ -549,53 +549,9 @@ class Game {
         }
 
         if (this.state === 'TITLE') {
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = 'bold 40px monospace';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('TRENCH TACTICS', this.width/2, 80);
-
-            this.ctx.font = '14px monospace';
-            this.ctx.fillText('LORE: Navigate the deep ocean trench in tactical turn-based blitz combat.', this.width/2, 110, this.width - 40);
-
-            this.ctx.fillStyle = 'rgba(13, 53, 84, 0.8)';
-            this.ctx.fillRect(50, 140, 220, 120);
-            this.ctx.fillRect(290, 140, 220, 120);
-            this.ctx.fillRect(530, 140, 220, 120);
-
-            this.ctx.fillStyle = '#00e5ff';
-            this.ctx.font = 'bold 16px monospace';
-            this.ctx.fillText('1. The Goal', 160, 165);
-            this.ctx.fillText('2. The Loop', 400, 165);
-            this.ctx.fillText('3. Controls', 640, 165);
-
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '13px monospace';
-            this.ctx.fillText('Survive and destroy', 160, 195);
-            this.ctx.fillText('enemies for points.', 160, 215);
-            this.ctx.fillText('Stillness slows time.', 400, 195);
-            this.ctx.fillText('Movement speeds it up.', 400, 215);
-            this.ctx.fillText('WASD/Drag: Move', 640, 195);
-            this.ctx.fillText('Space/Tap: Attack', 640, 215);
-
-            this.ctx.font = '24px monospace';
-            this.ctx.fillStyle = '#00e676';
-            this.ctx.fillText('Enter / Space / Tap to Start', this.width/2, 320);
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '18px monospace';
-            this.ctx.fillText('Press [O] for Options', this.width/2, 360);
-
-            this.ctx.font = '16px monospace';
-            this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, 400);
+            this.uiManager.drawTitle(this.ctx);
         } else if (this.state === 'OPTIONS') {
-            this.ctx.fillStyle = 'rgba(5, 10, 18, 0.9)';
-            this.ctx.fillRect(0, 0, this.width, this.height);
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '30px monospace';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('OPTIONS', this.width/2, 80);
-            this.ctx.font = '16px monospace';
-            this.ctx.fillText('Volume (M to Mute): ' + (this.saveManager.data.options.soundVolume * 100).toFixed(0) + '%', this.width/2, 140);
-            this.ctx.fillText('Press [Esc] to Return', this.width/2, 300);
+            this.uiManager.drawOptions(this.ctx);
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(5, 10, 18, 0.7)';
             this.ctx.fillRect(0, 0, this.width, this.height);
