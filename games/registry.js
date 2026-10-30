@@ -1191,5 +1191,19 @@ window.ARCADE_REGISTRY = [
     "sessionLength": "90-180 Sec Championship Match (Best of 5 Cup)",
     "palette": "Background #1b162a -> #2c2247, Primary Accent #00e5ff, Secondary Accent #ff4081",
     "path": "./games/088-garage-punk-soundstage-quirky-ragdoll-party/index.html"
+  },
+  {
+    "id": "089",
+    "slug": "089-texas-saloon-high-roller-parlor-dress-up-dol",
+    "title": "Texas Saloon & High-Roller Parlor Dress-Up, Doll Mak 089",
+    "genre": "Dress-Up, Doll Maker & Fashion Runway",
+    "coreMechanic": "High-Risk Double-or-Nothing Stake",
+    "setting": "Texas Saloon & High-Roller Parlor",
+    "description": "Curate a cohesive multi-layer look across hair, tops, bottoms/gowns, shoes, and accessories that matches the client's theme brief.",
+    "controls": "Mouse/Touch to select and style. Keyboard to navigate.",
+    "createdAt": "2023-10-31",
+    "accentColor": "#ffd700",
+    "phase": "1",
+    "path": "./games/089-texas-saloon-high-roller-parlor-dress-up-dol/index.html"
   }
 ];
