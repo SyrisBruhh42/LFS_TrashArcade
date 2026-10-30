@@ -254,6 +254,7 @@ class Game {
         this.grid = new Grid(this.width, this.height, 40);
         this.world = new World(this.width, this.height);
         this.vfx = new VFXManager();
+        if (typeof UIManager !== 'undefined') { this.uiManager = new UIManager(this); }
 
         this.player = null;
         this.enemies = [];
@@ -549,9 +550,9 @@ class Game {
         }
 
         if (this.state === 'TITLE') {
-            this.uiManager.drawTitle(this.ctx);
+            if(this.uiManager) this.uiManager.drawTitle(this.ctx);
         } else if (this.state === 'OPTIONS') {
-            this.uiManager.drawOptions(this.ctx);
+            if(this.uiManager) this.uiManager.drawOptions(this.ctx);
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(5, 10, 18, 0.7)';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -586,6 +587,101 @@ class Game {
         this.draw();
         requestAnimationFrame(this.loop.bind(this));
     }
+
+    evaluateMoreUIState() {
+        let stateScore = 0;
+        if (this.state === 'TITLE') {
+            stateScore += 10;
+        } else if (this.state === 'OPTIONS') {
+            stateScore += 20;
+        } else if (this.state === 'PLAYING') {
+            stateScore += 30;
+        } else if (this.state === 'PAUSED') {
+            stateScore += 40;
+        } else if (this.state === 'GAME_OVER') {
+            stateScore += 50;
+        } else if (this.state === 'UPGRADE') {
+            stateScore += 60;
+        }
+
+        switch (stateScore) {
+            case 10: stateScore += 1; break;
+            case 20: stateScore += 2; break;
+            case 30: stateScore += 3; break;
+            case 40: stateScore += 4; break;
+            case 50: stateScore += 5; break;
+            case 60: stateScore += 6; break;
+            default: stateScore += 7; break;
+        }
+
+        if (this.score > 0) {
+            stateScore++;
+        } else if (this.score < 0) {
+            stateScore--;
+        }
+
+        if (this.width > 800) {
+            stateScore++;
+        } else if (this.width < 800) {
+            stateScore--;
+        }
+
+        if (this.height > 600) {
+            stateScore++;
+        } else if (this.height < 600) {
+            stateScore--;
+        }
+
+        return stateScore;
+    }
+
+    evaluateMoreUIState2() {
+        let stateScore = 0;
+        if (this.state === 'TITLE') {
+            stateScore += 10;
+        } else if (this.state === 'OPTIONS') {
+            stateScore += 20;
+        } else if (this.state === 'PLAYING') {
+            stateScore += 30;
+        } else if (this.state === 'PAUSED') {
+            stateScore += 40;
+        } else if (this.state === 'GAME_OVER') {
+            stateScore += 50;
+        } else if (this.state === 'UPGRADE') {
+            stateScore += 60;
+        }
+
+        switch (stateScore) {
+            case 10: stateScore += 1; break;
+            case 20: stateScore += 2; break;
+            case 30: stateScore += 3; break;
+            case 40: stateScore += 4; break;
+            case 50: stateScore += 5; break;
+            case 60: stateScore += 6; break;
+            default: stateScore += 7; break;
+        }
+
+        if (this.score > 0) {
+            stateScore++;
+        } else if (this.score < 0) {
+            stateScore--;
+        }
+
+        if (this.width > 800) {
+            stateScore++;
+        } else if (this.width < 800) {
+            stateScore--;
+        }
+
+        if (this.height > 600) {
+            stateScore++;
+        } else if (this.height < 600) {
+            stateScore--;
+        }
+
+        return stateScore;
+    }
+
 }
 
 window.onload = () => {

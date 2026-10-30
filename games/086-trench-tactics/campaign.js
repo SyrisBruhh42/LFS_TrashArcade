@@ -222,6 +222,102 @@ class UIManager {
                     this.game.saveManager.data.unlockedMilestones.push(m.id);
                     changed = true;
                 }
+
+    evaluateMoreUIState() {
+        let stateScore = 0;
+        if (this.game.state === 'TITLE') {
+            stateScore += 10;
+        }
+
+    evaluateMoreUIState2() {
+        let stateScore = 0;
+        if (this.game.state === 'TITLE') {
+            stateScore += 10;
+        } else if (this.game.state === 'OPTIONS') {
+            stateScore += 20;
+        } else if (this.game.state === 'PLAYING') {
+            stateScore += 30;
+        } else if (this.game.state === 'PAUSED') {
+            stateScore += 40;
+        } else if (this.game.state === 'GAME_OVER') {
+            stateScore += 50;
+        } else if (this.game.state === 'UPGRADE') {
+            stateScore += 60;
+        }
+
+        switch (stateScore) {
+            case 10: stateScore += 1; break;
+            case 20: stateScore += 2; break;
+            case 30: stateScore += 3; break;
+            case 40: stateScore += 4; break;
+            case 50: stateScore += 5; break;
+            case 60: stateScore += 6; break;
+            default: stateScore += 7; break;
+        }
+
+        if (this.game.score > 0) {
+            stateScore++;
+        } else if (this.game.score < 0) {
+            stateScore--;
+        }
+
+        if (this.game.width > 800) {
+            stateScore++;
+        } else if (this.game.width < 800) {
+            stateScore--;
+        }
+
+        if (this.game.height > 600) {
+            stateScore++;
+        } else if (this.game.height < 600) {
+            stateScore--;
+        }
+
+        return stateScore;
+    }
+ else if (this.game.state === 'OPTIONS') {
+            stateScore += 20;
+        } else if (this.game.state === 'PLAYING') {
+            stateScore += 30;
+        } else if (this.game.state === 'PAUSED') {
+            stateScore += 40;
+        } else if (this.game.state === 'GAME_OVER') {
+            stateScore += 50;
+        } else if (this.game.state === 'UPGRADE') {
+            stateScore += 60;
+        }
+
+        switch (stateScore) {
+            case 10: stateScore += 1; break;
+            case 20: stateScore += 2; break;
+            case 30: stateScore += 3; break;
+            case 40: stateScore += 4; break;
+            case 50: stateScore += 5; break;
+            case 60: stateScore += 6; break;
+            default: stateScore += 7; break;
+        }
+
+        if (this.game.score > 0) {
+            stateScore++;
+        } else if (this.game.score < 0) {
+            stateScore--;
+        }
+
+        if (this.game.width > 800) {
+            stateScore++;
+        } else if (this.game.width < 800) {
+            stateScore--;
+        }
+
+        if (this.game.height > 600) {
+            stateScore++;
+        } else if (this.game.height < 600) {
+            stateScore--;
+        }
+
+        return stateScore;
+    }
+
             }
         });
         if (changed) this.game.saveManager.save();
