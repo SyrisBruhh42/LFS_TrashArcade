@@ -436,6 +436,7 @@ class Game {
     this.p1 = new PlayerController(this.width/4, this.height - 100, false, '#00e5ff');
     this.p2 = new PlayerController(this.width*3/4, this.height - 100, true, '#ff4081');
     this.ball = new Ball(this.width/2, 200);
+    this.world = new WorldEnvironment(this.width, this.height);
 
     this.score1 = 0;
     this.score2 = 0;
@@ -491,6 +492,8 @@ class Game {
     const p1State = this.p1.update(dt, this.input, this.ball, this.width, this.height);
     const p2State = this.p2.update(dt, this.input, this.ball, this.width, this.height);
     const ballHitWall = this.ball.update(dt, this.width, this.height);
+
+    if (this.world) this.world.update(dt, this.ball, this.audio);
 
     if (ballHitWall) this.audio.playHit();
 
@@ -587,6 +590,10 @@ class Game {
   draw() {
     // Clear
     this.ctx.clearRect(0, 0, this.width, this.height);
+
+    if (this.world && (this.state === 'PLAYING' || this.state === 'PAUSED')) {
+      this.world.draw(this.ctx);
+    }
 
     if (this.state === 'PAUSED') {
       this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
