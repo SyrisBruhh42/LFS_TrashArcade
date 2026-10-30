@@ -150,6 +150,15 @@ class Player {
     this.jumpForce = -600;
   }
 
+  getBotInput(ball, gameWidth, gameHeight) {
+    let moveDir = 0, jumpReq = false, smashReq = false;
+    if (ball.x > this.x + 20) moveDir = 1;
+    else if (ball.x < this.x - 20) moveDir = -1;
+    if (ball.y < this.y - 50 && ball.x > this.x - 100 && ball.x < this.x + 100) jumpReq = true;
+    if (Math.abs(ball.x - this.x) < 60 && Math.abs(ball.y - this.y) < 60) smashReq = true;
+    return { moveDir, jumpReq, smashReq };
+  }
+
   update(dt, input, ball, gameWidth, gameHeight) {
     // Gravity
     this.vy += 1200 * dt;
@@ -165,11 +174,10 @@ class Player {
       if (input.isDown('ArrowUp') || input.isDown('KeyW')) jumpReq = true;
       if (input.isDown('Space')) smashReq = true;
     } else {
-      // Simple Bot AI
-      if (ball.x > this.x + 20) moveDir = 1;
-      else if (ball.x < this.x - 20) moveDir = -1;
-      if (ball.y < this.y - 50 && ball.x > this.x - 100 && ball.x < this.x + 100) jumpReq = true;
-      if (Math.abs(ball.x - this.x) < 60 && Math.abs(ball.y - this.y) < 60) smashReq = true;
+      const botInput = this.getBotInput(ball, gameWidth, gameHeight);
+      moveDir = botInput.moveDir;
+      jumpReq = botInput.jumpReq;
+      smashReq = botInput.smashReq;
     }
 
     this.vx = moveDir * this.speed;
@@ -434,7 +442,16 @@ class Game {
     this.state = 'PLAYING';
 
     this.p1 = new PlayerController(this.width/4, this.height - 100, false, '#00e5ff');
-    this.p2 = new PlayerController(this.width*3/4, this.height - 100, true, '#ff4081');
+
+    if (!this.rosterManager) {
+      this.rosterManager = new RosterManager();
+    }
+    const currentMatchIndex = this.saveManager.data.wins || 0;
+    const RivalClass = this.rosterManager.getRivalClass(currentMatchIndex);
+    this.p2 = new RivalClass(this.width*3/4, this.height - 100);
+    // Reset bot score label if starting new opponent
+    const p2Label = document.querySelector('.score-p2');
+    if (p2Label) { p2Label.dataset.nameSet = ""; }
     this.ball = new Ball(this.width/2, 200);
     this.world = new WorldEnvironment(this.width, this.height);
 
@@ -560,6 +577,14 @@ class Game {
   }
 
   updateHUD() {
+    if (this.p2 && this.p2.name) {
+      const p2Label = document.querySelector('.score-p2');
+      if (p2Label && !p2Label.dataset.nameSet) {
+        p2Label.innerHTML = `${this.p2.name}: <span id="score2"></span>`;
+        p2Label.dataset.nameSet = "true";
+      }
+    }
+
     document.getElementById('score1').textContent = this.score1;
     document.getElementById('score2').textContent = this.score2;
     document.getElementById('time').textContent = this.timeLeft;
