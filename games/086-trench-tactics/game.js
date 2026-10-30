@@ -254,6 +254,7 @@ class Game {
         this.grid = new Grid(this.width, this.height, 40);
         this.world = new World(this.width, this.height);
         this.vfx = new VFXManager();
+        if (typeof UIManager !== 'undefined') { this.uiManager = new UIManager(this); }
 
         this.player = null;
         this.enemies = [];
@@ -549,53 +550,9 @@ class Game {
         }
 
         if (this.state === 'TITLE') {
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = 'bold 40px monospace';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('TRENCH TACTICS', this.width/2, 80);
-
-            this.ctx.font = '14px monospace';
-            this.ctx.fillText('LORE: Navigate the deep ocean trench in tactical turn-based blitz combat.', this.width/2, 110, this.width - 40);
-
-            this.ctx.fillStyle = 'rgba(13, 53, 84, 0.8)';
-            this.ctx.fillRect(50, 140, 220, 120);
-            this.ctx.fillRect(290, 140, 220, 120);
-            this.ctx.fillRect(530, 140, 220, 120);
-
-            this.ctx.fillStyle = '#00e5ff';
-            this.ctx.font = 'bold 16px monospace';
-            this.ctx.fillText('1. The Goal', 160, 165);
-            this.ctx.fillText('2. The Loop', 400, 165);
-            this.ctx.fillText('3. Controls', 640, 165);
-
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '13px monospace';
-            this.ctx.fillText('Survive and destroy', 160, 195);
-            this.ctx.fillText('enemies for points.', 160, 215);
-            this.ctx.fillText('Stillness slows time.', 400, 195);
-            this.ctx.fillText('Movement speeds it up.', 400, 215);
-            this.ctx.fillText('WASD/Drag: Move', 640, 195);
-            this.ctx.fillText('Space/Tap: Attack', 640, 215);
-
-            this.ctx.font = '24px monospace';
-            this.ctx.fillStyle = '#00e676';
-            this.ctx.fillText('Enter / Space / Tap to Start', this.width/2, 320);
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '18px monospace';
-            this.ctx.fillText('Press [O] for Options', this.width/2, 360);
-
-            this.ctx.font = '16px monospace';
-            this.ctx.fillText(`High Score: ${this.saveManager.data.highScore}`, this.width/2, 400);
+            if(this.uiManager) this.uiManager.drawTitle(this.ctx);
         } else if (this.state === 'OPTIONS') {
-            this.ctx.fillStyle = 'rgba(5, 10, 18, 0.9)';
-            this.ctx.fillRect(0, 0, this.width, this.height);
-            this.ctx.fillStyle = '#cdc3b9';
-            this.ctx.font = '30px monospace';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('OPTIONS', this.width/2, 80);
-            this.ctx.font = '16px monospace';
-            this.ctx.fillText('Volume (M to Mute): ' + (this.saveManager.data.options.soundVolume * 100).toFixed(0) + '%', this.width/2, 140);
-            this.ctx.fillText('Press [Esc] to Return', this.width/2, 300);
+            if(this.uiManager) this.uiManager.drawOptions(this.ctx);
         } else if (this.state === 'PAUSED') {
             this.ctx.fillStyle = 'rgba(5, 10, 18, 0.7)';
             this.ctx.fillRect(0, 0, this.width, this.height);
@@ -630,6 +587,101 @@ class Game {
         this.draw();
         requestAnimationFrame(this.loop.bind(this));
     }
+
+    evaluateMoreUIState() {
+        let stateScore = 0;
+        if (this.state === 'TITLE') {
+            stateScore += 10;
+        } else if (this.state === 'OPTIONS') {
+            stateScore += 20;
+        } else if (this.state === 'PLAYING') {
+            stateScore += 30;
+        } else if (this.state === 'PAUSED') {
+            stateScore += 40;
+        } else if (this.state === 'GAME_OVER') {
+            stateScore += 50;
+        } else if (this.state === 'UPGRADE') {
+            stateScore += 60;
+        }
+
+        switch (stateScore) {
+            case 10: stateScore += 1; break;
+            case 20: stateScore += 2; break;
+            case 30: stateScore += 3; break;
+            case 40: stateScore += 4; break;
+            case 50: stateScore += 5; break;
+            case 60: stateScore += 6; break;
+            default: stateScore += 7; break;
+        }
+
+        if (this.score > 0) {
+            stateScore++;
+        } else if (this.score < 0) {
+            stateScore--;
+        }
+
+        if (this.width > 800) {
+            stateScore++;
+        } else if (this.width < 800) {
+            stateScore--;
+        }
+
+        if (this.height > 600) {
+            stateScore++;
+        } else if (this.height < 600) {
+            stateScore--;
+        }
+
+        return stateScore;
+    }
+
+    evaluateMoreUIState2() {
+        let stateScore = 0;
+        if (this.state === 'TITLE') {
+            stateScore += 10;
+        } else if (this.state === 'OPTIONS') {
+            stateScore += 20;
+        } else if (this.state === 'PLAYING') {
+            stateScore += 30;
+        } else if (this.state === 'PAUSED') {
+            stateScore += 40;
+        } else if (this.state === 'GAME_OVER') {
+            stateScore += 50;
+        } else if (this.state === 'UPGRADE') {
+            stateScore += 60;
+        }
+
+        switch (stateScore) {
+            case 10: stateScore += 1; break;
+            case 20: stateScore += 2; break;
+            case 30: stateScore += 3; break;
+            case 40: stateScore += 4; break;
+            case 50: stateScore += 5; break;
+            case 60: stateScore += 6; break;
+            default: stateScore += 7; break;
+        }
+
+        if (this.score > 0) {
+            stateScore++;
+        } else if (this.score < 0) {
+            stateScore--;
+        }
+
+        if (this.width > 800) {
+            stateScore++;
+        } else if (this.width < 800) {
+            stateScore--;
+        }
+
+        if (this.height > 600) {
+            stateScore++;
+        } else if (this.height < 600) {
+            stateScore--;
+        }
+
+        return stateScore;
+    }
+
 }
 
 window.onload = () => {
