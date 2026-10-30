@@ -119,6 +119,7 @@ class Game {
         if (typeof BossManager !== 'undefined') this.bosses = new BossManager(this);
         if (typeof ProgressionManager !== 'undefined') this.progression = new ProgressionManager(this);
         if (typeof VFXManager !== 'undefined') this.vfx = new VFXManager(this);
+        if (typeof CampaignManager !== 'undefined') this.campaign = new CampaignManager(this);
 
         this.state = 'TITLE';
         if(this.sound) { this.sound.setMilestoneMode(false); } // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER, SHOWDOWN, SHOP
@@ -150,6 +151,7 @@ class Game {
     initUI() {
         const updateOpt = () => { this.applyOptions(); this.saveManager.save(); };
         document.getElementById('vol-master').addEventListener('input', e => { this.saveManager.data.options.masterVol = parseFloat(e.target.value); updateOpt(); });
+        if (document.getElementById('toggle-mute')) document.getElementById('toggle-mute').addEventListener('change', e => { this.saveManager.data.options.mute = e.target.checked; updateOpt(); });
         document.getElementById('vol-music').addEventListener('input', e => { this.saveManager.data.options.musicVol = parseFloat(e.target.value); updateOpt(); });
         document.getElementById('vol-sfx').addEventListener('input', e => { this.saveManager.data.options.sfxVol = parseFloat(e.target.value); updateOpt(); });
         document.getElementById('toggle-contrast').addEventListener('change', e => { this.saveManager.data.options.highContrast = e.target.checked; updateOpt(); });
@@ -160,8 +162,11 @@ class Game {
 
     applyOptions() {
         const opt = this.saveManager.data.options;
-        this.sound.setVolumes(opt.masterVol, opt.sfxVol, opt.musicVol);
+        let master = opt.mute ? 0 : opt.masterVol;
+        this.sound.setVolumes(master, opt.sfxVol, opt.musicVol);
         document.getElementById('vol-master').value = opt.masterVol;
+        if(document.getElementById('toggle-mute')) document.getElementById('toggle-mute').checked = !!opt.mute;
+        if(document.getElementById('toggle-lefthand')) document.getElementById('toggle-lefthand').checked = !!opt.leftHand;
     }
 
     start() {
@@ -193,6 +198,7 @@ class Game {
         if (this.state === 'SHOWDOWN' && this.bosses) this.bosses.update(dt);
         if (this.progression) this.progression.update(dt);
         if (this.vfx) this.vfx.update(dt);
+        if (this.campaign) this.campaign.update(dt);
         this.draw();
         this.input.update();
 
@@ -241,13 +247,15 @@ class Game {
                 { x: 300, y: 550, w: 200, h: 40, text: 'Options', onClick: () => { document.getElementById('options-modal').classList.add('active'); } }
             ];
         } else if (this.state === 'PLAYING') {
+            const bx = this.saveManager.data.options.leftHand ? 660 : 100;
+            const bMenuX = this.saveManager.data.options.leftHand ? 20 : 680;
             this.buttons = [
-                { x: 100, y: 200, w: 120, h: 60, text: 'Study', onClick: () => this.doAction('study') },
-                { x: 100, y: 280, w: 120, h: 60, text: 'Work', onClick: () => this.doAction('work') },
-                { x: 100, y: 360, w: 120, h: 60, text: 'Practice', onClick: () => this.doAction('practice') },
-                { x: 100, y: 440, w: 120, h: 60, text: 'Explore', onClick: () => this.doAction('explore') },
-                { x: 100, y: 520, w: 120, h: 40, text: 'Combine', onClick: () => { if (this.gadgetRig) this.gadgetRig.activateOverdrive(); } },
-                { x: 680, y: 20, w: 100, h: 40, text: 'Menu', onClick: () => this.pause() }
+                { x: bx, y: 200, w: 120, h: 60, text: 'Study', onClick: () => this.doAction('study') },
+                { x: bx, y: 280, w: 120, h: 60, text: 'Work', onClick: () => this.doAction('work') },
+                { x: bx, y: 360, w: 120, h: 60, text: 'Practice', onClick: () => this.doAction('practice') },
+                { x: bx, y: 440, w: 120, h: 60, text: 'Explore', onClick: () => this.doAction('explore') },
+                { x: bx, y: 520, w: 120, h: 40, text: 'Combine', onClick: () => { if (this.gadgetRig) this.gadgetRig.activateOverdrive(); } },
+                { x: bMenuX, y: 20, w: 100, h: 40, text: 'Menu', onClick: () => this.pause() }
             ];
 
             if (this.rosters) {
@@ -289,9 +297,10 @@ class Game {
         if(this.sound) { this.sound.setMilestoneMode(false); }
             }
         } else if (this.state === 'SHOWDOWN') {
+            const bx = this.saveManager.data.options.leftHand ? 660 : 100;
             this.buttons = [
-                { x: 100, y: 520, w: 120, h: 40, text: 'Combine', onClick: () => { if (this.gadgetRig) this.gadgetRig.activateOverdrive(); } },
-                { x: 100, y: 440, w: 120, h: 40, text: 'Attack', onClick: () => { if (this.bosses && this.bosses.activeShowdown) this.bosses.activeShowdown.hp -= 2; this.sound.playStatUp(); } }
+                { x: bx, y: 520, w: 120, h: 40, text: 'Combine', onClick: () => { if (this.gadgetRig) this.gadgetRig.activateOverdrive(); } },
+                { x: bx, y: 440, w: 120, h: 40, text: 'Attack', onClick: () => { if (this.bosses && this.bosses.activeShowdown) this.bosses.activeShowdown.hp -= 2; this.sound.playStatUp(); } }
             ];
 
             if (this.input.mouse.justDown) {
@@ -460,6 +469,7 @@ class Game {
             this.ctx.fillText(`Final Charm: ${this.saveManager.data.stats.charm}`, 400, 300);
             this.ctx.fillText('Click to Restart', 400, 400);
         }
+        if (this.campaign) this.campaign.draw(this.ctx);
         if (this.vfx) this.vfx.draw(this.ctx);
     }
 
