@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Garage Punk Soundstage Quirky Ragdoll Party Sports</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ui-layer">
+      <!-- Title Screen -->
+      <div id="title-screen" class="screen active">
+        <h1>Garage Punk Soundstage</h1>
+        <h2>Quirky Ragdoll Party Sports</h2>
+        <div class="lore-prologue">
+          The Grand Stadium Cup is underway! Step onto the floodlit pitch against a roster of eccentric rival champions where bouncy physics, trick-shot geometry, and floating stadium powerups turn every point into a highlight-reel duel.
+        </div>
+        <div class="main-menu-buttons">
+          <button id="btn-start" type="button">Start Game (Enter)</button>
+          <button id="btn-how-to-play" type="button">How to Play</button>
+          <button id="btn-options" type="button">Options</button>
+        </div>
+        <a href="../../index.html" class="back-link">Back to Arcade</a>
+      </div>
+
+      <!-- How to Play Screen -->
+      <div id="how-to-play-screen" class="screen hidden">
+        <h2>How to Play</h2>
+        <div class="panels-container">
+          <div class="panel">
+            <h3>1. The Goal & Lore</h3>
+            <p>Outscore your rival before the 90-second match clock expires (or reach 7 points first) by timing jumps, directional kicks/smashes, and powerup shots to advance through the Championship Bracket.</p>
+          </div>
+          <div class="panel">
+            <h3>2. How the Loop Works & Why</h3>
+            <p>Time your jump to intercept high lobs or block low line-drives. Strike the ball with directional spin or recoil to curve shots past the rival keeper. Strike mid-air powerup icons to trigger bonuses.</p>
+          </div>
+          <div class="panel">
+            <h3>3. Controls</h3>
+            <p><strong>Desktop:</strong> Left/Right Arrows or A/D to move. Up Arrow or W to jump. Space to Smash/Kick (Mid-Flight Boost).</p>
+            <p><strong>Mobile:</strong> Use the on-screen left/right buttons, Jump button, and Smash button.</p>
+          </div>
+        </div>
+        <button id="btn-close-how-to-play" type="button">Back</button>
+      </div>
+
+      <!-- Options Modal -->
+      <div id="options-screen" class="screen hidden">
+        <h2>Options</h2>
+        <div class="options-tabs">
+          <button class="tab-btn active" data-target="tab-audio" type="button">Audio & Comfort</button>
+          <button class="tab-btn" data-target="tab-controls" type="button">Controls & Handedness</button>
+        </div>
+
+        <div id="tab-audio" class="tab-content active">
+          <label>Master Volume: <input type="range" id="vol-master" min="0" max="1" step="0.1" value="1"></label>
+          <label>Music Volume: <input type="range" id="vol-music" min="0" max="1" step="0.1" value="0.5"></label>
+          <label>SFX Volume: <input type="range" id="vol-sfx" min="0" max="1" step="0.1" value="0.8"></label>
+          <label><input type="checkbox" id="chk-mute"> Mute All</label>
+          <label><input type="checkbox" id="chk-reduced-motion"> Reduced Motion / Screen-Shake Off</label>
+        </div>
+
+        <div id="tab-controls" class="tab-content hidden">
+          <label><input type="checkbox" id="chk-left-handed"> Left-Handed Touch Controls</label>
+
+          <details class="save-data-accordion">
+            <summary>Manage Save Data</summary>
+            <textarea id="save-data-text" rows="4" readonly></textarea>
+            <div class="save-buttons">
+              <button id="btn-copy-save" type="button">Copy to Clipboard</button>
+              <button id="btn-import-save" type="button">Import Save</button>
+              <button id="btn-reset-save" type="button" class="danger">Reset Save Data</button>
+            </div>
+          </details>
+        </div>
+
+        <button id="btn-close-options" type="button">Back</button>
+      </div>
+
+      <!-- HUD (Heads Up Display) -->
+      <div id="hud" class="hidden">
+        <div class="score-board">
+          <div class="score-p1">P1: <span id="score1">0</span></div>
+          <div class="timer">Time: <span id="time">90</span></div>
+          <div class="score-p2">Bot: <span id="score2">0</span></div>
+        </div>
+        <div class="messages" id="game-messages"></div>
+      </div>
+
+      <!-- Touch Controls -->
+      <div id="touch-controls" class="hidden">
+        <div class="touch-dpad">
+          <button id="btn-left" type="button">◀</button>
+          <button id="btn-right" type="button">▶</button>
+        </div>
+        <div class="touch-actions">
+          <button id="btn-jump" type="button">JUMP</button>
+          <button id="btn-smash" type="button">SMASH</button>
+        </div>
+      </div>
+
+      <!-- Game Over Screen -->
+      <div id="game-over-screen" class="screen hidden">
+        <h2 id="game-over-title">Match Over</h2>
+        <div id="game-over-stats"></div>
+        <button id="btn-restart" type="button">Play Again (Enter)</button>
+        <button id="btn-quit" type="button">Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
