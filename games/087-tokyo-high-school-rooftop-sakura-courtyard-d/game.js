@@ -6,7 +6,8 @@ window.ARCADE_CARTRIDGE_META = {
     inspiration: "Pacthesis Dating Sims (Chrono Days, Number Days, Star Days, Lunar Days, Idol Days, Kingdom Days), Love Hina Sim Date RPG, SimGirl & Date Ariane, Cute Knight & Magical Diary Flash.",
     howItWorks: "1. Plan Your Daily Schedule: Spend Stamina on Work, Study, Studio Practice, or Shopping to boost Charm, Wit, Talent, and Cash. | 2. Explore Locations & Converse: Visit the Cafe, Rooftop, Arcade, or VIP Lounge to trigger branching dialogue and give favorite gifts. | 3. Trigger Milestone Dates & Endings: Cross Affection thresholds at Day 10, 20, and 30 to unlock Festival confessions and persistent Album endings.",
     sessionLength: "10-15 Min 30-Day Calendar Campaign (Quick-Save Any Day)",
-    palette: "Background #fff8f6 -> #ffe4ec, Primary Accent #ff4081, Secondary Accent #7c4dff"
+    palette: "Background #fff8f6 -> #ffe4ec, Primary Accent #ff4081, Secondary Accent #7c4dff",
+    scene: "Tokyo High-School Rooftop & Sakura Courtyard Dating 087"
 };
 
 class SaveManager {
@@ -120,6 +121,7 @@ class Game {
         if (typeof ProgressionManager !== 'undefined') this.progression = new ProgressionManager(this);
         if (typeof VFXManager !== 'undefined') this.vfx = new VFXManager(this);
         if (typeof CampaignManager !== 'undefined') this.campaign = new CampaignManager(this);
+        if (typeof EndgameManager !== 'undefined') this.endgame = new EndgameManager(this);
 
         this.state = 'TITLE';
         if(this.sound) { this.sound.setMilestoneMode(false); } // TITLE, PLAYING, PAUSED, EVENT, GAMEOVER, SHOWDOWN, SHOP
@@ -199,6 +201,7 @@ class Game {
         if (this.progression) this.progression.update(dt);
         if (this.vfx) this.vfx.update(dt);
         if (this.campaign) this.campaign.update(dt);
+        if (this.endgame) this.endgame.update(dt);
         this.draw();
         this.input.update();
 
@@ -461,16 +464,11 @@ class Game {
             if (this.bosses) this.bosses.draw(this.ctx);
             this.drawButtons();
         } else if (this.state === 'GAMEOVER') {
-            this.ctx.fillStyle = '#ff4081';
-            this.ctx.font = 'bold 36px sans-serif';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('Festival Day!', 400, 250);
-            this.ctx.font = '20px sans-serif';
-            this.ctx.fillText(`Final Charm: ${this.saveManager.data.stats.charm}`, 400, 300);
-            this.ctx.fillText('Click to Restart', 400, 400);
+            if (this.endgame) this.endgame.draw(this.ctx);
         }
         if (this.campaign) this.campaign.draw(this.ctx);
         if (this.vfx) this.vfx.draw(this.ctx);
+        if (this.endgame && this.state !== 'GAMEOVER') this.endgame.draw(this.ctx);
     }
 
     drawButtons() {
