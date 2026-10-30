@@ -1171,5 +1171,25 @@ window.ARCADE_REGISTRY = [
     "sessionLength": "10-15 Min 30-Day Calendar Campaign (Quick-Save Any Day)",
     "palette": "Background #fff8f6 -> #ffe4ec, Primary Accent #ff4081, Secondary Accent #7c4dff",
     "path": "./games/087-tokyo-high-school-rooftop-sakura-courtyard-d/index.html"
+  },
+  {
+    "id": "088",
+    "slug": "088-garage-punk-soundstage-quirky-ragdoll-party",
+    "title": "Garage Punk Soundstage Quirky Ragdoll Party Sports & 088",
+    "genre": "Quirky Ragdoll Party Sports & Physics Duels",
+    "coreMechanic": "Angle/Power Launch & Mid-Flight Boost",
+    "setting": "Garage Punk Soundstage",
+    "description": "2-Player / Bot Arcade Rivals, Physics Comedy & Quick-Match Sports Fans — Laugh-out-loud physics chaos, clutch last-second goals/smashes, and wild arena powerups in fast 90-second matches.",
+    "controls": "Desktop: Arrows/WASD to move/jump, Space to smash/kick. Mobile: On-screen d-pad and action buttons.",
+    "createdAt": "2024-04-01",
+    "accentColor": "#00e5ff",
+    "phase": "1",
+    "lore": "The Grand Stadium Cup is underway! Step onto the floodlit pitch against a roster of eccentric rival champions where bouncy physics, trick-shot geometry, and floating stadium powerups turn every point into a highlight-reel duel.",
+    "inspiration": "Sports Heads: Football, Tennis & Volleyball Championship (Mousebreaker), Slime Volleyball & Slime Soccer, QWOP, Girp & Get On Top (Bennett Foddy), Ragdoll Masters & Achilles.",
+    "objective": "Outscore your rival before the 90-second match clock expires (or reach 7 points first) by timing jumps, directional kicks/smashes, and powerup shots to advance through the Championship Bracket.",
+    "howItWorks": "1. Control Positioning & Jump Arc: Move across the court and time your jump to intercept high lobs or block low line-drives. | 2. Angle Your Kick / Smash: Strike the ball/target with directional spin or recoil to curve shots past the rival keeper. | 3. Hit Floating Arena Powerups: Strike mid-air icons to trigger Giant Goal, Speed Boots, Low Gravity, or Super Shot.",
+    "sessionLength": "90-180 Sec Championship Match (Best of 5 Cup)",
+    "palette": "Background #1b162a -> #2c2247, Primary Accent #00e5ff, Secondary Accent #ff4081",
+    "path": "./games/088-garage-punk-soundstage-quirky-ragdoll-party/index.html"
   }
 ];
