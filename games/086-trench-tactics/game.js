@@ -255,6 +255,7 @@ class Game {
         this.world = new World(this.width, this.height);
         this.vfx = new VFXManager();
         if (typeof UIManager !== 'undefined') { this.uiManager = new UIManager(this); }
+        if (typeof EndgameManager !== 'undefined') { this.endgameManager = new EndgameManager(this); }
 
         this.player = null;
         this.enemies = [];
@@ -353,6 +354,7 @@ class Game {
 
     update(dt) {
         if (this.world) this.world.update(dt);
+        if (this.endgameManager) this.endgameManager.update(dt);
         if (this.upgradeManager) this.upgradeManager.update(dt, this.inputManager);
         if (this.vfx) this.vfx.update(dt);
         if (this.state === 'UPGRADE') return;
@@ -544,6 +546,7 @@ class Game {
             this.ctx.fillText(`Time Flow: ${Math.round(this.timeMultiplier * 100)}%`, this.width - 20, 30);
 
             if (this.upgradeManager) this.upgradeManager.draw(this.ctx, this.width, this.height);
+            if (this.endgameManager) this.endgameManager.draw(this.ctx, this.width, this.height);
             if (this.bossActive) {
                 this.bossActive.drawBossUI(this.ctx, this.width, this.height);
             }
@@ -572,6 +575,7 @@ class Game {
             this.ctx.font = '20px monospace';
             this.ctx.fillText(`Score: ${this.score}`, this.width/2, this.height/2);
             this.ctx.fillText('Press Space or Click to Restart', this.width/2, this.height/2 + 40);
+            if (this.endgameManager) this.endgameManager.draw(this.ctx, this.width, this.height);
         }
 
         if (this.vfx) {
