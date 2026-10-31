@@ -285,6 +285,7 @@ class Game {
     this.audio = new SoundEngine();
     this.saveManager = new SaveManager('arcade_game_088_088-garage-punk-soundstage-quirky-ragdoll-party_v1');
     this.input = new InputManager();
+    this.bossManager = new BossManager(this);
 
     this.initUI();
     this.resize();
@@ -446,12 +447,7 @@ class Game {
     if (!this.rosterManager) {
       this.rosterManager = new RosterManager();
     }
-    const currentMatchIndex = this.saveManager.data.wins || 0;
-    const RivalClass = this.rosterManager.getRivalClass(currentMatchIndex);
-    this.p2 = new RivalClass(this.width*3/4, this.height - 100);
-    // Reset bot score label if starting new opponent
-    const p2Label = document.querySelector('.score-p2');
-    if (p2Label) { p2Label.dataset.nameSet = ""; }
+
     this.ball = new Ball(this.width/2, 200);
     this.world = new WorldEnvironment(this.width, this.height);
 
@@ -459,6 +455,19 @@ class Game {
     this.score2 = 0;
     this.timeLeft = 90;
     this.matchTimer = 0;
+
+    const currentMatchIndex = this.saveManager.data.wins || 0;
+
+    if (currentMatchIndex === 3 || currentMatchIndex === 7 || (currentMatchIndex > 10 && currentMatchIndex % 3 === 0)) {
+       this.bossManager.startBossEncounter(currentMatchIndex);
+    } else {
+       this.bossManager.active = false;
+       const RivalClass = this.rosterManager.getRivalClass(currentMatchIndex);
+       this.p2 = new RivalClass(this.width*3/4, this.height - 100);
+       // Reset bot score label if starting new opponent
+       const p2Label = document.querySelector('.score-p2');
+       if (p2Label) { p2Label.dataset.nameSet = ""; }
+    }
 
     this.updateHUD();
   }
@@ -512,6 +521,8 @@ class Game {
 
     if (this.world) this.world.update(dt, this.ball, this.audio);
 
+    if (this.bossManager) this.bossManager.update(dt);
+
     if (ballHitWall) this.audio.playHit();
 
     // Player-Ball Collision
@@ -521,17 +532,26 @@ class Game {
     // Scoring
     if (this.ball.y > this.height - this.ball.radius - 10) {
       if (this.ball.x < this.width/2) {
-        this.score2++;
-        this.audio.playScore();
-        this.resetBall(2);
+        if (this.bossManager && this.bossManager.active) {
+            this.audio.playScore();
+            this.resetBall(2);
+        } else {
+            this.score2++;
+            this.audio.playScore();
+            this.resetBall(2);
+        }
       } else {
-        this.score1++;
-        this.audio.playScore();
-        this.resetBall(1);
+        if (this.bossManager && this.bossManager.active) {
+            this.bossManager.damageBoss();
+        } else {
+            this.score1++;
+            this.audio.playScore();
+            this.resetBall(1);
+        }
       }
       this.updateHUD();
 
-      if (this.score1 >= 7 || this.score2 >= 7) {
+      if ((!this.bossManager || !this.bossManager.active) && (this.score1 >= 7 || this.score2 >= 7)) {
         this.endMatch();
       }
     }
@@ -656,6 +676,7 @@ class Game {
     this.p1.draw(this.ctx);
     this.p2.draw(this.ctx);
     this.ball.draw(this.ctx);
+    if (this.bossManager) this.bossManager.draw(this.ctx);
   }
 
   loop(time) {
