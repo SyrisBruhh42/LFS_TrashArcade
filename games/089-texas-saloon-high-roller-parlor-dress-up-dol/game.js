@@ -33,7 +33,8 @@ class Game {
         this.currentBrief = 0;
         this.score = 0;
 
-        this.briefs = ["Saloon Gala", "Outlaw Chic", "High Roller Elite"];
+        this.roster = typeof RunwayRoster !== 'undefined' ? new RunwayRoster(this) : null;
+        this.briefs = this.roster ? this.roster.getBriefs() : ["Saloon Gala", "Outlaw Chic", "High Roller Elite"];
 
         this.items = {
             hair: ["Blonde Bob", "Brunette Waves", "Red Updo"],
@@ -222,11 +223,17 @@ class Game {
         document.getElementById("runway-ui").classList.remove("hidden");
         document.getElementById("item-selection").innerHTML = ""; // Clear selection UI
 
-        // Simple scoring logic based on theme match
-        this.score = 50 + Math.floor(Math.random() * 50);
-        if(this.doll.top === this.currentBrief) this.score += 20;
+        if (this.roster) {
+            const evaluation = this.roster.judges[this.currentBrief].evaluate(this.doll);
+            this.score = evaluation.score;
+            document.getElementById("runway-result").innerText = `Score: ${this.score}! - ${evaluation.critique}`;
+        } else {
+            // Simple scoring logic based on theme match
+            this.score = 50 + Math.floor(Math.random() * 50);
+            if(this.doll.top === this.currentBrief) this.score += 20;
+            document.getElementById("runway-result").innerText = `Style Score: ${this.score}!`;
+        }
 
-        document.getElementById("runway-result").innerText = `Style Score: ${this.score}!`;
         this.playSound(800, "triangle", 0.3);
     }
 
@@ -288,6 +295,9 @@ class Game {
         if (this.world) {
             this.world.update(dt || 0);
         }
+        if (this.roster) {
+            this.roster.update(dt || 0);
+        }
     }
 
     draw() {
@@ -305,6 +315,7 @@ class Game {
 
         if (this.state === "PLAYING" || this.state === "RUNWAY") {
             this.drawDoll();
+            if (this.roster) this.roster.draw(this.ctx, this.currentBrief, this.width * 0.8, this.height / 2);
             if (this.world) this.world.drawForeground(this.ctx);
         } else if (this.state === "PAUSED") {
             this.ctx.fillStyle = "rgba(0,0,0,0.5)";
