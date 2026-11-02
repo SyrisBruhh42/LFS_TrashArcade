@@ -49,6 +49,7 @@ class Game {
             this.masterGain.connect(this.audioContext.destination);
         }
         this.muted = false;
+        this.advancedRig = typeof AdvancedRig !== 'undefined' ? new AdvancedRig(this) : null;
 
         this.bindEvents();
         this.setupResizeObserver();
@@ -83,6 +84,8 @@ class Game {
                 this.startGame();
             } else if (e.key === "Escape" || e.key === "p" || e.key === "P") {
                 this.togglePause();
+            } else if (e.key === " " && this.state === "PLAYING" && this.advancedRig) {
+                this.advancedRig.activateOverdrive();
             }
         });
 
@@ -206,6 +209,7 @@ class Game {
             btn.onclick = () => {
                 this.doll[cat] = idx;
                 this.playSound(600);
+                if (this.advancedRig) this.advancedRig.addCharge(20);
             };
             container.appendChild(btn);
         });
@@ -251,6 +255,10 @@ class Game {
     }
 
     drawDoll() {
+        if (this.advancedRig) {
+            this.advancedRig.draw(this.ctx, this.doll);
+            return;
+        }
         this.ctx.fillStyle = "#f5d0b5"; // skin
         this.ctx.fillRect(this.doll.x - 30, this.doll.y - 100, 60, 160);
 
@@ -272,7 +280,11 @@ class Game {
         this.ctx.fillRect(this.doll.x + 5, this.doll.y + 60, 30, 20);
     }
 
-    update() { }
+    update(dt) {
+        if (this.advancedRig) {
+            this.advancedRig.update(dt || 0);
+        }
+    }
 
     draw() {
         // BG
