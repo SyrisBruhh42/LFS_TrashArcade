@@ -86,7 +86,8 @@ class SaveManager {
     return {
       masterVol: 1, musicVol: 0.5, sfxVol: 0.8,
       muted: false, reducedMotion: false, leftHanded: false,
-      wins: 0, losses: 0
+      wins: 0, losses: 0,
+      coins: 0, upgrades: { springCleats: 0, curveGlove: 0, powerGauge: 0, mascotBuff: 0 }
     };
   }
 
@@ -286,6 +287,7 @@ class Game {
     this.saveManager = new SaveManager('arcade_game_088_088-garage-punk-soundstage-quirky-ragdoll-party_v1');
     this.input = new InputManager();
     this.bossManager = new BossManager(this);
+    this.progression = new ProgressionManager(this);
 
     this.initUI();
     this.resize();
@@ -443,6 +445,9 @@ class Game {
     this.state = 'PLAYING';
 
     this.p1 = new PlayerController(this.width/4, this.height - 100, false, '#00e5ff');
+    this.progression.applyUpgrades(this.p1);
+    this.progression.pickupTimer = 5;
+    this.progression.resetCombo();
 
     if (!this.rosterManager) {
       this.rosterManager = new RosterManager();
@@ -523,6 +528,8 @@ class Game {
 
     if (this.bossManager) this.bossManager.update(dt);
 
+    if (this.progression) this.progression.update(dt, this.ball, this.p1);
+
     if (ballHitWall) this.audio.playHit();
 
     // Player-Ball Collision
@@ -573,10 +580,16 @@ class Game {
       let forceX = (this.ball.x - player.x) * 5;
       let forceY = (this.ball.y - player.y) * 5;
 
+      let pGaugeMulti = 1.0;
+      if (player === this.p1 && this.progression) {
+        this.progression.registerHit();
+        pGaugeMulti += this.progression.upgrades.powerGauge * 0.2;
+      }
+
       if (pState.smashReq) {
         // Core Mechanic: Mid-Flight Boost / Smash
-        forceX *= 2.5;
-        forceY = -800; // Spike or high lob
+        forceX *= 2.5 * pGaugeMulti;
+        forceY = -800 * pGaugeMulti; // Spike or high lob
         player.smashCooldown = 0.5;
         // Recoil
         player.vy -= 200;
@@ -613,20 +626,27 @@ class Game {
   endMatch() {
     this.state = 'GAME_OVER';
     let msg = "";
+    let coinsEarned = 0;
     if (this.score1 > this.score2) {
       msg = "You Win!";
       this.saveManager.data.wins++;
+      coinsEarned = 50;
     } else if (this.score2 > this.score1) {
       msg = "Bot Wins!";
       this.saveManager.data.losses++;
+      coinsEarned = 10;
     } else {
       msg = "Draw!";
+      coinsEarned = 25;
     }
+
+    this.progression.addCoins(coinsEarned);
     this.saveManager.save();
 
     document.getElementById('game-over-title').textContent = msg;
     document.getElementById('game-over-stats').innerHTML = `
       <p>Final Score: ${this.score1} - ${this.score2}</p>
+      <p>Coins Earned: ${coinsEarned * Math.floor(this.progression.multiplier)} (Max Combo: ${this.progression.maxCombo})</p>
       <p>Career Record: ${this.saveManager.data.wins} W / ${this.saveManager.data.losses} L</p>
     `;
     this.showScreen('game-over-screen');
@@ -677,6 +697,7 @@ class Game {
     this.p2.draw(this.ctx);
     this.ball.draw(this.ctx);
     if (this.bossManager) this.bossManager.draw(this.ctx);
+    if (this.progression) this.progression.draw(this.ctx);
   }
 
   loop(time) {

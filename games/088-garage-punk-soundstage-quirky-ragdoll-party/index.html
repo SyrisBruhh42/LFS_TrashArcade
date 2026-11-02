@@ -103,10 +103,21 @@
         </div>
       </div>
 
+      <!-- Shop Screen -->
+      <div id="shop-screen" class="screen hidden">
+        <h2>Upgrade Shop</h2>
+        <div style="color: #00e5ff; margin-bottom: 20px;">Coins: <span id="shop-coins">0</span></div>
+        <div class="panels-container" id="shop-items-container">
+          <!-- Populated dynamically -->
+        </div>
+        <button id="btn-shop-continue" type="button">Continue to Match</button>
+      </div>
+
       <!-- Game Over Screen -->
       <div id="game-over-screen" class="screen hidden">
         <h2 id="game-over-title">Match Over</h2>
         <div id="game-over-stats"></div>
+        <button id="btn-shop" type="button">Visit Shop</button>
         <button id="btn-restart" type="button">Play Again (Enter)</button>
         <button id="btn-quit" type="button">Main Menu</button>
       </div>
@@ -118,5 +129,6 @@
   <script defer src="controls.js"></script>
   <script defer src="rosters.js"></script>
   <script defer src="bosses.js"></script>
+  <script defer src="progression.js"></script>
 </body>
 </html>
