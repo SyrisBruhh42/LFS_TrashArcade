@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "mode": "phase",
+  "status": "PASS",
+  "classification": "content",
+  "base_sha": "4aacba0a1150d951962883b1612669dc700ec0d6",
+  "head_sha": "62dbb897b79d3d71526292d90b097259c787b118",
+  "targets": [
+    "088-garage-punk-soundstage-quirky-ragdoll-party"
+  ],
+  "paths": [
+    "games/088-garage-punk-soundstage-quirky-ragdoll-party/game.js",
+    "games/088-garage-punk-soundstage-quirky-ragdoll-party/game.json",
+    "games/088-garage-punk-soundstage-quirky-ragdoll-party/index.html",
+    "games/088-garage-punk-soundstage-quirky-ragdoll-party/progression.js",
+    "games/088-garage-punk-soundstage-quirky-ragdoll-party/style.css",
+    "games/registry.js"
+  ],
+  "errors": [],
+  "automatic_merge_eligible": true
+}
