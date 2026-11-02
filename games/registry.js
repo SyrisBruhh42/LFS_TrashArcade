@@ -1203,7 +1203,7 @@ window.ARCADE_REGISTRY = [
     "controls": "Mouse/Touch to select and style. Keyboard to navigate.",
     "createdAt": "2023-10-31",
     "accentColor": "#ffd700",
-    "phase": "2",
+    "phase": "3",
     "path": "./games/089-texas-saloon-high-roller-parlor-dress-up-dol/index.html"
   }
 ];

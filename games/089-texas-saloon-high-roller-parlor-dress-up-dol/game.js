@@ -50,6 +50,7 @@ class Game {
         }
         this.muted = false;
         this.advancedRig = typeof AdvancedRig !== 'undefined' ? new AdvancedRig(this) : null;
+        this.world = typeof StudioEnvironment !== 'undefined' ? new StudioEnvironment(this) : null;
 
         this.bindEvents();
         this.setupResizeObserver();
@@ -284,12 +285,19 @@ class Game {
         if (this.advancedRig) {
             this.advancedRig.update(dt || 0);
         }
+        if (this.world) {
+            this.world.update(dt || 0);
+        }
     }
 
     draw() {
         // BG
-        this.ctx.fillStyle = "#144533";
-        this.ctx.fillRect(0, 0, this.width, this.height);
+        if (this.world) {
+            this.world.drawBackdrop(this.ctx);
+        } else {
+            this.ctx.fillStyle = "#144533";
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        }
 
         this.ctx.fillStyle = "#ffd700";
         this.ctx.font = "20px Courier New";
@@ -297,6 +305,7 @@ class Game {
 
         if (this.state === "PLAYING" || this.state === "RUNWAY") {
             this.drawDoll();
+            if (this.world) this.world.drawForeground(this.ctx);
         } else if (this.state === "PAUSED") {
             this.ctx.fillStyle = "rgba(0,0,0,0.5)";
             this.ctx.fillRect(0, 0, this.width, this.height);
